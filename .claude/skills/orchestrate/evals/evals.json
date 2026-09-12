@@ -1,0 +1,36 @@
+{
+  "skill_name": "orchestrate",
+  "evals": [
+    {
+      "id": 0,
+      "prompt": "In this repo (/home/user/restaurant-dashboard) only 13 of the 42 adapters under src/lib/counter/adapters have contract tests under tests/lib/counter/adapters, and CLAUDE.md says the accountId tenancy filter is judgment the linter cannot check. I want the four smallest untested adapters covered: shell-status, ask-brief, pnl-store and packaging. Do NOT implement anything. Produce two files: plan.md (the task-by-task plan a worker could execute) and dispatch.md (which tasks can run in parallel, and the exact prompt you would send each worker agent). Model the tests on tests/lib/counter/adapters/prices.test.ts.",
+      "expected_output": "plan.md with Goal/Architecture/Global constraints, one task per adapter with Files (line ranges), Interfaces, a written failing test, scoped git add; dispatch.md marking all four tasks parallel with a complete per-worker prompt naming CLAUDE.md, the plan path, the task number, the gate, and a fixed report shape.",
+      "files": [],
+      "assertions": [
+        "plan.md has a Goal line, an Architecture paragraph, and a Global constraints section",
+        "plan.md states the whole-project gate verbatim from CLAUDE.md (npm test && npm run tokens && npx tsc --noEmit ...)",
+        "plan.md has one task per adapter (shell-status, ask-brief, pnl-store, packaging), each with a Files list naming the adapter source and the test path",
+        "at least one Files entry in plan.md cites a line range or line number in the adapter source",
+        "every task in plan.md contains a written test code block that includes vi.mock(\"@/lib/prisma\")",
+        "plan.md commit steps use git add with explicit file paths and never `git add .` or `git add -A`",
+        "dispatch.md says the four tasks can run in parallel",
+        "every worker prompt in dispatch.md names CLAUDE.md, the plan path with a task number, the gate command to run, and a fixed report shape",
+        "dispatch.md includes a review or verification step by an agent other than the implementer"
+      ]
+    },
+    {
+      "id": 1,
+      "prompt": "Add vitest contract tests for two adapters that have none: src/lib/counter/adapters/shell-status.ts and src/lib/counter/adapters/ask-brief.ts. Each test must prove the adapter filters by accountId (mock Prisma with vi.mock(\"@/lib/prisma\") the way tests/lib/counter/adapters/prices.test.ts does). Put them at tests/lib/counter/adapters/shell-status.test.ts and ask-brief.test.ts, make each its own commit, and confirm with: npx vitest run tests/lib/counter/adapters. Do not push. When finished, copy the two test files, the output of `git log --oneline -4`, and the last 30 lines of the vitest run into the outputs directory.",
+      "expected_output": "Two new test files that assert the Prisma where-clause contains the accountId boundary, two commits with scoped git add, vitest green for the adapters directory.",
+      "files": [],
+      "assertions": [
+        "outputs contain shell-status.test.ts and ask-brief.test.ts",
+        "each test file mocks Prisma with vi.mock(\"@/lib/prisma\")",
+        "each test file asserts that the query's where clause carries the accountId boundary (expect(...) mentioning accountId)",
+        "git-log.txt shows two separate commits, one per test file",
+        "vitest.txt shows the adapters directory suite passing with 0 failed",
+        "no test in the outputs was skipped (no it.skip / describe.skip / test.skip / .todo)"
+      ]
+    }
+  ]
+}

@@ -57,8 +57,9 @@ dashboard-*.png
 .worktrees/
 .env*.local
 
-# Claude Code local project config
-.claude/
+# Claude Code local project config (skills are shared, the rest is per-machine)
+.claude/*
+!.claude/skills/
 .codex/
 
 # Local outputs from invoice backfill / diagnostic scripts
