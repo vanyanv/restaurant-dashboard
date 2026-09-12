@@ -6,8 +6,10 @@ send, or in a file the prompt tells it to read first. These templates are the
 minimum; add the repo-specific facts the task turns on.
 
 Send prompts with the `Agent` tool. Default `subagent_type` is
-`general-purpose` for anything that edits files; use `Explore` for read-only
-scouting (it is cheaper and cannot write). Run workers in the background
+`general-purpose` for anything that edits files; use `Explore` for anything
+that must not — scouts and both reviewers. A reviewer that cannot write
+cannot "fix it while I'm here", which is the point: its verdict stays a
+verdict, and the fix stays a commit the implementer owns. Run workers in the background
 unless your very next step depends on that one result.
 
 ---
@@ -72,7 +74,7 @@ from "helpfully" starting Task N+1 in the same commit.
 
 ---
 
-## 3. Reviewer — spec compliance (after each implementer)
+## 3. Reviewer — spec compliance (`Explore`, after each implementer)
 
 A second pair of eyes that did not write the code. Give it the task text and
 the diff, not the implementer's report — the report is the implementer's
@@ -98,7 +100,7 @@ Answer, in under 250 words:
 
 ---
 
-## 4. Reviewer — code quality (after spec compliance passes)
+## 4. Reviewer — code quality (`Explore`, after spec compliance passes)
 
 ```
 You are reviewing a commit for quality. Assume it does what was asked (a

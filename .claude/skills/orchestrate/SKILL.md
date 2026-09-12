@@ -27,6 +27,11 @@ does not pay for a one-file change. If you can finish and verify the task
 yourself in a few minutes, do that and say so. Over-orchestrating a small
 task is a common failure and the user notices it as slowness.
 
+If you have no `Agent` tool in this session (you are yourself a subagent, or
+the harness does not offer one), you cannot dispatch. Do the work directly,
+still in the plan's shape, and say in your report that it was done
+single-handed and why.
+
 ## The loop
 
 ### 1. Scope
@@ -62,7 +67,10 @@ because each one is where parallel work silently breaks:
   shape produce a conflict in the type and a bug in the caller.
 - **Files named with line ranges**, from the scouts' answers.
 - **The failing test written into the task.** A worker told "add tests"
-  writes tests that pass against what it built.
+  writes tests that pass against what it built. When several tasks share a
+  fixture or mock pattern, write it once in the plan header and have each
+  task reference it — a plan that repeats 150 lines of fixtures four times
+  is four times as much for a worker to hold, not four times as clear.
 - **One commit per task, `git add` naming files.** Workers share one tree;
   `git add .` commits another worker's half-done files.
 - **Phases where order matters, and an explicit "may run in parallel" list
