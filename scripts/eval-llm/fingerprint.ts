@@ -20,7 +20,12 @@ import { join } from "node:path"
 import { VERDICT_MODEL, buildVerdictPrompt } from "@/lib/decision-verdict-llm"
 import { PROPOSAL_MODEL, buildProposalPrompt } from "@/lib/proposal-llm"
 import { ADJUDICATOR_MODEL, buildAdjudicatorPrompt } from "@/lib/ingredient-match-llm"
-import { CHAT_ROUTING_MODEL } from "@/lib/chat/openai-client"
+import {
+  CHAT_CLASSIFIER_MODEL,
+  CHAT_REASONING_EFFORT,
+  CHAT_ROUTING_MODEL,
+} from "@/lib/chat/openai-client"
+import { GROUP_HINTS, TOOL_GROUPS } from "@/lib/chat/tool-groups"
 import { composeSystemPrompt } from "@/lib/chat/system-prompt"
 import { chatTools } from "@/lib/chat/tools"
 
@@ -70,6 +75,21 @@ export function evalSystemPrompt(): string {
   return composeSystemPrompt(CHAT_CONTEXT)
 }
 
+/**
+ * The department list and hints the tool-group classifier is given.
+ *
+ * Not the classifier's full prompt template — that lives in
+ * `tool-group-classifier.ts` and is built around exactly this list. What
+ * changes in practice is the list and its hints, and a change to either moves
+ * which tools a turn carries.
+ */
+export function classifierCatalogue(): string {
+  return (Object.keys(TOOL_GROUPS) as Array<keyof typeof TOOL_GROUPS>)
+    .map((g) => `${g}: ${GROUP_HINTS[g]}`)
+    .sort()
+    .join("\n")
+}
+
 export function promptFingerprints(): Record<FingerprintedFeature, string> {
   return {
     // The first case, not all of them: the fingerprint tracks the *template*,
@@ -81,9 +101,23 @@ export function promptFingerprints(): Record<FingerprintedFeature, string> {
       ADJUDICATOR_MODEL,
       buildAdjudicatorPrompt({ cases: ADJUDICATOR_CASES[0].cases }),
     ),
+    /*
+     * Model, EFFORT, the system prompt, the tool catalogue and the classifier's
+     * own prompt.
+     *
+     * Effort and the classifier were both outside this hash, and both decide
+     * what the model does with the prompt that is inside it. `/api/chat`'s own
+     * note records `minimal` degrading tool routing — the exact behaviour this
+     * feature grades — so the setting could have moved from `low` to `minimal`
+     * with the recorded scorecard going on describing a run that no longer
+     * happened. The classifier is the same argument: `GROUP_HINTS` decides
+     * which schemas a turn carries when the page establishes no department, so
+     * editing one of those lines changes what the model is offered without
+     * touching a single character of the prompt.
+     */
     "chat-tool-choice": sha(
-      CHAT_ROUTING_MODEL,
-      `${evalSystemPrompt()}\n\n# Tools\n${toolCatalogue()}`,
+      `${CHAT_ROUTING_MODEL}:${CHAT_REASONING_EFFORT}:${CHAT_CLASSIFIER_MODEL}`,
+      `${evalSystemPrompt()}\n\n# Tools\n${toolCatalogue()}\n\n# Classifier\n${classifierCatalogue()}`,
     ),
   }
 }
@@ -99,6 +133,16 @@ export interface FingerprintRecord {
   costUsd: number
   /** The gate this feature must clear. */
   floor: number
+  /**
+   * True when the hash was updated without a live run behind it — the numbers
+   * above are the PREVIOUS run's and describe a prompt that has since changed.
+   *
+   * It exists so that carrying a scorecard forward is a thing written down in
+   * the file rather than a thing nobody notices. `note` says what changed and
+   * what has to happen; the live runner clears both on `--record`.
+   */
+  needsRerun?: boolean
+  note?: string
 }
 
 export const FINGERPRINTS_PATH = join(__dirname, "fingerprints.json")

@@ -21,6 +21,18 @@ on:
       - 'src/lib/chat/system-prompt.ts'
       - 'src/lib/chat/openai-client.ts'
       - 'src/lib/chat/tools/**'
+      # The five that decide what the model is offered and what it is told,
+      # and were not watched. `tool-groups.ts` narrows a turn to as few as
+      # nine of fifty-eight schemas; the classifier picks those groups when
+      # the page establishes no department; the route assembles both and
+      # carries the answer cache and the freshness stamps that key it. Two of
+      # the four correctness defects the 2026-09-19 audit found lived in files
+      # on this list and none of them would have fired this job.
+      - 'src/lib/chat/tool-groups.ts'
+      - 'src/lib/chat/tool-group-classifier.ts'
+      - 'src/lib/chat/answer-cache.ts'
+      - 'src/lib/chat/data-as-of.ts'
+      - 'src/app/api/chat/route.ts'
       - 'src/app/dashboard/decisions/lib/verdict-copy.ts'
       - 'scripts/eval-llm/**'
       - '.github/workflows/llm-eval.yml'
