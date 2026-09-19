@@ -1,3 +1,4 @@
+import { Prisma } from "@/generated/prisma/client"
 import { prisma } from "@/lib/prisma"
 import { getScopedStores } from "@/lib/account-stores"
 import { normalizeVendorName } from "@/lib/vendor-normalize"
@@ -110,6 +111,21 @@ async function loadOperations(input: OperationsInput): Promise<OperationsData> {
   const stores = await getScopedStores(accountId, storeId ?? null)
   const storeIds = stores.map((s) => s.id)
 
+  // Invoices carry a nullable `storeId`: an account-level invoice has none.
+  // So the store filter is applied only when the reader has actually PICKED a
+  // store — otherwise the all-stores view would silently drop every invoice
+  // that was never assigned to one, which is a different wrong number from
+  // the one being fixed here.
+  //
+  // What is being fixed: these queries filtered on `accountId` alone while
+  // the stock-count queries beside them scoped to `storeIds`, so picking
+  // Hollywood left the invoice spend, the unmatched-line count and the
+  // packaging spend reading account-wide. One page, two scopes, no sign of it.
+  const invoiceScope = storeId ? { storeId: { in: storeIds } } : {}
+  const invoiceScopeSql = storeId
+    ? Prisma.sql`AND i."storeId" IN (${Prisma.join(storeIds)})`
+    : Prisma.empty
+
   const [
     invoicesInReview,
     invoiceSpend,
@@ -125,13 +141,13 @@ async function loadOperations(input: OperationsInput): Promise<OperationsData> {
     vendorNames,
   ] = await Promise.all([
     // Invoices page's own filter.
-    prisma.invoice.count({ where: { accountId, status: "REVIEW" } }),
+    prisma.invoice.count({ where: { accountId, ...invoiceScope, status: "REVIEW" } }),
     prisma.invoice.aggregate({
-      where: { accountId, invoiceDate: { gte: startDate, lte: endDate } },
+      where: { accountId, ...invoiceScope, invoiceDate: { gte: startDate, lte: endDate } },
       _sum: { totalAmount: true },
     }),
     prisma.invoice.findFirst({
-      where: { accountId },
+      where: { accountId, ...invoiceScope },
       select: { invoiceDate: true },
       orderBy: { invoiceDate: "desc" },
     }),
@@ -139,11 +155,12 @@ async function loadOperations(input: OperationsInput): Promise<OperationsData> {
     prisma.$queryRaw<Array<{ n: number }>>`
       SELECT COUNT(*)::int AS n
       FROM "InvoiceLineItem" li JOIN "Invoice" i ON i.id = li."invoiceId"
-      WHERE i."accountId" = ${accountId} AND li."canonicalIngredientId" IS NULL`,
+      WHERE i."accountId" = ${accountId} ${invoiceScopeSql}
+        AND li."canonicalIngredientId" IS NULL`,
     prisma.$queryRaw<Array<{ spend: number }>>`
       SELECT COALESCE(SUM(li."extendedPrice"), 0)::float AS spend
       FROM "InvoiceLineItem" li JOIN "Invoice" i ON i.id = li."invoiceId"
-      WHERE i."accountId" = ${accountId}
+      WHERE i."accountId" = ${accountId} ${invoiceScopeSql}
         AND i."invoiceDate" >= ${startDate} AND i."invoiceDate" <= ${endDate}`,
     prisma.canonicalIngredient.findFirst({
       where: { accountId },
@@ -175,11 +192,11 @@ async function loadOperations(input: OperationsInput): Promise<OperationsData> {
       FROM "InvoiceLineItem" li
       JOIN "Invoice" i ON i.id = li."invoiceId"
       JOIN "CanonicalIngredient" ci ON ci.id = li."canonicalIngredientId"
-      WHERE i."accountId" = ${accountId}
+      WHERE i."accountId" = ${accountId} ${invoiceScopeSql}
         AND ci.category IN ('Paper/Supplies', 'Cleaning')
         AND i."invoiceDate" >= ${startDate} AND i."invoiceDate" <= ${endDate}`,
     prisma.invoice.findMany({
-      where: { accountId },
+      where: { accountId, ...invoiceScope },
       select: { vendorName: true },
       distinct: ["vendorName"],
     }),
