@@ -27,20 +27,36 @@ const cashPositionParams = z
 export type CashPositionChatDay = {
   date: string
   predictedRevenue: number | null
-  estimatedNetInflow: number
+  /** Null on a day with no revenue forecast — unknown, not a day of no sales. */
+  estimatedNetInflow: number | null
   scheduledPayables: number
   proRatedFixedCosts: number
-  netCashFlow: number
-  cumulativeNet: number
+  netCashFlow: number | null
+  /** Null once any earlier day in the horizon was unforecast. */
+  cumulativeNet: number | null
 }
 
+/**
+ * NOTE: `getCashPositionForecastTool.description` and the
+ * `getCashPositionForecast` paragraph in `src/lib/chat/system-prompt.ts` still
+ * describe `endingCumulativeNet` and `cumulativeNet` as always present. They
+ * went nullable on 2026-09-19. The wording was NOT updated with them: every
+ * word the routing model reads is fingerprinted by
+ * `scripts/eval-llm/fingerprint.ts`, so changing it invalidates the recorded
+ * golden-set scorecard until `npm run eval:llm -- --feature chat-tool-choice`
+ * is re-run with an OPENAI_API_KEY. Re-run it, then say there: a null
+ * cumulative means the horizon contains a day with no revenue forecast, so
+ * the running total stops there — report the horizon as partly unforecast,
+ * with `unforecastDays` days missing, never as a cash shortfall.
+ */
 export type CashPositionChatResult = {
   horizonDays: number
   blendedCommissionRate: number
   proRatedFixedDaily: number
+  unforecastDays: number
   totalScheduledPayables: number
   totalEstimatedInflow: number
-  endingCumulativeNet: number
+  endingCumulativeNet: number | null
   goesNegativeOn: string | null
   days: CashPositionChatDay[]
 }
@@ -62,11 +78,15 @@ export const getCashPositionForecastTool: ChatTool<
     if (!result.ok) return { ok: false, error: result.error }
     void ctx
     const d = result.data
-    const goesNegative = d.days.find((day) => day.cumulativeNet < 0)
+    // A null cumulative is not below zero; it is no figure at all.
+    const goesNegative = d.days.find(
+      (day) => day.cumulativeNet !== null && day.cumulativeNet < 0,
+    )
     return {
       horizonDays: d.horizonDays,
       blendedCommissionRate: d.blendedCommissionRate,
       proRatedFixedDaily: d.proRatedFixedDaily,
+      unforecastDays: d.unforecastDays,
       totalScheduledPayables: d.totalScheduledPayables,
       totalEstimatedInflow: d.totalEstimatedInflow,
       endingCumulativeNet: d.endingCumulativeNet,
