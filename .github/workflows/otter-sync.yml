@@ -128,16 +128,53 @@ jobs:
 
   # After fresh sales land, surface any new unmapped POS items as PENDING
   # proposals so they're waiting in the review sheet by the time anyone looks.
-  # Layer-0 exact-name matching makes routine runs LLM-free; failures here are
-  # non-critical (the next 4-hourly run retries), so no incident issue.
+  # Layer-0 exact-name matching makes routine runs LLM-free.
+  #
+  # This job used to carry no incident-issue steps, on the reasoning that a
+  # failure here is non-critical because the next 4-hourly run retries it. That
+  # held only while failures were transient. When the route started returning
+  # HTTP 504 on every run (no `maxDuration`, so Vercel's 10s default killed it),
+  # the retry hit the identical timeout, and with nothing reporting it the job
+  # stayed red from at least 2026-09-13 to 2026-09-19 with no issue filed while
+  # `list-stores` and `sync` beside it reported theirs. A failure that repeats
+  # is exactly the one worth filing, so it files now.
   generate-proposals:
     needs: sync
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
       - name: GET /api/cron/proposals
+        id: cron
         env:
           APP_URL: ${{ secrets.APP_URL }}
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
           CRON_MAX_TIME: "240"
-        run: .github/scripts/curl-cron-json.sh GET "$APP_URL/api/cron/proposals"
+          LOG_FILE: logs/otter-sync-proposals.log
+        run: |
+          bash .github/scripts/run-with-cron-logging.sh \
+            .github/scripts/curl-cron-json.sh GET "$APP_URL/api/cron/proposals"
+      - name: Upload failure log
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: otter-sync-proposals-log-${{ github.run_id }}
+          path: logs/otter-sync-proposals.log
+          retention-days: 14
+      - name: Open or update incident issue
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          WORKFLOW_NAME: Otter Daily Sync Proposals
+          ISSUE_TITLE: "[Auto] Otter Daily Sync Proposals failing"
+          ISSUE_LABEL: cron-failure
+          LOG_FILE: logs/otter-sync-proposals.log
+          FAILED_EXIT_CODE: ${{ steps.cron.outputs.status }}
+        run: bash .github/scripts/report-workflow-failure.sh
+      - name: Close incident issue on recovery
+        if: success()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          WORKFLOW_NAME: Otter Daily Sync Proposals
+          ISSUE_TITLE: "[Auto] Otter Daily Sync Proposals failing"
+          ISSUE_LABEL: cron-failure
+        run: bash .github/scripts/report-workflow-recovery.sh

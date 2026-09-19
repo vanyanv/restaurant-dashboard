@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma"
+import type { MonitoringInput } from "@/lib/counter/adapters/monitoring"
 import { count, pct } from "@/lib/counter/format"
 import type { ChartSpec } from "@/lib/counter/chart-geometry"
 import {
@@ -133,7 +134,7 @@ interface PeopleData {
   daily: Array<{ day: Date; views: number; human: number }>
 }
 
-async function loadPeople(): Promise<PeopleData> {
+async function loadPeople(accountId: string): Promise<PeopleData> {
   const [people, dwell, routes, daily] = await Promise.all([
     prisma.$queryRaw<
       Array<{
@@ -155,18 +156,21 @@ async function loadPeople(): Promise<PeopleData> {
                  AND l."createdAt" >= NOW() - MAKE_INTERVAL(days => ${WINDOW_DAYS})) AS signins
       FROM "User" u
       LEFT JOIN "PageView" p ON p."userId" = u.id
+      WHERE u."accountId" = ${accountId}
       GROUP BY u.id, u.email, u.role
       ORDER BY 3 DESC`,
     prisma.$queryRaw<Array<{ total: number; human: number; median: number | null }>>`
       SELECT COUNT(*)::int AS total,
              COUNT(*) FILTER (WHERE "dwellMs" >= ${HUMAN_DWELL_MS})::int AS human,
              (PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY "dwellMs"))::float AS median
-      FROM "PageView"`,
+      FROM "PageView" v
+      WHERE v."userId" IN (SELECT id FROM "User" WHERE "accountId" = ${accountId})`,
     prisma.$queryRaw<Array<{ route: string; views: number; median_s: number }>>`
       SELECT route, COUNT(*)::int AS views,
              ((PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY "dwellMs")) / 1000.0)::float AS median_s
       FROM "PageView"
       WHERE "dwellMs" >= ${HUMAN_DWELL_MS}
+        AND "userId" IN (SELECT id FROM "User" WHERE "accountId" = ${accountId})
       GROUP BY 1 ORDER BY 2 DESC`,
     // `generate_series` rather than a GROUP BY, so a day nobody opened it is a
     // zero in the series instead of a missing bar. See `PeopleReadings`.
@@ -178,7 +182,9 @@ async function loadPeople(): Promise<PeopleData> {
              date_trunc('day', NOW() - MAKE_INTERVAL(days => ${WINDOW_DAYS - 1})),
              date_trunc('day', NOW()),
              '1 day') AS d(day)
-      LEFT JOIN "PageView" p ON date_trunc('day', p."enteredAt") = d.day
+      LEFT JOIN "PageView" p
+             ON date_trunc('day', p."enteredAt") = d.day
+            AND p."userId" IN (SELECT id FROM "User" WHERE "accountId" = ${accountId})
       GROUP BY 1 ORDER BY 1`,
   ])
 
@@ -365,8 +371,10 @@ function peoplePagesOf(d: PeopleData): PeoplePages {
   }
 }
 
-export function getPeopleSectionPromises(): StreamedSections<PeopleSections> {
-  const dataP = classify(() => loadPeople(), {
+export function getPeopleSectionPromises(
+  input: MonitoringInput,
+): StreamedSections<PeopleSections> {
+  const dataP = classify(() => loadPeople(input.accountId), {
     retryAction: "retryPeople",
     isEmpty: (d) => d.people.length === 0,
     emptyReason: "no_match",
@@ -381,8 +389,10 @@ export function getPeopleSectionPromises(): StreamedSections<PeopleSections> {
   }
 }
 
-export async function getPeopleSections(): Promise<PeopleSections> {
-  return awaitSections(getPeopleSectionPromises())
+export async function getPeopleSections(
+  input: MonitoringInput,
+): Promise<PeopleSections> {
+  return awaitSections(getPeopleSectionPromises(input))
 }
 
 /* ── Activity ─────────────────────────────────────────────────────────── */
@@ -454,7 +464,7 @@ interface ActivityData {
   stores: Array<{ name: string; stage: string | null; lastOrder: Date | null; orders30d: number }>
 }
 
-async function loadActivity(): Promise<ActivityData> {
+async function loadActivity(accountId: string): Promise<ActivityData> {
   const [errors, byHour, recent, syncs, stores, feed] = await Promise.all([
     prisma.$queryRaw<Array<{ n: number }>>`
       SELECT COUNT(*)::int AS n FROM "ErrorEvent"
@@ -477,7 +487,7 @@ async function loadActivity(): Promise<ActivityData> {
              (SELECT MAX(o."referenceTimeLocal") FROM "OtterOrder" o WHERE o."storeId" = s.id) AS last_order,
              (SELECT COUNT(*)::int FROM "OtterOrder" o WHERE o."storeId" = s.id
                AND o."referenceTimeLocal" >= NOW() - INTERVAL '30 days') AS orders
-      FROM "Store" s ORDER BY s.name`,
+      FROM "Store" s WHERE s."accountId" = ${accountId} ORDER BY s.name`,
     prisma.$queryRaw<ActivityFeedRow[]>`
       SELECT id, "jobName", "startedAt", "rowsWritten", "durationMs", "errorMessage"
         FROM "JobRun"
@@ -698,8 +708,10 @@ function activityStoresOf(d: ActivityData): ActivityStores {
   }
 }
 
-export function getActivitySectionPromises(): StreamedSections<ActivitySections> {
-  const dataP = classify(() => loadActivity(), {
+export function getActivitySectionPromises(
+  input: MonitoringInput,
+): StreamedSections<ActivitySections> {
+  const dataP = classify(() => loadActivity(input.accountId), {
     retryAction: "retryActivity",
     isEmpty: () => false,
     emptyReason: "no_match",
@@ -714,6 +726,8 @@ export function getActivitySectionPromises(): StreamedSections<ActivitySections>
   }
 }
 
-export async function getActivitySections(): Promise<ActivitySections> {
-  return awaitSections(getActivitySectionPromises())
+export async function getActivitySections(
+  input: MonitoringInput,
+): Promise<ActivitySections> {
+  return awaitSections(getActivitySectionPromises(input))
 }

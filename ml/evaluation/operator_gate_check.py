@@ -22,11 +22,15 @@ Gates (from `docs/superpowers/plans/2026-05-12-...`, Task 13):
       Each (active store × target) wrote at least one MlForecastEvaluation
       row whose windowEnd = target_date - 1. Missing rows mean the nightly
       job failed for that store/target, or reconciliation hasn't caught up.
+      A pair with no SUCCEEDED training at all is only excused when its store
+      is not yet `ready`; a `ready` store that stopped training fails.
 
-  Gate 2 — Seasonal-naive gate fired
-      MlTrainingRun.errorMessage in the last 7 days mentions "seasonal-naive"
-      at least once. Zero mentions = either no model retrained, or the gate
-      string isn't being persisted (regression).
+  Gate 2 — Seasonal-naive gate recorded
+      Every target the promotion gate applies to (REVENUE, BUSY_HOURS) that
+      trained in the last 7 days recorded its decision on
+      MlTrainingRun.errorMessage. Silence from a target that trained means
+      the gate isn't being persisted (regression). MENU_ITEM is outside the
+      gate by design and is reported, not judged.
 
   Gate 3 — Empirical 80% coverage for REVENUE
       Measured coverage of the CURRENT model generation's reconciled forecasts
@@ -153,16 +157,49 @@ def _schema_ready(conn) -> bool:
     return bool(ready)
 
 
+#: What `ml.run_nightly.main` trains at each lifecycle stage. pre_open stores
+#: are skipped outright; warming_up stores get REVENUE only (native, so the
+#: warming_up -> ready gate has something to evaluate); ready stores get
+#: everything. Mirrors the stage branching at the foot of `main()`.
+_STAGE_TARGETS: dict[str, tuple[str, ...]] = {
+    "pre_open": (),
+    "warming_up": ("REVENUE",),
+    "ready": ("REVENUE", "BUSY_HOURS", "MENU_ITEM"),
+}
+
+
+def _expects_training(stage: str | None, target: str) -> bool:
+    """Whether main() trains `target` for a store at `stage`.
+
+    An unrecognised stage is read as `ready` — a stage added to the schema
+    without being added here should make the gate noisy, not silent, since
+    silence is the failure this gate was built to end.
+    """
+    expected = _STAGE_TARGETS.get(stage or "", _STAGE_TARGETS["ready"])
+    return target in expected
+
+
 def gate1_eval_rows_today(conn, target_date: date) -> tuple[bool, str]:
     """Each trainable (active store × MlTarget) wrote at least one row with
     windowEnd = target_date - 1.
 
     A pair is "trainable" if it has at least one SUCCEEDED MlTrainingRun in
-    the trailing _WINDOW_DAYS ending at target_date. Stores with
-    insufficient_history will never produce an evaluation row, so demanding
-    one would be guaranteed-to-fail noise; we skip them with status
-    "skipped" and surface the count in the gate detail so they remain
-    visible.
+    the trailing _WINDOW_DAYS ending at target_date. A pair with none is read
+    against what `ml.run_nightly.main` actually trains at that store's
+    lifecycle stage (_STAGE_TARGETS), because the two cases are opposite:
+
+      - main() does not train that pair at that stage. The absence is the
+        design. Skipped, and counted in the detail so it stays visible.
+      - main() does train it. The absence means the nightly job is failing
+        for that pair — the outage this gate exists to catch — and it fails
+        the gate.
+
+    Until 2026-09-19 both cases took the skip path, so a ready store that
+    silently stopped training was reported and passed anyway. Reading the
+    stage as a bare `ready` / not-`ready` split fixed that for ready stores
+    and left the same hole one stage down: main() trains REVENUE for a
+    warming_up store, so a warming_up store whose revenue training stopped
+    was still skipped. The expectation is per (stage, target), not per store.
     """
     window_end = target_date - timedelta(days=1)
     train_cutoff = target_date - timedelta(days=_WINDOW_DAYS)
@@ -175,10 +212,26 @@ def gate1_eval_rows_today(conn, target_date: date) -> tuple[bool, str]:
                 WHERE status = 'SUCCEEDED'
                   AND "startedAt" >= %s
                   AND "startedAt" <= %s + INTERVAL '1 day'
+            ),
+            -- Runs that DID happen and reported there was not enough data
+            -- to fit on. The nightly job is working in that case; the
+            -- store simply has no history yet. Without this, such a pair
+            -- reads exactly like one the job never touched.
+            thin AS (
+                SELECT DISTINCT scope AS "storeId", target
+                FROM "MlTrainingRun"
+                WHERE status <> 'SUCCEEDED'
+                  AND "startedAt" >= %s
+                  AND "startedAt" <= %s + INTERVAL '1 day'
+                  AND ("errorMessage" ILIKE '%%insufficient!_history%%' ESCAPE '!'
+                    OR "errorMessage" ILIKE '%%insufficient!_hourly!_history%%' ESCAPE '!'
+                    OR "errorMessage" ILIKE '%%no!_items!_in!_lookback%%' ESCAPE '!')
             )
             SELECT s.id AS "storeId", s.name, t.target,
                    COUNT(e.id) AS rows_today,
-                   (tr."storeId" IS NOT NULL) AS is_trainable
+                   (tr."storeId" IS NOT NULL) AS is_trainable,
+                   s."lifecycleStage"::text AS stage,
+                   (th."storeId" IS NOT NULL) AS is_thin
             FROM "Store" s
             CROSS JOIN (VALUES ('REVENUE'::"MlTarget"),
                                ('BUSY_HOURS'::"MlTarget"),
@@ -188,11 +241,13 @@ def gate1_eval_rows_today(conn, target_date: date) -> tuple[bool, str]:
               AND e."windowEnd" = %s
             LEFT JOIN trainable tr
               ON tr."storeId" = s.id AND tr.target = t.target
+            LEFT JOIN thin th
+              ON th."storeId" = s.id AND th.target = t.target
             WHERE s."isActive" = true
-            GROUP BY 1, 2, 3, tr."storeId"
+            GROUP BY 1, 2, 3, tr."storeId", s."lifecycleStage", th."storeId"
             ORDER BY 2, 3
             ''',
-            (train_cutoff, target_date, window_end),
+            (train_cutoff, target_date, train_cutoff, target_date, window_end),
         )
         rows = cur.fetchall()
 
@@ -201,32 +256,87 @@ def gate1_eval_rows_today(conn, target_date: date) -> tuple[bool, str]:
 
     lines = []
     missing = []
+    untrained = []
     skipped = 0
-    for _, name, target, count, is_trainable in rows:
+    for _, name, target, count, is_trainable, stage, is_thin in rows:
         if not is_trainable:
-            lines.append(f"  {name:<24} {target:<11} skipped (no SUCCEEDED training in {_WINDOW_DAYS}d)")
-            skipped += 1
+            if is_thin:
+                # The job ran and said there was not enough history to fit on.
+                # `train_revenue` returns None under 60 days, so a store that
+                # has just started warming up produces two months of these;
+                # failing on them would light the gate red nightly for that
+                # whole period — the guaranteed-to-fail noise the skip exists
+                # to avoid. The same shape hits MENU_ITEM at a ready store
+                # whose lookback holds no items.
+                lines.append(
+                    f"  {name:<24} {target:<11} not enough history yet "
+                    f"(stage `{stage}`)"
+                )
+                skipped += 1
+            elif _expects_training(stage, target):
+                # main() trains this pair at this stage, so no SUCCEEDED run
+                # is the nightly job failing for it — the exact outage this
+                # gate exists to catch. Skipping it was silent: the gate
+                # reported the line and still passed.
+                lines.append(
+                    f"  {name:<24} {target:<11} NO SUCCEEDED training in "
+                    f"{_WINDOW_DAYS}d (stage `{stage}`)"
+                )
+                untrained.append((name, target))
+            else:
+                # main() does not train this pair at this stage, so demanding
+                # rows would be guaranteed-to-fail noise.
+                lines.append(
+                    f"  {name:<24} {target:<11} not trained (stage `{stage}`)"
+                )
+                skipped += 1
         else:
             lines.append(f"  {name:<24} {target:<11} {count} rows")
             if count == 0:
                 missing.append((name, target))
     detail = "\n".join(lines)
     if skipped:
-        detail = f"{detail}\n  ({skipped} pair(s) skipped — no recent training)"
+        detail = f"{detail}\n  ({skipped} pair(s) skipped — not trained at that stage)"
+    if untrained:
+        return False, (
+            f"{len(untrained)} expected (store, target) pair(s) have no "
+            f"SUCCEEDED training in {_WINDOW_DAYS}d\n{detail}"
+        )
     if missing:
         return False, f"{len(missing)} trainable (store, target) pairs missing for windowEnd={window_end}\n{detail}"
     return True, detail
 
 
+#: Targets `ml.run_nightly._select_result` puts through the seasonal-naive
+#: promotion gate. MENU_ITEM is deliberately outside it — `train_menu_item`
+#: produces one flavor per SKU, so there is no baseline/enriched pair to
+#: choose between (see `run_menu_items_for_store`). Counting its runs as
+#: unmentioned printed a permanent `MENU_ITEM 0/N` that described the design,
+#: not a fault.
+_GATED_TARGETS = ("BUSY_HOURS", "REVENUE")
+
+
 def gate2_seasonal_naive_fired(conn, target_date: date) -> tuple[bool, str]:
-    """MlTrainingRun.errorMessage mentions the seasonal-naive gate in the 7
-    days ending at target_date.
+    """Every gated target that trained in the window recorded its promotion
+    decision on MlTrainingRun.errorMessage.
 
     Accepts either 'seasonal-naive' (post-fix label, commit 19b6be4) or
     'vs naive' (pre-fix label). Both indicate the seasonal-naive baseline
     gate was evaluated during that training run — the fix in 19b6be4 was
     purely a label-format change in promotion.decide_promotion's reason
     string, not a behavioral change to the gate itself.
+
+    Two things changed here on 2026-09-19, after this gate had been red since
+    09-14 with `0/8 runs mention seasonal-naive` on every target:
+
+      - `run_nightly` only wrote the decision when the gate REJECTED, so a
+        window in which every model was promoted — the healthy case — left
+        every errorMessage NULL and read exactly like a window in which the
+        gate never ran. It now records the decision on both branches, which
+        is what makes this gate's question answerable at all.
+      - The verdict was `any(mentions > 0)` across all targets, so one gated
+        target still reporting could mask the other going silent. Each gated
+        target that trained must now account for itself.
     """
     cutoff = target_date - timedelta(days=_WINDOW_DAYS)
     with conn.cursor() as cur:
@@ -251,13 +361,33 @@ def gate2_seasonal_naive_fired(conn, target_date: date) -> tuple[bool, str]:
     if not rows:
         return False, f"no MlTrainingRun rows in [{cutoff}, {target_date}]"
 
-    lines = [
-        f"  {target:<11} {naive}/{total} runs mention seasonal-naive"
-        for target, naive, total in rows
-    ]
+    lines = []
+    silent = []
+    gated_runs = 0
+    for target, naive, total in rows:
+        if str(target) not in _GATED_TARGETS:
+            lines.append(f"  {target:<11} {total} runs (not gated by design)")
+            continue
+        gated_runs += total
+        lines.append(f"  {target:<11} {naive}/{total} runs recorded the gate")
+        if total > 0 and naive == 0:
+            silent.append(str(target))
+
     detail = "\n".join(lines)
-    any_fired = any(naive > 0 for _, naive, _ in rows)
-    return any_fired, detail
+    if silent:
+        return False, (
+            f"{', '.join(silent)} trained but recorded no promotion decision\n{detail}"
+        )
+    if not gated_runs:
+        # Before the per-target rewrite the verdict was `any(naive > 0)`, which
+        # this case failed. Reporting it as healthy would mean a window holding
+        # nothing but MENU_ITEM rows — no revenue or busy-hours training at all
+        # — passed the gate that exists to notice exactly that kind of silence.
+        return False, (
+            f"no {' or '.join(_GATED_TARGETS)} runs at all in "
+            f"[{cutoff}, {target_date}]\n{detail}"
+        )
+    return True, detail
 
 
 @dataclass(frozen=True)
