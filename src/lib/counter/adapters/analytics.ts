@@ -1279,8 +1279,10 @@ function buildCategories(data: MenuEngineeringData): CategoryTable {
       key: name,
       name,
       net: money(b.net),
-      share: total === 0 ? DASH : pct((b.net / total) * 100, { scaled: true }),
-      food: b.net === 0 ? DASH : pct((b.cogs / b.net) * 100, { scaled: true }),
+      // `<= 0` on both: a category or a day that netted below zero inverts
+      // the share and the food-cost percentage, printing a cost as a credit.
+      share: total <= 0 ? DASH : pct((b.net / total) * 100, { scaled: true }),
+      food: b.net <= 0 ? DASH : pct((b.cogs / b.net) * 100, { scaled: true }),
     }))
 
   return {

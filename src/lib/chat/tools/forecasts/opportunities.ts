@@ -97,21 +97,38 @@ export type PromoRoiChatEvent = {
   date: string
   weekday: number
   netSales: number
-  baselineNetSales: number
+  /** Null when too few same-weekday non-promo days exist to build one. */
+  baselineNetSales: number | null
   baselineSampleSize: number
   discount: number
   discountPct: number
-  lift: number
-  liftCI80Low: number
-  liftCI80High: number
+  /** Null whenever `baselineNetSales` is. Not 0 — 0 reads as "no lift". */
+  lift: number | null
+  liftCI80Low: number | null
+  liftCI80High: number | null
   roi: number | null
 }
 
+/**
+ * NOTE: `getPromoRoiTool.description` and the `getPromoRoi` paragraph in
+ * `src/lib/chat/system-prompt.ts` still describe lift and roi as always
+ * present, and blendedRoi as totalLift / totalDiscount. Both went nullable /
+ * matched-denominator on 2026-09-19. The wording was NOT updated with them:
+ * every word the routing model reads is fingerprinted by
+ * `scripts/eval-llm/fingerprint.ts`, so changing it invalidates the recorded
+ * golden-set scorecard until `npm run eval:llm -- --feature chat-tool-choice`
+ * is re-run with an OPENAI_API_KEY. Re-run it, then update both texts to say:
+ * a null lift/roi/baselineNetSales means too few comparable days to price the
+ * promo — unknown, never zero — and blendedRoi's denominator is
+ * `measuredDiscount`, with `unmeasuredEvents` counting what it leaves out.
+ */
 export type PromoRoiChatResult = {
   windowStart: string
   windowEnd: string
   totalLift: number
   totalDiscount: number
+  measuredDiscount: number
+  unmeasuredEvents: number
   blendedRoi: number | null
   events: PromoRoiChatEvent[]
 }
@@ -138,6 +155,8 @@ export const getPromoRoiTool: ChatTool<
       windowEnd: d.windowEnd.toISOString().slice(0, 10),
       totalLift: d.totalLift,
       totalDiscount: d.totalDiscount,
+      measuredDiscount: d.measuredDiscount,
+      unmeasuredEvents: d.unmeasuredEvents,
       blendedRoi: d.blendedRoi,
       events: d.events.slice(0, args.limit ?? 10).map((e) => ({
         date: e.date.toISOString().slice(0, 10),

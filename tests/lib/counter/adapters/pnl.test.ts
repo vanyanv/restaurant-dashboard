@@ -906,3 +906,48 @@ describe("the phone's statement", () => {
     expect(lineOf(s, "food")?.over).toBeUndefined()
   })
 })
+
+describe("a range whose COGS has not been posted", () => {
+  /**
+   * `primeCost` withholds its percentages only when the DENOMINATOR is
+   * missing. With sales on the books and no COGS yet — the materializer has
+   * not run, or the range reaches into days it has not reached — `cogsValue`
+   * is 0 and `cogsPct` comes back a confident 0.0%.
+   *
+   * The Overview grew a `foodKnown` gate for exactly this. This page had only
+   * the labour half of it, so the identical hole stayed open here: a Food cell
+   * reading 0.0% and a prime cost built on it, both well under their targets.
+   */
+  function noCogs(over: Record<string, unknown> = {}) {
+    const lines = kpis({ cogsValue: 0, cogsPct: 0, ...over })
+    vi.mocked(getAllStoresPnL).mockImplementation((async (arg: { periods?: unknown[] }) =>
+      rollupFor(arg, {
+        combined: lines,
+        perStore: [store("holly", "Hollywood", { cogsValue: 0, cogsPct: 0, ...over })],
+        storeCount: 1,
+      })) as never)
+  }
+
+  it("leaves the Food cell out rather than printing a 0.0% nobody achieved", async () => {
+    noCogs()
+    expect(cellOf(await load(), "Food")).toBeUndefined()
+  })
+
+  it("leaves prime cost out, because half of it is missing", async () => {
+    noCogs()
+    expect(cellOf(await load(), "Prime cost")).toBeUndefined()
+  })
+
+  it("still prints the labour percentage, which is not missing at all", async () => {
+    noCogs()
+    const labor = cellOf(await load(), "Labor")
+    expect(labor).toBeDefined()
+    expect(labor?.value).not.toBe("0.0%")
+  })
+
+  it("prints both again the moment COGS lands", async () => {
+    const s = await load()
+    expect(cellOf(s, "Food")).toBeDefined()
+    expect(cellOf(s, "Prime cost")).toBeDefined()
+  })
+})

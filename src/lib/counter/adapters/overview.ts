@@ -762,7 +762,9 @@ function buildComparison(
     figure: "Net sales",
     now: money(now.grossSales),
     then: money(thenSales),
-    change: thenSales === 0 ? DASH : delta((now.grossSales - thenSales) / thenSales),
+    // `<= 0`: a comparison window below zero inverts the sign, so a rise
+    // prints as a fall. Same guard as `comparisonPhrase` and the P&L's cell.
+    change: thenSales <= 0 ? DASH : delta((now.grossSales - thenSales) / thenSales),
     bad: thenSales > 0 && now.grossSales < thenSales,
   })
 
