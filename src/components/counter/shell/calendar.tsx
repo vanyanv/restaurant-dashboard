@@ -28,17 +28,22 @@ import { isoDay, type DateRange } from "@/lib/counter/date-range"
  *   `today` — a dot under the number
  *   `cmp`   — inside the COMPARISON window, drawn as a signal-coloured underline
  *
- * ONE DELIBERATE DIVERGENCE FROM THE PROTOTYPE, and it is about truthfulness
- * rather than markup. The prototype's `inCompare()` (line 1905) computes the
- * weekday comparison as the union of four separate windows shifted back 1..4
- * weeks. `comparisonRange(range, "weekday")` in `src/lib/counter/date-range.ts`
- * returns the CONTIGUOUS HULL of those, `[start-28, end-7]`, and documents why:
- * it is a window a caller aggregates across. For a 7-day range the two are the
- * same set of days. For a shorter one the hull is wider. We shade the hull,
- * because the hull is what this application actually compares against — a
- * calendar that shades days the page does not use would be note 19's lie
- * ("a range that only changes the label") wearing a different hat. The caller
- * passes the window; this component only draws it.
+ * `compare` IS A LIST, and that is about truthfulness rather than markup. The
+ * prototype's `inCompare()` (line 1905) computes the weekday comparison as the
+ * union of four separate windows shifted back 1..4 weeks, and
+ * `comparisonWindows(range, "weekday")` in `src/lib/counter/date-range.ts`
+ * returns exactly those four. For a 7-day range they tile into one contiguous
+ * span; for a shorter one they do not, and the days between them are compared
+ * against nothing.
+ *
+ * This drew the contiguous HULL of the four instead — `comparisonRange`'s
+ * `[start-28, end-7]` — on the grounds that the hull was what the application
+ * actually compared against. That was true, and it was the bug: every page
+ * summed the hull and divided by four, so a single day was read against five
+ * and a half days of trade. The loaders now read the four windows themselves,
+ * so the hull is no longer what anything compares against and shading it would
+ * be note 19's lie ("a range that only changes the label") wearing a different
+ * hat. The caller passes the windows; this component only draws them.
  */
 
 const MONTH_LONG = [
@@ -82,8 +87,11 @@ export function Calendar({
   /** Any date in the month to draw; normalised here. */
   month: Date
   range: DateRange
-  /** The window the page compares against, or null when comparison is off. */
-  compare: DateRange | null
+  /**
+   * The windows the page compares against, or null when comparison is off.
+   * One for `prev` and `year`, four for `weekday` — see `comparisonWindows`.
+   */
+  compare: DateRange[] | null
   today: Date
   /** The first click of a two-click range pick, before it becomes a range. */
   pending?: Date | null
@@ -137,7 +145,7 @@ export function Calendar({
             classes.push("edge")
           }
           if (isSameDay(day, today)) classes.push("today")
-          if (within(day, compare)) classes.push("cmp")
+          if (compare?.some((w) => within(day, w))) classes.push("cmp")
           return (
             <button
               key={isoDay(day)}

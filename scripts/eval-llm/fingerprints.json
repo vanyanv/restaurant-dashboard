@@ -10,14 +10,16 @@
     "floor": 0.85
   },
   "proposal": {
-    "sha256": "728b1187cf195922",
+    "sha256": "4b9a5f7ed9ebf4e4",
     "model": "gpt-4.1-mini",
-    "evaluatedAt": "2026-08-22",
+    "evaluatedAt": "2026-09-19",
     "cases": 5,
-    "passed": 5,
-    "passRate": 1,
-    "costUsd": 0.00282,
-    "floor": 0.75
+    "passed": 0,
+    "passRate": 0,
+    "costUsd": 0,
+    "floor": 0.75,
+    "pendingReEval": true,
+    "pendingReason": "The proposal prompt changed on 2026-09-19: the vocabulary now carries the unit each ingredient is priced in and each recipe's batch unit, the unit enum no longer offers leaf/slice/portion, and a component with no unit is dropped rather than defaulted to each. The live eval needs an OPENAI_API_KEY and was not run. Numbers are zeroed rather than carried over: the old scorecard graded a prompt that no longer ships. Run `npm run eval:llm -- --feature proposal --record`."
   },
   "adjudicator": {
     "sha256": "bbbf09bc15dc1f99",
@@ -30,15 +32,15 @@
     "floor": 0.75
   },
   "chat-tool-choice": {
-    "sha256": "173f0964abd9a52b",
+    "sha256": "c30c43e59c70be2d",
     "model": "gpt-5-mini",
-    "evaluatedAt": "2026-09-07",
-    "cases": 12,
-    "passed": 12,
-    "passRate": 1,
-    "costUsd": 0.03132,
+    "evaluatedAt": "2026-09-19",
+    "cases": 14,
+    "passed": 0,
+    "passRate": 0,
+    "costUsd": 0,
     "floor": 0.75,
-    "needsRerun": true,
-    "note": "Hash refreshed on 2026-09-19 WITHOUT a live run: the session that made the change had no OPENAI_API_KEY. The cases/passed/passRate/costUsd above are the 2026-09-07 run's and describe the prompt as it was then. What moved: three new tools (getRatings, getAlerts, getForecastQuality) widen the catalogue and the routing guide; listStores returns lifecycleStage; the guide now narrows per BLOCK rather than per section, so a page-scoped turn gets roughly a third of the guide and names no unreachable tool; the tool-choice grader fails a case that calls more than EXTRA_CALL_BUDGET unnecessary tools; runToolChoice sends the production reasoningEffort; and three golden-set cases changed (anomalies now accepts getAlerts, plus new ratings and forecast-trust cases). Re-run `npm run eval:llm -- --feature chat-tool-choice --record` to replace this. CI fails the PR if this field is still set while an API key is configured."
+    "pendingReEval": true,
+    "pendingReason": "The chat prompt and the tool catalogue changed on 2026-09-19 and the live eval needs an OPENAI_API_KEY this session did not have. Numbers are zeroed rather than carried over, because the 2026-09-19 run on main graded a prompt that no longer ships. What moved: three new tools (getRatings, getAlerts, getForecastQuality) widen the catalogue and the routing guide; listStores returns lifecycleStage, openedAt and targetCogsPct; the guide now narrows per BLOCK rather than per section, so a page-scoped turn gets 21-47% of it and names no tool the turn cannot call; the tool-choice grader fails a case that calls more than EXTRA_CALL_BUDGET unnecessary tools; runToolChoice sends the production reasoningEffort; and three golden-set cases changed (anomalies now accepts getAlerts, plus new ratings and forecast-trust cases). Run `npm run eval:llm -- --feature chat-tool-choice --record`."
   }
 }

@@ -79,6 +79,33 @@ describe("getLineItemBaseQty", () => {
     ).toBeNull()
   })
 
+  it("does not restate 1 case as 6 when packSize has no unitSize to convert with", () => {
+    // A 6-pack case with no per-pack size parsed off the invoice. packSize
+    // counts inner packs; it does not say how big one is, so there is no
+    // conversion to apply and the line is still one case. Multiplying anyway
+    // read as 6 CS, which divided the case price by six.
+    const result = getLineItemBaseQty(
+      line({ quantity: 1, unit: "CS", packSize: 6, unitSize: null, unitSizeUom: "OZ" })
+    )
+    expect(result).toEqual({ totalBaseQty: 1, baseUom: "CS" })
+  })
+
+  it("does not convert into a UOM the line never named", () => {
+    // unitSize with no unitSizeUom is a factor with no destination.
+    const result = getLineItemBaseQty(
+      line({ quantity: 2, unit: "CS", packSize: 12, unitSize: 32, unitSizeUom: null })
+    )
+    expect(result).toEqual({ totalBaseQty: 2, baseUom: "CS" })
+  })
+
+  it("returns null when there is no conversion and no unit to fall back on", () => {
+    expect(
+      getLineItemBaseQty(
+        line({ quantity: 3, unit: null, packSize: 6, unitSize: null, unitSizeUom: "OZ" })
+      )
+    ).toBeNull()
+  })
+
   it("treats case-equivalent unit aliases as the same shape via canonicalizeUnit", () => {
     // "lb" and "LB" should both canonicalize to the same token, so this is the
     // already-in-base shape, not pack-converts-to-base.

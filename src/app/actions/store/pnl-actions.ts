@@ -26,7 +26,70 @@ import type {
   PnLMover,
   StorePnLResult,
   AllStoresPnLResult,
+  PnLPeriodLines,
 } from "./pnl-types"
+
+/**
+ * `combined`-shaped lines, one entry PER PERIOD, over whichever stores are
+ * handed in.
+ *
+ * Built by INDEXING the same per-period arrays the range totals sum —
+ * deliberately NOT re-derived from `consolidatedRows`, which would mean
+ * mapping GL row codes back onto these fields and getting one wrong silently.
+ * So a period here and the same period asked for on its own are the same
+ * arithmetic on the same rows.
+ *
+ * It takes a LIST of computeds rather than closing over every store, and that
+ * is the whole point of it being a function. Passing one store's computed
+ * gives that store's periods by the identical route, which is what a
+ * single-store trailing-weeks table needs. `loadWeekStatements` read the
+ * account-wide `perPeriod` whatever store was selected, so selecting Glendale
+ * on `/dashboard/pnl` printed a correct Glendale cascade above an eight-week
+ * table holding all three stores — roughly triple, with nothing to say it was
+ * a different scope. The rollup published no per-store answer to read instead;
+ * now it does.
+ */
+function periodLines(
+  computeds: Array<ReturnType<typeof computeStorePnL>>,
+  periods: Period[],
+): PnLPeriodLines[] {
+  const total = (xs: number[]) => xs.reduce((a, b) => a + b, 0)
+  return periods.map((_p, i) => {
+    const at = (pick: (c: ReturnType<typeof computeStorePnL>) => number[]) =>
+      total(computeds.map((c) => pick(c)[i] ?? 0))
+    const gross = at((c) => c.totalSales)
+    const cogs = at((c) => c.cogsValues)
+    const labor = at((c) => c.laborValues)
+    const rent = at((c) => c.rentValues)
+    const fixed =
+      labor +
+      rent +
+      at((c) => c.towelsValues) +
+      at((c) => c.cleaningValues) +
+      total(computeds.map((c) => total(c.customFixedValues.map((row) => row[i] ?? 0))))
+    const bottom = at((c) => c.bottomLine)
+    // `<= 0`, not `=== 0`. A window that took in less than nothing — heavy
+    // refunds — has a negative denominator, and dividing by it inverts every
+    // ratio's sign: a cost reads as a credit, a loss reads as a margin. Zero
+    // sales and negative sales say the same thing here: there is no revenue
+    // for these to be a percentage of. `prime-cost.ts`, `statement.ts` and
+    // `cogs.ts` all guard with `<= 0` already; this layer was the survivor.
+    const r = (v: number) => (gross <= 0 ? 0 : v / gross)
+    return {
+      grossSales: gross,
+      netAfterCommissions: at((c) => c.netAfterCommissions),
+      fixedCosts: fixed,
+      bottomLine: bottom,
+      marginPct: gross <= 0 ? 0 : bottom / gross,
+      cogsValue: cogs,
+      cogsPct: r(cogs),
+      laborValue: labor,
+      laborPct: r(labor),
+      rentValue: rent,
+      rentPct: r(rent),
+    }
+  })
+}
 
 type FixedExpenseRow = {
   id: string
@@ -418,7 +481,7 @@ export async function getStorePnL(input: {
     const netAfterCommissions = sum(computed.netAfterCommissions)
     const totalCogs = sum(computed.cogsValues)
     const grossProfit = sum(computed.grossProfit)
-    const grossMarginPct = grossSales === 0 ? 0 : grossProfit / grossSales
+    const grossMarginPct = grossSales <= 0 ? 0 : grossProfit / grossSales
     const fixedCosts =
       sum(computed.laborValues) +
       sum(computed.rentValues) +
@@ -426,7 +489,7 @@ export async function getStorePnL(input: {
       sum(computed.cleaningValues) +
       sum(computed.customFixedValues.flat())
     const bottomLine = sum(computed.bottomLine)
-    const marginPct = grossSales === 0 ? 0 : bottomLine / grossSales
+    const marginPct = grossSales <= 0 ? 0 : bottomLine / grossSales
 
     const totalChannelVals = computed.perPeriodSalesValues.reduce<number[]>(
       (acc, periodVals) => {
@@ -665,8 +728,8 @@ export async function getAllStoresPnL(input: {
         sum(computed.cleaningValues) +
         sum(computed.customFixedValues.flat())
       const bottomLine = sum(computed.bottomLine)
-      const marginPct = grossSales === 0 ? 0 : bottomLine / grossSales
-      const ratio = (v: number) => (grossSales === 0 ? 0 : v / grossSales)
+      const marginPct = grossSales <= 0 ? 0 : bottomLine / grossSales
+      const ratio = (v: number) => (grossSales <= 0 ? 0 : v / grossSales)
 
       const totalChannelVals = computed.perPeriodSalesValues.reduce<number[]>(
         (acc, periodVals) => {
@@ -696,6 +759,9 @@ export async function getAllStoresPnL(input: {
         fixedCostsConfigured:
           store.fixedMonthlyLabor != null && store.fixedMonthlyRent != null,
         rows: computed.rows,
+        // This store's own periods, by the same route `perPeriod` takes for
+        // the account. See `periodLines`.
+        perPeriod: periodLines([computed], periods),
       }
     })
 
@@ -710,14 +776,14 @@ export async function getAllStoresPnL(input: {
       bottomLine: sum(perStore.map((p) => p.bottomLine)),
       marginPct: 0,
       cogsValue: combinedCogs,
-      cogsPct: combinedGross === 0 ? 0 : combinedCogs / combinedGross,
+      cogsPct: combinedGross <= 0 ? 0 : combinedCogs / combinedGross,
       laborValue: combinedLabor,
-      laborPct: combinedGross === 0 ? 0 : combinedLabor / combinedGross,
+      laborPct: combinedGross <= 0 ? 0 : combinedLabor / combinedGross,
       rentValue: combinedRent,
-      rentPct: combinedGross === 0 ? 0 : combinedRent / combinedGross,
+      rentPct: combinedGross <= 0 ? 0 : combinedRent / combinedGross,
     }
     combined.marginPct =
-      combined.grossSales === 0 ? 0 : combined.bottomLine / combined.grossSales
+      combined.grossSales <= 0 ? 0 : combined.bottomLine / combined.grossSales
 
     // Merge by row code (not index): robust to stores having different custom
     // fixed expenses. Stores lacking a given code contribute 0 to that line.
@@ -726,44 +792,7 @@ export async function getAllStoresPnL(input: {
       periods
     )
 
-    /*
-     * `combined`, per period. Same arithmetic as the block above, indexed
-     * instead of summed — deliberately NOT re-derived from `consolidatedRows`,
-     * which would mean mapping GL row codes back onto these fields and getting
-     * one wrong silently.
-     */
-    const perPeriod = periods.map((_p, i) => {
-      const at = (xs: number[][]) => sum(xs.map((v) => v[i] ?? 0))
-      const gross = at(perStoreComputed.map((c) => c.totalSales))
-      const cogs = at(perStoreComputed.map((c) => c.cogsValues))
-      const labor = at(perStoreComputed.map((c) => c.laborValues))
-      const rent = at(perStoreComputed.map((c) => c.rentValues))
-      const fixed =
-        labor +
-        rent +
-        at(perStoreComputed.map((c) => c.towelsValues)) +
-        at(perStoreComputed.map((c) => c.cleaningValues)) +
-        sum(
-          perStoreComputed.map((c) =>
-            sum(c.customFixedValues.map((row) => row[i] ?? 0)),
-          ),
-        )
-      const bottom = at(perStoreComputed.map((c) => c.bottomLine))
-      const r = (v: number) => (gross === 0 ? 0 : v / gross)
-      return {
-        grossSales: gross,
-        netAfterCommissions: at(perStoreComputed.map((c) => c.netAfterCommissions)),
-        fixedCosts: fixed,
-        bottomLine: bottom,
-        marginPct: gross === 0 ? 0 : bottom / gross,
-        cogsValue: cogs,
-        cogsPct: r(cogs),
-        laborValue: labor,
-        laborPct: r(labor),
-        rentValue: rent,
-        rentPct: r(rent),
-      }
-    })
+    const perPeriod = periodLines(perStoreComputed, periods)
 
     return {
       storeCount: stores.length,

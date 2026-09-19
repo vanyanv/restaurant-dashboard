@@ -13,7 +13,7 @@ vi.mock("@/lib/prisma", () => ({
   prisma: {
     invoiceLineItem: { findFirst: vi.fn(), findMany: vi.fn(), updateMany: vi.fn() },
     ingredientSkuMatch: { upsert: vi.fn() },
-    canonicalIngredient: { create: vi.fn() },
+    canonicalIngredient: { create: vi.fn(), findFirst: vi.fn() },
     ingredientAlias: { upsert: vi.fn() },
   },
 }))
@@ -38,6 +38,10 @@ beforeEach(() => {
     productName: "HOUSE SAUCE BULK",
     unit: "CS",
     invoice: { vendorName: "VITCO FOODSERVICE", storeId: "store-1" },
+  } as never)
+  // The target canonical belongs to this account unless a test says otherwise.
+  vi.mocked(prisma.canonicalIngredient.findFirst).mockResolvedValue({
+    id: "canon-bulk",
   } as never)
   vi.mocked(prisma.ingredientSkuMatch.upsert).mockResolvedValue({} as never)
   vi.mocked(prisma.invoiceLineItem.updateMany).mockResolvedValue({ count: 0 } as never)
@@ -102,5 +106,34 @@ describe("confirmSkuMatch vendor identity", () => {
 
     expect(prisma.invoiceLineItem.updateMany).not.toHaveBeenCalled()
     expect(result.backfilled).toBe(0)
+  })
+})
+
+
+describe("confirmSkuMatch account boundary", () => {
+  it("refuses a canonical ingredient belonging to another account", async () => {
+    // The line item is already scoped by `invoice: { accountId }`, but the
+    // canonical arrives from the caller. Unchecked, this call would point
+    // our invoice lines and our SKU match at another account's ingredient.
+    vi.mocked(prisma.canonicalIngredient.findFirst).mockResolvedValue(null as never)
+
+    await expect(
+      confirmSkuMatch({ lineItemId: "li-clicked", canonicalIngredientId: "canon-theirs" })
+    ).rejects.toThrow("Ingredient not found")
+
+    expect(prisma.ingredientSkuMatch.upsert).not.toHaveBeenCalled()
+    expect(prisma.invoiceLineItem.updateMany).not.toHaveBeenCalled()
+  })
+
+  it("looks the canonical up within the caller's account", async () => {
+    vi.mocked(prisma.invoiceLineItem.findMany).mockResolvedValue([] as never)
+
+    await confirmSkuMatch({ lineItemId: "li-clicked", canonicalIngredientId: "canon-bulk" })
+
+    expect(prisma.canonicalIngredient.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: "canon-bulk", accountId: "acct-A" },
+      })
+    )
   })
 })

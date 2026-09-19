@@ -14,10 +14,13 @@ describe("buildProposalPrompt", () => {
     const prompt = buildProposalPrompt({
       items: [{ itemName: "3 Slider Combo", category: "Combos", qty30d: 42 }],
       recipeVocab: [
-        { itemName: "Double Slider", category: "Sliders" },
-        { itemName: "Fries", category: "Sides" },
+        { itemName: "Double Slider", category: "Sliders", yieldUnit: null },
+        { itemName: "Fries", category: "Sides", yieldUnit: null },
       ],
-      ingredientVocab: ["ground beef", "potato roll"],
+      ingredientVocab: [
+        { name: "ground beef", recipeUnit: "lb" },
+        { name: "potato roll", recipeUnit: "each" },
+      ],
     })
 
     expect(prompt).toContain("3 Slider Combo")
@@ -32,7 +35,7 @@ describe("buildProposalPrompt", () => {
   it("folds confirmed mappings in as house-pattern examples when provided", () => {
     const prompt = buildProposalPrompt({
       items: [{ itemName: "Chris N Eddy's Slider", category: "Sliders", qty30d: 10 }],
-      recipeVocab: [{ itemName: "Double Slider", category: "Sliders" }],
+      recipeVocab: [{ itemName: "Double Slider", category: "Sliders", yieldUnit: null }],
       ingredientVocab: [],
       confirmedExamples: [
         { itemName: "Triple Patty Slider", recipeName: "Triple Slider" },
@@ -47,7 +50,7 @@ describe("buildProposalPrompt", () => {
   it("omits the examples section when there are none", () => {
     const prompt = buildProposalPrompt({
       items: [{ itemName: "X", category: "Menu", qty30d: 1 }],
-      recipeVocab: [{ itemName: "Y", category: "Menu" }],
+      recipeVocab: [{ itemName: "Y", category: "Menu", yieldUnit: null }],
       ingredientVocab: [],
     })
     expect(prompt).not.toContain("Already-confirmed mappings")
@@ -56,7 +59,7 @@ describe("buildProposalPrompt", () => {
   it("tells the model to echo names verbatim and to prefer MATCH over decomposing", () => {
     const prompt = buildProposalPrompt({
       items: [{ itemName: "2 Sliders and Fries", category: "Combos", qty30d: 10 }],
-      recipeVocab: [{ itemName: "2 Slider Combo", category: "Combos" }],
+      recipeVocab: [{ itemName: "2 Slider Combo", category: "Combos", yieldUnit: null }],
       ingredientVocab: [],
     })
 

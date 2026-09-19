@@ -6,6 +6,7 @@ import { loadChannelMix, type ChannelReading } from "@/lib/counter/channel-mix"
 import { loadStripTargets, type StripTargets, type Target } from "@/lib/counter/targets"
 import {
   granularityFor,
+  loadComparisonStatement,
   loadStatement,
   loadWeekStatements,
   type Statement,
@@ -19,7 +20,6 @@ import {
 import { PRIME_CEILING_PCT } from "@/lib/counter/prime-cost"
 import { count, delta, money, pct, plural, points } from "@/lib/counter/format"
 import {
-  comparisonRange,
   serializeWeekWindow,
   trailingWeeks,
   type ComparisonId,
@@ -350,6 +350,24 @@ function laborKnown(s: Statement | StoreStatement): boolean {
   return s.grossSales > 0 && s.laborValue > 0
 }
 
+/**
+ * The same gate on the food half.
+ *
+ * `primeCost` withholds its percentages only when the DENOMINATOR is missing.
+ * With sales on the books and no COGS posted yet — the materializer has not
+ * run, or the range reaches into days it has not reached — `cogsValue` is 0
+ * and `cogsPct` comes back as a confident 0.0%. A zero food cost is not a
+ * missing reading; it reads as a perfect one, and the prime cost built on it
+ * reads as headroom that is not there.
+ *
+ * The Overview grew this guard first. This page had only the labour half, so
+ * the identical hole stayed open on the food half and on the prime cost that
+ * depends on both.
+ */
+function foodKnown(s: Statement | StoreStatement): boolean {
+  return s.grossSales > 0 && s.cogsValue > 0
+}
+
 /** The margin in POINTS. `Statement.marginPct` is the rollup's raw fraction. */
 function marginPoints(s: Statement | StoreStatement): number | null {
   return s.marginPct === null ? null : s.marginPct * 100
@@ -454,8 +472,10 @@ function buildStrip(
   // food and labour and leaves the bottom line and gross sales bare. Every rate
   // is read off that week's own `prime`, the same scale the cell above it
   // prints, so the line and the figure cannot be in different units.
-  const primeTrail = weeklyRates(weeks, (w) => (laborKnown(w) ? w.prime.primePct : null))
-  const foodTrail = weeklyRates(weeks, (w) => w.prime.cogsPct)
+  const primeTrail = weeklyRates(weeks, (w) =>
+    laborKnown(w) && foodKnown(w) ? w.prime.primePct : null,
+  )
+  const foodTrail = weeklyRates(weeks, (w) => (foodKnown(w) ? w.prime.cogsPct : null))
   const laborTrail = weeklyRates(weeks, (w) => (laborKnown(w) ? w.prime.laborPct : null))
 
   const margin = marginPoints(p)
@@ -472,7 +492,11 @@ function buildStrip(
 
   // `p.prime` is `primeCost()` already applied by `statement.ts`, on this
   // statement's own denominator. Nothing here re-derives it (note 60).
-  const prime = laborKnown(p) ? p.prime : null
+  // Prime is food PLUS labour, so it needs both halves. The two cells below
+  // are each gated on their own half — a missing food cost is no reason to
+  // withhold a labour percentage that is perfectly well known.
+  const prime = laborKnown(p) && foodKnown(p) ? p.prime : null
+  const labor = laborKnown(p) ? p.prime : null
   if (prime?.primePct != null) {
     const move = moveVs(prime.primePct, c?.prime.primePct, cmp)
     cells.push({
@@ -494,7 +518,7 @@ function buildStrip(
   }
 
   const foodPlan = targets?.foodCost ?? null
-  if (p.prime.cogsPct !== null) {
+  if (foodKnown(p) && p.prime.cogsPct !== null) {
     const value = pct(p.prime.cogsPct, { scaled: true })
     const move = moveVs(p.prime.cogsPct, c?.prime.cogsPct, cmp)
     cells.push({
@@ -508,11 +532,11 @@ function buildStrip(
     })
   }
 
-  if (prime?.laborPct != null) {
-    const move = moveVs(prime.laborPct, c?.prime.laborPct, cmp)
+  if (labor?.laborPct != null) {
+    const move = moveVs(labor.laborPct, c?.prime.laborPct, cmp)
     cells.push({
       label: "Labor",
-      value: pct(prime.laborPct, { scaled: true }),
+      value: pct(labor.laborPct, { scaled: true }),
       delta: move === null ? undefined : `${points(move)} vs ${cmp.short}`,
       deltaTone: move !== null && move > 0 ? "is-down" : undefined,
       // The dollars, not a band: the prototype's 23.9–26.2% "plus salaried"
@@ -525,10 +549,10 @@ function buildStrip(
       // line away because there is no band to judge it against was this cell
       // reporting a data gap it does not have.
       reference: referenceFor(
-        prime.laborPct,
+        labor.laborPct,
         targets?.labor ?? null,
         "low",
-        `Labor ${pct(prime.laborPct, { scaled: true })}`,
+        `Labor ${pct(labor.laborPct, { scaled: true })}`,
         laborTrail,
       ),
     })
@@ -588,7 +612,11 @@ function buildPhoneStrip(p: Statement): StripCell[] {
   // `roomPp` is null exactly when `primePct` is — `primeCost()` returns both
   // from the same branch — but the pair is asserted rather than assumed, so
   // this cell can never print a ceiling it did not measure against.
-  const prime = laborKnown(p) ? p.prime : null
+  // Prime is food PLUS labour, so it needs both halves. The two cells below
+  // are each gated on their own half — a missing food cost is no reason to
+  // withhold a labour percentage that is perfectly well known.
+  const prime = laborKnown(p) && foodKnown(p) ? p.prime : null
+  const labor = laborKnown(p) ? p.prime : null
   if (prime?.primePct != null && prime.roomPp != null) {
     const room = prime.roomPp
     cells.push({
@@ -648,7 +676,11 @@ function buildReading(p: Statement, targets: StripTargets | null): ReadingSegmen
   strong(pct(marginPoints(p), { scaled: true }))
   say(".")
 
-  const prime = laborKnown(p) ? p.prime : null
+  // Prime is food PLUS labour, so it needs both halves. The two cells below
+  // are each gated on their own half — a missing food cost is no reason to
+  // withhold a labour percentage that is perfectly well known.
+  const prime = laborKnown(p) && foodKnown(p) ? p.prime : null
+  const labor = laborKnown(p) ? p.prime : null
   if (prime?.primePct == null || prime.roomPp == null) {
     // No labour posted against these sales: prime cost has no reading, and the
     // strip has no prime cell either. Saying so is the point.
@@ -885,8 +917,12 @@ function buildStatement(
   // Derived here rather than lifted out of `comparisonPhrase`'s sentence: this
   // is a table cell, and a cell reading "no the prior period to compare" is
   // the sentence's words in the wrong place.
+  // `<= 0`, not `=== 0`. A comparison window that netted below zero — heavy
+  // refunds — has a negative denominator, and dividing by it turns a rise into
+  // a fall. `comparisonPhrase` carries the same guard for the sentence version
+  // of this figure; the cell version has to agree with it.
   const grossMove =
-    thenGross === null || thenGross === 0 ? null : (p.grossSales - thenGross) / thenGross
+    thenGross === null || thenGross <= 0 ? null : (p.grossSales - thenGross) / thenGross
   const lines: StatementLine[] = [
     {
       key: "gross",
@@ -1095,7 +1131,6 @@ export function getPnlSectionPromises(input: PnlSectionsInput): StreamedSections
   // too: a `weekday` window contains four occurrences and would derive
   // "weekly" from itself, which is a comparison of two different things.
   const granularity = granularityFor(range)
-  const cmpRange = comparisonId === "none" ? null : comparisonRange(range, comparisonId)
   const windows = trailingWeeks(businessCalendarDate(today), WEEKS_SHOWN)
 
   /* ── The loads. Every one of them starts here; none is awaited here. ── */
@@ -1104,9 +1139,11 @@ export function getPnlSectionPromises(input: PnlSectionsInput): StreamedSections
     retryAction: "retryStatement",
   })
 
+  // `loadComparisonStatement`, not `loadStatement(comparisonRange(...))`: a
+  // `weekday` comparison is FOUR windows, and loading their contiguous hull as
+  // one window read a single day against five and a half days of trade.
   const cmpP = classify<Statement | null>(
-    () =>
-      cmpRange ? loadStatement({ range: cmpRange, storeId, granularity }) : Promise.resolve(null),
+    () => loadComparisonStatement({ range, mode: comparisonId, storeId, granularity }),
     { retryAction: "retryComparison" },
   )
 

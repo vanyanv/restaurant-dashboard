@@ -26,6 +26,23 @@ beforeEach(() => {
   vi.clearAllMocks()
 })
 
+/**
+ * Days the store traded, established by an item that never stops selling.
+ *
+ * `OtterMenuItem` has no row for an item that sold nothing, so the only
+ * evidence a store was OPEN on a date is that something sold that date.
+ * A fixture with a single item cannot distinguish "this item was 86'd" from
+ * "the store was shut" — which is exactly the inference `getLostSales` used
+ * to make, and why a closure or a sync outage booked a loss on every item.
+ */
+function tradingDays(from: string, days: number) {
+  return Array.from({ length: days }, (_, i) => {
+    const d = new Date(`${from}T00:00:00Z`)
+    d.setUTCDate(d.getUTCDate() + i)
+    return row(d.toISOString().slice(0, 10), "Fries", 20, 100)
+  })
+}
+
 function row(date: string, itemName: string, qty: number, sales: number) {
   return {
     storeId: "s1",
@@ -72,7 +89,9 @@ describe("getLostSales", () => {
       return row(d.toISOString().slice(0, 10), "Burger", 10, 80)
     })
     vi.mocked(prisma.otterMenuItem.findMany).mockResolvedValue(
-      [...baseline, ...after] as never,
+      // Fries sells straight through, so 2026-05-01..03 are days the store
+      // was OPEN and the Burger did not sell — a stock-out, not a closure.
+      [...baseline, ...after, ...tradingDays("2026-04-07", 31)] as never,
     )
     const asOf = new Date("2026-05-07T00:00:00Z")
     const result = await getLostSales({
@@ -124,7 +143,9 @@ describe("getLostSales", () => {
       d.setUTCDate(d.getUTCDate() + i)
       return row(d.toISOString().slice(0, 10), "Delisted", 10, 80)
     })
-    vi.mocked(prisma.otterMenuItem.findMany).mockResolvedValue(baseline as never)
+    vi.mocked(prisma.otterMenuItem.findMany).mockResolvedValue(
+      [...baseline, ...tradingDays("2026-03-01", 62)] as never,
+    )
     const result = await getLostSales({
       storeId: "s1",
       asOf: new Date("2026-05-01T00:00:00Z"),
@@ -134,6 +155,124 @@ describe("getLostSales", () => {
     if (!result || !result.ok) throw new Error("expected ok")
     expect(result.data.events).toHaveLength(1)
     expect(result.data.events[0].gapDays).toBe(14)
+  })
+
+  it("does not book a loss on every item when the store was shut for two days", async () => {
+    // The whole menu goes quiet together because the doors were locked, not
+    // because three items were 86'd on the same morning. Filling the calendar
+    // with qty 0 made this a simultaneous stock-out of all three, each priced
+    // at its own baseline and summed into totalEstimatedLost. minGapDays is 2,
+    // so a long weekend was enough.
+    vi.mocked(getServerSession).mockResolvedValue(sessionWith() as never)
+    vi.mocked(prisma.store.findMany).mockResolvedValue([
+      { id: "s1", name: "S1", accountId: "acct-A", isActive: true },
+    ] as never)
+    const menu = ["Burger", "Fries", "Shake"]
+    const rows = []
+    for (let i = 0; i < 20; i += 1) {
+      const d = new Date("2026-04-01T00:00:00Z")
+      d.setUTCDate(d.getUTCDate() + i)
+      const key = d.toISOString().slice(0, 10)
+      // 2026-04-15 and 2026-04-16: closed. No rows for ANY item.
+      if (key === "2026-04-15" || key === "2026-04-16") continue
+      for (const item of menu) rows.push(row(key, item, 10, 80))
+    }
+    vi.mocked(prisma.otterMenuItem.findMany).mockResolvedValue(rows as never)
+    const result = await getLostSales({
+      storeId: "s1",
+      asOf: new Date("2026-04-20T00:00:00Z"),
+      lookbackDays: 30,
+    })
+    if (!result || !result.ok) throw new Error("expected ok")
+    expect(result.data.events).toHaveLength(0)
+    expect(result.data.totalEstimatedLost).toBe(0)
+  })
+
+  it("does not book a loss because today and yesterday have not synced yet", async () => {
+    // The window ends at startOfDay(asOf), and Otter posts a day after it
+    // closes. Today therefore always had zero rows, and a sync that ran late
+    // made it two — exactly minGapDays — for every item on the menu.
+    vi.mocked(getServerSession).mockResolvedValue(sessionWith() as never)
+    vi.mocked(prisma.store.findMany).mockResolvedValue([
+      { id: "s1", name: "S1", accountId: "acct-A", isActive: true },
+    ] as never)
+    const rows = []
+    for (let i = 0; i < 18; i += 1) {
+      const d = new Date("2026-04-01T00:00:00Z")
+      d.setUTCDate(d.getUTCDate() + i)
+      const key = d.toISOString().slice(0, 10)
+      for (const item of ["Burger", "Fries"]) rows.push(row(key, item, 10, 80))
+    }
+    vi.mocked(prisma.otterMenuItem.findMany).mockResolvedValue(rows as never)
+    // Last posted day is 2026-04-18; asOf is 2026-04-20.
+    const result = await getLostSales({
+      storeId: "s1",
+      asOf: new Date("2026-04-20T00:00:00Z"),
+      lookbackDays: 30,
+    })
+    if (!result || !result.ok) throw new Error("expected ok")
+    expect(result.data.events).toHaveLength(0)
+  })
+
+  it("still flags one item that goes quiet while the rest of the menu sells", async () => {
+    vi.mocked(getServerSession).mockResolvedValue(sessionWith() as never)
+    vi.mocked(prisma.store.findMany).mockResolvedValue([
+      { id: "s1", name: "S1", accountId: "acct-A", isActive: true },
+    ] as never)
+    const rows = []
+    for (let i = 0; i < 20; i += 1) {
+      const d = new Date("2026-04-01T00:00:00Z")
+      d.setUTCDate(d.getUTCDate() + i)
+      const key = d.toISOString().slice(0, 10)
+      rows.push(row(key, "Fries", 20, 100))
+      // The Burger is off the pass on the 15th and 16th. The store is open.
+      if (key !== "2026-04-15" && key !== "2026-04-16") {
+        rows.push(row(key, "Burger", 10, 80))
+      }
+    }
+    vi.mocked(prisma.otterMenuItem.findMany).mockResolvedValue(rows as never)
+    const result = await getLostSales({
+      storeId: "s1",
+      asOf: new Date("2026-04-20T00:00:00Z"),
+      lookbackDays: 30,
+    })
+    if (!result || !result.ok) throw new Error("expected ok")
+    expect(result.data.events).toHaveLength(1)
+    const e = result.data.events[0]
+    expect(e.itemName).toBe("Burger")
+    expect(e.gapDays).toBe(2)
+    expect(e.estimatedLostRevenue).toBeCloseTo(10 * 8 * 2, 5)
+  })
+
+  it("counts gap days a store was open, not calendar days it was shut", async () => {
+    // The Burger is 86'd on the 13th and stays off; the store is then shut on
+    // the 15th and 16th and reopens. Four calendar days pass with no Burger,
+    // but only two of them were days it could have sold.
+    vi.mocked(getServerSession).mockResolvedValue(sessionWith() as never)
+    vi.mocked(prisma.store.findMany).mockResolvedValue([
+      { id: "s1", name: "S1", accountId: "acct-A", isActive: true },
+    ] as never)
+    const closed = new Set(["2026-04-15", "2026-04-16"])
+    const rows = []
+    for (let i = 0; i < 20; i += 1) {
+      const d = new Date("2026-04-01T00:00:00Z")
+      d.setUTCDate(d.getUTCDate() + i)
+      const key = d.toISOString().slice(0, 10)
+      if (closed.has(key)) continue
+      rows.push(row(key, "Fries", 20, 100))
+      if (key !== "2026-04-13" && key !== "2026-04-14") {
+        rows.push(row(key, "Burger", 10, 80))
+      }
+    }
+    vi.mocked(prisma.otterMenuItem.findMany).mockResolvedValue(rows as never)
+    const result = await getLostSales({
+      storeId: "s1",
+      asOf: new Date("2026-04-20T00:00:00Z"),
+      lookbackDays: 30,
+    })
+    if (!result || !result.ok) throw new Error("expected ok")
+    expect(result.data.events).toHaveLength(1)
+    expect(result.data.events[0].gapDays).toBe(2)
   })
 
   it("ignores leading zero runs at the very start of the window (no prior baseline)", async () => {

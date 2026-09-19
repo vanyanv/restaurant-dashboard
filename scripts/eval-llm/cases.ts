@@ -138,36 +138,44 @@ export const VERDICT_CASES: VerdictCase[] = [
 
 // --- recipe proposals ----------------------------------------------------------
 
+// Every plate here is counted in servings (`yieldUnit: null`), which is what
+// every recipe in the live account is. A batch recipe would carry its unit —
+// `{ itemName: "House Sauce", category: "Sauces", yieldUnit: "fl oz" }` — and
+// the prompt tells the model to measure lines drawing on it in fluid ounces.
 const RECIPE_VOCAB = [
-  { itemName: "Double Slider", category: "Sliders" },
-  { itemName: "Single Slider", category: "Sliders" },
-  { itemName: "Chicken Slider", category: "Sliders" },
-  { itemName: "Fries", category: "Sides" },
-  { itemName: "Cheese Fries", category: "Sides" },
-  { itemName: "Onion Rings", category: "Sides" },
-  { itemName: "Fountain Drink", category: "Drinks" },
-  { itemName: "Milkshake", category: "Drinks" },
+  { itemName: "Double Slider", category: "Sliders", yieldUnit: null },
+  { itemName: "Single Slider", category: "Sliders", yieldUnit: null },
+  { itemName: "Chicken Slider", category: "Sliders", yieldUnit: null },
+  { itemName: "Fries", category: "Sides", yieldUnit: null },
+  { itemName: "Cheese Fries", category: "Sides", yieldUnit: null },
+  { itemName: "Onion Rings", category: "Sides", yieldUnit: null },
+  { itemName: "Fountain Drink", category: "Drinks", yieldUnit: null },
+  { itemName: "Milkshake", category: "Drinks", yieldUnit: null },
 ]
 
+// Each ingredient carries the unit it is PRICED in. The model used to get bare
+// names and had to guess the unit against a cost engine that only converts
+// within a family — a guess of "leaf" or "slice" produced a line that costed
+// $0.00 forever.
 const INGREDIENT_VOCAB = [
-  "Beef Patty",
-  "Slider Bun",
-  "American Cheese",
-  "Grilled Onion",
-  "Pickle Chip",
-  "Russet Potato",
-  "Yellow Onion",
-  "Chicken Breast",
-  "Vanilla Ice Cream",
-  "Whole Milk",
+  { name: "Beef Patty", recipeUnit: "each" },
+  { name: "Slider Bun", recipeUnit: "each" },
+  { name: "American Cheese", recipeUnit: "each" },
+  { name: "Grilled Onion", recipeUnit: "oz" },
+  { name: "Pickle Chip", recipeUnit: "each" },
+  { name: "Russet Potato", recipeUnit: "lb" },
+  { name: "Yellow Onion", recipeUnit: "lb" },
+  { name: "Chicken Breast", recipeUnit: "lb" },
+  { name: "Vanilla Ice Cream", recipeUnit: "gal" },
+  { name: "Whole Milk", recipeUnit: "gal" },
 ]
 
 export interface ProposalCase {
   id: string
   input: {
     items: { itemName: string; category: string; qty30d: number }[]
-    recipeVocab: { itemName: string; category: string }[]
-    ingredientVocab: string[]
+    recipeVocab: { itemName: string; category: string; yieldUnit: string | null }[]
+    ingredientVocab: { name: string; recipeUnit: string | null }[]
     confirmedExamples?: { itemName: string; recipeName: string }[]
   }
   expect: ExpectedProposal[]

@@ -11,6 +11,7 @@ import {
   type StreamedSections,
 } from "@/lib/counter/adapters/types"
 import { mapReady, type SectionData } from "@/lib/counter/section-data"
+import { PORTION_UNIT_LABEL, unitsCompatibleWith } from "@/lib/unit-conversion"
 import type { CostBand, FigureProps, MoneyLine, Row } from "@/components/counter"
 
 /**
@@ -51,6 +52,31 @@ import type { CostBand, FigureProps, MoneyLine, Row } from "@/components/counter
  * bands are the categories the recipe's own lines actually carry.
  */
 
+/**
+ * The units a line may be measured in, given what the thing it points at is
+ * priced or made in.
+ *
+ * An unrecognised unit yields the unit itself and nothing else: we cannot say
+ * what converts into "sleeve", so the only safe offer is the one that is
+ * already there. An empty list would leave the owner with no way to keep a
+ * line they cannot currently fix.
+ */
+export function unitChoices(unit: string | null | undefined): string[] {
+  const options = unitsCompatibleWith(unit)
+  if (options.length > 0) return [...options]
+  return unit?.trim() ? [unit.trim()] : [PORTION_UNIT_LABEL]
+}
+
+/**
+ * The units a batch may be measured in, biggest first per family.
+ *
+ * A kitchen makes sauce by the gallon and chili by the quart; it does not make
+ * anything by the gram. The list is deliberately the everyday half of what
+ * `unit-conversion` understands — anything here converts into anything else in
+ * its family, so a line can always be written in whatever the cook reaches for.
+ */
+const YIELD_UNIT_CHOICES = ["gal", "qt", "pt", "cup", "fl oz", "l", "ml", "lb", "oz", "kg", "g", "each"]
+
 /** Bands drawn before the rest is folded into one. */
 const MAX_BANDS = 4
 /** Days of cost history the trend reads. */
@@ -65,9 +91,34 @@ export interface RecipeHead {
   phoneCells: FigureProps[]
 }
 
+/**
+ * One header field, as a CONTROL rather than a sentence.
+ *
+ * These were rendered as `<span>`s. Four of a recipe's five header fields —
+ * name, category, yield and cost override — were read-only text, the unit on
+ * every line was read-only text, and notes rendered as a caption. An owner
+ * could change a quantity and delete a row; that was the entire editable
+ * surface of a recipe, and it is why `servingSize` reads 1 on all sixty rows.
+ *
+ * `saveRecipeLines` has always accepted every one of these and `upsertRecipe`
+ * has always written them. The gap was only ever the input.
+ */
+export interface BuilderField {
+  key: "itemName" | "category" | "servingSize" | "yieldUnit" | "foodCostOverride" | "notes"
+  label: string
+  kind: "text" | "number" | "money" | "select" | "textarea"
+  /** The raw value for the control — a number field gets a number. */
+  value: string
+  /** For `select`: the options, first one being the current value's own. */
+  options?: Array<{ value: string; label: string }>
+  /** Shown when the field is empty. */
+  placeholder?: string
+  /** One line under the control, when the field needs explaining. */
+  hint?: string
+}
+
 export interface RecipeBuilder {
-  /** The four editable header fields, in the prototype's order. */
-  fields: Array<{ key: string; label: string; value: string; placeholder?: boolean }>
+  fields: BuilderField[]
   lines: BuilderLine[]
   notes: string | null
   meta: string
@@ -77,6 +128,12 @@ export interface RecipeBuilder {
   components: PantryOption[]
   recipeId: string
   isConfirmed: boolean
+  /**
+   * Null when the recipe can be deleted; the reason when it cannot. A recipe
+   * used as somebody's sub-recipe is refused by `deleteRecipe`, and a button
+   * that always throws is worse than a button that explains itself.
+   */
+  deleteBlockedBy: string | null
 }
 
 export interface BuilderLine {
@@ -84,13 +141,25 @@ export interface BuilderLine {
   kind: "ingredient" | "component"
   refId: string
   name: string
-  /** "Sysco · 3589484 · $0.33 / each" — already written. */
+  /** "Sysco · 3589484 · $0.33 / each · 6 days ago" — already written. */
   sub: string
   quantity: number
   unit: string
+  /**
+   * The units this line may use — every unit that converts into what the
+   * ingredient is PRICED in, or into the sub-recipe's own batch unit. This is
+   * what makes an uncostable line unreachable rather than merely discouraged:
+   * an owner cannot pick `cup` against a price per `lb` and get a line that
+   * silently costs $0.00 forever.
+   */
+  unitOptions: string[]
   /** "$0.33", or "—" when the line could not be priced. */
   ext: string
   missing: boolean
+  /** One short phrase naming what is wrong, when something is. */
+  missingWhy: string | null
+  /** Days since the invoice this line's price came from. Null when unknown. */
+  priceAgeDays: number | null
 }
 
 export interface PantryOption {
@@ -100,10 +169,18 @@ export interface PantryOption {
   price: string
   unit: string
   kind: "ingredient" | "component"
+  /** The units a line drawing on this option may use. */
+  unitOptions: string[]
 }
 
 export interface RecipeCost {
   perServing: string
+  /**
+   * "Batch $48.20 ÷ 24 portions" — shown only when the recipe is a batch, so
+   * a reader can see where the per-serving figure above came from. Null on the
+   * ordinary one-plate recipe, which is every recipe in this account today.
+   */
+  batch: string | null
   bands: CostBand[]
   money: MoneyLine[]
   foot: string
@@ -159,20 +236,35 @@ export interface RecipeInput {
 
 /* -- loading ---------------------------------------------------------- */
 
-interface Loaded {
+export interface Loaded {
   id: string
   name: string
   category: string
   servingSize: number
+  yieldUnit: string | null
   notes: string | null
   isSellable: boolean
   isConfirmed: boolean
   override: number | null
   lines: RecipeCostLine[]
   totalCost: number
+  batchCost: number
+  /** What priced lines established before a fallback replaced the booked cost. */
+  computedCost: number
   partial: boolean
   emptyWalk: boolean
+  hasLines: boolean
+  overrideApplied: boolean
   categoryOf: Map<string, string | null>
+  /** Categories already in use on this account, for the category picker. */
+  categories: string[]
+  /** How many other recipes use this one as a component, and one of their names. */
+  usedInCount: number
+  usedInName: string | null
+  /** canonicalIngredientId → the unit it is priced in, for the line's unit box. */
+  costUnitOf: Map<string, string | null>
+  /** componentRecipeId → the units a line drawing on it may use. */
+  componentUnits: Map<string, string[]>
   pantry: PantryOption[]
   components: PantryOption[]
   posNames: Array<{ kind: string; name: string; stores: number }>
@@ -193,7 +285,7 @@ async function loadRecipe(input: RecipeInput): Promise<Loaded | null> {
     where: { id: recipeId, accountId },
     select: {
       id: true, itemName: true, category: true, servingSize: true, notes: true,
-      isSellable: true, isConfirmed: true, foodCostOverride: true,
+      isSellable: true, isConfirmed: true, foodCostOverride: true, yieldUnit: true,
     },
   })
   if (!recipe) return null
@@ -211,7 +303,7 @@ async function loadRecipe(input: RecipeInput): Promise<Loaded | null> {
       }),
       prisma.recipe.findMany({
         where: { accountId, id: { not: recipeId } },
-        select: { id: true, itemName: true },
+        select: { id: true, itemName: true, yieldUnit: true, category: true },
         orderBy: { itemName: "asc" },
       }),
       prisma.$queryRaw<Array<{ name: string; stores: number }>>`
@@ -269,39 +361,82 @@ async function loadRecipe(input: RecipeInput): Promise<Loaded | null> {
   }
   mark(recipeId)
 
+  // Who would break if this recipe were deleted. `deleteRecipe` refuses when
+  // anything uses it as a component, so the page says so up front instead of
+  // offering a button that always throws.
+  const usedIn: Array<{ id: string; name: string }> = []
+  for (const [id, result] of costs) {
+    if (id === recipeId) continue
+    if (result.lines.some((l) => l.kind === "component" && l.refId === recipeId)) {
+      usedIn.push({ id, name: result.itemName })
+    }
+  }
+
   return {
     id: recipe.id,
     name: recipe.itemName,
     category: recipe.category,
     servingSize: recipe.servingSize,
+    yieldUnit: recipe.yieldUnit,
     notes: recipe.notes,
     isSellable: recipe.isSellable,
     isConfirmed: recipe.isConfirmed,
     override: recipe.foodCostOverride,
     lines: walked?.lines ?? [],
     totalCost: walked?.totalCost ?? 0,
+    batchCost: walked?.batchCost ?? 0,
+    computedCost: walked?.computedCost ?? 0,
     partial: walked?.partial ?? false,
     emptyWalk: walked?.emptyWalk ?? true,
+    hasLines: walked?.hasLines ?? false,
+    overrideApplied: walked?.overrideApplied ?? false,
     categoryOf: new Map(canonicals.map((c) => [c.id, c.category])),
-    pantry: canonicals.map((c) => ({
-      id: c.id,
-      name: titleCase(c.name),
-      price:
-        c.costPerRecipeUnit === null
-          ? "no price"
-          : `${unitCost(c.costPerRecipeUnit)} / ${(c.recipeUnit ?? "unit").toLowerCase()}`,
-      unit: c.recipeUnit ?? "each",
-      kind: "ingredient" as const,
-    })),
+    costUnitOf: new Map(canonicals.map((c) => [c.id, c.recipeUnit])),
+    componentUnits: new Map(
+      allRecipes.map((r) => [
+        r.id,
+        r.yieldUnit ? unitChoices(r.yieldUnit) : [PORTION_UNIT_LABEL],
+      ]),
+    ),
+    categories: [
+      ...new Set([recipe.category, ...allRecipes.map((r) => r.category)].filter(Boolean)),
+    ].sort(),
+    usedInCount: usedIn.length,
+    usedInName: usedIn[0]?.name ?? null,
+    pantry: canonicals.map((c) => {
+      // `unitChoices(null)` answers with the PORTION label, which is a
+      // sub-recipe's fallback and not an ingredient's: an unpriced pantry item
+      // was offered "serving" while the line it produced carried "each", so
+      // the one control that exists to make an uncostable line unreachable
+      // was handing out a unit the ingredient can never be measured in.
+      // Resolve the unit first, then ask what converts into THAT.
+      const unit = c.recipeUnit ?? "each"
+      return {
+        id: c.id,
+        name: titleCase(c.name),
+        price:
+          c.costPerRecipeUnit === null
+            ? "no price"
+            : `${unitCost(c.costPerRecipeUnit)} / ${(c.recipeUnit ?? "unit").toLowerCase()}`,
+        unit,
+        kind: "ingredient" as const,
+        unitOptions: unitChoices(unit),
+      }
+    }),
     components: allRecipes
       .filter((r) => !reachable.has(r.id))
-      .map((r) => ({
-        id: r.id,
-        name: r.itemName,
-        price: costs.has(r.id) ? `${unitCost(costs.get(r.id)!.totalCost)} / serving` : "no cost",
-        unit: "serving",
-        kind: "component" as const,
-      })),
+      .map((r) => {
+        const walkedSub = costs.get(r.id)
+        const per = r.yieldUnit ?? PORTION_UNIT_LABEL
+        return {
+          id: r.id,
+          name: r.itemName,
+          price: walkedSub ? `${unitCost(walkedSub.totalCost)} / ${per}` : "no cost",
+          unit: per,
+          kind: "component" as const,
+          unitOptions: r.yieldUnit ? unitChoices(r.yieldUnit) : [PORTION_UNIT_LABEL],
+        }
+      }),
     posNames: [
       ...posItems.map((p) => ({ kind: "item", name: p.name, stores: p.stores })),
       ...posSubItems.map((p) => ({ kind: "modifier", name: p.name, stores: p.stores })),
@@ -325,7 +460,7 @@ async function loadRecipe(input: RecipeInput): Promise<Loaded | null> {
 const marginOf = (d: Loaded): number | null =>
   d.price === null || d.price <= 0 ? null : ((d.price - d.totalCost) / d.price) * 100
 
-function headOf(d: Loaded): RecipeHead {
+export function headOf(d: Loaded): RecipeHead {
   const margin = marginOf(d)
   const zero = d.emptyWalk && Math.abs(d.totalCost) < 0.005
 
@@ -336,9 +471,18 @@ function headOf(d: Loaded): RecipeHead {
     // whether the number was computed at all.
     delta: zero
       ? "nothing was costed"
-      : d.partial
-        ? "at least — one line unpriced"
-        : `${count(d.lines.length)} ${d.lines.length === 1 ? "line" : "lines"}, all priced`,
+      : d.overrideApplied
+        ? // `overrideApplied` covers two shapes: a recipe whose lines could
+          // not all be priced, and a recipe with no lines at all — the ~19
+          // modifiers that carry only a figure. Saying "a line is unpriced"
+          // about the second contradicts `gapOf`'s "no lines" four inches
+          // below it on the same screen. `hasLines` separates them.
+          d.hasLines
+          ? "fallback used — a line is unpriced"
+          : "fallback used — no lines to cost"
+        : d.partial
+          ? "at least — one line unpriced"
+          : `${count(d.lines.length)} ${d.lines.length === 1 ? "line" : "lines"}, all priced`,
     deltaTone: zero || d.partial ? "is-down" : "is-flat",
   }
   const marginCell: FigureProps = {
@@ -350,8 +494,13 @@ function headOf(d: Loaded): RecipeHead {
 
   return {
     title: d.name,
+    // "yields 24" said nothing: 24 of what, and is a line drawing on this
+    // recipe taking one of twenty-four or the whole batch? The unit is the
+    // answer and it is the difference between a sub-recipe line costing
+    // cents and costing sixty dollars.
     sub:
-      `${d.category} · yields ${count(d.servingSize)} · ` +
+      `${d.category} · yields ${count(d.servingSize)} ` +
+      `${d.yieldUnit ?? (d.servingSize === 1 ? "portion" : "portions")} · ` +
       (d.isConfirmed ? "confirmed" : "not confirmed"),
     cells: [
       costCell,
@@ -373,41 +522,186 @@ function headOf(d: Loaded): RecipeHead {
   }
 }
 
-function builderOf(d: Loaded): RecipeBuilder {
+/** Plain-English age of a price, for the line it sits under. */
+function ageOf(date: Date | null | undefined, today: Date): { days: number; label: string } | null {
+  if (!date) return null
+  const days = Math.max(0, Math.round((today.getTime() - date.getTime()) / 86_400_000))
+  return {
+    days,
+    label: days === 0 ? "today" : days === 1 ? "yesterday" : `${count(days)} days ago`,
+  }
+}
+
+/**
+ * A price older than this is called out on the line.
+ *
+ * Not a hard error and not a threshold anybody can act on directly — it is the
+ * point past which "$6.20 / gal" stops being a fact about this week. Recipes
+ * showed a vendor, a part number and a price with no date at all, so an owner
+ * had no way to tell a figure invoiced on Tuesday from one invoiced in March.
+ */
+const STALE_PRICE_DAYS = 45
+
+/** One short phrase naming what is wrong with a line, for the row itself. */
+function whyMissing(l: RecipeCostLine): string | null {
+  switch (l.missingReason) {
+    case "no-price":
+      return "no price"
+    case "unit-mismatch":
+      return `cannot measure ${l.unit} against ${l.costUnit ?? "its price"}`
+    case "yield-mismatch":
+      return l.costUnit
+        ? `this batch is measured in ${l.costUnit}`
+        : "this recipe is counted in servings"
+    case "unresolved":
+      return "nothing to cost"
+    default:
+      return l.missingCost ? "no price" : null
+  }
+}
+
+/**
+ * The builder, with every header field a CONTROL.
+ *
+ * All four of these used to render as `<span>`s, which is why `servingSize`
+ * reads 1 on all sixty recipes: the product has never had a box to type it in.
+ * `saveRecipeLines` accepts all of them and `upsertRecipe` writes all of them;
+ * only the input was missing.
+ *
+ * The yield pair is the load-bearing one. `servingSize` with no `yieldUnit`
+ * means portions; with one it means a measured batch, and a recipe that draws
+ * on it takes a share rather than the whole thing. That is the difference
+ * between two ounces of house sauce costing $0.47 and costing $60.
+ */
+export function builderOf(d: Loaded, today: Date): RecipeBuilder {
+  /*
+   * `l.costUnit` FIRST, not the canonical's `recipeUnit`.
+   *
+   * They are usually the same and occasionally are not: when
+   * `deriveCostFromLineItem` cannot read an invoice line's pack shape, the
+   * cost layer falls back to the raw invoice unit, and THAT is what the walk
+   * multiplies against. Offering `recipeUnit`'s family in that case would
+   * offer every unit except the one that works.
+   *
+   * The line's own unit is kept whatever happens, so a control can never
+   * silently change a line by rendering it.
+   */
+  const unitFor = (l: RecipeCostLine): string[] => {
+    const base =
+      l.kind === "component"
+        ? (d.componentUnits.get(l.refId) ?? [PORTION_UNIT_LABEL])
+        : unitChoices(l.costUnit ?? d.costUnitOf.get(l.refId) ?? l.unit)
+    return base.includes(l.unit) ? base : [...base, l.unit]
+  }
+
   return {
     fields: [
-      { key: "itemName", label: "Recipe name", value: d.name },
-      { key: "category", label: "Category", value: d.category },
-      { key: "servingSize", label: "Serves", value: String(d.servingSize) },
+      { key: "itemName", label: "Recipe name", kind: "text", value: d.name },
+      {
+        key: "category",
+        label: "Category",
+        kind: "select",
+        value: d.category,
+        options: d.categories.map((c) => ({ value: c, label: c })),
+      },
+      {
+        key: "servingSize",
+        label: "One batch makes",
+        kind: "number",
+        value: String(d.servingSize),
+        hint:
+          d.yieldUnit
+            ? `Recipes that use this one will measure it in ${d.yieldUnit}.`
+            : `Portions. Recipes that use this one will count servings.`,
+      },
+      {
+        key: "yieldUnit",
+        label: "Measured in",
+        kind: "select",
+        value: d.yieldUnit ?? "",
+        options: [
+          { value: "", label: "portions" },
+          ...YIELD_UNIT_CHOICES.map((u) => ({ value: u, label: u })),
+        ],
+      },
       {
         key: "foodCostOverride",
-        label: "Cost override",
-        value: d.override === null ? "None" : unitCost(d.override),
-        placeholder: d.override === null,
+        label: "Fallback batch cost",
+        kind: "money",
+        value: d.override === null ? "" : String(d.override),
+        placeholder: "None",
+        // This is a BATCH value — everything in a recipe's body is one batch
+        // and `totalCost` is what comes out after the yield divides it — so
+        // on a recipe that makes 24, an override of $48 is $2.00 a serving.
+        // With every recipe in this account yielding 1 the two readings are
+        // the same number today, which is exactly why it has to be written
+        // down before the first batch recipe is entered.
+        hint:
+          d.servingSize > 1 || d.yieldUnit
+            ? `Used when any line below cannot be priced. It is the cost of the ` +
+              `whole batch, so it is divided by the yield above.`
+            : "Used when any line below cannot be priced; complete recipes use their line total.",
+      },
+      {
+        key: "notes",
+        label: "Notes",
+        kind: "textarea",
+        value: d.notes ?? "",
+        placeholder: "Anything the next person should know",
       },
     ],
-    lines: d.lines.map((l, i) => ({
-      key: `${l.kind}:${l.refId}:${i}`,
-      kind: l.kind,
-      refId: l.refId,
-      name: titleCase(l.name),
-      sub:
-        l.kind === "component"
-          ? `sub-recipe · ${unitCost(l.unitCost)} / serving`
-          : [
-              l.sourceVendor ?? null,
-              l.sourceSku ? `part ${l.sourceSku}` : null,
-              l.unitCost === null
-                ? "no price"
-                : `${unitCost(l.unitCost)} / ${(l.costUnit ?? "unit").toLowerCase()}`,
-            ]
-              .filter(Boolean)
-              .join(" · "),
-      quantity: l.quantity,
-      unit: l.unit,
-      ext: l.missingCost ? "—" : unitCost(l.lineCost),
-      missing: l.missingCost,
-    })),
+    lines: d.lines.map((l, i) => {
+      const age = ageOf(l.sourceInvoiceDate, today)
+      return {
+        key: `${l.kind}:${l.refId}:${i}`,
+        kind: l.kind,
+        refId: l.refId,
+        name: titleCase(l.name),
+        sub:
+          l.kind === "component"
+            ? `sub-recipe · ${unitCost(l.unitCost)} / ${(l.costUnit ?? PORTION_UNIT_LABEL).toLowerCase()}` +
+              // The unit on the line is not the unit it was costed in. The
+              // sub-recipe yields portions, so `2 oz` was counted as two
+              // servings — which is what this line has always cost, and is
+              // not what it says. Giving the sub-recipe a yield unit is the
+              // one-field fix, and the row is where somebody would notice.
+              (l.unitAssumed ? ` · counted as ${count(l.quantity)} servings, not ${l.unit}` : "")
+            : [
+                // A HAND-TYPED PRICE IS NOT THE VENDOR'S.
+                //
+                // `getCanonicalIngredientCost` pulls vendor, SKU and invoice
+                // date from the most recent matched line even when the price
+                // itself was typed in, and says why: for an invoice-sourced
+                // canonical whose `costUpdatedAt` lags an arrival, the latest
+                // invoice IS the right label. For a manual price it is not —
+                // the row read "Sysco · part 3589484 · $0.33 / each · 6 days
+                // ago" over a figure somebody entered by hand that has no
+                // invoice behind it at all. So a manual cost says so and
+                // drops the provenance it does not have.
+                l.costSource === "manual" ? "entered by hand" : (l.sourceVendor ?? null),
+                l.costSource === "manual" ? null : l.sourceSku ? `part ${l.sourceSku}` : null,
+                l.unitCost === null
+                  ? "no price"
+                  : `${unitCost(l.unitCost)} / ${(l.costUnit ?? "unit").toLowerCase()}`,
+                // The date the price came from. Without it a vendor and a part
+                // number read as provenance when they are only a label — an
+                // owner could not tell Tuesday's invoice from March's.
+                l.costSource === "manual" ? null : (age?.label ?? null),
+                l.yieldFactor != null && l.yieldFactor < 1
+                  ? `${pct((1 - l.yieldFactor) * 100, { scaled: true })} waste`
+                  : null,
+              ]
+                .filter(Boolean)
+                .join(" · "),
+        quantity: l.quantity,
+        unit: l.unit,
+        unitOptions: unitFor(l),
+        ext: l.missingCost ? "—" : unitCost(l.lineCost),
+        missing: l.missingCost,
+        missingWhy: whyMissing(l),
+        priceAgeDays: l.costSource === "manual" ? null : (age?.days ?? null),
+      }
+    }),
     notes: d.notes,
     meta:
       d.lines.length === 0
@@ -420,6 +714,12 @@ function builderOf(d: Loaded): RecipeBuilder {
     components: d.components,
     recipeId: d.id,
     isConfirmed: d.isConfirmed,
+    deleteBlockedBy:
+      d.usedInCount === 0
+        ? null
+        : d.usedInCount === 1
+          ? `“${d.usedInName}” uses this as a sub-recipe.`
+          : `${count(d.usedInCount)} recipes use this as a sub-recipe, starting with “${d.usedInName}”.`,
   }
 }
 
@@ -438,13 +738,23 @@ function builderOf(d: Loaded): RecipeBuilder {
  * data says which. So this note says exactly that, with the figure attached,
  * and leaves the call to a person.
  */
-function costOf(d: Loaded): RecipeCost {
+export function costOf(d: Loaded): RecipeCost {
   const priced = d.lines.filter((l) => !l.missingCost)
+  /*
+   * PER SERVING, like the figure the bar sits under.
+   *
+   * `lineCost` is a whole batch's worth — the builder's rows show batch
+   * quantities, so a batch cost is the right number THERE. This bar sits
+   * directly beneath "Cost per serving", and on a 24-portion chili it read
+   * $2.00 in the headline with a $48.00 band under it. Two true numbers in
+   * the same panel, describing different things, with nothing saying which.
+   */
+  const perServing = d.servingSize > 0 ? d.servingSize : 1
   const byCategory = new Map<string, number>()
   for (const l of priced) {
     const cat =
       l.kind === "component" ? "Sub-recipes" : (d.categoryOf.get(l.refId) ?? "Uncategorised")
-    byCategory.set(cat, (byCategory.get(cat) ?? 0) + l.lineCost)
+    byCategory.set(cat, (byCategory.get(cat) ?? 0) + l.lineCost / perServing)
   }
   const ordered = [...byCategory].sort((a, b) => b[1] - a[1])
   const head = ordered.slice(0, MAX_BANDS - 1)
@@ -482,40 +792,89 @@ function costOf(d: Loaded): RecipeCost {
   ]
 
   const missing = d.lines.filter((l) => l.missingCost)
+  const handTyped = priced.filter((l) => l.costSource === "manual").length
 
   return {
     perServing: unitCost(d.totalCost),
+    // Where the figure above came from, shown only when it was divided. Null
+    // on a one-plate recipe, which is every recipe in this account today.
+    batch:
+      d.servingSize > 1 || d.yieldUnit
+        ? `Batch ${unitCost(d.batchCost)} ÷ ${count(d.servingSize)} ${d.yieldUnit ?? (d.servingSize === 1 ? "portion" : "portions")}`
+        : null,
     bands,
     money: lines,
     foot:
-      margin === null
+      (margin === null
         ? `No observed price in ${d.rangeLabel}, so there is no margin to state.`
-        : `${pct(margin, { scaled: true })} margin · ${pct(100 - margin, { scaled: true })} food cost`,
-    gap:
-      d.emptyWalk && d.lines.length === 0
-        ? {
-            lead: "no lines",
-            body:
-              `Nothing was costed. This recipe has no ingredient lines at all, so the ` +
-              `${unitCost(d.totalCost)} above is its recipe-level override standing in for a cost ` +
-              `nobody computed — not a plate cost that happens to be low.`,
-          }
-        : missing.length > 0
-          ? {
-              lead: `${count(missing.length)} of ${count(d.lines.length)}`,
-              href: `/dashboard/ingredients/${missing[0].refId}`,
-              body:
-                `${missing.map((l) => titleCase(l.name)).join(", ")} could not be priced, so this ` +
-                `plate costs AT LEAST ${unitCost(d.totalCost)} rather than exactly. It does not ` +
-                `block the recipe from saving.`,
-            }
-          : null,
+        : `${pct(margin, { scaled: true })} margin · ${pct(100 - margin, { scaled: true })} food cost`) +
+      // A MANUAL PRICE HAS NO HISTORY, and the product does not say so
+      // anywhere. `getCanonicalIngredientCost` documents it — "we do not store
+      // manual price history" — and then every as-of recosting of a closed
+      // month reaches for the same hand-typed figure that is in force today.
+      // An invoiced line recosts to what the month actually paid; a typed one
+      // recosts to now, silently, and the month moves.
+      (handTyped > 0
+        ? ` · ${count(handTyped)} of these ${handTyped === 1 ? "prices was" : "prices were"} ` +
+          `typed in rather than invoiced, and a typed price has no history — recosting a closed ` +
+          `month uses today's figure for ${handTyped === 1 ? "it" : "them"}.`
+        : ""),
+    gap: gapOf(d, missing),
     // Stated on every recipe, priced or not — see the function's own comment.
     note:
       `Packaging is not in this cost. Across the account ${money(d.packaging.spend)} of ` +
       `containers, liners and gloves is bought and appears in no recipe. Whether that is a ` +
       `deliberate exclusion or ${count(d.packaging.n)} missing lines is a decision nobody has ` +
       `written down, and the Ingredients page reports the same figure as a gap.`,
+  }
+}
+
+/**
+ * What is wrong with this cost, in the order it matters.
+ *
+ * Three cases, where there used to be two. The one that is new is the recipe
+ * that HAS lines, could not price all of them, and used its fallback — the
+ * catalogue reported that as "No lines", which is a false sentence about a
+ * recipe whose lines are the whole problem. `emptyWalk` means "walked to
+ * nothing"; `hasLines` is what separates the two, and both now travel out of
+ * the walk so a page can tell them apart.
+ */
+function gapOf(d: Loaded, missing: RecipeCostLine[]): RecipeCost["gap"] {
+  if (d.emptyWalk && !d.hasLines) {
+    return {
+      lead: "no lines",
+      body:
+        `Nothing was costed. This recipe has no ingredient lines at all, so the ` +
+        `${unitCost(d.totalCost)} above is its recipe-level override standing in for a cost ` +
+        `nobody computed — not a plate cost that happens to be low.`,
+    }
+  }
+
+  if (d.overrideApplied) {
+    const pricedCount = d.lines.length - missing.length
+    return {
+      lead: "fallback in use",
+      href: missing[0] ? `/dashboard/ingredients/${missing[0].refId}` : undefined,
+      body:
+        `${count(pricedCount)} of ${count(d.lines.length)} lines produced a known minimum of ` +
+        `${unitCost(d.computedCost)} per serving. Because the recipe is incomplete, the higher ` +
+        `${unitCost(d.totalCost)} fallback is what goes into COGS — a fallback BELOW that ` +
+        `minimum would understate the plate, so the lines win when they are the larger. ` +
+        `Price the missing ${missing.length === 1 ? "line" : "lines"} and the complete line ` +
+        `total takes over.`,
+    }
+  }
+
+  if (missing.length === 0) return null
+
+  const reasons = [...new Set(missing.map((l) => whyMissing(l)).filter(Boolean))]
+  return {
+    lead: `${count(missing.length)} of ${count(d.lines.length)}`,
+    href: `/dashboard/ingredients/${missing[0].refId}`,
+    body:
+      `${missing.map((l) => titleCase(l.name)).join(", ")} could not be priced — ` +
+      `${reasons.join("; ")}. So this plate costs AT LEAST ${unitCost(d.totalCost)} rather than ` +
+      `exactly, and the difference is understated food cost on every one of them.`,
   }
 }
 
@@ -636,7 +995,7 @@ export function getRecipeSectionPromises(input: RecipeInput): StreamedSections<R
 
   return {
     head: s(headOf),
-    builder: s(builderOf),
+    builder: s((d) => builderOf(d, input.today)),
     cost: s(costOf),
     sellsAs: s(sellsAsOf),
     trend: s(trendOf),

@@ -261,7 +261,13 @@ export const compareSales: ChatTool<typeof compareSalesParams, CompareSalesResul
       totalsFor(ctx, storeIds, a),
       totalsFor(ctx, storeIds, b),
     ])
-    const netPctChange = totB.net !== 0 ? (totA.net - totB.net) / totB.net : null
+    // `> 0`, not `!== 0`. A comparison period whose net sales came out
+    // negative — a week of refunds against an earlier range, a correction
+    // posted late — divides by a negative number, and the percentage change
+    // comes back with its sign flipped: the model then reports a recovery as
+    // a collapse. There is no meaningful percentage change from a negative
+    // base, so it is withheld the same way a zero base is.
+    const netPctChange = totB.net > 0 ? (totA.net - totB.net) / totB.net : null
     return {
       periodA: { label: "A", from: ymd(a.from), to: ymd(a.to), ...totA },
       periodB: { label: "B", from: ymd(b.from), to: ymd(b.to), ...totB },

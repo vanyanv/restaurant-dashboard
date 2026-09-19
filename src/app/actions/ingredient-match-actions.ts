@@ -349,6 +349,18 @@ export async function confirmSkuMatch(input: {
     await syncCanonicalEmbedding(created.id)
   }
   if (!canonicalId) throw new Error("canonicalIngredientId or newCanonical required")
+  // The line item is scoped above, but the canonical it is being attached to
+  // arrives from the caller and nothing else checks it. Without this, a
+  // request could point this account's invoice lines and SKU match at another
+  // account's ingredient — the monitoring audit would then count our lines
+  // and spend under their canonical, and our ingredients page would render
+  // their ingredient's name. `mergeCanonicalIngredients` already validates
+  // both of its ids this way; this is the same check.
+  const target = await prisma.canonicalIngredient.findFirst({
+    where: { id: canonicalId, accountId },
+    select: { id: true },
+  })
+  if (!target) throw new Error("Ingredient not found")
   const targetCanonicalId: string = canonicalId
 
   if (li.sku) {

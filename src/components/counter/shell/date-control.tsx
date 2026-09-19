@@ -5,7 +5,7 @@ import { businessCalendarDate } from "@/lib/counter/business-date"
 import { useEffect, useId, useMemo, useRef, useState } from "react"
 import { startOfMonth } from "date-fns"
 import {
-  COMPARISONS, PRESETS, bucketFor, comparisonRange, dayCount, rangeLabel, stepRange,
+  COMPARISONS, PRESETS, bucketFor, comparisonWindows, dayCount, rangeLabel, stepRange,
   type ComparisonId, type DateRange, type PresetId, type RangeId,
 } from "@/lib/counter/date-range"
 import { useFramePlacement } from "./frame-placement"
@@ -158,15 +158,17 @@ export function DateControl({
   const presetName = PRESETS.find((p) => p.id === presetId)?.name ?? "Custom range"
   const comparison = COMPARISONS.find((c) => c.id === comparisonId) ?? COMPARISONS[0]
 
-  // Filter by what comparisonRange ACTUALLY returns for this range, rather than
-  // a hardcoded length check. "none" is a deliberate exception: it always
+  // Filter by what comparisonWindows ACTUALLY returns for this range, rather
+  // than a hardcoded length check. "none" is a deliberate exception: it always
   // returns null BY DESIGN — the caller opting out, not a range that failed to
   // resolve.
   const comparisonOptions = COMPARISONS.filter(
-    (c) => c.id === "none" || comparisonRange(range, c.id) !== null,
+    (c) => c.id === "none" || comparisonWindows(range, c.id) !== null,
   )
 
-  const compare = comparisonRange(range, comparisonId)
+  // The windows themselves, not their hull — the calendar shades what the page
+  // reads, and for `weekday` below a week those are not the same set of days.
+  const compare = comparisonWindows(range, comparisonId)
   const anchorMonth = viewMonth ?? startOfMonth(range.end)
   const days = dayCount(range)
 

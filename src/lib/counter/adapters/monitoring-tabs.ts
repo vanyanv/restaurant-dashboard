@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma"
+import type { MonitoringInput } from "@/lib/counter/adapters/monitoring"
 import { count, money, pct, plural } from "@/lib/counter/format"
 import type { ChartSpec } from "@/lib/counter/chart-geometry"
 import {
@@ -141,6 +142,9 @@ interface CacheData {
   hoursRecorded: number
 }
 
+// No `accountId`: `CacheStat` is per key-prefix across the deployment, with
+// no tenant column and nothing tenant-shaped in it. Threading an account here
+// to match its siblings would suggest a filter that does not exist.
 async function loadCache(): Promise<CacheData> {
   const [rows, coverage] = await Promise.all([
     prisma.$queryRaw<
@@ -442,7 +446,7 @@ interface CostsData {
   cost30d: number
 }
 
-async function loadCosts(): Promise<CostsData> {
+async function loadCosts(accountId: string): Promise<CostsData> {
   const [days, features, totals, failures] = await Promise.all([
     prisma.$queryRaw<Array<{ day: Date; calls: number; cost: number; zero: number }>>`
       SELECT DATE("occurredAt") AS day, COUNT(*)::int AS calls,
@@ -481,6 +485,13 @@ async function loadCosts(): Promise<CostsData> {
         FROM "ChatTurn" t
         LEFT JOIN "AiUsageEvent" e ON e.id = t."aiUsageEventId"
        WHERE t.status <> 'OK'
+         -- ChatTurn's own account is whichever of its two nullable owners it
+         -- has. A turn with neither belongs to no tenant and is not this
+         -- account's to read.
+         AND (
+           t."userId" IN (SELECT id FROM "User" WHERE "accountId" = ${accountId})
+           OR t."storeId" IN (SELECT id FROM "Store" WHERE "accountId" = ${accountId})
+         )
        ORDER BY t."occurredAt" DESC
        LIMIT 20`,
   ])
@@ -692,8 +703,10 @@ function costsFailuresOf(d: CostsData): CostsFailures {
   }
 }
 
-export function getCostsSectionPromises(): StreamedSections<CostsSections> {
-  const dataP = classify(() => loadCosts(), {
+export function getCostsSectionPromises(
+  input: MonitoringInput,
+): StreamedSections<CostsSections> {
+  const dataP = classify(() => loadCosts(input.accountId), {
     retryAction: "retryCosts",
     isEmpty: (d) => d.days.length === 0,
     emptyReason: "no_match",
@@ -708,6 +721,8 @@ export function getCostsSectionPromises(): StreamedSections<CostsSections> {
   }
 }
 
-export async function getCostsSections(): Promise<CostsSections> {
-  return awaitSections(getCostsSectionPromises())
+export async function getCostsSections(
+  input: MonitoringInput,
+): Promise<CostsSections> {
+  return awaitSections(getCostsSectionPromises(input))
 }

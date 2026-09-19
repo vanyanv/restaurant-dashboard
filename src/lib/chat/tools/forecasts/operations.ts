@@ -27,20 +27,23 @@ const cashPositionParams = z
 export type CashPositionChatDay = {
   date: string
   predictedRevenue: number | null
-  estimatedNetInflow: number
+  /** Null on a day with no revenue forecast — unknown, not a day of no sales. */
+  estimatedNetInflow: number | null
   scheduledPayables: number
   proRatedFixedCosts: number
-  netCashFlow: number
-  cumulativeNet: number
+  netCashFlow: number | null
+  /** Null once any earlier day in the horizon was unforecast. */
+  cumulativeNet: number | null
 }
 
 export type CashPositionChatResult = {
   horizonDays: number
   blendedCommissionRate: number
   proRatedFixedDaily: number
+  unforecastDays: number
   totalScheduledPayables: number
   totalEstimatedInflow: number
-  endingCumulativeNet: number
+  endingCumulativeNet: number | null
   goesNegativeOn: string | null
   days: CashPositionChatDay[]
 }
@@ -51,7 +54,7 @@ export const getCashPositionForecastTool: ChatTool<
 > = {
   name: "getCashPositionForecast",
   description:
-    "Projects daily cash flow for the next 14 days. Inflow = predicted revenue × (1 − blended commission); outflow = invoice dueDate matches + pro-rated monthly fixed costs (rent/labor/cleaning/towels). Returns DELTA cumulative cash, not absolute balance — say so once. goesNegativeOn is the first date where cumulativeNet drops below 0; null when never.",
+    "Projects daily cash flow for the next 14 days. Inflow = predicted revenue x (1 - blended commission, a rate against TOTAL revenue); outflow = invoice dueDate matches + pro-rated monthly fixed costs (rent/labor/cleaning/towels). Returns DELTA cumulative cash, not absolute balance — say so once. goesNegativeOn is the first date where cumulativeNet drops below 0; null when never. A null cumulativeNet, netCashFlow or endingCumulativeNet means that day had no revenue forecast and the running total stops there: report the horizon as partly unforecast with unforecastDays days missing, never as a cash shortfall.",
   parameters: cashPositionParams,
   async execute(args, ctx) {
     const result = await getCashPositionForecast({
@@ -62,11 +65,15 @@ export const getCashPositionForecastTool: ChatTool<
     if (!result.ok) return { ok: false, error: result.error }
     void ctx
     const d = result.data
-    const goesNegative = d.days.find((day) => day.cumulativeNet < 0)
+    // A null cumulative is not below zero; it is no figure at all.
+    const goesNegative = d.days.find(
+      (day) => day.cumulativeNet !== null && day.cumulativeNet < 0,
+    )
     return {
       horizonDays: d.horizonDays,
       blendedCommissionRate: d.blendedCommissionRate,
       proRatedFixedDaily: d.proRatedFixedDaily,
+      unforecastDays: d.unforecastDays,
       totalScheduledPayables: d.totalScheduledPayables,
       totalEstimatedInflow: d.totalEstimatedInflow,
       endingCumulativeNet: d.endingCumulativeNet,

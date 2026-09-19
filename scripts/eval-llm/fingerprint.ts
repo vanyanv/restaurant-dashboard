@@ -170,15 +170,21 @@ export interface FingerprintRecord {
   /** The gate this feature must clear. */
   floor: number
   /**
-   * True when the hash was updated without a live run behind it — the numbers
-   * above are the PREVIOUS run's and describe a prompt that has since changed.
+   * The prompt changed and the paid eval has NOT been re-run against it.
    *
-   * It exists so that carrying a scorecard forward is a thing written down in
-   * the file rather than a thing nobody notices. `note` says what changed and
-   * what has to happen; the live runner clears both on `--record`.
+   * The fingerprint tripwire has exactly one failure mode: somebody edits a
+   * prompt, finds the test red, pastes in the new hash, and the committed
+   * scorecard now vouches for a run that never happened. That is the
+   * permanently-green gate this repo has fixed four times elsewhere.
+   *
+   * So a hash may be refreshed without the eval, but only wearing this, and
+   * `tests/scripts/eval-llm-fingerprint.test.ts` holds the other half of the
+   * bargain: a record marked pending must have `passed: 0`, `passRate: 0` and
+   * `costUsd: 0`. There is no way to record a pass you did not measure.
    */
-  needsRerun?: boolean
-  note?: string
+  pendingReEval?: boolean
+  /** Why it is pending and what to run. Required when `pendingReEval`. */
+  pendingReason?: string
 }
 
 export const FINGERPRINTS_PATH = join(__dirname, "fingerprints.json")

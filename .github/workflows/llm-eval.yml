@@ -81,10 +81,12 @@ jobs:
             echo "present=true" >> "$GITHUB_OUTPUT"
           fi
 
-      # `needsRerun` is set when a hash was refreshed without a live run behind
-      # it, which is honest bookkeeping and was, until this step, a field
-      # nothing read. With a key configured there is no excuse for it, so the
-      # run below clears it and this step fails the PR if it did not.
+      # `pendingReEval` marks a hash refreshed without a live run behind it.
+      # `tests/scripts/eval-llm-fingerprint.test.ts` already forces such a
+      # record to zero its numbers, so it cannot vouch for a pass nobody
+      # measured -- but nothing made it TEMPORARY. With a key configured there
+      # is no excuse for carrying one, and `--record` rebuilds the record
+      # without the flag, so this step fails the PR if that was not done.
       - name: Carried-forward scorecard
         if: always()
         env:
@@ -92,15 +94,15 @@ jobs:
         run: |
           stale=$(node -e "
             const f = require('./scripts/eval-llm/fingerprints.json');
-            const s = Object.entries(f).filter(([, r]) => r.needsRerun).map(([k]) => k);
+            const s = Object.entries(f).filter(([, r]) => r.pendingReEval).map(([k]) => k);
             process.stdout.write(s.join(' '));
           ")
           if [ -z "$stale" ]; then exit 0; fi
           if [ "$HAVE_KEY" = "true" ]; then
-            echo "::error::$stale carries needsRerun with an API key configured. Run 'npm run eval:llm -- --record' and commit scripts/eval-llm/fingerprints.json."
+            echo "::error::$stale carries pendingReEval with an API key configured. Run 'npm run eval:llm -- --record' and commit scripts/eval-llm/fingerprints.json."
             exit 1
           fi
-          echo "::warning::$stale carries needsRerun: its recorded pass rate describes an older prompt. Configure OPENAI_API_KEY, or run 'npm run eval:llm -- --record' locally."
+          echo "::warning::$stale carries pendingReEval: its scorecard is zeroed and the prompt is unmeasured. Configure OPENAI_API_KEY, or run 'npm run eval:llm -- --record' locally."
 
       - name: Run the golden set
         if: steps.key.outputs.present == 'true'

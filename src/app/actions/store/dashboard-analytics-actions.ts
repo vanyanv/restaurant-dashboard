@@ -3,6 +3,7 @@
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { computeDeposit } from "@/lib/deposit"
 import { todayInLA, startOfDayLA, endOfDayLA } from "@/lib/dashboard-utils"
 import { cached, stableKey } from "@/lib/cache/cached"
 import { aggregateChannelTotals } from "@/lib/otter-analytics-aggregation"
@@ -405,23 +406,30 @@ export async function getDashboardAnalytics(
       const paidIn = s((r) => r.tillPaidIn ?? 0)
       const paidOut = s((r) => r.tillPaidOut ?? 0)
 
-      if (taxRemitted > 0 || commissionFees > 0 || paidOut > 0) {
+      // `computeDeposit` in @/lib/deposit — the one implementation, shared
+      // with the channel rollup in `otter-analytics-aggregation.ts`, which
+      // used to carry its own copy of this arithmetic with no guard on it.
+      const { theoreticalDeposit, expectedDeposit, signDrift } = computeDeposit({
+        netSales,
+        taxCollected,
+        taxRemitted,
+        tips,
+        serviceCharges,
+        fees: commissionFees,
+        paidIn,
+        paidOut,
+      })
+
+      if (signDrift.length > 0) {
         console.warn(
           "[store-actions] Otter sign-convention drift detected for store=%s: " +
-            "taxRemitted=%s commissionFees=%s paidOut=%s — deposit formula assumes <= 0",
+            "%s — deposit formula assumes <= 0",
           storeId,
-          taxRemitted,
-          commissionFees,
-          paidOut
+          signDrift.join(", ")
         )
       }
 
-      const theoreticalDeposit =
-        netSales + taxCollected + taxRemitted + tips + serviceCharges + commissionFees
-
       const cashDrawerRecon = null
-
-      const expectedDeposit = theoreticalDeposit + paidIn + paidOut
 
       return {
         storeId,

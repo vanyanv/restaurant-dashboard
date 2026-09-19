@@ -158,6 +158,80 @@ describe("getPromoRoi", () => {
     expect(result.data.blendedRoi).toBeGreaterThan(0)
   })
 
+  it("withholds lift and ROI for a promo day with no comparable weekday", async () => {
+    // The only Tuesday in the window IS the promo. An absent baseline used to
+    // read as $0, so `lift` was the whole day's sales and the ROI was the
+    // day's revenue over its discount — 7.5x here, reported to the owner as
+    // the return on the promotion.
+    vi.mocked(getServerSession).mockResolvedValue(sessionWith() as never)
+    const fixtures: DayFixture[] = [
+      { date: "2026-04-04", fpNet: 1000, fpGross: 1000 }, // Sat
+      { date: "2026-04-11", fpNet: 1000, fpGross: 1000 }, // Sat
+      { date: "2026-04-13", fpNet: 1500, fpDisc: 200, fpGross: 1700 }, // Mon, promo
+    ]
+    vi.mocked(prisma.$queryRaw).mockResolvedValue(fixtures.map(row) as never)
+    const result = await getPromoRoi({ asOf: new Date("2026-05-08T00:00:00Z") })
+    if (!result || !result.ok) throw new Error("expected ok")
+    expect(result.data.events).toHaveLength(1)
+    const e = result.data.events[0]
+    expect(e.baselineSampleSize).toBe(0)
+    expect(e.baselineNetSales).toBeNull()
+    expect(e.lift).toBeNull()
+    expect(e.roi).toBeNull()
+    expect(e.liftCI80Low).toBeNull()
+    expect(e.liftCI80High).toBeNull()
+    // The discount is still a fact; the return on it is not.
+    expect(e.discount).toBeCloseTo(200, 5)
+    expect(result.data.totalDiscount).toBeCloseTo(200, 5)
+    expect(result.data.measuredDiscount).toBe(0)
+    expect(result.data.unmeasuredEvents).toBe(1)
+    expect(result.data.blendedRoi).toBeNull()
+  })
+
+  it("withholds the interval when a single prior day is all the baseline has", async () => {
+    // One sample gives a sample std of 0, so the 80% interval was +/-0 — a
+    // claim that the counterfactual is known exactly, from one observation.
+    vi.mocked(getServerSession).mockResolvedValue(sessionWith() as never)
+    const fixtures: DayFixture[] = [
+      { date: "2026-04-06", fpNet: 1000, fpGross: 1000 }, // Mon
+      { date: "2026-04-13", fpNet: 1500, fpDisc: 200, fpGross: 1700 }, // Mon, promo
+      { date: "2026-04-04", fpNet: 900, fpGross: 900 }, // Sat, padding
+      { date: "2026-04-11", fpNet: 900, fpGross: 900 }, // Sat, padding
+    ]
+    vi.mocked(prisma.$queryRaw).mockResolvedValue(fixtures.map(row) as never)
+    const result = await getPromoRoi({ asOf: new Date("2026-05-08T00:00:00Z") })
+    if (!result || !result.ok) throw new Error("expected ok")
+    expect(result.data.events).toHaveLength(1)
+    const e = result.data.events[0]
+    expect(e.baselineSampleSize).toBe(1)
+    expect(e.lift).toBeNull()
+    expect(e.liftCI80High).toBeNull()
+    expect(result.data.unmeasuredEvents).toBe(1)
+  })
+
+  it("prices the blended ROI over the promo days it could price, not all of them", async () => {
+    vi.mocked(getServerSession).mockResolvedValue(sessionWith() as never)
+    const fixtures: DayFixture[] = [
+      // Saturdays: two clean ones, then a promo that IS measurable.
+      { date: "2026-04-04", fpNet: 1000, fpGross: 1000 },
+      { date: "2026-04-11", fpNet: 1000, fpGross: 1000 },
+      { date: "2026-05-02", fpNet: 1500, fpDisc: 200, fpGross: 1700 },
+      // The only Monday in the window is itself a promo: unmeasurable.
+      { date: "2026-04-13", fpNet: 2000, fpDisc: 300, fpGross: 2300 },
+    ]
+    vi.mocked(prisma.$queryRaw).mockResolvedValue(fixtures.map(row) as never)
+    const result = await getPromoRoi({ asOf: new Date("2026-05-08T00:00:00Z") })
+    if (!result || !result.ok) throw new Error("expected ok")
+    expect(result.data.events).toHaveLength(2)
+    expect(result.data.totalLift).toBeCloseTo(500, 5)
+    expect(result.data.totalDiscount).toBeCloseTo(500, 5)
+    expect(result.data.measuredDiscount).toBeCloseTo(200, 5)
+    expect(result.data.unmeasuredEvents).toBe(1)
+    // 500 / 200, NOT 500 / 500 — the unpriced day's discount would have
+    // dragged a real 2.5x down to 1.0x.
+    expect(result.data.blendedRoi).toBeCloseTo(2.5, 5)
+  })
+
   it("does not flag any days when discount share is uniformly negligible", async () => {
     vi.mocked(getServerSession).mockResolvedValue(sessionWith() as never)
     // Every day under 1% discount → no campaign signature.

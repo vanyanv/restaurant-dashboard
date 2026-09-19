@@ -597,11 +597,30 @@ Rules for every task in this phase: (1) re-verify each file is unreferenced imme
 
 ---
 
-## Phase 5 — Monitoring all-tenant reads (BLOCKED on owner decision)
+## Phase 5 — Monitoring all-tenant reads
 
-### Task 23: Gate or scope the monitoring surfaces
+### Task 23: Gate or scope the monitoring surfaces — DONE 2026-09-19, option (b)
 
-Waits on the user choosing spec §5 option (a) role-gate, (b) account-scope, or (c) both. Once chosen:
+**Decision (2026-09-19):** option (b), account-scope, shipped. Option (a) was
+deliberately not taken and is still open.
+
+`Role` holds only OWNER and DEVELOPER, so a strict `role === "DEVELOPER"` gate
+is not the vacuous check `hasOwnerAccess` is — it bites, and the person it
+excludes is the owner. Chris is the OWNER, so (a) or (c) would shut him out of
+his own monitoring pages. Locking the owner out of a surface is a product
+decision for him to make, not a side effect of closing a leak, so the leak was
+closed on its own: every tenant-scoped query on these tabs now takes
+`MonitoringInput.accountId` and filters by it, and the infra tables stay global
+as the spec requires. A second account cannot read this one's users, page
+views, stores, orders, ingredient decisions, invoice lines, training runs,
+evaluations, forecasts or chat turns here, gate or no gate.
+
+Covered by `tests/lib/counter/adapters/monitoring-tenancy.test.ts`, which
+asserts both halves: the boundary present on tenant queries, and absent from
+`JobRun`, `ExternalSignalSyncRun`, `AiUsageEvent`, `CacheStat` and
+`OperatorGateDailyVerdict`.
+
+If (a) is ever wanted on top, the original note stands:
 
 - Option (a): add a `role === "DEVELOPER"` check where the monitoring routes resolve their session (both `(counter)` groups' monitoring pages / their shared adapter entry), returning the counter 403/forbidden surface that already exists (`(counter)/forbidden`); update `monitoring.ts`'s docblock, which currently concedes the gate is vacuous.
 - Option (b): thread `accountId` through `monitoring-people.ts` / `monitoring-ingredients.ts` / `monitoring-ml.ts` / `monitoring-tabs.ts:479` queries the way Phase 1 did, leaving the infra tables (`JobRun`, `ErrorEvent`, `CacheStat`, `DbSnapshot`, `R2BucketSnapshot`, `AiUsageEvent`, `ExternalSignalSyncRun`) global.

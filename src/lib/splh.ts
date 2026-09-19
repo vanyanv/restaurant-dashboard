@@ -92,7 +92,7 @@ export function weekdayTargets(history: SplhInput[]): Array<number | null> {
   return buckets.map((b) => median(b))
 }
 
-function classify(splh: number | null, target: number | null): SplhStatus {
+export function classify(splh: number | null, target: number | null): SplhStatus {
   if (splh == null || target == null || target <= 0) return "unknown"
   if (splh < target * (1 - SPLH_TOLERANCE)) return "over"
   if (splh > target * (1 + SPLH_TOLERANCE)) return "under"

@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useMemo } from "react"
+import { useCallback, useMemo, useState, useTransition } from "react"
 import { usePathname, useRouter } from "next/navigation"
 import {
   DateControl,
@@ -17,6 +17,7 @@ import {
 } from "@/components/counter"
 import { readCounterParams, writeCounterParams } from "@/lib/counter/url-state"
 import { stepRange } from "@/lib/counter/date-range"
+import { createRecipe } from "@/lib/counter/actions/recipe"
 import type { SectionSources } from "@/lib/counter/adapters/types"
 import type { RecipesSections } from "@/lib/counter/adapters/recipes"
 
@@ -119,6 +120,7 @@ export function CounterRecipesClient({
       >
         {(c) => (
           <>
+            <NewRecipe categories={c.categories} />
             <Table columns={CATALOGUE_COLUMNS} rows={c.rows} />
             {/* No `.sec__body` — a table section emits the table alone, so the
                 note carries the body's own inset via `<Note flush>`. */}
@@ -157,6 +159,93 @@ export function CounterRecipesClient({
           )}
         </Section>
       </div>
+    </>
+  )
+}
+
+/**
+ * Start a recipe — the create path this product has never had.
+ *
+ * `upsertRecipe` treats an omitted `id` as a create and always has; the only
+ * caller that ever omitted one was the AI mapping-proposal accept. So an owner
+ * who wanted a new dish in the book had to sell it first, wait for the
+ * proposal job to notice the POS item, and accept whatever the model guessed.
+ * Nothing on any screen made a recipe.
+ *
+ * A name and a category, then the editor. Everything else about a recipe — its
+ * yield, its lines, its override — is built there, and a create form that
+ * asked for all of it up front would be a second, worse copy of the page the
+ * owner is about to land on.
+ *
+ * The category is a picker over the account's own vocabulary rather than a
+ * text box, because "Burgers" and "burger" are two categories to every
+ * grouping in the product and the catalogue above is where that first shows.
+ */
+function NewRecipe({ categories }: { categories: string[] }) {
+  const router = useRouter()
+  const [name, setName] = useState("")
+  const [category, setCategory] = useState(categories[0] ?? "Uncategorized")
+  const [error, setError] = useState<string | null>(null)
+  const [creating, start] = useTransition()
+
+  const create = () => {
+    setError(null)
+    start(async () => {
+      const result = await createRecipe({ itemName: name, category })
+      if (result.ok && result.recipeId) {
+        router.push(`/dashboard/recipes/${result.recipeId}`)
+        return
+      }
+      setError(result.error ?? "Could not create that recipe.")
+    })
+  }
+
+  return (
+    <>
+      <div className="newrec">
+        <div className="inp">
+          <input
+            type="text"
+            value={name}
+            placeholder="Name a new recipe"
+            aria-label="New recipe name"
+            onChange={(e) => setName(e.target.value)}
+            // Enter is what somebody types after a name in a one-field row.
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && name.trim() && !creating) create()
+            }}
+          />
+        </div>
+        <div className="inp inp--select">
+          <select
+            value={category}
+            aria-label="New recipe category"
+            onChange={(e) => setCategory(e.target.value)}
+          >
+            {categories.includes(category) ? null : (
+              <option value={category}>{category}</option>
+            )}
+            {categories.map((c) => (
+              <option key={c} value={c}>
+                {c}
+              </option>
+            ))}
+          </select>
+        </div>
+        <button
+          type="button"
+          className="btn btn--primary"
+          disabled={creating || name.trim() === ""}
+          onClick={create}
+        >
+          {creating ? "Creating…" : "New recipe"}
+        </button>
+      </div>
+      {error ? (
+        <Note flush live tone="bad">
+          {error}
+        </Note>
+      ) : null}
     </>
   )
 }
