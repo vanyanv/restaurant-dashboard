@@ -802,7 +802,15 @@ function Builder({
     start(async () => {
       const result = await markRecipeConfirmed(builder.recipeId)
       setNote({ ok: result.ok, text: result.ok ? "Confirmed." : result.error ?? "Could not confirm." })
-      if (result.ok) router.refresh()
+      if (result.ok) {
+        // The refresh replaces the rows with the server's, so the draft has
+        // to go with them. Without this the rows reverted while the cost
+        // panel went on showing the discarded draft's figures under the word
+        // "unsaved" — the same defect `clearDraft` exists for, wired into
+        // only one of the two controls that refresh.
+        onSaved()
+        router.refresh()
+      }
     })
   }
 
