@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma"
+import type { MonitoringInput } from "@/lib/counter/adapters/monitoring"
 import { count, money, pct } from "@/lib/counter/format"
 import type { ChartSpec } from "@/lib/counter/chart-geometry"
 import {
@@ -137,7 +138,17 @@ interface MlData {
 
 /* ── Load ─────────────────────────────────────────────────────────────── */
 
-async function loadMl(): Promise<MlData> {
+async function loadMl(accountId: string): Promise<MlData> {
+  // Every ML table below is keyed on a store rather than an account, so the
+  // account's stores are resolved once and the queries filter on them.
+  // `OperatorGateDailyVerdict` and `ExternalSignalSyncRun` are not: they
+  // record the deployment's own health and stay global.
+  const stores = await prisma.store.findMany({
+    where: { accountId },
+    select: { id: true },
+  })
+  const storeIds = stores.map((s) => s.id)
+
   const [agg, newest, gates, gateLast, runs, days, pending, lastRun, signals] = await Promise.all([
     prisma.$queryRaw<
       Array<{ target: string; n: bigint; wins: bigint; wape: number | null; base: number | null; cov: number | null }>
@@ -147,7 +158,8 @@ async function loadMl(): Promise<MlData> {
              SUM(CASE WHEN wape < "baselineWape" THEN 1 ELSE 0 END) wins,
              AVG(wape) wape, AVG("baselineWape") base, AVG("intervalCoverage80") cov
       FROM "MlForecastEvaluation"
-      WHERE wape IS NOT NULL AND "baselineWape" IS NOT NULL
+      WHERE "storeId" = ANY(${storeIds}::text[])
+        AND wape IS NOT NULL AND "baselineWape" IS NOT NULL
       GROUP BY 1`,
     prisma.$queryRaw<
       Array<{
@@ -163,6 +175,7 @@ async function loadMl(): Promise<MlData> {
       SELECT DISTINCT ON (target)
              target, "modelVersion", wape, "baselineWape", "intervalCoverage80", "sampleSize", "windowEnd"
       FROM "MlForecastEvaluation"
+      WHERE "storeId" = ANY(${storeIds}::text[])
       ORDER BY target, "computedAt" DESC`,
     prisma.$queryRaw<Array<{ gateName: string; n: bigint; passed: bigint }>>`
       SELECT "gateName", COUNT(*) n, SUM(CASE WHEN passed THEN 1 ELSE 0 END) passed
@@ -174,6 +187,9 @@ async function loadMl(): Promise<MlData> {
       FROM "OperatorGateDailyVerdict"
       ORDER BY "gateName", "verdictDate" DESC`,
     prisma.mlTrainingRun.findMany({
+      // `scope` holds the store id the run trained on — MlTrainingRun has no
+      // account column of its own, so the boundary is the store's.
+      where: { scope: { in: storeIds } },
       orderBy: { startedAt: "desc" },
       take: RUN_ROWS,
       select: { startedAt: true, target: true, modelVersion: true, status: true, sampleSize: true },
@@ -184,13 +200,16 @@ async function loadMl(): Promise<MlData> {
         FROM "ForecastDailyRevenue"
         -- CURRENT_DATE is UTC; at 8pm Pacific that is already tomorrow, which
         -- would let today's half-synced sales in as a 60% undershoot.
-        WHERE "hourBucket" = 0
+        WHERE "storeId" = ANY(${storeIds}::text[])
+          AND "hourBucket" = 0
           AND "forecastDate" < (NOW() AT TIME ZONE 'America/Los_Angeles')::date
         ORDER BY "forecastDate" DESC, "generatedAt" DESC
       ),
       a AS (
         SELECT date, SUM(COALESCE("fpNetSales", 0) + COALESCE("tpNetSales", 0)) net
-        FROM "OtterDailySummary" GROUP BY 1
+        FROM "OtterDailySummary"
+        WHERE "storeId" = ANY(${storeIds}::text[])
+        GROUP BY 1
       )
       SELECT f.d, f.forecast, a.net actual
       FROM f LEFT JOIN a ON a.date = f.d
@@ -198,10 +217,11 @@ async function loadMl(): Promise<MlData> {
     prisma.$queryRaw<Array<{ n: bigint }>>`
       SELECT COUNT(DISTINCT "forecastDate") n
       FROM "ForecastDailyRevenue"
-      WHERE "hourBucket" = 0
+      WHERE "storeId" = ANY(${storeIds}::text[])
+        AND "hourBucket" = 0
         AND "forecastDate" >= (NOW() AT TIME ZONE 'America/Los_Angeles')::date`,
     prisma.mlTrainingRun.findFirst({
-      where: { status: "SUCCEEDED" },
+      where: { status: "SUCCEEDED", scope: { in: storeIds } },
       orderBy: { startedAt: "desc" },
       select: { startedAt: true },
     }),
@@ -534,8 +554,10 @@ export interface MlSections {
   gaps: SectionData<MlGaps>
 }
 
-export function getMlSectionPromises(): StreamedSections<MlSections> {
-  const dataP = classify(() => loadMl(), {
+export function getMlSectionPromises(
+  input: MonitoringInput,
+): StreamedSections<MlSections> {
+  const dataP = classify(() => loadMl(input.accountId), {
     retryAction: "retryMl",
     isEmpty: (d) => d.targets.every((t) => t.evaluations === 0) && d.runs.length === 0,
     emptyReason: "no_match",
@@ -550,6 +572,8 @@ export function getMlSectionPromises(): StreamedSections<MlSections> {
   }
 }
 
-export async function getMlSections(): Promise<MlSections> {
-  return awaitSections(getMlSectionPromises())
+export async function getMlSections(
+  input: MonitoringInput,
+): Promise<MlSections> {
+  return awaitSections(getMlSectionPromises(input))
 }

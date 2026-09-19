@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma"
+import type { MonitoringInput } from "@/lib/counter/adapters/monitoring"
 import { count, money, pct } from "@/lib/counter/format"
 import { isNonIngredientRow } from "@/lib/invoice-charges"
 import {
@@ -105,9 +106,10 @@ interface IngredientAuditData {
 
 /* ── Load ─────────────────────────────────────────────────────────────── */
 
-async function loadAudit(): Promise<IngredientAuditData> {
+async function loadAudit(accountId: string): Promise<IngredientAuditData> {
   const [decisions, counts, undone, canonicals, unmatched, sources] = await Promise.all([
     prisma.ingredientMatchDecision.findMany({
+      where: { accountId },
       orderBy: { createdAt: "desc" },
       take: TABLE_ROWS,
       select: {
@@ -123,8 +125,11 @@ async function loadAudit(): Promise<IngredientAuditData> {
       },
     }),
     prisma.$queryRaw<Array<{ status: string; n: bigint }>>`
-      SELECT status, COUNT(*) n FROM "IngredientMatchDecision" GROUP BY 1`,
-    prisma.ingredientMatchDecision.count({ where: { undoneAt: { not: null } } }),
+      SELECT status, COUNT(*) n FROM "IngredientMatchDecision"
+       WHERE "accountId" = ${accountId} GROUP BY 1`,
+    prisma.ingredientMatchDecision.count({
+      where: { accountId, undoneAt: { not: null } },
+    }),
     prisma.$queryRaw<
       Array<{
         name: string
@@ -144,9 +149,12 @@ async function loadAudit(): Promise<IngredientAuditData> {
                 WHERE li."canonicalIngredientId" = c.id) lines,
              (SELECT COALESCE(SUM(li."extendedPrice"), 0) FROM "InvoiceLineItem" li
                 WHERE li."canonicalIngredientId" = c.id) spend
-      FROM "CanonicalIngredient" c`,
+      FROM "CanonicalIngredient" c
+      WHERE c."accountId" = ${accountId}`,
     prisma.invoiceLineItem.findMany({
-      where: { canonicalIngredientId: null },
+      // InvoiceLineItem carries no account column; the boundary is its
+      // invoice, the same path `adapters/ingredient.ts` takes.
+      where: { canonicalIngredientId: null, invoice: { accountId } },
       orderBy: { extendedPrice: "desc" },
       select: {
         sku: true,
@@ -156,10 +164,13 @@ async function loadAudit(): Promise<IngredientAuditData> {
       },
     }),
     prisma.$queryRaw<Array<{ source: string; lines: bigint; spend: number | null }>>`
-      SELECT COALESCE("matchSource", '(unmatched)') source,
+      SELECT COALESCE(li."matchSource", '(unmatched)') source,
              COUNT(*) lines,
-             SUM("extendedPrice") spend
-      FROM "InvoiceLineItem" GROUP BY 1 ORDER BY lines DESC`,
+             SUM(li."extendedPrice") spend
+      FROM "InvoiceLineItem" li
+       JOIN "Invoice" i ON i.id = li."invoiceId"
+       WHERE i."accountId" = ${accountId}
+       GROUP BY 1 ORDER BY lines DESC`,
   ])
 
   const allCanonicals: CanonicalRow[] = canonicals.map((c) => ({
@@ -425,8 +436,10 @@ export interface AuditSections {
   decisions: SectionData<AuditDecisions>
 }
 
-export function getAuditSectionPromises(): StreamedSections<AuditSections> {
-  const dataP = classify(() => loadAudit(), {
+export function getAuditSectionPromises(
+  input: MonitoringInput,
+): StreamedSections<AuditSections> {
+  const dataP = classify(() => loadAudit(input.accountId), {
     retryAction: "retryIngredientAudit",
     isEmpty: (d) => d.canonicalTotal === 0,
     emptyReason: "no_match",
@@ -440,6 +453,8 @@ export function getAuditSectionPromises(): StreamedSections<AuditSections> {
   }
 }
 
-export async function getAuditSections(): Promise<AuditSections> {
-  return awaitSections(getAuditSectionPromises())
+export async function getAuditSections(
+  input: MonitoringInput,
+): Promise<AuditSections> {
+  return awaitSections(getAuditSectionPromises(input))
 }

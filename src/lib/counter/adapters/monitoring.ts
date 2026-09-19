@@ -45,12 +45,41 @@ import type { FigureProps, MListRow, Row } from "@/components/counter"
  *
  * ## The developer-only claim it cannot enforce
  *
- * `P.monitoring`'s sub is "Developer only · not visible to the owner". There
- * is no gate in this product that can do that: `Role` holds only OWNER and
- * DEVELOPER and every access helper accepts both, so `hasOwnerAccess` is true
- * for everyone who can log in. The page says what it is rather than claiming a
- * restriction nothing enforces.
+ * `P.monitoring`'s sub is "Developer only · not visible to the owner". No
+ * helper in this product enforces that: `Role` holds only OWNER and DEVELOPER
+ * and every access helper accepts both, so `hasOwnerAccess` is true for
+ * everyone who can log in. A strict `role === "DEVELOPER"` check WOULD bite —
+ * it is the OWNER it would exclude — which is exactly why it is not applied
+ * here. Chris is the OWNER, so that gate would shut him out of his own
+ * monitoring, and locking the owner out of a surface is his call, not a
+ * cleanup's.
+ *
+ * The leak underneath it is not a judgment call and has been closed: every
+ * tenant-scoped query on these tabs now filters by `accountId` (see
+ * `MonitoringInput`). A second account added tomorrow cannot read this one's
+ * users, stores, orders, ingredients or forecasts here, gate or no gate.
  */
+
+/**
+ * Every monitoring adapter takes this. The tabs read two different kinds of
+ * table and the boundary runs between them:
+ *
+ * - Tenant business data — `User`, `PageView`, `Store`, `OtterOrder`,
+ *   `IngredientMatchDecision`, `CanonicalIngredient`, `InvoiceLineItem`,
+ *   `MlTrainingRun` (whose `scope` is a store id), `ForecastDailyRevenue`,
+ *   `OtterDailySummary`, `ChatTurn` — is filtered by `accountId`, reached
+ *   through `store: { accountId }` or a `"Store"` join where the model has no
+ *   column of its own. These queries had no `where` at all until 2026-09-19.
+ * - Infrastructure — `JobRun`, `ErrorEvent`, `CacheStat`, `DbSnapshot`,
+ *   `R2BucketSnapshot`, `AiUsageEvent`, `ExternalSignalSyncRun` — describes
+ *   the deployment rather than any one tenant and stays global, deliberately.
+ *
+ * What this does NOT add is the developer-only gate the page claims; see the
+ * note below on why that is a separate decision.
+ */
+export interface MonitoringInput {
+  accountId: string
+}
 
 /** A provider failing more than this share of runs is not flaky, it is down. */
 const DEAD_PCT = 90
