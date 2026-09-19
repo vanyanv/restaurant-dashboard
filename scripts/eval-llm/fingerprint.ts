@@ -25,8 +25,13 @@ import {
   CHAT_REASONING_EFFORT,
   CHAT_ROUTING_MODEL,
 } from "@/lib/chat/openai-client"
-import { GROUP_HINTS, TOOL_GROUPS } from "@/lib/chat/tool-groups"
-import { composeSystemPrompt } from "@/lib/chat/system-prompt"
+import {
+  GROUP_HINTS,
+  NAV_TOOL_GROUPS,
+  TOOL_GROUPS,
+  activeToolsForPage,
+} from "@/lib/chat/tool-groups"
+import { composeSystemPrompt, renderToolGuide } from "@/lib/chat/system-prompt"
 import { chatTools } from "@/lib/chat/tools"
 
 import {
@@ -76,6 +81,36 @@ export function evalSystemPrompt(): string {
 }
 
 /**
+ * THE PROMPT PRODUCTION ACTUALLY SENDS, PER PAGE.
+ *
+ * `evalSystemPrompt()` renders the UNNARROWED guide, which is what a turn
+ * gets only when no department was established. Every question asked from a
+ * Counter page is narrowed, so the live golden set grades a prompt most
+ * readers never receive, and the largest behavioural change in the chat --
+ * cutting the guide and the offered schemas to the page's department -- was
+ * outside the free gate entirely.
+ *
+ * Hashing the guide each nav id renders closes that. It does not make the
+ * live run cover narrowed turns (that needs cases carrying a pageId), but it
+ * does mean a change to `renderToolGuide`, to `TOOL_GROUPS`, or to a guide
+ * block's tool names moves the fingerprint and demands a re-run, which is the
+ * thing the free gate is for.
+ *
+ * Sorted by page id so the map's declaration order cannot move the hash.
+ */
+export function narrowedGuides(): string {
+  const all = Object.keys(chatTools)
+  return Object.keys(NAV_TOOL_GROUPS)
+    .sort()
+    .map((page) => {
+      const active = activeToolsForPage(page)
+      const { guide } = renderToolGuide(all, active)
+      return `## ${page} [${[...(active ?? [])].sort().join(",")}]\n${guide}`
+    })
+    .join("\n")
+}
+
+/**
  * The department list and hints the tool-group classifier is given.
  *
  * Not the classifier's full prompt template — that lives in
@@ -117,7 +152,8 @@ export function promptFingerprints(): Record<FingerprintedFeature, string> {
      */
     "chat-tool-choice": sha(
       `${CHAT_ROUTING_MODEL}:${CHAT_REASONING_EFFORT}:${CHAT_CLASSIFIER_MODEL}`,
-      `${evalSystemPrompt()}\n\n# Tools\n${toolCatalogue()}\n\n# Classifier\n${classifierCatalogue()}`,
+      `${evalSystemPrompt()}\n\n# Tools\n${toolCatalogue()}\n\n# Classifier\n${classifierCatalogue()}` +
+        `\n\n# Narrowed\n${narrowedGuides()}`,
     ),
   }
 }

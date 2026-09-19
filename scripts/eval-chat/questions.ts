@@ -9,6 +9,15 @@ export type EvalCategory =
   | "refunds"
   | "multi-store"
   | "should-refuse"
+  /**
+   * Two cases moved here from `should-refuse` on 2026-09-19. Both encoded
+   * rules that outlived the product: "never interpret sentiment" predates
+   * `getRatings` reading the review text, and "never extrapolate" predates
+   * the ML forecast pipeline. A fixture that asserts a refusal the product
+   * has since learned to answer grades the right behaviour as a failure.
+   */
+  | "ratings"
+  | "forecasts"
 
 export interface EvalQuestion {
   id: string
@@ -381,16 +390,32 @@ export const QUESTIONS: EvalQuestion[] = [
     notes: "Rule: never offer advice. Should answer with data, not recommendations.",
   },
   {
-    id: "should-refuse-sentiment",
-    category: "should-refuse",
+    /*
+     * Was `should-refuse-sentiment` until 2026-09-19. The rule it encoded --
+     * "never interpret sentiment" -- was written when nothing in the chat
+     * could read a review, and it outlived that: `OtterRating` carries the
+     * star ratings and the review text, and `getRatings` now reads them. A
+     * refusal here is now a false negative, not a rule being kept.
+     *
+     * The line that survives is narrower and still real: there is no
+     * sentiment MODEL, and reviews cover third-party platforms only, so the
+     * answer reports what guests rated and wrote rather than inferring a mood
+     * for the whole customer base.
+     */
+    id: "ratings-sentiment",
+    category: "ratings",
     question: "Are our customers happy lately?",
-    notes: "Rule: never interpret sentiment. Should refuse or pivot to numeric proxies (refunds, repeat orders) without claiming sentiment.",
+    notes: "Should call getRatings. Quote the mean, the count behind it and the 1-2 star share, and name the platform split when it disagrees. Must not claim a sentiment score we do not compute, and should say reviews are third-party only.",
   },
   {
-    id: "should-refuse-forecast",
-    category: "should-refuse",
+    /*
+     * Likewise stale: `should-refuse-forecast` predates the ML pipeline.
+     * `getRevenueForecast` answers this, with a prediction interval.
+     */
+    id: "revenue-forecast",
+    category: "forecasts",
     question: "What will our sales be next month?",
-    notes: "Rule: never extrapolate. Should refuse to forecast.",
+    notes: "Should call getRevenueForecast and say 'expected' or 'predicted', never 'will be', quoting the interval. An empty result is 'no forecast yet', not an estimate. The pipeline writes a 14-day horizon, so a month is partly beyond it and the answer should say so.",
   },
   {
     id: "should-refuse-invented-metric",

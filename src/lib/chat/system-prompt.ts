@@ -184,7 +184,7 @@ Labor figures come from Harri actuals when available. Read the labor row's \`lab
 - **"How are our reviews?" / "what's our rating?" / "are guests happy?"**: \`getRatings\` with view='summary'. Quote the mean, the count behind it, and the 1-2 star share. If the per-platform split disagrees (a 4.1 on one platform against a 4.9 on another), lead with that: it points at fulfilment, not food.
 - **"What are people complaining about?" / "read me the bad reviews" / "why did someone give us one star?"**: \`getRatings\` with view='reviews' and maxRating=2. Quote the review text; do not paraphrase a guest. The \`orderItems\` on each review is what that guest actually ordered, which is the only link from a complaint to a menu item.
 - Reviews exist for third-party platforms only. There is no first-party review feed, so say so rather than implying the sample covers every guest.
-- Check \`latestReviewAt\` before calling a quiet window good news. The review sync has gone stale before; a range with no reviews may mean nobody reviewed, or may mean nothing synced, and those are different answers.
+- A range with no reviews does not mean guests are quiet. Read \`latestReviewOnRecord\`, which ignores the range: if it is recent, nobody reviewed in that window; if it is months old, the review sync has stopped and the right answer says so rather than reporting all clear. The sync has in fact been dead for three months before.
 - Never attribute a review to a named staff member, and never infer one.
 
 ## Forecasts and anomalies (precomputed by the nightly ML pipeline)
@@ -318,21 +318,51 @@ No em dashes. Use a period, comma, semicolon, colon, or parentheses instead. Nev
  * had two exits and both were wrong: refuse against three sources saying the
  * tool exists, or answer without it.
  *
- * Section granularity, not line granularity. A `##` section is the unit a
- * reader of this file already thinks in, sections are kept whole so no rule
- * is split from the caveat under it, and the text is sliced rather than
- * rewritten so narrowing cannot change what an included rule says.
+ * ## Why the unit is a BLOCK and not a `##` section
  *
- * A section naming no tool at all (the guide's own preamble, prose about
- * sign conventions) is always kept: it is context, not routing.
+ * It was a section, on the reasoning that a section is the unit a reader of
+ * this file thinks in. That reasoning was wrong in a way a review measured:
+ * a section survives if ANY tool in it is active, and one line of `## Sales`
+ * reads "Cash vs card split: `getDailySales` ... Do not use `getPnlSummary`
+ * for this". On the Labor page `getPnlSummary` is active and `getDailySales`
+ * is not, so a PROHIBITION pinned the whole 3KB section on, and the model was
+ * then told to answer sales totals with a tool it had not been given. The
+ * rendered guide was 67% of the full text and named 29 unreachable tools,
+ * while `describeSchema` on the same turn correctly reported them absent.
+ * That is a sharper contradiction than the one narrowing was added to fix.
+ *
+ * So the unit is a block -- a bullet with its indented continuations, or a
+ * paragraph -- and the rule is strict: a block survives only if EVERY tool it
+ * names is active. A block naming a tool the turn cannot call is worse than
+ * no block, because it is an instruction that cannot be followed; and a
+ * prohibition against an unreachable tool is moot, since the model has no
+ * schema for it. A block naming no tool at all (prose about sign conventions,
+ * the guide's preamble) is always kept: it is context, not routing.
+ *
+ * A section whose surviving blocks name no active tool is dropped whole,
+ * heading included, rather than left as a heading over caveats about nothing.
+ *
+ * The text is sliced, never rewritten, so narrowing cannot change what an
+ * included rule says, and the unnarrowed render is byte-identical to the
+ * source. `tests/lib/chat/system-prompt.test.ts` asserts both, and asserts
+ * that a narrowed guide names NO inactive tool -- the property this comment
+ * used to claim and the code did not have.
  */
 const GUIDE_HEADING = "# Tool selection guide"
 const GUIDE_END_HEADING = "# Self-check before sending"
 
-interface GuideSection {
+/** A bullet with its continuations, or a paragraph. Sliced, never rewritten. */
+interface GuideBlock {
+  /** The block's exact source text, trailing newlines included. */
   text: string
-  /** Backticked identifiers in this section that are real tool names. */
+  /** Backticked identifiers in this block that are real tool names. */
   tools: string[]
+}
+
+interface GuideSection {
+  /** The `## ...` line and the blank line under it, exactly as written. */
+  heading: string
+  blocks: GuideBlock[]
 }
 
 interface ParsedPrompt {
@@ -345,6 +375,51 @@ interface ParsedPrompt {
 /** Every `` `identifier` `` in a chunk of the guide. */
 function backticked(text: string): string[] {
   return [...text.matchAll(/`([A-Za-z][A-Za-z0-9]*)`/g)].map((m) => m[1])
+}
+
+/**
+ * A section into its heading and its blocks, losslessly.
+ *
+ * `heading` is the `## ...` line plus the blank line under it. Each block
+ * keeps its own trailing newlines, so `heading + blocks.join("")` is the
+ * section's source text character for character. That is what lets the
+ * unnarrowed render be byte-identical, which the golden set's fingerprint
+ * depends on.
+ *
+ * A block ends at a blank line, or at the next line starting `- `. An
+ * indented continuation line therefore stays with the bullet above it rather
+ * than becoming an orphan when that bullet is dropped.
+ */
+function splitSection(text: string, known: ReadonlySet<string>): GuideSection {
+  const lines = text.split("\n")
+  // The heading line, plus the blank line under it when there is one.
+  let headEnd = 1
+  if (lines[headEnd] === "") headEnd += 1
+  const heading = lines.slice(0, headEnd).join("\n") + (headEnd < lines.length ? "\n" : "")
+
+  const blocks: GuideBlock[] = []
+  let current: string[] = []
+  const flush = () => {
+    if (current.length === 0) return
+    const body = current.join("")
+    blocks.push({
+      text: body,
+      tools: [...new Set(backticked(body))].filter((n) => known.has(n)),
+    })
+    current = []
+  }
+  const rest = lines.slice(headEnd)
+  for (let i = 0; i < rest.length; i += 1) {
+    const line = rest[i]
+    const startsBlock = line.startsWith("- ")
+    // A blank line closes the block it follows and rides with it, so the
+    // separator is never lost and never duplicated.
+    if (startsBlock && current.length > 0) flush()
+    current.push(i === rest.length - 1 ? line : `${line}\n`)
+    if (line === "") flush()
+  }
+  flush()
+  return { heading, blocks }
 }
 
 /**
@@ -382,10 +457,7 @@ function parsePrompt(allTools: readonly string[]): ParsedPrompt {
   const parsed: ParsedPrompt = {
     head,
     preamble: parts[0],
-    sections: parts.slice(1).map((text) => ({
-      text,
-      tools: [...new Set(backticked(text))].filter((n) => known.has(n)),
-    })),
+    sections: parts.slice(1).map((text) => splitSection(text, known)),
     tail,
   }
   parseCache.set(cacheKey, parsed)
@@ -405,14 +477,27 @@ export function renderToolGuide(
   active: readonly string[] | null,
 ): { head: string; guide: string; tail: string } {
   const { head, preamble, sections, tail } = parsePrompt(allTools)
+  const whole = (s: GuideSection) => s.heading + s.blocks.map((b) => b.text).join("")
   if (!active) {
-    return { head, guide: preamble + sections.map((s) => `\n${s.text}`).join(""), tail }
+    return { head, guide: preamble + sections.map((s) => `\n${whole(s)}`).join(""), tail }
   }
   const on = new Set(active)
-  const kept = sections.filter(
-    (s) => s.tools.length === 0 || s.tools.some((t) => on.has(t)),
-  )
-  return { head, guide: preamble + kept.map((s) => `\n${s.text}`).join(""), tail }
+  const rendered: string[] = []
+  for (const section of sections) {
+    // Strict: every tool a block names must be callable this turn.
+    const kept = section.blocks.filter((b) => b.tools.every((t) => on.has(t)))
+    /*
+     * A heading over caveats about tools that are all gone is noise, so a
+     * ROUTING section only survives if something in it still routes. A
+     * section that routes nowhere to begin with (prose about sign
+     * conventions) is context and is always kept -- "names no tool" and
+     * "named tools that are all unreachable" are different things.
+     */
+    const routes = section.blocks.some((b) => b.tools.length > 0)
+    if (routes && !kept.some((b) => b.tools.length > 0)) continue
+    rendered.push(`\n${section.heading}${kept.map((b) => b.text).join("")}`)
+  }
+  return { head, guide: preamble + rendered.join(""), tail }
 }
 
 /**

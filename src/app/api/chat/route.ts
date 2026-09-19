@@ -31,6 +31,7 @@ import {
   writeCachedAnswer,
 } from "@/lib/chat/answer-cache"
 import type { AskRequestScope } from "@/lib/counter/ask-context"
+import { businessDay } from "@/lib/counter/business-date"
 import {
   appendMessage,
   assertConversationAccess,
@@ -172,16 +173,26 @@ export async function POST(req: Request) {
 
   /*
    * The limiter counts requests; this counts dollars. See `spend-cap.ts` for
-   * why both are needed. 429 rather than 402 so a client that already backs
-   * off on rate limiting backs off on this too, and a sentence a reader can
-   * act on rather than a raw failure.
+   * why both are needed.
+   *
+   * READ HERE, REFUSED LATER. The refusal used to sit at this line, ahead of
+   * the answer cache, so an account that reached its cap was turned away from
+   * answers that were already computed and cost nothing to serve. The cap
+   * exists to stop SPEND; a cache hit is not spend. So the verdict is carried
+   * down to `budgetRefusal()` and returned only once the lookup has missed.
+   *
+   * It is still read before anything is billed: an over-budget turn skips the
+   * classifier call below, so the only work it can reach is a Redis get.
    */
   const budget = await checkDailyBudget(accountId)
-  if (budget.overBudget) {
+  const budgetRefusal = () => {
     logger.warn(
       `[chat] accountId=${accountId} over daily AI budget ` +
         `spent=${budget.spentUsd} budget=${budget.budgetUsd}`,
     )
+    // 429 rather than 402 so a client that already backs off on rate limiting
+    // backs off on this too, and a sentence a reader can act on rather than a
+    // raw failure.
     return NextResponse.json(
       {
         error: "daily_budget_reached",
@@ -371,7 +382,10 @@ export async function POST(req: Request) {
   const askedQuestion =
     newlineAt >= 0 ? userMessageText.slice(newlineAt + 1) : userMessageText
   const askedScope = newlineAt >= 0 ? userMessageText.slice(0, newlineAt) : null
-  if (!activeTools && userMessageText) {
+  // An over-budget turn can still reach the cache, but it must not pay the
+  // classifier to get there. No department means the full menu, which is what
+  // this branch degrades to anyway.
+  if (!activeTools && userMessageText && !budget.overBudget) {
     const groups = await classifyToolGroups(askedQuestion)
     if (groups) {
       classifiedGroups = groups
@@ -433,6 +447,7 @@ export async function POST(req: Request) {
         scope: askedScope,
         pageId: body.askScope?.pageId ?? null,
         effort: body.askScope?.effort ?? null,
+        businessDay: businessDay(new Date()),
         dataAsOf,
       })
     : null
@@ -532,6 +547,10 @@ export async function POST(req: Request) {
       return cachedResponse
     }
   }
+
+  // The lookup missed, so answering from here costs money. This is where the
+  // cap bites.
+  if (budget.overBudget) return budgetRefusal()
 
   const requestStartMs = performance.now()
   const systemPromptStartMs = performance.now()

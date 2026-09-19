@@ -30,7 +30,7 @@
     "floor": 0.75
   },
   "chat-tool-choice": {
-    "sha256": "8ea05286bdf83b38",
+    "sha256": "173f0964abd9a52b",
     "model": "gpt-5-mini",
     "evaluatedAt": "2026-09-07",
     "cases": 12,
@@ -39,6 +39,6 @@
     "costUsd": 0.03132,
     "floor": 0.75,
     "needsRerun": true,
-    "note": "Hash refreshed on 2026-09-19 WITHOUT a live run: the session that made the change had no OPENAI_API_KEY. The cases/passed/passRate/costUsd above are the 2026-09-07 run's and describe the prompt as it was then. Four things moved since: three new tools (getRatings, getAlerts, getForecastQuality) widen the catalogue and the routing guide; listStores now returns lifecycleStage; the tool-choice grader now fails a case that calls more than EXTRA_CALL_BUDGET unnecessary tools, which is stricter than the grading behind that 100%; and runToolChoice now sends the production reasoningEffort instead of the SDK default. Re-run `npm run eval:llm -- --feature chat-tool-choice --record` to replace this."
+    "note": "Hash refreshed on 2026-09-19 WITHOUT a live run: the session that made the change had no OPENAI_API_KEY. The cases/passed/passRate/costUsd above are the 2026-09-07 run's and describe the prompt as it was then. What moved: three new tools (getRatings, getAlerts, getForecastQuality) widen the catalogue and the routing guide; listStores returns lifecycleStage; the guide now narrows per BLOCK rather than per section, so a page-scoped turn gets roughly a third of the guide and names no unreachable tool; the tool-choice grader fails a case that calls more than EXTRA_CALL_BUDGET unnecessary tools; runToolChoice sends the production reasoningEffort; and three golden-set cases changed (anomalies now accepts getAlerts, plus new ratings and forecast-trust cases). Re-run `npm run eval:llm -- --feature chat-tool-choice --record` to replace this. CI fails the PR if this field is still set while an API key is configured."
   }
 }

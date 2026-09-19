@@ -22,6 +22,7 @@ const BASE: Key = {
   scope: "Hollywood, last 7 days",
   pageId: "overview",
   effort: "quick",
+  businessDay: "2026-09-19",
   dataAsOf: "2026-09-18T04:00:00.000Z",
 }
 
@@ -53,6 +54,17 @@ describe("answerCacheKey", () => {
 
   it("separates two pages", () => {
     expect(key({ pageId: "pnl" })).not.toBe(key())
+  })
+
+  it("separates the same relative range asked on two days", () => {
+    /*
+     * The scope sentence carries a range PRESET, not a window: `rangeLabel`
+     * returns "Yesterday" for every non-custom range. At 23:50 Monday and
+     * 00:20 Tuesday the words, the store, the label, the page and the effort
+     * are all identical, and without the date Sunday's answer was served as
+     * Monday's for anyone asking in that half hour.
+     */
+    expect(key({ businessDay: "2026-09-20" })).not.toBe(key())
   })
 
   it("expires by data, not by clock: a new sync stamp is a new key", () => {

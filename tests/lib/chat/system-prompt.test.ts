@@ -81,13 +81,65 @@ describe("renderToolGuide", () => {
     expect(guide).toContain("copy the exact ids from the per-request context")
   })
 
-  it("a narrowed render is a strict subset of the unnarrowed one", () => {
+  it("a narrowed render is a strict subset of the unnarrowed one, line for line", () => {
     const active = ["getDailySales", "getPnlSummary"]
     const { guide } = renderToolGuide(ALL, active)
     const { guide: full } = renderToolGuide(ALL, null)
     expect(full.length).toBeGreaterThan(guide.length)
-    for (const section of guide.split(/\n(?=## )/)) {
-      expect(full).toContain(section.trim())
+    // Sliced, never rewritten: every line that survives is a line that was
+    // written, unchanged.
+    for (const line of guide.split("\n")) {
+      if (line.trim() === "") continue
+      expect(full).toContain(line)
+    }
+  })
+
+  it("NAMES NO TOOL THE TURN CANNOT CALL", () => {
+    /*
+     * The property the whole narrowing exists for, and the one section
+     * granularity did not have: one line of `## Sales` says "use
+     * `getDailySales` ... do not use `getPnlSummary` for this", so on a turn
+     * carrying `getPnlSummary` and not `getDailySales` the prohibition kept
+     * the entire section and the model was told to call a tool it had not
+     * been given -- while `describeSchema`, correctly narrowed, reported that
+     * same tool absent on the same turn.
+     */
+    const cases: readonly string[][] = [
+      ["getPnlSummary", "searchPnlHistory", "listStores", "describeSchema", "fileReturn"],
+      ["getDailySales", "listStores", "describeSchema", "fileReturn"],
+      ["getRatings", "listStores", "describeSchema", "fileReturn"],
+      ["getOrderById", "listOrdersByDay", "getOrderItemFrequency", "fileReturn"],
+      ["getRevenueForecast", "getForecastQuality", "fileReturn"],
+    ]
+    for (const active of cases) {
+      const { guide } = renderToolGuide(ALL, active)
+      const on = new Set(active)
+      const named = [...new Set(guide.match(/`([A-Za-z][A-Za-z0-9]*)`/g) ?? [])]
+        .map((m) => m.slice(1, -1))
+        .filter((n) => ALL.includes(n))
+      const ghosts = named.filter((n) => !on.has(n))
+      expect(ghosts, `narrowed to [${active.join(", ")}] but still names: ${ghosts.join(", ")}`).toEqual([])
+    }
+  })
+
+  it("actually removes most of the guide on a narrow turn", () => {
+    // The measurement that made this worth doing: a Labor-shaped turn used to
+    // get 67% of the full text. If this ever climbs back, narrowing has
+    // quietly stopped working even while the ghost test above passes.
+    const active = ["getPnlSummary", "searchPnlHistory", "listStores", "describeSchema", "fileReturn"]
+    const { guide } = renderToolGuide(ALL, active)
+    const { guide: full } = renderToolGuide(ALL, null)
+    expect(guide.length).toBeLessThan(full.length * 0.5)
+  })
+
+  it("keeps a bullet's indented continuation with the bullet", () => {
+    const active = ["getPnlSummary", "searchPnlHistory", "listStores", "describeSchema", "fileReturn"]
+    const { guide } = renderToolGuide(ALL, active)
+    // The per-day P&L bullet is followed by a worked example in an indented
+    // block. A dropped parent with an orphaned example would read as an
+    // instruction with no subject.
+    if (guide.includes("what's the daily profit this week?")) {
+      expect(guide).toContain("granularity")
     }
   })
 

@@ -51,30 +51,56 @@ describe("getRatings", () => {
     const findMany = vi.fn().mockResolvedValue([])
     await getRatings.execute(
       { storeIds: ["s1"], dateRange: RANGE, view: "summary", limit: 15 },
-      ctx({ otterRating: { findMany } }),
+      ctx({ otterRating: { findMany, findFirst: vi.fn().mockResolvedValue(null) } }),
     )
     expect(assertOwnerOwnsStores).toHaveBeenCalledWith("acct-A", ["s1"])
     expect(findMany.mock.calls[0][0].where.storeId).toEqual({ in: ["s1"] })
   })
 
-  it("reaches the end of the last day, not its midnight", async () => {
-    // `reviewedAt` is a timestamp. Querying `lte: 2026-09-30T00:00:00Z` drops
-    // every review left after midnight on the final day of the range.
+  it("windows on the LA calendar day, the one the model was given as 'today'", async () => {
+    /*
+     * `reviewedAt` is a timestamp, not `@db.Date`, and the prompt injects the
+     * LA business day. On UTC boundaries a guest reviewing at 19:00 on the
+     * 18th is stored at 02:00Z on the 19th and falls outside a range for the
+     * 18th -- the whole dinner service reads a day late, every day.
+     */
     const findMany = vi.fn().mockResolvedValue([])
     await getRatings.execute(
       { dateRange: RANGE, view: "summary", limit: 15 },
-      ctx({ otterRating: { findMany } }),
+      ctx({ otterRating: { findMany, findFirst: vi.fn().mockResolvedValue(null) } }),
     )
     const { gte, lte } = findMany.mock.calls[0][0].where.reviewedAt
-    expect(gte.toISOString()).toBe("2026-09-01T00:00:00.000Z")
-    expect(lte.getTime()).toBe(new Date("2026-10-01T00:00:00.000Z").getTime() - 1)
+    // September is PDT, UTC-7.
+    expect(gte.toISOString()).toBe("2026-09-01T07:00:00.000Z")
+    expect(lte.getTime()).toBe(new Date("2026-10-01T07:00:00.000Z").getTime() - 1)
+  })
+
+  it("follows the offset across a DST change rather than assuming one", async () => {
+    const findMany = vi.fn().mockResolvedValue([])
+    await getRatings.execute(
+      { dateRange: { from: "2026-01-15", to: "2026-01-15" }, view: "summary", limit: 15 },
+      ctx({ otterRating: { findMany, findFirst: vi.fn().mockResolvedValue(null) } }),
+    )
+    // January is PST, UTC-8.
+    expect(findMany.mock.calls[0][0].where.reviewedAt.gte.toISOString()).toBe(
+      "2026-01-15T08:00:00.000Z",
+    )
+  })
+
+  it("still rejects a backwards range", async () => {
+    await expect(
+      getRatings.execute(
+        { dateRange: { from: "2026-09-30", to: "2026-09-01" }, view: "summary", limit: 15 },
+        ctx({ otterRating: { findMany: vi.fn().mockResolvedValue([]), findFirst: vi.fn().mockResolvedValue(null) } }),
+      ),
+    ).rejects.toThrow(/on or before/)
   })
 
   it("summarises the distribution, the mean and the low-star count", async () => {
     const rows = [rating({ rating: 5 }), rating({ rating: 1 }), rating({ rating: 4 })]
     const result = await getRatings.execute(
       { dateRange: RANGE, view: "summary", limit: 15 },
-      ctx({ otterRating: { findMany: vi.fn().mockResolvedValue(rows) } }),
+      ctx({ otterRating: { findMany: vi.fn().mockResolvedValue(rows), findFirst: vi.fn().mockResolvedValue(null) } }),
     )
     if (result.view !== "summary") throw new Error("expected the summary view")
     expect(result.summary.count).toBe(3)
@@ -91,7 +117,7 @@ describe("getRatings", () => {
     ]
     const result = await getRatings.execute(
       { dateRange: RANGE, view: "summary", limit: 15 },
-      ctx({ otterRating: { findMany: vi.fn().mockResolvedValue(rows) } }),
+      ctx({ otterRating: { findMany: vi.fn().mockResolvedValue(rows), findFirst: vi.fn().mockResolvedValue(null) } }),
     )
     if (result.view !== "summary") throw new Error("expected the summary view")
     expect(result.summary.byPlatform).toEqual([
@@ -103,7 +129,7 @@ describe("getRatings", () => {
   it("returns an honest empty summary rather than a null", async () => {
     const result = await getRatings.execute(
       { dateRange: RANGE, view: "summary", limit: 15 },
-      ctx({ otterRating: { findMany: vi.fn().mockResolvedValue([]) } }),
+      ctx({ otterRating: { findMany: vi.fn().mockResolvedValue([]), findFirst: vi.fn().mockResolvedValue(null) } }),
     )
     if (result.view !== "summary") throw new Error("expected the summary view")
     expect(result.summary).toMatchObject({
@@ -120,7 +146,7 @@ describe("getRatings", () => {
     const findMany = vi.fn().mockResolvedValue([])
     await getRatings.execute(
       { dateRange: RANGE, view: "reviews", limit: 15 },
-      ctx({ otterRating: { findMany } }),
+      ctx({ otterRating: { findMany, findFirst: vi.fn().mockResolvedValue(null) } }),
     )
     expect(findMany.mock.calls[0][0].orderBy).toEqual([
       { rating: "asc" },
@@ -133,7 +159,7 @@ describe("getRatings", () => {
     const findMany = vi.fn().mockResolvedValue([])
     await getRatings.execute(
       { dateRange: RANGE, view: "summary", limit: 15 },
-      ctx({ otterRating: { findMany } }),
+      ctx({ otterRating: { findMany, findFirst: vi.fn().mockResolvedValue(null) } }),
     )
     expect(findMany.mock.calls[0][0].take).toBeUndefined()
     expect(findMany.mock.calls[0][0].orderBy).toEqual({ reviewedAt: "desc" })
@@ -147,7 +173,7 @@ describe("getRatings", () => {
     ]
     const result = await getRatings.execute(
       { dateRange: RANGE, view: "reviews", limit: 15 },
-      ctx({ otterRating: { findMany: vi.fn().mockResolvedValue(rows) } }),
+      ctx({ otterRating: { findMany: vi.fn().mockResolvedValue(rows), findFirst: vi.fn().mockResolvedValue(null) } }),
     )
     if (result.view !== "reviews") throw new Error("expected the reviews view")
     // Otter writes the literal string "null" for an unknown line, and repeats
@@ -160,7 +186,7 @@ describe("getRatings", () => {
     const findMany = vi.fn().mockResolvedValue([])
     await getRatings.execute(
       { dateRange: RANGE, view: "reviews", maxRating: 2, limit: 5 },
-      ctx({ otterRating: { findMany } }),
+      ctx({ otterRating: { findMany, findFirst: vi.fn().mockResolvedValue(null) } }),
     )
     expect(findMany.mock.calls[0][0].where.rating).toEqual({ lte: 2 })
   })
@@ -171,7 +197,7 @@ describe("getRatings", () => {
     const findMany = vi.fn().mockResolvedValue([])
     await getRatings.execute(
       { dateRange: RANGE, view: "summary", maxRating: 2, limit: 15 },
-      ctx({ otterRating: { findMany } }),
+      ctx({ otterRating: { findMany, findFirst: vi.fn().mockResolvedValue(null) } }),
     )
     expect(findMany.mock.calls[0][0].where.rating).toBeUndefined()
   })
@@ -180,7 +206,7 @@ describe("getRatings", () => {
     const rows = Array.from({ length: 30 }, () => rating({ rating: 1 }))
     const result = await getRatings.execute(
       { dateRange: RANGE, view: "reviews", limit: 3 },
-      ctx({ otterRating: { findMany: vi.fn().mockResolvedValue(rows) } }),
+      ctx({ otterRating: { findMany: vi.fn().mockResolvedValue(rows), findFirst: vi.fn().mockResolvedValue(null) } }),
     )
     if (result.view !== "reviews") throw new Error("expected the reviews view")
     expect(result.reviews).toHaveLength(3)
@@ -204,9 +230,19 @@ function alert(over: Partial<Record<string, unknown>> = {}) {
   }
 }
 
-function alertCtx(alerts: unknown[], prefs: unknown[] = []) {
+/** Severity tallies as Prisma's `groupBy` returns them. */
+function tallies(rows: { severity: string }[]) {
+  const by = new Map<string, number>()
+  for (const r of rows) by.set(r.severity, (by.get(r.severity) ?? 0) + 1)
+  return [...by.entries()].map(([severity, n]) => ({ severity, _count: { _all: n } }))
+}
+
+function alertCtx(alerts: { severity: string }[], prefs: unknown[] = [], page = alerts) {
   return ctx({
-    alert: { findMany: vi.fn().mockResolvedValue(alerts) },
+    alert: {
+      findMany: vi.fn().mockResolvedValue(page),
+      groupBy: vi.fn().mockResolvedValue(tallies(alerts)),
+    },
     alertPreference: { findMany: vi.fn().mockResolvedValue(prefs) },
   })
 }
@@ -219,7 +255,7 @@ describe("getAlerts", () => {
     await getAlerts.execute(
       { status: "OPEN", sinceDays: 30, limit: 25 },
       ctx({
-        alert: { findMany },
+        alert: { findMany, groupBy: vi.fn().mockResolvedValue([]) },
         alertPreference: { findMany: vi.fn().mockResolvedValue([]) },
       }),
     )
@@ -233,7 +269,7 @@ describe("getAlerts", () => {
   it("defaults to the open inbox and scopes to owned stores", async () => {
     const findMany = vi.fn().mockResolvedValue([])
     const c = ctx({
-      alert: { findMany },
+      alert: { findMany, groupBy: vi.fn().mockResolvedValue([]) },
       alertPreference: { findMany: vi.fn().mockResolvedValue([]) },
     })
     await getAlerts.execute({ status: "OPEN", sinceDays: 30, limit: 25 }, c)
@@ -247,46 +283,57 @@ describe("getAlerts", () => {
     await getAlerts.execute(
       { status: "any", sinceDays: 30, limit: 25 },
       ctx({
-        alert: { findMany },
+        alert: { findMany, groupBy: vi.fn().mockResolvedValue([]) },
         alertPreference: { findMany: vi.fn().mockResolvedValue([]) },
       }),
     )
     expect(findMany.mock.calls[0][0].where.status).toBeUndefined()
   })
 
-  it("counts every severity across the whole match, not just the returned page", async () => {
-    const rows = [
+  it("counts the whole match while returning only a page of it", async () => {
+    // "3 critical" is the headline, and a count of the first 25 rows is not
+    // it. The tally comes from an aggregate, the rows from a capped read.
+    const all = [
       ...Array.from({ length: 30 }, () => alert({ severity: "INFO" })),
       alert({ severity: "CRITICAL" }),
     ]
     const result = await getAlerts.execute(
       { status: "OPEN", sinceDays: 30, limit: 5 },
-      alertCtx(rows),
+      alertCtx(all, [], all.slice(0, 5)),
     )
     expect(result.alerts).toHaveLength(5)
     expect(result.counts).toEqual({ critical: 1, watch: 0, info: 30, total: 31 })
   })
 
-  it("puts the critical ones first whatever their date", async () => {
-    const rows = [
-      alert({ severity: "INFO", occurredOn: new Date("2026-09-18T00:00:00Z") }),
-      alert({ severity: "CRITICAL", occurredOn: new Date("2026-09-01T00:00:00Z") }),
-    ]
-    const result = await getAlerts.execute(
-      { status: "OPEN", sinceDays: 30, limit: 25 },
-      alertCtx(rows),
+  it("caps the read in the database rather than after it", async () => {
+    const findMany = vi.fn().mockResolvedValue([])
+    await getAlerts.execute(
+      { status: "OPEN", sinceDays: 30, limit: 7 },
+      ctx({
+        alert: { findMany, groupBy: vi.fn().mockResolvedValue([]) },
+        alertPreference: { findMany: vi.fn().mockResolvedValue([]) },
+      }),
     )
-    expect(result.alerts[0].severity).toBe("CRITICAL")
+    expect(findMany.mock.calls[0][0].take).toBe(7)
+    // Severity first, so the cap keeps what matters rather than what is most
+    // recent. The enum is declared INFO, WATCH, CRITICAL, so desc is worst.
+    expect(findMany.mock.calls[0][0].orderBy[0]).toEqual({ severity: "desc" })
   })
 
-  it("filters below the requested minimum severity", async () => {
-    const rows = [alert({ severity: "INFO" }), alert({ severity: "CRITICAL" })]
-    const result = await getAlerts.execute(
+  it("pushes the severity floor into the query", async () => {
+    const findMany = vi.fn().mockResolvedValue([])
+    const groupBy = vi.fn().mockResolvedValue([])
+    await getAlerts.execute(
       { status: "OPEN", severity: "WATCH", sinceDays: 30, limit: 25 },
-      alertCtx(rows),
+      ctx({
+        alert: { findMany, groupBy },
+        alertPreference: { findMany: vi.fn().mockResolvedValue([]) },
+      }),
     )
-    expect(result.counts.total).toBe(1)
-    expect(result.alerts[0].severity).toBe("CRITICAL")
+    const listed: string[] = findMany.mock.calls[0][0].where.severity.in
+    expect([...listed].sort()).toEqual(["CRITICAL", "WATCH"])
+    // The counts must describe the same set the rows came from.
+    expect(groupBy.mock.calls[0][0].where).toEqual(findMany.mock.calls[0][0].where)
   })
 
   it("says an empty inbox is muted when it is", async () => {
@@ -338,7 +385,10 @@ describe("getAlerts", () => {
     await getAlerts.execute(
       { status: "OPEN", sinceDays: 30, limit: 25 },
       ctx({
-        alert: { findMany: vi.fn().mockResolvedValue([]) },
+        alert: {
+          findMany: vi.fn().mockResolvedValue([]),
+          groupBy: vi.fn().mockResolvedValue([]),
+        },
         alertPreference: { findMany: prefFind },
       }),
     )

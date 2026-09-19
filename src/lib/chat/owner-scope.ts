@@ -112,13 +112,28 @@ export async function assertOwnerOwnsStores(
   const ownedSet = new Set(owned)
 
   if (requested.length === 0) {
-    if (ownedSet.size === 0) {
-      throw new OwnerScopeError(
-        "EMPTY_STORE_LIST",
-        "owner has no stores",
-      )
+    /*
+     * "ALL MY STORES" MEANS THE STORES THE MODEL WAS TOLD ABOUT.
+     *
+     * The prompt's store block and `listStores` both come from
+     * `listOwnerStores`, which filters `isActive`. This default used to come
+     * from the unfiltered id list, so an account with a closed store had the
+     * model naming three stores and then quietly totalling four. The answer
+     * was right about nothing it could explain, and the extra store never
+     * appeared in the prose or the provenance line.
+     *
+     * A deliberate question about a closed store still works: an explicit id
+     * is validated against EVERY owned store below, active or not, so
+     * "how did Van Nuys do before we shut it?" is answerable. Only the
+     * unscoped default narrows.
+     */
+    const active = (await listOwnerStores(accountId)).map((s) => s.id)
+    if (active.length === 0) {
+      // Every store closed is not the same as no stores, but neither gives an
+      // answer, and the existing error is the one callers already handle.
+      throw new OwnerScopeError("EMPTY_STORE_LIST", "owner has no active stores")
     }
-    return Array.from(ownedSet)
+    return active
   }
 
   const missing = requested.filter((id) => !ownedSet.has(id))
@@ -131,6 +146,14 @@ export async function assertOwnerOwnsStores(
   return requested
 }
 
+/**
+ * EVERY store on the account, closed ones included.
+ *
+ * Deliberately wider than `listOwnerStores`: this list decides whether an id
+ * the model passed is the account's to read, and a closed store's orders are
+ * still that account's orders. The narrowing to active stores happens above,
+ * and only for the unscoped default.
+ */
 async function listOwnedStoreIds(accountId: string): Promise<string[]> {
   const cached = ownedStoreIdsCache.get(accountId)
   if (cached && cached.expiresAt > Date.now()) return cached.ids

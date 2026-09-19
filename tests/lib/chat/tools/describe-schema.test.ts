@@ -91,16 +91,26 @@ describe("describeSchema catalogue", () => {
     for (const d of result.domains) expect(d.tools.length).toBeGreaterThan(0)
   })
 
-  it("every domain in the enum is a domain in the catalogue", async () => {
-    const result = await describeSchema.execute({ domain: "all" }, ctx())
-    const catalogued = new Set(result.domains.map((d) => d.domain))
-    // `all` is the wildcard, not a domain.
-    const enumerated = (describeSchema.parameters as never as {
-      shape: { domain: { unwrap: () => { unwrap: () => { options: string[] } } } }
-    }).shape.domain
-      .unwrap()
-      .unwrap()
-      .options.filter((d: string) => d !== "all")
-    for (const d of enumerated) expect(catalogued).toContain(d)
+  it("every domain the schema accepts is a domain in the catalogue", async () => {
+    /*
+     * Asked through the public surface -- parse the value, run the tool --
+     * rather than by reaching into zod's internals. A cast down to
+     * `.shape.domain.unwrap().unwrap().options` throws rather than failing
+     * informatively the moment the `.optional().default()` nesting or the zod
+     * version changes, and it would be testing the library, not this file.
+     */
+    const catalogued = new Set(
+      (await describeSchema.execute({ domain: "all" }, ctx())).domains.map((d) => d.domain),
+    )
+    for (const domain of catalogued) {
+      // Every catalogued domain must be a value the model is allowed to send,
+      // or the prompt points at a filter that cannot be applied.
+      expect(describeSchema.parameters.safeParse({ domain }).success, domain).toBe(true)
+    }
+    // And the reverse: a domain the schema offers must return something.
+    for (const domain of ["sales", "ratings", "forecasts", "anomalies", "elasticity"]) {
+      const result = await describeSchema.execute({ domain } as never, ctx())
+      expect(result.domains.map((d) => d.domain), domain).toEqual([domain])
+    }
   })
 })

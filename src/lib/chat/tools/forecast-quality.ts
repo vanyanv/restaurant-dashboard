@@ -1,4 +1,9 @@
 import { z } from "zod"
+import {
+  combineEvaluations,
+  latestPerStore,
+  type Scorecard,
+} from "@/lib/decisions/scorecard"
 import { resolveStoreIds, storeIdsSchema, ymd } from "./_shared"
 import type { ChatTool } from "./types"
 
@@ -40,6 +45,8 @@ const params = z
 export type ForecastQualityRow = {
   storeName: string
   target: string
+  /** 0 for a whole-day evaluation; the hour bucket for BUSY_HOURS. */
+  horizonDay: number
   modelVersion: string
   windowStart: string
   windowEnd: string
@@ -79,6 +86,21 @@ export type TrainingRunRow = {
 }
 
 export type ForecastQualityResult = {
+  /**
+   * THE HEADLINE, and the same number /dashboard/decisions prints.
+   *
+   * `combineEvaluations` owns this figure: one row per store, newest model
+   * version, weighted by sample size so a store with three reconciled days
+   * cannot drag the portfolio reading around. Quoting a raw row instead gives
+   * a different percentage from the page on the same day, which is the
+   * failure CLAUDE.md's "one function owns the figure" rule exists to stop.
+   *
+   * REVENUE only, because that is what the page reports and what
+   * `combineEvaluations` was written for. Null when no store has a reconciled
+   * evaluation yet.
+   */
+  scorecard: Scorecard | null
+  /** Per store and per target, behind the headline. */
   evaluations: ForecastQualityRow[]
   /**
    * The most recent training run per target, scoped to this account's stores.
@@ -92,7 +114,7 @@ export type ForecastQualityResult = {
 export const getForecastQuality: ChatTool<typeof params, ForecastQualityResult> = {
   name: "getForecastQuality",
   description:
-    "Returns the measured accuracy of the forecasts: WAPE, MAPE, bias, 80/95% interval coverage, sample size, and the WAPE of the seasonal-naive (same-day-last-week) baseline the model has to beat. Also returns the recent training runs for this account's stores with their status. Use for 'how accurate are the forecasts?', 'can I trust the revenue prediction?', 'is the model any good?', 'did the model train?'. An empty evaluations array means no backtest has been computed yet, which is an honest 'we don't know', not 'the model is fine'.",
+    "Returns the measured accuracy of the forecasts. `scorecard` is the headline and is the SAME figure the Decisions page prints: one evaluation per store, newest model version, weighted by sample size. `evaluations` is the per-store, per-target detail behind it: WAPE, MAPE, bias, 80/95% interval coverage, sample size, and the WAPE of the seasonal-naive (same-day-last-week) baseline the model has to beat. Rows with no reconciled days are excluded, because a WAPE with nothing behind it is not a record. Also returns the recent training runs for this account's stores with their status. Use for 'how accurate are the forecasts?', 'can I trust the revenue prediction?', 'is the model any good?', 'did the model train?'. An empty evaluations array means no backtest has been computed yet, which is an honest 'we don't know', not 'the model is fine'.",
   parameters: params,
   async execute(args, ctx) {
     const storeIds = await resolveStoreIds(ctx, args.storeIds)
@@ -102,9 +124,26 @@ export const getForecastQuality: ChatTool<typeof params, ForecastQualityResult> 
       where: {
         storeId: { in: storeIds },
         ...(args.target ? { target: args.target } : {}),
+        /*
+         * `sampleSize` 0 means "informational only" (schema.prisma), so a
+         * WAPE on such a row is a number with nothing behind it. The
+         * Decisions page has always filtered these out; returning them here
+         * would let the model quote one as the model's record.
+         */
+        sampleSize: { gt: 0 },
+        /*
+         * `horizonDay` is 0 for a whole-day evaluation and 0-23 for the
+         * hourly BUSY_HOURS target. Without this, one store on one model
+         * version returns 24 hourly rows that read as 24 separate backtests.
+         * The hourly rows are still reachable by asking for BUSY_HOURS,
+         * where the field is carried on the row so they cannot be confused.
+         */
+        ...(args.target === "BUSY_HOURS" ? {} : { horizonDay: 0 }),
       },
       select: {
+        storeId: true,
         target: true,
+        horizonDay: true,
         modelVersion: true,
         windowStart: true,
         windowEnd: true,
@@ -152,10 +191,21 @@ export const getForecastQuality: ChatTool<typeof params, ForecastQualityResult> 
       take: limit,
     })
 
+    /*
+     * The portfolio reading, from the rows already in hand when the question
+     * covers REVENUE. `rows` is ordered newest-first, which is what
+     * `latestPerStore` requires.
+     */
+    const revenueRows = rows.filter((r) => r.target === "REVENUE")
+    const scorecard =
+      revenueRows.length > 0 ? combineEvaluations(latestPerStore(revenueRows)) : null
+
     return {
+      scorecard,
       evaluations: rows.map((r) => ({
         storeName: r.store.name,
         target: r.target,
+        horizonDay: r.horizonDay,
         modelVersion: r.modelVersion,
         windowStart: ymd(r.windowStart),
         windowEnd: ymd(r.windowEnd),

@@ -32,6 +32,16 @@ import { createHash } from "node:crypto"
  * - **page**, because the same words mean different things on different
  *   pages — `describeAskContext` exists for that reason — and because the
  *   page decides which tools the turn could reach.
+ * - **businessDay**, the LA date the question was asked on. The scope
+ *   sentence names a range PRESET ("Yesterday", "Last 7 days"), not a
+ *   window: `rangeLabel` returns the preset's name for everything but a
+ *   custom range. So at 23:50 on Monday and 00:20 on Tuesday the whole key
+ *   was identical -- same words, same store, same label -- and Sunday's
+ *   answer was served as Monday's for anyone asking in that half hour. The
+ *   only thing standing against it was `dataAsOf`, and the window straddling
+ *   midnight is exactly when the day has just closed and the sync has not
+ *   run. The date is cheap and kills the whole class: a relative range means
+ *   a different window tomorrow, so an entry should not outlive the day.
  * - **effort**, because Quick and Careful are different compute budgets. A
  *   reader who picks Careful has asked for more thinking, and handing back
  *   the Quick answer the cache already had is not that.
@@ -116,6 +126,12 @@ export function answerCacheKey(input: {
   pageId: string | null
   /** The dock's Quick / Careful choice, or null for the route's default. */
   effort: string | null
+  /**
+   * The LA business date, `YYYY-MM-DD`. Required, because the scope sentence
+   * carries a range LABEL rather than a window, and a label means a
+   * different window tomorrow.
+   */
+  businessDay: string
   dataAsOf: string | null
 }): string {
   const material = stableKey({
@@ -123,6 +139,7 @@ export function answerCacheKey(input: {
     scope: input.scope ? normaliseQuestion(input.scope) : "",
     page: input.pageId ?? "",
     effort: input.effort ?? "",
+    day: input.businessDay,
     asOf: input.dataAsOf ?? "",
   })
   // Hashed because a question is arbitrary user text and keys are a shared

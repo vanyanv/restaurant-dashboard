@@ -4,7 +4,10 @@ import {
   storeIdsSchema,
   ymd,
 } from "./_shared"
+import type { $Enums } from "@/generated/prisma/client"
 import type { ChatTool } from "./types"
+
+type AlertSeverity = $Enums.AlertSeverity
 
 /**
  * The alert inbox, as the assistant can read it.
@@ -94,7 +97,39 @@ export type AlertsChatResult = {
   mutedByPreference: boolean
 }
 
-const SEVERITY_RANK: Record<string, number> = { CRITICAL: 3, WATCH: 2, INFO: 1 }
+/**
+ * Ordered, and total over the enum by construction.
+ *
+ * It was a `Record<string, number>` over three literals, so a fourth
+ * `AlertSeverity` would have made every lookup `undefined`, and
+ * `undefined >= minRank` is `false` -- the new severity would have vanished
+ * from the list AND from the counts with nothing raised. An alert severity
+ * added precisely because it matters, silently dropped.
+ *
+ * `satisfies Record<AlertSeverity, number>` makes that a compile error, and
+ * `rankOf` handles a value from an older row that no longer maps: it ranks
+ * lowest rather than nowhere, so it is still counted and still returned when
+ * no floor was asked for.
+ */
+const SEVERITY_RANK = {
+  CRITICAL: 3,
+  WATCH: 2,
+  INFO: 1,
+} as const satisfies Record<AlertSeverity, number>
+
+const LOWEST_RANK = 1
+
+function rankOf(severity: string): number {
+  return SEVERITY_RANK[severity as AlertSeverity] ?? LOWEST_RANK
+}
+
+/** The severities at or above a floor, so the floor can go into the query. */
+function atOrAbove(floor: AlertSeverity): AlertSeverity[] {
+  const min = SEVERITY_RANK[floor]
+  return (Object.keys(SEVERITY_RANK) as AlertSeverity[]).filter(
+    (s) => SEVERITY_RANK[s] >= min,
+  )
+}
 
 export const getAlerts: ChatTool<typeof params, AlertsChatResult> = {
   name: "getAlerts",
@@ -114,37 +149,54 @@ export const getAlerts: ChatTool<typeof params, AlertsChatResult> = {
     const status = args.status ?? "OPEN"
     const minRank = args.severity ? SEVERITY_RANK[args.severity] : 0
 
-    const rows = await ctx.prisma.alert.findMany({
-      where: {
-        storeId: { in: storeIds },
-        occurredOn: { gte: since },
-        ...(status === "any" ? {} : { status }),
-        ...(args.target ? { target: args.target } : {}),
-      },
-      select: {
-        source: true,
-        target: true,
-        targetId: true,
-        severity: true,
-        status: true,
-        title: true,
-        body: true,
-        explanation: true,
-        occurredOn: true,
-        store: { select: { name: true } },
-      },
-      orderBy: [{ occurredOn: "desc" }, { detectedAt: "desc" }],
-    })
+    const where = {
+      storeId: { in: storeIds },
+      occurredOn: { gte: since },
+      ...(status === "any" ? {} : { status }),
+      ...(args.target ? { target: args.target } : {}),
+      ...(args.severity ? { severity: { in: atOrAbove(args.severity) } } : {}),
+    }
 
-    const matching = rows.filter(
-      (r) => SEVERITY_RANK[r.severity] >= minRank,
-    )
+    /*
+     * Counts by aggregate, rows by page.
+     *
+     * `counts` has to describe the WHOLE matching set -- "3 critical" is the
+     * headline and a count of the first 25 rows is not it -- but reading
+     * every row to get there meant `status: "any"` with `sinceDays: 365`
+     * across every store pulled a year of every detector's output into memory
+     * to return 25. `groupBy` does the counting in Postgres.
+     */
+    const [tallies, rows] = await Promise.all([
+      ctx.prisma.alert.groupBy({ by: ["severity"], where, _count: { _all: true } }),
+      ctx.prisma.alert.findMany({
+        where,
+        select: {
+          source: true,
+          target: true,
+          targetId: true,
+          severity: true,
+          status: true,
+          title: true,
+          body: true,
+          explanation: true,
+          occurredOn: true,
+          store: { select: { name: true } },
+        },
+        // Severity first, so the cap keeps what matters rather than what is
+        // most recent. Postgres sorts the enum in declaration order, which is
+        // INFO, WATCH, CRITICAL -- hence `desc`.
+        orderBy: [{ severity: "desc" }, { occurredOn: "desc" }, { detectedAt: "desc" }],
+        take: Math.max(args.limit ?? 25, 1),
+      }),
+    ])
 
+    const tally = (s: AlertSeverity) =>
+      tallies.find((t) => t.severity === s)?._count._all ?? 0
     const counts = {
-      critical: matching.filter((r) => r.severity === "CRITICAL").length,
-      watch: matching.filter((r) => r.severity === "WATCH").length,
-      info: matching.filter((r) => r.severity === "INFO").length,
-      total: matching.length,
+      critical: tally("CRITICAL"),
+      watch: tally("WATCH"),
+      info: tally("INFO"),
+      total: tallies.reduce((n, t) => n + t._count._all, 0),
     }
 
     /*
@@ -169,20 +221,12 @@ export const getAlerts: ChatTool<typeof params, AlertsChatResult> = {
     const relevant = args.target
       ? prefs.filter((p) => p.target == null || p.target === args.target)
       : prefs
-    const askedRank = minRank || SEVERITY_RANK.INFO
+    const askedRank = minRank || LOWEST_RANK
     const mutedByPreference = relevant.some(
-      (p) => p.muted || SEVERITY_RANK[p.minSeverity] > askedRank,
+      (p) => p.muted || rankOf(p.minSeverity) > askedRank,
     )
 
-    const limit = args.limit ?? 25
-    const alerts = [...matching]
-      .sort(
-        (a, b) =>
-          SEVERITY_RANK[b.severity] - SEVERITY_RANK[a.severity] ||
-          b.occurredOn.getTime() - a.occurredOn.getTime(),
-      )
-      .slice(0, limit)
-      .map((r) => ({
+    const alerts = rows.map((r) => ({
         source: r.source,
         target: r.target,
         targetId: r.targetId,
@@ -191,9 +235,9 @@ export const getAlerts: ChatTool<typeof params, AlertsChatResult> = {
         title: r.title,
         body: r.body,
         explanation: r.explanation,
-        occurredOn: ymd(r.occurredOn),
-        storeName: r.store.name,
-      }))
+      occurredOn: ymd(r.occurredOn),
+      storeName: r.store.name,
+    }))
 
     return { alerts, counts, mutedByPreference }
   },
