@@ -67,3 +67,46 @@ describe("tool routing tables", () => {
     expect(orphans, `these tools are in no group: ${orphans.join(", ")}`).toEqual([])
   })
 })
+
+describe("freshness stamps", () => {
+  it("every tool that reads figures has an asOf source", async () => {
+    // A tool with no entry reports no stamp, and `everyToolStamped` then
+    // refuses to cache ANY answer that read it — so an unstamped new tool
+    // silently costs a model call on every repeat of every question it
+    // touches. The exemptions below are decisions, each with a reason.
+    const { TOOL_AS_OF } = await import("@/lib/chat/data-as-of")
+    const EXEMPT: Record<string, string> = {
+      listStores: "structure, and a store can be added without a sync",
+      describeSchema: "structure",
+      fileReturn: "presentation, reads nothing",
+      simulatePriceChange: "computes over inputs stamped by their own tools",
+      getMenuItemElasticity: "a fitted model, not a synced table",
+      // The catalogue tools are edited by hand rather than synced, so they
+      // have no refresh moment to report.
+      getMenuPrices: "hand-edited catalogue",
+      searchMenuItems: "hand-edited catalogue",
+      getMenuItemDetails: "hand-edited catalogue",
+      searchCanonicalIngredients: "hand-edited catalogue",
+      listIngredientGaps: "hand-edited catalogue",
+      listRecipesByIngredient: "hand-edited catalogue",
+      searchRecipes: "hand-edited catalogue",
+      getRecipeByName: "hand-edited catalogue",
+      getRecipeById: "hand-edited catalogue",
+      rankRecipes: "hand-edited catalogue",
+      listRecipesByCategory: "hand-edited catalogue",
+      listVendorLeadTimes: "hand-edited catalogue",
+      getInventoryStatus: "hand-edited catalogue",
+      getInventoryCoverage: "hand-edited catalogue",
+      listStockCounts: "hand-edited catalogue",
+      getRecentInventoryAdjustments: "hand-edited catalogue",
+      getOpenAnomalies: "detector output, stamped by the alert inbox instead",
+    }
+    const unstamped = Object.keys(chatTools).filter(
+      (n) => !(n in TOOL_AS_OF) && !(n in EXEMPT),
+    )
+    expect(
+      unstamped,
+      `give these a TOOL_AS_OF source or an exemption with a reason: ${unstamped.join(", ")}`,
+    ).toEqual([])
+  })
+})

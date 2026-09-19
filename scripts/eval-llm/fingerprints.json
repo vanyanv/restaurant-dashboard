@@ -30,7 +30,7 @@
     "floor": 0.75
   },
   "chat-tool-choice": {
-    "sha256": "a151742cc864a4ee",
+    "sha256": "8ea05286bdf83b38",
     "model": "gpt-5-mini",
     "evaluatedAt": "2026-09-07",
     "cases": 12,

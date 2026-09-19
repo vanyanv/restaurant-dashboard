@@ -104,7 +104,13 @@ export const getAlerts: ChatTool<typeof params, AlertsChatResult> = {
   async execute(args, ctx) {
     const storeIds = await resolveStoreIds(ctx, args.storeIds)
     const sinceDays = args.sinceDays ?? 30
+    /*
+     * `occurredOn` is `@db.Date`, so every row sits at UTC midnight. A cutoff
+     * carrying the current time of day therefore excludes the day exactly
+     * `sinceDays` back, and "the last 30 days" quietly returns 29.
+     */
     const since = new Date(Date.now() - sinceDays * 24 * 60 * 60 * 1000)
+    since.setUTCHours(0, 0, 0, 0)
     const status = args.status ?? "OPEN"
     const minRank = args.severity ? SEVERITY_RANK[args.severity] : 0
 

@@ -38,7 +38,10 @@ export type AsOfSource =
   | "invoices"
   | "cogs"
   | "forecasts"
+  | "forecastEval"
   | "labor"
+  | "ratings"
+  | "alerts"
 
 /**
  * Table and freshness column per source. Module constants, never request
@@ -52,7 +55,15 @@ const SOURCE_TABLES: Record<AsOfSource, { table: string; column: string }> = {
   invoices: { table: "Invoice", column: "updatedAt" },
   cogs: { table: "DailyCogsItem", column: "computedAt" },
   forecasts: { table: "ForecastDailyRevenue", column: "generatedAt" },
+  // The backtest is written by its own pass, not by the forecast write, so a
+  // pipeline that still emits predictions while evaluation has stopped shows
+  // as a stale accuracy stamp rather than a fresh one.
+  forecastEval: { table: "MlForecastEvaluation", column: "computedAt" },
   labor: { table: "HarriDailyLabor", column: "syncedAt" },
+  ratings: { table: "OtterRating", column: "syncedAt" },
+  // `detectedAt`, not `occurredAt`: the question is when the inbox was last
+  // written, and an alert about last Tuesday can be raised tonight.
+  alerts: { table: "Alert", column: "detectedAt" },
 }
 
 /**
@@ -114,6 +125,13 @@ export const TOOL_AS_OF: Partial<Record<ChatToolName, AsOfSource>> = {
   getMenuEngineering: "forecasts",
   getVendorReliability: "forecasts",
   getWasteRootCauses: "forecasts",
+  getForecastQuality: "forecastEval",
+  // Added 2026-09-19 with the tools themselves. A tool with no entry here
+  // reports no stamp, and `everyToolStamped` then refuses to cache ANY answer
+  // that read it -- so an unstamped new tool silently costs a model call on
+  // every repeat of every question it touches.
+  getRatings: "ratings",
+  getAlerts: "alerts",
 }
 
 /**

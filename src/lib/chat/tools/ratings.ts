@@ -118,7 +118,7 @@ function averageBy<T>(
 export const getRatings: ChatTool<typeof params, RatingsResult> = {
   name: "getRatings",
   description:
-    "Guest star ratings and review text from the delivery platforms (Otter's review feed). view='summary' returns the count, mean, 1-5 distribution and a per-platform / per-store split over a date range. view='reviews' returns the individual reviews with their text and the items each guest ordered, worst rating first; pass maxRating=2 to read only complaints. This is the only source in the product for what customers said, as opposed to what they bought. Reviews only exist for third-party platforms; there is no first-party review feed.",
+    "Guest star ratings and review text from the delivery platforms (Otter's review feed). view='summary' returns the count, mean, 1-5 distribution and a per-platform / per-store split over a date range. view='reviews' returns individual reviews with their text and the items each guest ordered, lowest rating first and most recent first within a rating, so the default is the worst reviews in the whole range rather than the worst of the most recent ones; pass maxRating=2 to read only complaints. This is the only source in the product for what customers said, as opposed to what they bought. Reviews only exist for third-party platforms; there is no first-party review feed.",
   parameters: params,
   async execute(args, ctx) {
     const storeIds = await resolveStoreIds(ctx, args.storeIds)
@@ -145,24 +145,30 @@ export const getRatings: ChatTool<typeof params, RatingsResult> = {
         storeName: true,
         orderItemNames: true,
       },
-      orderBy: { reviewedAt: "desc" },
-      // The summary needs every row to be honest about its distribution; the
-      // review list is capped by the caller.
-      ...(args.view === "reviews" ? { take: Math.max(args.limit ?? 15, 1) * 4 } : {}),
+      /*
+       * WORST FIRST IN THE QUERY, not after a cap.
+       *
+       * Ordering by date and then re-sorting in JS returns the worst of the
+       * most RECENT page, which is not the worst in the range: with 400
+       * reviews in a month and a limit of 15, the one-star review from the
+       * 3rd never appears. The database can do both keys at once, so it does,
+       * and the cap is then exact.
+       *
+       * The summary takes every row: a distribution computed from a page is
+       * not a distribution.
+       */
+      orderBy:
+        args.view === "reviews"
+          ? [{ rating: "asc" as const }, { reviewedAt: "desc" as const }]
+          : { reviewedAt: "desc" as const },
+      ...(args.view === "reviews" ? { take: Math.max(args.limit ?? 15, 1) } : {}),
     })
 
     if (args.view === "reviews") {
       const limit = args.limit ?? 15
       return {
         view: "reviews",
-        reviews: [...rows]
-          // Worst first: a five-star review needs no action, a one-star one
-          // might. Ties break to the most recent.
-          .sort((a, b) =>
-            a.rating !== b.rating
-              ? a.rating - b.rating
-              : b.reviewedAt.getTime() - a.reviewedAt.getTime(),
-          )
+        reviews: rows
           .slice(0, limit)
           .map((r) => ({
             rating: r.rating,

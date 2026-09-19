@@ -114,18 +114,42 @@ describe("getRatings", () => {
     })
   })
 
-  it("orders reviews worst first and parses the items the guest ordered", async () => {
+  it("asks the DATABASE for worst-first, so the cap cannot hide the worst review", async () => {
+    // Sorting in JS after a capped page returns the worst of the most recent
+    // reviews, which with 400 reviews in a month is not the worst review.
+    const findMany = vi.fn().mockResolvedValue([])
+    await getRatings.execute(
+      { dateRange: RANGE, view: "reviews", limit: 15 },
+      ctx({ otterRating: { findMany } }),
+    )
+    expect(findMany.mock.calls[0][0].orderBy).toEqual([
+      { rating: "asc" },
+      { reviewedAt: "desc" },
+    ])
+    expect(findMany.mock.calls[0][0].take).toBe(15)
+  })
+
+  it("takes every row for the summary, because a paged distribution is not one", async () => {
+    const findMany = vi.fn().mockResolvedValue([])
+    await getRatings.execute(
+      { dateRange: RANGE, view: "summary", limit: 15 },
+      ctx({ otterRating: { findMany } }),
+    )
+    expect(findMany.mock.calls[0][0].take).toBeUndefined()
+    expect(findMany.mock.calls[0][0].orderBy).toEqual({ reviewedAt: "desc" })
+  })
+
+  it("parses the items the guest ordered", async () => {
     const rows = [
-      rating({ rating: 5, orderItemNames: '["Fries","null","Fries"]' }),
       rating({ rating: 1, orderItemNames: null }),
       rating({ rating: 3 }),
+      rating({ rating: 5, orderItemNames: '["Fries","null","Fries"]' }),
     ]
     const result = await getRatings.execute(
       { dateRange: RANGE, view: "reviews", limit: 15 },
       ctx({ otterRating: { findMany: vi.fn().mockResolvedValue(rows) } }),
     )
     if (result.view !== "reviews") throw new Error("expected the reviews view")
-    expect(result.reviews.map((r) => r.rating)).toEqual([1, 3, 5])
     // Otter writes the literal string "null" for an unknown line, and repeats
     // an item that was ordered twice.
     expect(result.reviews[2].orderItems).toEqual(["Fries"])
@@ -153,7 +177,7 @@ describe("getRatings", () => {
   })
 
   it("honours the limit on the review list", async () => {
-    const rows = Array.from({ length: 30 }, (_, i) => rating({ rating: (i % 5) + 1 }))
+    const rows = Array.from({ length: 30 }, () => rating({ rating: 1 }))
     const result = await getRatings.execute(
       { dateRange: RANGE, view: "reviews", limit: 3 },
       ctx({ otterRating: { findMany: vi.fn().mockResolvedValue(rows) } }),
@@ -188,6 +212,24 @@ function alertCtx(alerts: unknown[], prefs: unknown[] = []) {
 }
 
 describe("getAlerts", () => {
+  it("cuts the window at a UTC midnight, since occurredOn is a date", async () => {
+    // A cutoff carrying the current time of day excludes the day exactly
+    // `sinceDays` back, so "the last 30 days" quietly returns 29.
+    const findMany = vi.fn().mockResolvedValue([])
+    await getAlerts.execute(
+      { status: "OPEN", sinceDays: 30, limit: 25 },
+      ctx({
+        alert: { findMany },
+        alertPreference: { findMany: vi.fn().mockResolvedValue([]) },
+      }),
+    )
+    const since: Date = findMany.mock.calls[0][0].where.occurredOn.gte
+    expect(since.getUTCHours()).toBe(0)
+    expect(since.getUTCMinutes()).toBe(0)
+    expect(since.getUTCSeconds()).toBe(0)
+    expect(since.getUTCMilliseconds()).toBe(0)
+  })
+
   it("defaults to the open inbox and scopes to owned stores", async () => {
     const findMany = vi.fn().mockResolvedValue([])
     const c = ctx({
