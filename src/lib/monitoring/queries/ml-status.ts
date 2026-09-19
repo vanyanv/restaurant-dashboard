@@ -283,18 +283,28 @@ export async function getOperatorGateStatus(): Promise<OperatorGateStatus> {
       WHERE "startedAt" >= (CURRENT_DATE - INTERVAL '7 days')
     `,
     prisma.$queryRaw<{ stores: number; minCoverage: number | null; avgCoverage: number | null; maxCoverage: number | null; outsideAcceptBand: number }[]>`
+      -- Each store's own coverage, weighted by "sampleSize" within the store.
+      -- A plain AVG() of the rows, then AVG() again across stores, is an
+      -- unweighted average of averages: a store with one reconciled day moved
+      -- the portfolio figure as much as a store with a full window. The
+      -- per-store AVG below is deliberate — the stores ARE weighted equally
+      -- at that level, because min/max/outsideAcceptBand are per-store
+      -- readings — but the rows inside one store are not interchangeable.
       WITH per_store AS (
         SELECT
           s.id,
-          AVG(e."intervalCoverage80")::float AS coverage
+          (SUM(e."intervalCoverage80" * e."sampleSize")
+             / NULLIF(SUM(e."sampleSize"), 0))::float AS coverage
         FROM "Store" s
         JOIN "MlForecastEvaluation" e
           ON e."storeId" = s.id
          AND e.target = 'REVENUE'::"MlTarget"
          AND e."computedAt" >= (NOW() - INTERVAL '7 days')
          AND e."intervalCoverage80" IS NOT NULL
+         AND e."sampleSize" > 0
         WHERE s."isActive" = true
         GROUP BY s.id
+        HAVING SUM(e."sampleSize") > 0
       )
       SELECT
         COUNT(*)::int AS stores,

@@ -380,12 +380,41 @@ export async function getDecisionsView(input: {
     // Labor hours joined to net sales, for the per-weekday productivity median.
     // Same sources and grain as getSplhSeries: HarriPositionDaily.actualSeconds
     // and OtterHourlySummary.netSales, both LA-calendar daily.
-    prisma.$queryRaw<Array<{ date: Date; hours: number | null; net: number | null }>>(
+    prisma.$queryRaw<
+      Array<{ date: Date; hours: number | null; net: number | null; unsynced: bigint }>
+    >(
       Prisma.sql`
-        SELECT h."date",
-               SUM(h."actualSeconds") / 3600.0  AS hours,
-               s.net                            AS net
-          FROM "HarriPositionDaily" h
+        -- One row per DAY, account-wide. Two levels, and the inner one is not
+        -- optional: "HarriPositionDaily" is unique on (storeId, date,
+        -- categoryCode, positionCode, payType), so a store-day is MANY rows —
+        -- one per position on the roster. Joining the single daily sales
+        -- figure onto that and summing it counted the day's net sales once
+        -- per position, ten or twenty times over, while SUM(actualSeconds)
+        -- stayed right. Every weekday SPLH median came out that multiple too
+        -- high, which is what targetSplh is, which made computeLaborLane
+        -- ask for a fraction of the hours it should and call every day heavy.
+        --
+        -- So labour is folded to one row per store-day FIRST, and only then
+        -- does the sales figure join it. Grouping by s.net instead — which is
+        -- what splh-actions.ts does, correctly, because it wants per-store
+        -- rows — would emit one row per store here and make the medians
+        -- medians of store-days.
+        SELECT d."date",
+               SUM(d.hours)                                              AS hours,
+               SUM(s.net)                                                AS net,
+               COUNT(DISTINCT d."storeId") FILTER (WHERE s.net IS NULL)  AS unsynced
+          FROM (
+            SELECT h."storeId",
+                   h."date",
+                   SUM(h."actualSeconds") / 3600.0 AS hours
+              FROM "HarriPositionDaily" h
+             WHERE h."storeId" IN (${Prisma.join(storeIds)})
+               AND h."date" >= ${addDays(today, -120)}
+               -- Today is always partial; one low sample would drag a weekday
+               -- median that only has ~17 observations behind it.
+               AND h."date" < ${today}
+             GROUP BY h."storeId", h."date"
+          ) d
           LEFT JOIN (
             SELECT "storeId", "date", SUM("netSales") AS net
               FROM "OtterHourlySummary"
@@ -393,13 +422,8 @@ export async function getDecisionsView(input: {
                AND "date" >= ${addDays(today, -120)}
                AND "date" < ${today}
              GROUP BY "storeId", "date"
-          ) s ON s."storeId" = h."storeId" AND s."date" = h."date"
-         WHERE h."storeId" IN (${Prisma.join(storeIds)})
-           AND h."date" >= ${addDays(today, -120)}
-           -- Today is always partial; one low sample would drag a weekday
-           -- median that only has ~17 observations behind it.
-           AND h."date" < ${today}
-         GROUP BY h."date", s.net
+          ) s ON s."storeId" = d."storeId" AND s."date" = d."date"
+         GROUP BY d."date"
       `,
     ).catch(() => []),
     // The forecast's own explanation. Read here rather than through
@@ -498,7 +522,13 @@ export async function getDecisionsView(input: {
   // Median $/labor-hour per weekday. A flat target would just redraw the volume
   // curve and condemn every Tuesday, so the comparison is like-for-like.
   const splhHistory: SplhInput[] = splhHistoryRows
-    .filter((r) => Number(r.hours ?? 0) > 0 && Number(r.net ?? 0) > 0)
+    // `unsynced` counts stores that worked that day with no sales row behind
+    // them. Their hours are in the denominator and their sales are not in the
+    // numerator, so such a day reads as a productivity collapse that never
+    // happened. A day we only half know is not a day we can score.
+    .filter(
+      (r) => Number(r.hours ?? 0) > 0 && Number(r.net ?? 0) > 0 && Number(r.unsynced) === 0,
+    )
     .map((r) => ({
       date: ymd(r.date),
       netSales: Number(r.net ?? 0),

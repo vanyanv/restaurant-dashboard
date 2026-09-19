@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest"
+import { describe, expect, it, vi } from "vitest"
 import {
   aggregateChannelTotals,
   type ChannelSummaryRow,
@@ -102,27 +102,56 @@ describe("aggregateChannelTotals", () => {
   })
 
   it("computes theoreticalDeposit and expectedDeposit per channel", () => {
+    // Fees, tax remitted and paid-out are SIGNED DEDUCTIONS in this table, as
+    // the deposit formula's own guard says ("assumes <= 0"). This fixture used
+    // to hand them over positive and still expect them subtracted, because the
+    // implementation reached for `Math.abs()` — so the test pinned the copy
+    // rather than the formula.
     const result = aggregateChannelTotals([
       row({
         platform: "css-pos",
         paymentMethod: "CASH",
         fpGrossSales: 100,
         fpNetSales: 90,
-        fpFees: 4,
+        fpFees: -4,
         fpTaxCollected: 8,
-        fpTaxRemitted: -8, // signed
+        fpTaxRemitted: -8,
         fpTips: 1,
         fpServiceCharges: 0,
         tillPaidIn: 5,
-        tillPaidOut: 2,
+        tillPaidOut: -2,
       }),
     ])
     const entry = result.get("css-pos|||CASH")!
-    // theoretical = net + tax_collected - |tax_remitted| + tips + serviceCharges - |fees|
+    // theoretical = net + taxCollected + taxRemitted + tips + serviceCharges + fees
     // = 90 + 8 - 8 + 1 + 0 - 4 = 87
     expect(entry.theoreticalDeposit).toBe(87)
-    // expected = theoretical + paidIn - |paidOut| = 87 + 5 - 2 = 90
+    // expected = theoretical + paidIn + paidOut = 87 + 5 - 2 = 90
     expect(entry.expectedDeposit).toBe(90)
+  })
+
+  it("does not silently subtract a deduction that arrived positive", () => {
+    // If Otter ever flips the convention, the `Math.abs()` copy would keep
+    // subtracting and nothing would say so. Addition reports the wrong figure
+    // loudly instead, which is the failure a reader can act on — and the
+    // caller warns on the same signal.
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {})
+    const result = aggregateChannelTotals([
+      row({
+        platform: "css-pos",
+        paymentMethod: "CASH",
+        fpNetSales: 90,
+        fpTaxCollected: 0,
+        fpTaxRemitted: 0,
+        fpTips: 0,
+        fpFees: 4,
+      }),
+    ])
+    // 90 + 4, not 90 − 4: the fee was added because it arrived with the wrong
+    // sign, and that is visible instead of absorbed.
+    expect(result.get("css-pos|||CASH")!.theoreticalDeposit).toBe(94)
+    expect(warn).toHaveBeenCalled()
+    warn.mockRestore()
   })
 
   it("isolates till totals per channel (paidIn / paidOut sum independently)", () => {

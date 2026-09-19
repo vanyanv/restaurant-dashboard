@@ -153,13 +153,26 @@ async function loadMl(accountId: string): Promise<MlData> {
     prisma.$queryRaw<
       Array<{ target: string; n: bigint; wins: bigint; wape: number | null; base: number | null; cov: number | null }>
     >`
+      -- Weighted by "sampleSize", and rows with no sample behind them are
+      -- excluded. A plain AVG() let a row built from three reconciled days
+      -- count as much as one built from twenty-eight, which is how the
+      -- headline coverage figure the operator gate reads was assembled.
+      -- src/lib/decisions/scorecard.ts weights the same rows the same way,
+      -- deliberately; these two must not disagree about the same table.
+      -- Each metric is weighted over only the rows that reported it, so a
+      -- missing metric is skipped rather than counted as zero.
       SELECT target,
              COUNT(*) n,
              SUM(CASE WHEN wape < "baselineWape" THEN 1 ELSE 0 END) wins,
-             AVG(wape) wape, AVG("baselineWape") base, AVG("intervalCoverage80") cov
+             (SUM(wape * "sampleSize") / NULLIF(SUM("sampleSize"), 0))::float wape,
+             (SUM("baselineWape" * "sampleSize") / NULLIF(SUM("sampleSize"), 0))::float base,
+             (SUM("intervalCoverage80" * "sampleSize")
+                FILTER (WHERE "intervalCoverage80" IS NOT NULL)
+              / NULLIF(SUM("sampleSize") FILTER (WHERE "intervalCoverage80" IS NOT NULL), 0)
+             )::float cov
       FROM "MlForecastEvaluation"
       WHERE "storeId" = ANY(${storeIds}::text[])
-        AND wape IS NOT NULL AND "baselineWape" IS NOT NULL
+        AND wape IS NOT NULL AND "baselineWape" IS NOT NULL AND "sampleSize" > 0
       GROUP BY 1`,
     prisma.$queryRaw<
       Array<{

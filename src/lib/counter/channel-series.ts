@@ -143,9 +143,16 @@ function commissionFrom(rows: Statement["rows"], code: string): number {
   return values ? -sum(values) : 0
 }
 
-/** A ratio-safe divide: `0` rather than `NaN` when the denominator is `0`. */
+/**
+ * A ratio-safe divide: `0` rather than `NaN` or an inverted sign.
+ *
+ * `<= 0` and not `=== 0`. The denominators here are sales, and a band that
+ * netted below zero over the window — refunds outrunning takings — would turn
+ * every share and rate computed off it negative, which reads as a credit.
+ * There is no revenue for these to be a percentage of either way.
+ */
 const ratio = (numerator: number, denominator: number): number =>
-  denominator === 0 ? 0 : (numerator / denominator) * 100
+  denominator <= 0 ? 0 : (numerator / denominator) * 100
 
 const sumAt = (values: number[], idxs: number[]): number =>
   idxs.reduce((acc, i) => acc + values[i], 0)
@@ -233,7 +240,7 @@ export function channelSeries(statement: Statement): ChannelSeries {
   const commission = bands.reduce((acc, b) => acc + (b.commission ?? 0), 0)
   const commissionPct = ratio(commission, total)
   const marketplaceTotal = total - house
-  const blendedPct = marketplaceTotal === 0 ? null : ratio(commission, marketplaceTotal)
+  const blendedPct = marketplaceTotal <= 0 ? null : ratio(commission, marketplaceTotal)
 
   // The per-bucket commission, off the SAME two GL rows the range totals read,
   // negated once (`computeStorePnL` writes them negative). Grubhub publishes no

@@ -8,6 +8,25 @@ import { startOfDayUTC as startOfDay, ymdUTC as ymd } from "@/lib/date-utils"
 //   outflow_per_day = Σ Invoice.dueDate matches  +  pro-rated monthly fixed costs
 //   cumulative      = Σ (inflow − outflow) up to that day
 //
+// `blended_commission_rate` is a rate against TOTAL revenue, because that is
+// what `predicted_revenue` is. It used to be `(uberRate + doordashRate) / 2` —
+// two marketplace rates, averaged without reference to how much each channel
+// actually sold, and then charged against every dollar the store took,
+// in-house counter sales included. With rates of 21% and 25% that is 23% off
+// the top of revenue that mostly pays no commission at all: on a store that
+// does half its trade in-house, daily cash inflow came out roughly 11% low,
+// compounding across the horizon into the cumulative line and into the cash
+// warning `build-briefing` raises off it. The 0.13 fallback below is the
+// giveaway — someone picked that as a whole-revenue blend, and the computed
+// branch has been returning nearly double it.
+//
+// The rate is now `Σ (channel sales × that store's rate for that channel) /
+// Σ all sales` over the trailing window, per store, from OtterDailySummary.
+// Grubhub and the smaller marketplaces have no rate column, so they sit in
+// the denominator with nothing in the numerator — the same convention
+// `channel-series.ts` applies to its blended commission, and for the same
+// reason: Otter publishes no commission row for them.
+//
 // Notes / honest framing for the dashboard prose:
 //   - Without a starting bank balance, this is a DELTA forecast (cumulative
 //     change from today, not absolute balance). The dashboard shows the
@@ -16,12 +35,25 @@ import { startOfDayUTC as startOfDay, ymdUTC as ymd } from "@/lib/date-utils"
 //     hits in 1-2 days). We collapse all of that into the daily blended-net
 //     inflow because cash-position questions over 14 days don't materially
 //     hinge on D+1 vs D+7 alignment.
+//   - A day with no revenue forecast is NOT a day of no revenue. Its inflow,
+//     net and cumulative are null, and every later day's cumulative is null
+//     too, because a running total cannot step over an unknown. Two stores
+//     have no successfully trained forecast at all; with `?? 0` their whole
+//     horizon read as fixed costs and payables against nothing coming in,
+//     and the briefing announced a cash crisis that was a training failure.
 
 import { getServerSession } from "next-auth"
 import { Prisma } from "@/generated/prisma/client"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { getAccountStores } from "@/lib/account-stores"
+import { monthlyCostForDays } from "@/lib/pnl"
+import {
+  COMMISSION_MIX_DAYS,
+  FALLBACK_BLENDED_RATE,
+  weightedCommissionRate,
+  type CommissionRateStore,
+} from "@/lib/commission-blend"
 
 interface SessionUser {
   id: string
@@ -34,11 +66,13 @@ interface SessionLike {
 export interface CashPositionDay {
   date: Date
   predictedRevenue: number | null
-  estimatedNetInflow: number
+  /** Null on a day with no revenue forecast — unknown, not zero. */
+  estimatedNetInflow: number | null
   scheduledPayables: number
   proRatedFixedCosts: number
-  netCashFlow: number
-  cumulativeNet: number
+  netCashFlow: number | null
+  /** Null once any earlier day in the horizon was unforecast. */
+  cumulativeNet: number | null
 }
 
 export interface CashPositionData {
@@ -46,12 +80,16 @@ export interface CashPositionData {
   storeName: string | null
   horizonDays: number
   blendedCommissionRate: number
-  /** Daily fixed-cost allocation = monthly total / 30. */
+  /** Daily fixed-cost allocation, prorated over the average month. */
   proRatedFixedDaily: number
+  /** Days in the horizon with no revenue forecast at all. */
+  unforecastDays: number
   /** Sum of all invoices with due dates in the horizon, regardless of day. */
   totalScheduledPayables: number
+  /** Summed over the forecast days only; `unforecastDays` says how many are missing. */
   totalEstimatedInflow: number
-  endingCumulativeNet: number
+  /** Null when any day in the horizon was unforecast. */
+  endingCumulativeNet: number | null
   days: CashPositionDay[]
 }
 
@@ -70,8 +108,9 @@ export async function getCashPositionForecast(input: {
 
   let storeIds: string[]
   let storeName: string | null = null
-  let blendedCommissionRate = 0.13 // default if no per-store rates set
   let proRatedFixedDaily = 0
+  /** The stores whose commission rates weight the blend. */
+  let rateStores: CommissionRateStore[] = []
 
   if (input.storeId) {
     const store = await prisma.store.findUnique({
@@ -93,14 +132,19 @@ export async function getCashPositionForecast(input: {
     }
     storeIds = [store.id]
     storeName = store.name
-    blendedCommissionRate =
-      ((store.uberCommissionRate ?? 0.21) + (store.doordashCommissionRate ?? 0.25)) / 2
+    rateStores = [store]
+    // `monthlyCostForDays(x, 1)`, not `x / 30`. The rest of the app prorates a
+    // monthly fixed cost over the AVERAGE month, 365.25/12 ≈ 30.4375 days, and
+    // a second divisor here made the daily rent on this page 1.5% higher than
+    // the same rent on the P&L.
     proRatedFixedDaily =
-      ((store.fixedMonthlyLabor ?? 0) +
-        (store.fixedMonthlyRent ?? 0) +
-        (store.fixedMonthlyTowels ?? 0) +
-        (store.fixedMonthlyCleaning ?? 0)) /
-      30
+      monthlyCostForDays(
+        (store.fixedMonthlyLabor ?? 0) +
+          (store.fixedMonthlyRent ?? 0) +
+          (store.fixedMonthlyTowels ?? 0) +
+          (store.fixedMonthlyCleaning ?? 0),
+        1,
+      ) ?? 0
   } else {
     // Whole rows from the one store query a request makes — all seven columns
     // this used to select are on them. See `@/lib/account-stores`.
@@ -108,22 +152,20 @@ export async function getCashPositionForecast(input: {
     storeIds = stores.map((s) => s.id)
     storeName = "All stores"
     if (stores.length > 0) {
-      const avg = (xs: (number | null | undefined)[]) =>
-        xs.reduce<number>((s, x) => s + (x ?? 0), 0) / xs.length
-      blendedCommissionRate =
-        (avg(stores.map((s) => s.uberCommissionRate ?? 0.21)) +
-          avg(stores.map((s) => s.doordashCommissionRate ?? 0.25))) /
-        2
+      rateStores = stores
       proRatedFixedDaily =
-        stores.reduce(
-          (s, st) =>
-            s +
-            (st.fixedMonthlyLabor ?? 0) +
-            (st.fixedMonthlyRent ?? 0) +
-            (st.fixedMonthlyTowels ?? 0) +
-            (st.fixedMonthlyCleaning ?? 0),
-          0,
-        ) / 30
+        monthlyCostForDays(
+          stores.reduce(
+            (s, st) =>
+              s +
+              (st.fixedMonthlyLabor ?? 0) +
+              (st.fixedMonthlyRent ?? 0) +
+              (st.fixedMonthlyTowels ?? 0) +
+              (st.fixedMonthlyCleaning ?? 0),
+            0,
+          ),
+          1,
+        ) ?? 0
     }
   }
 
@@ -133,7 +175,10 @@ export async function getCashPositionForecast(input: {
   const horizonEnd = new Date(today)
   horizonEnd.setUTCDate(horizonEnd.getUTCDate() + horizonDays)
 
-  const [revenueRows, payableInvoiceGroups] = await Promise.all([
+  const mixStart = new Date(today)
+  mixStart.setUTCDate(mixStart.getUTCDate() - COMMISSION_MIX_DAYS)
+
+  const [revenueRows, payableInvoiceGroups, mixRows] = await Promise.all([
     prisma.$queryRaw<Array<{ forecastDate: Date; predictedRevenue: number | null }>>(
       Prisma.sql`
         SELECT
@@ -164,7 +209,33 @@ export async function getCashPositionForecast(input: {
       },
       _sum: { totalAmount: true },
     }),
+    // What each channel actually sold over the trailing window, per store.
+    // Both halves summed: a platform row carries its sales in the FP columns
+    // or the TP ones depending on who took the order, never in both.
+    prisma.$queryRaw<Array<{ storeId: string; platform: string; net: number | null }>>(
+      Prisma.sql`
+        SELECT
+          "storeId",
+          "platform",
+          SUM(COALESCE("fpNetSales", 0) + COALESCE("tpNetSales", 0))::double precision AS "net"
+        FROM "OtterDailySummary"
+        WHERE "storeId" IN (${Prisma.join(storeIds)})
+          AND "date" >= ${mixStart}
+          AND "date" < ${today}
+        GROUP BY "storeId", "platform"
+      `,
+    ),
   ])
+
+  const blendedCommissionRate =
+    weightedCommissionRate(
+      rateStores,
+      mixRows.map((r) => ({
+        storeId: r.storeId,
+        platform: r.platform,
+        net: r.net ?? 0,
+      })),
+    ) ?? FALLBACK_BLENDED_RATE
 
   const revenueByDate = new Map<string, number>()
   for (const r of revenueRows) {
@@ -187,23 +258,44 @@ export async function getCashPositionForecast(input: {
   }
 
   const days: CashPositionDay[] = []
-  let cumulative = 0
+  // Null from the first unforecast day onward: a running total cannot step
+  // over an unknown and come out the other side meaning anything.
+  let cumulative: number | null = 0
   let totalInflow = 0
   let totalPayables = 0
+  let unforecastDays = 0
 
   for (let offset = 0; offset < horizonDays; offset++) {
     const dayDate = new Date(today)
     dayDate.setUTCDate(dayDate.getUTCDate() + offset)
     const key = ymd(dayDate)
     const predictedRevenue = revenueByDate.get(key) ?? null
-    const grossInflow = predictedRevenue ?? 0
-    const netInflow = grossInflow * (1 - blendedCommissionRate)
     const scheduled = payablesByDate.get(key) ?? 0
     const fixed = proRatedFixedDaily
-    const net = netInflow - scheduled - fixed
-    cumulative += net
-    totalInflow += netInflow
     totalPayables += scheduled
+
+    if (predictedRevenue === null) {
+      // No forecast row for this day. NOT a day of no revenue — see the
+      // header. `?? 0` here charged the day's fixed costs and payables
+      // against nothing coming in.
+      unforecastDays += 1
+      cumulative = null
+      days.push({
+        date: dayDate,
+        predictedRevenue: null,
+        estimatedNetInflow: null,
+        scheduledPayables: scheduled,
+        proRatedFixedCosts: fixed,
+        netCashFlow: null,
+        cumulativeNet: null,
+      })
+      continue
+    }
+
+    const netInflow = predictedRevenue * (1 - blendedCommissionRate)
+    const net = netInflow - scheduled - fixed
+    if (cumulative !== null) cumulative += net
+    totalInflow += netInflow
     days.push({
       date: dayDate,
       predictedRevenue,
@@ -223,6 +315,7 @@ export async function getCashPositionForecast(input: {
       horizonDays,
       blendedCommissionRate,
       proRatedFixedDaily,
+      unforecastDays,
       totalScheduledPayables: totalPayables,
       totalEstimatedInflow: totalInflow,
       endingCumulativeNet: cumulative,

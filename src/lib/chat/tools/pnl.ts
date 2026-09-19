@@ -5,6 +5,7 @@ import {
   buildPeriods,
   channelMix,
   computeStorePnL,
+  consolidateRows,
   monthlyFromFrequency,
   CUSTOM_FIXED_CODE_PREFIX,
   type CustomFixedExpense,
@@ -221,39 +222,6 @@ function weightedTarget(stores: StoreFixed[], salesByStore: Map<string, number>)
     weightDen += w
   }
   return weightDen > 0 ? weightedNum / weightDen : null
-}
-
-/** Sum each store's `rows[]` index-wise into one combined matrix. Mirrors
- * the consolidation logic in getAllStoresPnL. */
-function combineRows(perStoreRows: PnLRow[][], periodCount: number): PnLRow[] {
-  if (perStoreRows.length === 0) return []
-  const template = perStoreRows[0]
-  const grossPerPeriod: number[] = Array.from({ length: periodCount }, (_, pi) =>
-    perStoreRows.reduce((acc, rows) => {
-      const total = rows.find((r) => r.code === "TOTAL_SALES")
-      return acc + (total?.values[pi] ?? 0)
-    }, 0),
-  )
-  return template.map((tmpl, rowIdx) => {
-    const values = Array.from({ length: periodCount }, (_, pi) =>
-      perStoreRows.reduce((acc, rows) => acc + (rows[rowIdx]?.values[pi] ?? 0), 0),
-    )
-    const isUnknownByPeriod = Array.from({ length: periodCount }, (_, pi) =>
-      perStoreRows.every((rows) => rows[rowIdx]?.isUnknown?.[pi] === true),
-    )
-    const anyUnknown = isUnknownByPeriod.some(Boolean)
-    return {
-      code: tmpl.code,
-      label: tmpl.label,
-      values,
-      percents: values.map((v, i) =>
-        grossPerPeriod[i] === 0 ? 0 : v / grossPerPeriod[i],
-      ),
-      isSubtotal: tmpl.isSubtotal,
-      isFixed: tmpl.isFixed,
-      isUnknown: anyUnknown ? isUnknownByPeriod : undefined,
-    }
-  })
 }
 
 /** Pull the row by code and sum across periods. */
@@ -590,9 +558,17 @@ async function computeWindow(input: {
     })
   }
 
-  const combinedRows = combineRows(
+  // `consolidateRows` from @/lib/pnl, which is what the P&L page itself
+  // consolidates with. The copy that used to live here summed the stores'
+  // matrices by ROW INDEX. Custom fixed expenses are per store and appended in
+  // each store's own order, so index N is not the same line across stores:
+  // Hollywood's rent could be added to Glendale's linen bill and labelled
+  // whatever the first store called row N. Merging by code is the whole reason
+  // the shared helper exists, and it also gets the unknown flag right — a
+  // store that simply does not have a line should not be able to clear it.
+  const combinedRows = consolidateRows(
     perStore.map((s) => s.rows),
-    periods.length,
+    periods,
   )
 
   // Window-level salesByStore for weighted-target computation.

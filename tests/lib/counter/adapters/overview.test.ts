@@ -34,7 +34,7 @@ import { loadChannelMix, loadChannelMixByStore } from "@/lib/counter/channel-mix
 import { loadStripTargets } from "@/lib/counter/targets"
 import { toQueryBounds } from "@/lib/counter/date-range"
 import { PRIME_CEILING_PCT } from "@/lib/counter/prime-cost"
-import { hasData } from "@/lib/counter/section-data"
+import { dataOf, hasData } from "@/lib/counter/section-data"
 import {
   getOverviewSections,
   type OverviewSections,
@@ -75,6 +75,10 @@ function pnl(overrides: Record<string, unknown> = {}) {
     rentValue: 0,
     rentPct: 0,
   }
+  // Four entries because a `weekday` comparison asks for four windows, and
+  // each one is a whole occurrence of this fixture's trade — see
+  // `loadComparisonStatement`. The other comparisons read one.
+  const perPeriod = [kpis, kpis, kpis, kpis]
   return {
     storeCount: 2,
     combined: kpis,
@@ -86,8 +90,10 @@ function pnl(overrides: Record<string, unknown> = {}) {
         channelMix: [],
         fixedCostsConfigured: true,
         rows: pnlRows(),
+        perPeriod,
       },
     ],
+    perPeriod,
     consolidatedRows: pnlRows(),
     periods: [
       { label: "Tue Aug 18", startDate: range.start, endDate: range.start, days: 1, isPartial: false },
@@ -523,15 +529,16 @@ describe("getOverviewSections", () => {
     expect(food?.change).toContain("pts")
   })
 
-  it("divides the weekday window's money by four before reading it against one period", async () => {
-    // `comparisonRange("weekday")` returns a window CONTAINING four
-    // occurrences, not an equivalent period. Undivided, every weekday
-    // comparison would report this range as down 75%.
-    vi.mocked(getAllStoresPnL).mockImplementation(async (input) =>
-      (input.startDate.getTime() < primaryStart.getTime()
-        ? pnl({ combined: { ...pnl().combined, grossSales: 29_872 } })
-        : pnl()) as never,
-    )
+  it("divides the weekday comparison's four occurrences before reading them against one period", async () => {
+    // `comparisonWindows("weekday")` returns FOUR windows, each the length of
+    // the range, and the loader sums them — so a fixture answering $7,468 per
+    // window is four occurrences of $7,468, and the divisor turns that back
+    // into one. Undivided, every weekday comparison would report this range as
+    // down 75%.
+    //
+    // The four used to be loaded as their contiguous HULL, one window 22 days
+    // wide for a single day, with the same divisor applied to it.
+    vi.mocked(getAllStoresPnL).mockImplementation(async () => pnl() as never)
     const s = await load({ comparisonId: "weekday" })
     if (!hasData(s.comparison)) throw new Error("comparison")
     const net = s.comparison.data[0]
@@ -630,6 +637,33 @@ describe("getOverviewSections", () => {
     expect(cell(s, "Orders")).toBeDefined()
   })
 
+  it("leaves food and prime out entirely rather than printing a 0.0% nobody achieved", async () => {
+    /*
+     * The mirror of the labour case above, and the one that was missing.
+     * `cogsValue: 0` over a range with sales is a range whose DailyCogsItem
+     * rows have not materialised — `getAllStoresPnL` logs a warning on this
+     * exact test — and it printed "Food cost 0.0%" with a green bullet, plus a
+     * prime cost of labour alone sitting under the 60% ceiling.
+     */
+    vi.mocked(getAllStoresPnL).mockResolvedValue(
+      pnl({ combined: { ...pnl().combined, cogsValue: 0, cogsPct: 0 } }) as never,
+    )
+    const s = await load()
+    expect(cell(s, "Food cost")).toBeUndefined()
+    expect(cell(s, "Prime cost")).toBeUndefined()
+    // The figures that ARE known still render.
+    expect(cell(s, "Labor")).toBeDefined()
+    expect(cell(s, "Orders")).toBeDefined()
+  })
+
+  it("keeps prime out when EITHER half of it is missing, because it is their sum", async () => {
+    vi.mocked(getAllStoresPnL).mockResolvedValue(
+      pnl({ combined: { ...pnl().combined, cogsValue: 0, cogsPct: 0, laborValue: 0, laborPct: 0 } }) as never,
+    )
+    const s = await load()
+    expect(cell(s, "Prime cost")).toBeUndefined()
+  })
+
   it("fails ONE section without taking the others down", async () => {
     vi.mocked(loadChannelMix).mockRejectedValue(new Error("Otter sync timed out"))
     const s = await load()
@@ -683,5 +717,42 @@ describe("getOverviewSections", () => {
     for (const [arg] of vi.mocked(loadChannelMixByStore).mock.calls) {
       expect(arg.accountId).toBe(accountId)
     }
+  })
+})
+
+describe("the alert queue's days open", () => {
+  /**
+   * `Alert.occurredOn` is a `@db.Date`: UTC midnight encoding the LA BUSINESS
+   * date. Flooring the clock to UTC midnight compared it against the UTC day,
+   * and between 00:00 and 08:00 UTC — 4pm to midnight in Los Angeles, dinner
+   * service — the UTC day is one ahead of the restaurant's. Every alert read a
+   * day older than it was, right through every evening.
+   */
+  const duringDinner = new Date("2026-08-20T02:00:00.000Z") // 7pm Wed 19 Aug in LA
+
+  it("says today for an alert raised on the business day it is still on", async () => {
+    vi.mocked(getAlertInbox).mockResolvedValue(
+      inbox([alert({ occurredOn: new Date(Date.UTC(2026, 7, 19)) })]) as never,
+    )
+    const s = await load({ today: duringDinner })
+    expect(dataOf(s.needsYou)?.[0].lead).toBe("today")
+  })
+
+  it("counts whole business days for an older one", async () => {
+    vi.mocked(getAlertInbox).mockResolvedValue(
+      inbox([alert({ occurredOn: new Date(Date.UTC(2026, 7, 17)) })]) as never,
+    )
+    const s = await load({ today: duringDinner })
+    expect(dataOf(s.needsYou)?.[0].lead).toBe("2")
+    expect(dataOf(s.needsYou)?.[0].unit).toBe("days open")
+  })
+
+  it("reads the same before midnight UTC, when the two calendars agree", async () => {
+    vi.mocked(getAlertInbox).mockResolvedValue(
+      inbox([alert({ occurredOn: new Date(Date.UTC(2026, 7, 19)) })]) as never,
+    )
+    // 11am LA on the same Wednesday: UTC is still the 19th too.
+    const s = await load({ today: new Date("2026-08-19T18:00:00.000Z") })
+    expect(dataOf(s.needsYou)?.[0].lead).toBe("today")
   })
 })

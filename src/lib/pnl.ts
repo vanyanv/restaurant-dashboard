@@ -164,8 +164,21 @@ export function buildPeriods(
 const DAYS_PER_MONTH = 365.25 / 12 // ≈ 30.4375
 
 /**
- * Convert a monthly fixed-cost figure to the amount applicable to a period of `days` days.
- * Uses a 30.4375-day month so weekly (7d) ≈ monthly/4.348 and full-month values match exactly.
+ * Convert a monthly fixed-cost figure to the amount applicable to a period of
+ * `days` days.
+ *
+ * The divisor is the AVERAGE month — 365.25/12 ≈ 30.4375 days — because the
+ * caller's window is arbitrary: a 7-day range, a 22-day range, a range that
+ * straddles two months. There is no month to be a fraction of, so an average
+ * one is the only answer that is stable across windows and sums to the year.
+ *
+ * What that costs: a calendar month does NOT come back at its own figure. A
+ * 31-day month prorates to 1.85% over the real rent and February to about 8%
+ * under, and month-to-date rent, cleaning, towels and the fixed-labour
+ * fallback all carry it. This docblock used to claim "full-month values match
+ * exactly", which they never did — stated here because someone will otherwise
+ * reconcile a month against a landlord's invoice and go looking for the
+ * difference in the data.
  */
 export function monthlyCostForDays(
   monthlyAmount: number | null | undefined,
@@ -290,10 +303,36 @@ export function salesRowValues(rows: OtterSummaryRow[]): number[] {
   ]
 }
 
-/** Compute % of Total Sales for each value. Returns 0 when total is 0. */
+/**
+ * Compute % of Total Sales for each value. Returns 0 when there are no sales.
+ *
+ * See `pctOfSales` for why the guard is `<= 0` and not `=== 0`.
+ */
 export function percents(values: number[], total: number): number[] {
-  if (total === 0) return values.map(() => 0)
+  if (total <= 0) return values.map(() => 0)
   return values.map((v) => v / total)
+}
+
+/**
+ * One value as a share of that period's Total Sales.
+ *
+ * The one function that owns the P&L percent column. Fourteen copies of
+ * `totalSales[i] === 0 ? 0 : v / totalSales[i]` stood in this file, and every
+ * one of them divided by a denominator it had only checked for exact zero.
+ *
+ * Total Sales for a period CAN be negative — a day of refunds against a
+ * closed range, a correction posted after the fact, a store that traded one
+ * void. A negative denominator does not throw and does not produce Infinity;
+ * it silently flips the sign of every line in the column. COGS of $4,000 on
+ * Total Sales of −$200 printed as +2000% food cost, and Net Income of −$900
+ * printed as a positive margin. The owner reads that column to decide whether
+ * a store is making money.
+ *
+ * Zero is the fallback rather than null because `PnLRow.percents` is
+ * `number[]`; the row's `isUnknown` flags carry "not configured" separately.
+ */
+export function pctOfSales(value: number, totalSales: number): number {
+  return totalSales <= 0 ? 0 : value / totalSales
 }
 
 // ─── Channel mix helpers ───
@@ -399,7 +438,7 @@ export function computeStorePnL(input: {
       code: meta.code,
       label: meta.label,
       values,
-      percents: values.map((v, i) => (totalSales[i] === 0 ? 0 : v / totalSales[i])),
+      percents: values.map((v, i) => pctOfSales(v, totalSales[i])),
     }
   })
 
@@ -420,14 +459,14 @@ export function computeStorePnL(input: {
     code: UBER_COMMISSION_CODE,
     label: `Uber Commission (${(store.uberCommissionRate * 100).toFixed(0)}%)`,
     values: uberCommission,
-    percents: uberCommission.map((v, i) => (totalSales[i] === 0 ? 0 : v / totalSales[i])),
+    percents: uberCommission.map((v, i) => pctOfSales(v, totalSales[i])),
     isFixed: true,
   })
   rows.push({
     code: DOORDASH_COMMISSION_CODE,
     label: `DoorDash Commission (${(store.doordashCommissionRate * 100).toFixed(0)}%)`,
     values: doordashCommission,
-    percents: doordashCommission.map((v, i) => (totalSales[i] === 0 ? 0 : v / totalSales[i])),
+    percents: doordashCommission.map((v, i) => pctOfSales(v, totalSales[i])),
     isFixed: true,
   })
 
@@ -438,7 +477,7 @@ export function computeStorePnL(input: {
     code: NET_AFTER_COMMISSIONS_CODE,
     label: "Net Sales After Commissions",
     values: netAfterCommissions,
-    percents: netAfterCommissions.map((v, i) => (totalSales[i] === 0 ? 0 : v / totalSales[i])),
+    percents: netAfterCommissions.map((v, i) => pctOfSales(v, totalSales[i])),
     isSubtotal: true,
   })
 
@@ -450,13 +489,13 @@ export function computeStorePnL(input: {
       code: COGS_CODE,
       label: "Cost of Goods Sold",
       values: cogs.map((v) => -v),
-      percents: cogs.map((v, i) => (totalSales[i] === 0 ? 0 : -v / totalSales[i])),
+      percents: cogs.map((v, i) => pctOfSales(-v, totalSales[i])),
     })
     rows.push({
       code: GROSS_PROFIT_CODE,
       label: "Gross Profit",
       values: grossProfit,
-      percents: grossProfit.map((v, i) => (totalSales[i] === 0 ? 0 : v / totalSales[i])),
+      percents: grossProfit.map((v, i) => pctOfSales(v, totalSales[i])),
       isSubtotal: true,
     })
   }
@@ -488,9 +527,20 @@ export function computeStorePnL(input: {
     laborUnknown = periods.map((p, i) => {
       const h = harriLaborByPeriod[i]
       if (h.coveredDays >= p.days) return false
-      // Partial / no Harri coverage falls back on fixed; flag as unknown only
-      // when the fixed estimate is also missing.
-      return store.fixedMonthlyLabor == null && h.coveredDays === 0
+      /*
+       * Partial / no Harri coverage falls back on fixed; flag as unknown when
+       * the fixed estimate is also missing — whatever the coverage.
+       *
+       * This carried `&& h.coveredDays === 0`, which is not what the sentence
+       * above it says and not what the arithmetic does. With no
+       * `fixedMonthlyLabor`, `fixedLaborByPeriod[i]` is 0, so `perDayFixed` is
+       * 0 and the uncovered days contribute NOTHING — not an estimate, an
+       * omission. A store with three of seven days synced and no labour budget
+       * on file reported a week's labour built from three days and called it
+       * known. Labour understated means bottom line, margin and prime cost all
+       * overstated, which is the direction nobody goes looking in.
+       */
+      return store.fixedMonthlyLabor == null
     })
     const totalDays = periods.reduce((a, p) => a + p.days, 0)
     const totalCovered = harriLaborByPeriod.reduce((a, h) => a + Math.max(0, h.coveredDays), 0)
@@ -519,7 +569,7 @@ export function computeStorePnL(input: {
     code: LABOR_CODE,
     label: laborLabel,
     values: laborValues.map((v) => -v),
-    percents: laborValues.map((v, i) => (totalSales[i] === 0 ? 0 : -v / totalSales[i])),
+    percents: laborValues.map((v, i) => pctOfSales(-v, totalSales[i])),
     isFixed: true,
     isUnknown: laborUnknown,
   })
@@ -527,7 +577,7 @@ export function computeStorePnL(input: {
     code: RENT_CODE,
     label: "Rent (fixed)",
     values: rentValues.map((v) => -v),
-    percents: rentValues.map((v, i) => (totalSales[i] === 0 ? 0 : -v / totalSales[i])),
+    percents: rentValues.map((v, i) => pctOfSales(-v, totalSales[i])),
     isFixed: true,
     isUnknown: rentUnknown,
   })
@@ -535,7 +585,7 @@ export function computeStorePnL(input: {
     code: CLEANING_CODE,
     label: "Store Cleaning (fixed)",
     values: cleaningValues.map((v) => -v),
-    percents: cleaningValues.map((v, i) => (totalSales[i] === 0 ? 0 : -v / totalSales[i])),
+    percents: cleaningValues.map((v, i) => pctOfSales(-v, totalSales[i])),
     isFixed: true,
     isUnknown: cleaningUnknown,
   })
@@ -543,7 +593,7 @@ export function computeStorePnL(input: {
     code: TOWELS_CODE,
     label: "Towels (fixed)",
     values: towelsValues.map((v) => -v),
-    percents: towelsValues.map((v, i) => (totalSales[i] === 0 ? 0 : -v / totalSales[i])),
+    percents: towelsValues.map((v, i) => pctOfSales(-v, totalSales[i])),
     isFixed: true,
     isUnknown: towelsUnknown,
   })
@@ -559,7 +609,7 @@ export function computeStorePnL(input: {
       code: exp.code,
       label: exp.label,
       values: vals.map((v) => -v),
-      percents: vals.map((v, i) => (totalSales[i] === 0 ? 0 : -v / totalSales[i])),
+      percents: vals.map((v, i) => pctOfSales(-v, totalSales[i])),
       isFixed: true,
     })
   })
@@ -581,7 +631,7 @@ export function computeStorePnL(input: {
     code: AFTER_LABOR_RENT_CODE,
     label: "Net After Commissions & Fixed Costs",
     values: bottomLine,
-    percents: bottomLine.map((v, i) => (totalSales[i] === 0 ? 0 : v / totalSales[i])),
+    percents: bottomLine.map((v, i) => pctOfSales(v, totalSales[i])),
     isSubtotal: true,
   })
 
@@ -639,6 +689,18 @@ export function consolidateRows(
 
   return order.map((code) => {
     const meta = template.get(code)!
+    // A label like "Labor (actual)" or "Labor (partial)" is a claim about one
+    // store's data. `template` holds whichever store came first, so a
+    // consolidated line was stamped with that store's state and read as a
+    // claim about all of them. Where the contributing stores disagree, the
+    // line takes the bare name.
+    const labels = new Set(
+      perStoreRows
+        .map((rows) => rows.find((r) => r.code === code)?.label)
+        .filter((l): l is string => l !== undefined)
+    )
+    const label =
+      labels.size > 1 ? (meta.label.split(" (")[0] ?? meta.label) : meta.label
     const contributing = perStoreRows.filter((rows) =>
       rows.some((r) => r.code === code)
     )
@@ -648,21 +710,24 @@ export function consolidateRows(
         0
       )
     )
-    // Unknown only when every store that has this row flags it unknown.
+    // Unknown when ANY contributing store is unknown, because the line is a
+    // SUM and a store that does not know its figure contributes nothing to it.
+    // Hollywood's $10k of rent plus Glendale's missing rent is a consolidated
+    // Rent of $10k — Glendale's real rent has entered the group P&L as zero,
+    // and the group bottom line is overstated by exactly that. The flag used
+    // to require EVERY store to be unknown, which is the test for "we know
+    // nothing about this line", not for "this total is short a store".
     const combinedUnknown = periods.map((_, pi) =>
-      contributing.length > 0 &&
-      contributing.every(
+      contributing.some(
         (rows) => rows.find((r) => r.code === code)?.isUnknown?.[pi] === true
       )
     )
     const anyUnknown = combinedUnknown.some(Boolean)
     return {
       code,
-      label: meta.label,
+      label,
       values,
-      percents: values.map((v, i) =>
-        combinedGrossPerPeriod[i] === 0 ? 0 : v / combinedGrossPerPeriod[i]
-      ),
+      percents: values.map((v, i) => pctOfSales(v, combinedGrossPerPeriod[i])),
       isSubtotal: meta.isSubtotal,
       isFixed: meta.isFixed,
       isUnknown: anyUnknown ? combinedUnknown : undefined,

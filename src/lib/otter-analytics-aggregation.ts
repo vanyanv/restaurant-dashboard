@@ -1,3 +1,5 @@
+import { computeDeposit } from "@/lib/deposit"
+
 /**
  * Single-pass channel rollup for `getOtterAnalytics` / `getDashboardAnalytics`.
  *
@@ -133,15 +135,22 @@ export function aggregateChannelTotals(
   }
 
   for (const entry of out.values()) {
-    entry.theoreticalDeposit =
-      entry.netSales +
-      entry.taxCollected -
-      Math.abs(entry.taxRemitted) +
-      entry.tips +
-      entry.serviceCharges -
-      Math.abs(entry.fees)
-    entry.expectedDeposit =
-      entry.theoreticalDeposit + entry.paidIn - Math.abs(entry.paidOut)
+    // `computeDeposit` in @/lib/deposit — the one implementation, shared with
+    // `getDashboardAnalytics`. This used to be a second copy that subtracted
+    // `Math.abs()` of the three signed deductions, which is the same answer
+    // while the sign convention holds and a silent wrong answer the day it
+    // does not.
+    const { theoreticalDeposit, expectedDeposit, signDrift } = computeDeposit(entry)
+    if (signDrift.length > 0) {
+      console.warn(
+        "[otter-analytics] Otter sign-convention drift detected on %s: %s — " +
+          "deposit formula assumes <= 0",
+        entry.platform,
+        signDrift.join(", "),
+      )
+    }
+    entry.theoreticalDeposit = theoreticalDeposit
+    entry.expectedDeposit = expectedDeposit
   }
 
   return out

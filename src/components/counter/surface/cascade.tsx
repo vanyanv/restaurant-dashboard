@@ -162,9 +162,14 @@ function Row({
  * A zero `start` is a real state — a closed store, a channel filter that
  * matched no orders — and dividing by it would print "NaN%" and lay out a
  * width of "Infinity%". Every bar collapses to 0% instead.
+ *
+ * A NEGATIVE `start` is the same state for this purpose and used to fall
+ * through the `=== 0` test: it divides, so every bar got a negative width and
+ * a negative percentage, and the cascade read as if each step ADDED what it
+ * subtracts.
  */
 function share(v: number, top: number): number {
-  return top === 0 ? 0 : (v / top) * 100
+  return top <= 0 ? 0 : (v / top) * 100
 }
 
 function pctOf(v: number, top: number): number {

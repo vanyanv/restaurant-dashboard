@@ -36,6 +36,21 @@ export interface LaborLane {
   status: LaborLaneStatus
   /** Shifts published with nobody assigned (`HarriShift.isVirtual`). */
   unfilledSlots: number
+  /**
+   * The same three figures before `round1`, for anything that AGGREGATES them.
+   *
+   * The rounded fields above are what a day's ribbon prints, and rounding
+   * there is right — nobody reads "7.43 hours short". But `computeVitals`
+   * sums a week of days and rounds again, which is sum-of-rounded where
+   * round-of-summed is meant, and each day's error compounds rather than
+   * cancels. Small over seven days; wrong in the way that stops being small
+   * the moment someone sums a month.
+   */
+  exact: {
+    scheduledHours: number
+    neededHours: number | null
+    gapHours: number | null
+  }
 }
 
 const round1 = (n: number) => Math.round(n * 10) / 10
@@ -53,6 +68,7 @@ export function computeLaborLane(input: {
     scheduledHours: round1(scheduledHours),
     neededHours: null,
     gapHours: null,
+    exact: { scheduledHours, neededHours: null, gapHours: null },
     unfilledSlots,
   }
 
@@ -60,15 +76,22 @@ export function computeLaborLane(input: {
     return { ...blank, status: "unknown" }
   }
 
-  const neededHours = round1(forecastRevenue / targetSplh)
+  const exactNeeded = forecastRevenue / targetSplh
+  const neededHours = round1(exactNeeded)
 
   // Distinct from "short": nobody has published anything, which is a different
   // conversation with the manager than a schedule that is merely thin.
   if (scheduledHours <= 0) {
-    return { ...blank, neededHours, status: "unscheduled" }
+    return {
+      ...blank,
+      neededHours,
+      exact: { scheduledHours, neededHours: exactNeeded, gapHours: null },
+      status: "unscheduled",
+    }
   }
 
-  const gapHours = round1(scheduledHours - neededHours)
+  const exactGap = scheduledHours - exactNeeded
+  const gapHours = round1(exactGap)
   // Same tolerance the SPLH chart uses, so the two surfaces agree about which
   // days are worth flagging.
   const slack = neededHours * SPLH_TOLERANCE
@@ -78,6 +101,7 @@ export function computeLaborLane(input: {
     neededHours,
     gapHours,
     unfilledSlots,
+    exact: { scheduledHours, neededHours: exactNeeded, gapHours: exactGap },
     status: gapHours < -slack ? "short" : gapHours > slack ? "heavy" : "level",
   }
 }

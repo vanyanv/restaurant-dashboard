@@ -2,7 +2,11 @@ import { prisma } from "@/lib/prisma"
 import { getScopedStores } from "@/lib/account-stores"
 import { count, money, pct, plural } from "@/lib/counter/format"
 import { toQueryBounds, type DateRange } from "@/lib/counter/date-range"
-import { CHANNEL_FOR_PLATFORM, HOUSE_PLATFORMS } from "@/lib/counter/channel-mix"
+import {
+  CHANNEL_FOR_PLATFORM,
+  HOUSE_PLATFORMS,
+  commissionRateFor,
+} from "@/lib/counter/channel-mix"
 import { channelById, type ChannelId } from "@/lib/counter/channels"
 import type { ChartSpec } from "@/lib/counter/chart-geometry"
 import {
@@ -39,9 +43,17 @@ import type { FigureProps, MListRow } from "@/components/counter"
  * "not recorded for this range", never a zero. `money(null)` is an em dash for
  * exactly this reason — **`$0.00` in a fee column is the claim that the
  * marketplaces took nothing**, which is a far worse error than an absence.
- * This page uses the same words for the same gap, because a reader who sees
- * "not recorded" on two pages has learned one fact, and a reader who sees it
- * once and a zero once has learned something false.
+ *
+ * This page went further, and the paragraph above described only the first
+ * half of the answer until the figure was corrected. Commission and Net are
+ * priced at the store's CONTRACT rate — `commissionRateFor`, the same rule
+ * `computeStorePnL` charges its `COM_UBER` and `COM_DD` lines at — so the fee
+ * shown against an item and the fee shown against the range come from one
+ * place. `OtterOrder.commission` is not consulted for these columns at all,
+ * which is why the gap measured above no longer empties them. What a contract
+ * rate cannot price is a channel the schema holds no rate for — Grubhub,
+ * ChowNow, Caviar — and those read "no rate on file", never zero, and poison
+ * the Kept total rather than shrinking it.
  *
  * ## What the channel table CAN say
  *
@@ -180,7 +192,12 @@ interface ItemData {
   margin: number | null
   mapped: boolean
   recipeLines: number | null
-  byChannel: { channel: ChannelId; qty: number; revenue: number }[]
+  /**
+   * `commission` is the marketplace's cut at this store's contract rate, or
+   * `null` where the schema publishes no rate for the channel. Never `0` for
+   * an unknown — a fee we cannot price is not a fee of nothing.
+   */
+  byChannel: { channel: ChannelId; qty: number; revenue: number; commission: number | null }[]
   modifiers: { name: string; qty: number; revenue: number; mapped: boolean }[]
   /** True when ANY order in the window carries a commission. Measured: false. */
   feesRecorded: boolean
@@ -244,8 +261,14 @@ async function loadItem(input: MenuItemInput): Promise<ItemData | null> {
       where: { storeId: { in: storeIds }, otterItemName: name },
       select: { recipeId: true },
     }),
-    prisma.$queryRaw<{ platform: string; qty: number; revenue: number }[]>`
-      SELECT o."platform" AS platform,
+    // Grouped by STORE as well as platform, because the commission rate is a
+    // per-store contract (`Store.uberCommissionRate`, `doordashCommissionRate`)
+    // and two stores on one account can hold different ones. Summing the
+    // platform first and applying one rate afterwards would price this item's
+    // commission at whichever store happened to be first.
+    prisma.$queryRaw<{ storeId: string; platform: string; qty: number; revenue: number }[]>`
+      SELECT o."storeId" AS "storeId",
+             o."platform" AS platform,
              SUM(i."quantity")::float AS qty,
              SUM(i."price" * i."quantity")::float AS revenue
       FROM "OtterOrderItem" i
@@ -253,7 +276,7 @@ async function loadItem(input: MenuItemInput): Promise<ItemData | null> {
       WHERE o."storeId" = ANY(${storeIds})
         AND o."referenceTimeLocal" BETWEEN ${startDate} AND ${endDate}
         AND i."name" = ${name}
-      GROUP BY o."platform"`,
+      GROUP BY o."storeId", o."platform"`,
     prisma.$queryRaw<{ name: string; qty: number; revenue: number }[]>`
       SELECT s."name" AS name,
              SUM(s."quantity")::float AS qty,
@@ -316,13 +339,36 @@ async function loadItem(input: MenuItemInput): Promise<ItemData | null> {
   // Channels the map does not name are LEFT OUT, not folded into house — the
   // rule `channel-mix.ts` states: folding a marketplace into the house channel
   // would report its volume as commission-free.
-  const byChannel = new Map<ChannelId, { qty: number; revenue: number }>()
+  const byChannel = new Map<
+    ChannelId,
+    { qty: number; revenue: number; commission: number | null }
+  >()
+  const ratesByStore = new Map(stores.map((st) => [st.id, st]))
   for (const r of channelRows) {
     const channel = CHANNEL_FOR_PLATFORM[r.platform]
     if (!channel) continue
-    const acc = byChannel.get(channel) ?? { qty: 0, revenue: 0 }
+    const acc = byChannel.get(channel) ?? { qty: 0, revenue: 0, commission: 0 as number | null }
+    const revenue = Number(r.revenue)
     acc.qty += Number(r.qty)
-    acc.revenue += Number(r.revenue)
+    acc.revenue += revenue
+    /*
+     * The marketplace's cut, at the rate the P&L charges it at.
+     *
+     * `commissionRateFor` returns null where the schema publishes no rate —
+     * Grubhub, ChowNow, Caviar — and a null anywhere in a channel poisons that
+     * channel's total, because a commission that is partly unknown is not a
+     * smaller commission. Same rule `channel-mix.ts` applies to the same gap.
+     *
+     * This is the store's CONTRACT rate rather than `OtterOrder.commission`,
+     * deliberately: `computeStorePnL` prices the `COM_UBER` and `COM_DD` lines
+     * the same way, so the fee this page shows against an item and the fee the
+     * P&L shows against the range come from one rule. The recorded figure is
+     * per-order and would have to be prorated across an order's items to land
+     * here at all, and its coverage is documented in `adapters/orders.ts` as
+     * running 0% for whole months.
+     */
+    const rate = commissionRateFor(channel, ratesByStore.get(r.storeId) ?? null)
+    acc.commission = acc.commission === null || rate === null ? null : acc.commission + revenue * rate
     byChannel.set(channel, acc)
   }
 
@@ -352,10 +398,38 @@ async function loadItem(input: MenuItemInput): Promise<ItemData | null> {
   }
 }
 
-/** The Orders page's own words for the same gap, in one place. */
-const FEES_ABSENT = "not recorded for this range"
+/** A channel this account holds no commission rate for — Grubhub, ChowNow, Caviar. */
+const RATE_ABSENT = "no rate on file"
+
+/** The order feed carries no row for this name, so there is no cut to take. */
+const CHANNELS_ABSENT = "no channel data"
+
+/**
+ * What the kitchen keeps after the marketplaces take their share, or `null`
+ * when any channel this item sold on publishes no rate.
+ *
+ * Null rather than a partial subtraction, for the reason the whole page is
+ * careful about: a "Kept" that silently omits Grubhub's cut is a number an
+ * owner would price a menu off, and it is wrong in the flattering direction.
+ *
+ * NO channel rows at all is the same claim by a different route, and it used
+ * to fall straight through: `some` is false on an empty list, `taken` is 0,
+ * and Kept came out equal to Charged under the words "after commission" — the
+ * exact assertion this function was written to stop making. It is reachable.
+ * `revenue` comes from the POS daily rollup matched by slug; `byChannel` is
+ * built from the ORDER feed matched on the item's exact name, and skips any
+ * platform `CHANNEL_FOR_PLATFORM` does not name. The note further down this
+ * file exists because those two feeds are known to disagree about names.
+ */
+function keptOf(d: ItemData): number | null {
+  if (d.byChannel.length === 0) return null
+  if (d.byChannel.some((c) => c.commission === null)) return null
+  const taken = d.byChannel.reduce((t, c) => t + (c.commission ?? 0), 0)
+  return d.revenue - taken
+}
 
 function headlineOf(d: ItemData): ItemHeadline {
+  const kept = keptOf(d)
   const soldCell: FigureProps = {
     label: "Sold",
     value: count(d.qty),
@@ -377,11 +451,19 @@ function headlineOf(d: ItemData): ItemHeadline {
       { label: "Charged", value: money(d.revenue), delta: "before commission", deltaTone: "is-flat" },
       {
         label: "Kept",
-        // NOT `money(d.revenue)`. With no commission on file "Kept" would
-        // equal "Charged" and the page would assert the marketplaces took
-        // nothing — see the docblock.
-        value: d.feesRecorded ? money(d.revenue) : "—",
-        delta: d.feesRecorded ? "after commission" : FEES_ABSENT,
+        // Charged LESS the marketplaces' cut. `keptOf` is null when any
+        // channel this item sold on publishes no rate, because a total that
+        // counts an unpriceable fee as zero is the same claim as "the
+        // marketplaces took nothing" — which is what this cell printed while
+        // it was `money(d.revenue)`, the expression the comment here used to
+        // forbid directly above the line that did it.
+        value: kept === null ? "—" : money(kept),
+        delta:
+          kept !== null
+            ? "after commission"
+            : d.byChannel.length === 0
+              ? CHANNELS_ABSENT
+              : RATE_ABSENT,
         deltaTone: "is-flat",
       },
       {
@@ -429,8 +511,14 @@ function channelsOf(d: ItemData): ItemChannels {
       tint: meta.markVar,
       price: money(price, { cents: true }),
       sold: count(c.qty),
-      commission: d.feesRecorded ? money(0) : FEES_ABSENT,
-      netEach: d.feesRecorded ? money(price, { cents: true }) : FEES_ABSENT,
+      // The channel's own cut, and what a unit leaves behind once it is taken.
+      // Both were `money(0)` and the gross price — a marketplace row asserting
+      // in dollars that Uber took nothing.
+      commission: c.commission === null ? RATE_ABSENT : money(c.commission),
+      netEach:
+        c.commission === null || c.qty <= 0
+          ? RATE_ABSENT
+          : money((c.revenue - c.commission) / c.qty, { cents: true }),
       margin: margin === null ? "—" : pct(margin, { scaled: true }),
     }
   })
@@ -483,10 +571,13 @@ function channelsOf(d: ItemData): ItemChannels {
       `item — cancelled orders do not account for it. ` +
       (d.feesRecorded
         ? "Margin is against the plate cost, which does not vary by channel."
-        : `Commission and Net each read "${FEES_ABSENT}" because no order in this window ` +
-          `carries one — the last that did is dated 22 Jul. A zero there would say the ` +
-          `marketplaces took nothing. Margin is against the PLATE cost, which does not ` +
-          `vary by channel, so it is what the kitchen keeps before the marketplace's share.`),
+        : `No order in this window carries a recorded fee — the last that did is dated ` +
+          `22 Jul — so Commission and Net are priced at the store's CONTRACT rate, the ` +
+          `same rule the P&L charges its Uber and DoorDash lines at. A channel with no ` +
+          `rate on file reads "${RATE_ABSENT}" rather than zero, because a zero would ` +
+          `say the marketplaces took nothing. Margin is against the PLATE cost, which ` +
+          `does not vary by channel, so it is what the kitchen keeps before the ` +
+          `marketplace's share.`),
   }
 }
 
