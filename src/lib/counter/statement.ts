@@ -365,7 +365,19 @@ export async function loadWeekStatements(
     storeId === null ? null : result.perStore.find((p) => p.storeId === storeId)
 
   return windows.map((w, i) => {
-    const k = result.perPeriod[i]
+    /*
+     * THE SELECTED STORE's period, not the account's.
+     *
+     * `result.perPeriod` is the account-wide answer whatever `storeId` says —
+     * `getAllStoresPnL` takes no store and scopes by filtering `perStore`, and
+     * there is no filter that reaches inside a period. This read it anyway and
+     * only ever used `scoped` as a null check, so `/dashboard/pnl` with one
+     * store selected drew a correct cascade above an eight-week table summing
+     * all three, roughly triple, and fed the same figures to the headline's
+     * prime-cost trail. The rollup now publishes `perStore[].perPeriod` by the
+     * identical indexing route, so there is one right thing to read.
+     */
+    const k = scoped ? scoped.perPeriod[i] : result.perPeriod[i]
     /*
      * A selected store that the rollup has no row for is the same
      * `storeNotFound` case `loadStatement` reports, and for the same reason:

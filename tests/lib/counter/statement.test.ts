@@ -25,6 +25,7 @@ import { toQueryBounds, type DateRange } from "@/lib/counter/date-range"
 import {
   granularityFor,
   loadStatement,
+  loadWeekStatements,
   type Statement,
 } from "@/lib/counter/statement"
 
@@ -79,6 +80,9 @@ function store(id: string, name: string, over: Partial<Record<string, number>> =
     channelMix: [],
     fixedCostsConfigured: true,
     rows: rows(),
+    // This store's own periods. Scaled off its own KPIs so a per-store read is
+    // distinguishable from the account-wide `perPeriod` at a glance.
+    perPeriod: [kpis(over), kpis(over)],
   }
 }
 
@@ -396,5 +400,100 @@ describe("loadStatement — prime", () => {
     const s = await load()
     expect(s.prime.primePct).toBeNull()
     expect(s.prime.overCeiling).toBe(false)
+  })
+})
+
+/* ── Trailing windows ─────────────────────────────────────────────────── */
+
+/**
+ * The eight-week table's scope, which is the second way note 60 could come
+ * back without a formula difference.
+ *
+ * `loadWeekStatements` reads N windows off ONE rollup call. The rollup's
+ * `perPeriod` answers for the whole account whatever store the caller asked
+ * for — `getAllStoresPnL` takes no `storeId` — so reading it for a selected
+ * store put a correct single-store cascade above an eight-week table summing
+ * every store on the account. These pin that the selected store's own
+ * `perStore[].perPeriod` is what a scoped read returns.
+ */
+describe("loadWeekStatements — scope", () => {
+  const windows = [
+    { start: new Date(2026, 7, 10), end: new Date(2026, 7, 16), days: 7, partial: false },
+    { start: new Date(2026, 7, 17), end: new Date(2026, 7, 19), days: 3, partial: true },
+  ]
+
+  /** The account-wide answer, deliberately unlike either store's. */
+  const accountPeriod = kpis({
+    grossSales: 10000,
+    netAfterCommissions: 9400,
+    fixedCosts: 3400,
+    bottomLine: 3200,
+    marginPct: 3200 / 10000,
+    cogsValue: 2600,
+    cogsPct: 2600 / 10000,
+    laborValue: 2500,
+    laborPct: 2500 / 10000,
+    rentValue: 700,
+    rentPct: 700 / 10000,
+  })
+
+  const glendale = {
+    grossSales: 2532,
+    netAfterCommissions: 2400,
+    fixedCosts: 800,
+    bottomLine: 1000,
+    marginPct: 1000 / 2532,
+    cogsValue: 400,
+    cogsPct: 400 / 2532,
+    laborValue: 600,
+    laborPct: 600 / 2532,
+    rentValue: 200,
+    rentPct: 200 / 2532,
+  }
+
+  const twoStoreWeeks = () =>
+    rollup({
+      storeCount: 2,
+      perStore: [store("holly", "Hollywood"), store("gln", "Glendale", glendale)],
+      perPeriod: [accountPeriod, accountPeriod],
+    })
+
+  beforeEach(() => {
+    mockPnL.mockResolvedValue(twoStoreWeeks() as never)
+  })
+
+  it("reads the SELECTED store's periods, not the account's", async () => {
+    const weeks = await loadWeekStatements(windows, "gln")
+    expect(weeks).toHaveLength(2)
+    for (const w of weeks) {
+      expect(w.grossSales).toBe(2532)
+      expect(w.cogsValue).toBe(400)
+      expect(w.laborValue).toBe(600)
+      expect(w.bottomLine).toBe(1000)
+    }
+  })
+
+  it("prices prime cost on the selected store's own denominator", async () => {
+    const [week] = await loadWeekStatements(windows, "gln")
+    // 400 food + 600 labour over 2532 of sales — not 2600 + 2500 over 10000.
+    expect(week.prime.primePct).toBeCloseTo(39.5, 1)
+  })
+
+  it("still answers for the account when no store is selected", async () => {
+    const weeks = await loadWeekStatements(windows, null)
+    expect(weeks[0].grossSales).toBe(10000)
+    expect(weeks[0].cogsValue).toBe(2600)
+  })
+
+  it("reports a selected store the rollup has no row for, rather than widening", async () => {
+    const weeks = await loadWeekStatements(windows, "nobody")
+    expect(weeks.every((w) => w.storeNotFound)).toBe(true)
+    expect(weeks.every((w) => w.grossSales === 0)).toBe(true)
+  })
+
+  it("carries each window's own day count and makes one rollup call", async () => {
+    const weeks = await loadWeekStatements(windows, "gln")
+    expect(weeks.map((w) => w.days)).toEqual([7, 3])
+    expect(mockPnL).toHaveBeenCalledTimes(1)
   })
 })
