@@ -27,6 +27,24 @@ export interface OwnerStoreRow {
   id: string
   name: string
   address: string | null
+  /**
+   * `pre_open` | `warming_up` | `ready`. The lifecycle stage decides what the
+   * nightly ML job does for a store, and therefore what the assistant is
+   * entitled to say about it: a `pre_open` store trains no forecasts at all
+   * and a `warming_up` one emits transfer forecasts borrowed from Hollywood.
+   * Without this field the chat reported "no forecast available" for a store
+   * that was never going to have one, which reads as an outage rather than as
+   * a store that has not opened.
+   */
+  lifecycleStage: string
+  /** Null until the store physically opens. */
+  openedAt: Date | null
+  /**
+   * Per-store COGS target as a percent (28.5 = 28.5%). Null when the owner
+   * has not set one, and the difference matters: the prompt already tells the
+   * model to say the target is not configured rather than guess.
+   */
+  targetCogsPct: number | null
 }
 
 /**

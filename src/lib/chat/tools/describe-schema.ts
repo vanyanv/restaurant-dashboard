@@ -29,6 +29,7 @@ const params = z
         "forecasts",
         "anomalies",
         "elasticity",
+        "ratings",
       ])
       .optional()
       .default("all")
@@ -166,13 +167,16 @@ const CATALOG: SchemaDomain[] = [
       { name: "getPromoRoi", useFor: "inferred-promo days with lift vs same-weekday baseline" },
       { name: "getLaunchTrajectory", useFor: "newly-launched menu items + 90-day projection (linear, no ramp)" },
       { name: "getChannelMix", useFor: "per-platform net-rate + shift simulation (X% migration what-if)" },
+      { name: "getForecastQuality", useFor: "measured accuracy of the forecasts — WAPE/MAPE/bias, interval coverage, and the seasonal-naive baseline the model has to beat" },
     ],
+    notes: "A store at lifecycleStage 'pre_open' is never forecast, and a 'warming_up' one gets a borrowed prior. Check the store's lifecycle stage before reporting a forecast as missing.",
   },
   {
     domain: "anomalies",
     summary: "Z-score deviation events and waste root-cause clustering.",
     tools: [
       { name: "getOpenAnomalies", useFor: "open z-score events (revenue, menu-item, ingredient, labor, refunds)" },
+      { name: "getAlerts", useFor: "the whole alert inbox across all five detectors — anomalies, ingredient price deltas, labour variance, quantity spikes, new products — plus whether delivery is muted" },
       { name: "getWasteRootCauses", useFor: "(store, ingredient) waste-residual cluster labels (theft_or_unrecorded, expiry_driven, etc.)" },
     ],
   },
@@ -185,6 +189,15 @@ const CATALOG: SchemaDomain[] = [
     ],
     notes: "Linear fit. Extrapolating beyond ±25% of meanPrice is directional only.",
   },
+  {
+    domain: "ratings",
+    summary:
+      "Guest star ratings and review text from the delivery platforms. The only source here for what a customer SAID, as opposed to what they bought.",
+    tools: [
+      { name: "getRatings", useFor: "view='summary' for count / mean / 1-5 distribution / per-platform and per-store split; view='reviews' for the review text itself, worst first, with the items each guest ordered" },
+    ],
+    notes: "Third-party platforms only — there is no first-party review feed. The sync is not guaranteed fresh; check latestReviewAt before calling a quiet window good news.",
+  },
 ]
 
 export const describeSchema: ChatTool<
@@ -193,7 +206,7 @@ export const describeSchema: ChatTool<
 > = {
   name: "describeSchema",
   description:
-    "Meta-tool: returns the catalog of data domains and tools available in this chat. Call when the user asks 'what can you do?', 'what data do you have?', or 'how do you know X?' — or when you're unsure whether a tool exists for a question. Domains: stores, sales, orders, menu, recipes, ingredients, invoices, cogs, pnl, inventory, vendors, forecasts, anomalies, elasticity.",
+    "Meta-tool: returns the catalog of data domains and tools available in this chat. Call when the user asks 'what can you do?', 'what data do you have?', or 'how do you know X?' — or when you're unsure whether a tool exists for a question. Domains: stores, sales, orders, menu, recipes, ingredients, invoices, cogs, pnl, inventory, vendors, forecasts, anomalies, elasticity, ratings.",
   parameters: params,
   async execute(args, ctx) {
     const byDomain =

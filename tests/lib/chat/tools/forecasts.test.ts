@@ -60,7 +60,7 @@ describe("getRevenueForecast (chat tool)", () => {
     const ctx = makeCtx({ forecastDailyRevenue: { findMany } } as never)
 
     const result = await getRevenueForecast.execute(
-      { horizonDays: 14, storeIds: ["s1"] },
+      { horizonDays: 14, includeDrivers: false, storeIds: ["s1"] },
       ctx,
     )
     expect(result).toHaveLength(2)
@@ -70,7 +70,7 @@ describe("getRevenueForecast (chat tool)", () => {
 
   it("calls assertOwnerOwnsStores so a foreign id can't leak in", async () => {
     const ctx = makeCtx()
-    await getRevenueForecast.execute({ horizonDays: 14, storeIds: ["s1"] }, ctx)
+    await getRevenueForecast.execute({ horizonDays: 14, includeDrivers: false, storeIds: ["s1"] }, ctx)
     expect(assertOwnerOwnsStores).toHaveBeenCalledWith("acct-A", ["s1"])
   })
 })

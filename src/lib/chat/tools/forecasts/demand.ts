@@ -26,8 +26,23 @@ const revenueParams = z
       .optional()
       .default(14)
       .describe("Days ahead to return. The pipeline currently writes 14d horizons."),
+    includeDrivers: z
+      .boolean()
+      .optional()
+      .default(false)
+      .describe(
+        "Include the TreeSHAP driver breakdown for each day: what the model thinks is pushing the number up or down (weather, day of week, recent trend). Costs roughly six extra rows per day, so only ask for it when the user asks WHY a forecast looks the way it does.",
+      ),
   })
   .strict()
+
+/**
+ * One operator-facing driver from the TreeSHAP waterfall. `value` is signed
+ * dollars against `base`, and `base` + every `value` sums to
+ * `predictedRevenue`. Grouped in ml/models/attribution.py because nobody
+ * running a restaurant wants `lag_7` weighed against `roll_28`.
+ */
+export type ForecastDriver = { label: string; value: number }
 
 export type RevenueForecastChatRow = {
   storeId: string
@@ -37,12 +52,49 @@ export type RevenueForecastChatRow = {
   p90: number | null
   modelVersion: string
   generatedAt: string
+  /**
+   * 'native' for a model fitted on this store's own history, 'transfer' for a
+   * borrowed prior emitted while the store is warming up. A transfer row is a
+   * real forecast but a weaker one, and the answer should say so.
+   */
+  forecastSource: string
+  /**
+   * Present only when `includeDrivers` was set. Null when the row predates
+   * attribution (before 2026-08-19) or the booster declined to produce one --
+   * which is not the same as "nothing is driving it".
+   */
+  drivers?: { base: number; groups: ForecastDriver[] } | null
+}
+
+/**
+ * `attribution` is `Json?`, so it arrives as `unknown` and may be anything a
+ * previous pipeline version wrote. Validate the shape rather than casting:
+ * a malformed row should drop to null and leave the forecast readable, not
+ * throw inside a tool call and cost the turn its whole answer.
+ */
+function readDrivers(
+  raw: unknown,
+): { base: number; groups: ForecastDriver[] } | null {
+  if (raw === null || typeof raw !== "object" || Array.isArray(raw)) return null
+  const obj = raw as Record<string, unknown>
+  if (typeof obj.base !== "number" || !Array.isArray(obj.groups)) return null
+  const groups = obj.groups
+    .filter(
+      (g): g is { label: string; value: number } =>
+        typeof g === "object" &&
+        g !== null &&
+        typeof (g as Record<string, unknown>).label === "string" &&
+        typeof (g as Record<string, unknown>).value === "number",
+    )
+    .map((g) => ({ label: g.label, value: g.value }))
+  if (groups.length === 0) return null
+  return { base: obj.base, groups }
 }
 
 export const getRevenueForecast: ChatTool<typeof revenueParams, RevenueForecastChatRow[]> = {
   name: "getRevenueForecast",
   description:
-    "Returns the latest daily revenue forecast for an owner-scoped slice of stores. Source: ForecastDailyRevenue, written by the nightly ML pipeline (XGBoost). p10/p90 are the 80% prediction-interval bounds. Empty when the pipeline has not run yet.",
+    "Returns the latest daily revenue forecast for an owner-scoped slice of stores. Source: ForecastDailyRevenue, written by the nightly ML pipeline (XGBoost). p10/p90 are the 80% prediction-interval bounds. forecastSource is 'native' for a model fitted on the store's own history and 'transfer' for a borrowed prior used while a store is warming up. Pass includeDrivers=true to get the per-day TreeSHAP breakdown of what is pushing the number up or down. Empty when the pipeline has not run yet; check listStores first, because a pre_open store is never forecast at all.",
   parameters: revenueParams,
   async execute(args, ctx) {
     const storeIds = await resolveStoreIds(ctx, args.storeIds)
@@ -71,6 +123,8 @@ export const getRevenueForecast: ChatTool<typeof revenueParams, RevenueForecastC
         p90: true,
         modelVersion: true,
         generatedAt: true,
+        forecastSource: true,
+        ...(args.includeDrivers ? { attribution: true } : {}),
       },
     })
 
@@ -95,6 +149,14 @@ export const getRevenueForecast: ChatTool<typeof revenueParams, RevenueForecastC
         p90: r.p90,
         modelVersion: r.modelVersion,
         generatedAt: r.generatedAt.toISOString(),
+        forecastSource: r.forecastSource,
+        ...(args.includeDrivers
+          ? {
+              drivers: readDrivers(
+                (r as { attribution?: unknown }).attribution ?? null,
+              ),
+            }
+          : {}),
       }))
   },
 }

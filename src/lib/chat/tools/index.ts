@@ -34,6 +34,9 @@ import {
 } from "./recipes"
 import { getOperationalCosts, getStoreBreakdown } from "./store-summary"
 import { getRefunds } from "./refunds"
+import { getRatings } from "./ratings"
+import { getAlerts } from "./alerts"
+import { getForecastQuality } from "./forecast-quality"
 import { getPnlSummary } from "./pnl"
 import { searchPnlHistory } from "./pnl-history"
 import {
@@ -118,6 +121,12 @@ export const chatTools = {
   listRecipesByCategory,
   // Refunds
   getRefunds,
+  // Guest ratings and review text
+  getRatings,
+  // The alert inbox (all five detector sources, wider than getOpenAnomalies)
+  getAlerts,
+  // Measured forecast accuracy + training-run status
+  getForecastQuality,
   // P&L
   getPnlSummary,
   searchPnlHistory,
