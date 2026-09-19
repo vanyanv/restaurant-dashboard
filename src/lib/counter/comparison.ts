@@ -101,6 +101,18 @@ export function comparisonPhrase(
    * that case is the `cmp.on` branch above.
    */
   if (previous === 0) return { text: `nothing in ${cmp.label} to compare`, tone: "is-flat" }
+  /*
+   * A negative prior period has no percentage to be a percentage OF.
+   *
+   * `previous` is net sales, and a window of heavy refunds can land below
+   * zero. Dividing by a negative denominator inverts the sign, so sales up on
+   * a refund week printed a fall — the one direction a reader acts on. The
+   * arithmetic is fine; the statement "up 40% on a window that took in less
+   * than nothing" is not one. `prime-cost.ts` and `statement.ts` both guard
+   * their own denominators with `<= 0` for this reason, and this one was the
+   * survivor on `=== 0`.
+   */
+  if (previous < 0) return { text: `${cmp.label} was negative`, tone: "is-flat" }
   const change = (now - previous) / previous
   const sign = deltaSign(change)
   return {

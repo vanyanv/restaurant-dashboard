@@ -43,6 +43,11 @@ _EVAL_WINDOW_DAYS = 35
 #: the baseline a free zero error, and a `sampleSize` of ~35 under a comment
 #: promising 28.
 _SCORE_WINDOW_DAYS = 28
+
+#: How much wider a 95% prediction interval is than an 80% one, for a
+#: normal-ish error: 1.96 / 1.2816. The two columns we store are the 80% ones,
+#: so the 95% pair is synthesised from them by this factor.
+_PI95_FROM_PI80 = 1.9599639845400545 / 1.2815515655446004
 _CONSISTENCY_WINDOW_DAYS = 14
 _DISCREPANCY_THRESHOLD_PCT = 15.0
 
@@ -393,14 +398,24 @@ def _build_eval_input(
     # 2026-08-19 model change). Newest is still an approximation of a pooled
     # number, but it names the generation the window is converging on rather
     # than the one it is leaving.
-    model_version = rows[-1][5] or rows[0][5] or "unknown"
+    # The NEWEST contributing generation. `rows[-1]` is only the newest row
+    # when the fetch ordered by date — true for revenue and hourly orders,
+    # false for MENU_ITEM, whose SQL orders by SKU first, so its last row was
+    # the last SKU's last date rather than the window's newest. Ask the dates.
+    by_date = sorted(
+        (r for r in rows if r[5]), key=lambda r: r[0], reverse=True
+    )
+    model_version = (by_date[0][5] if by_date else None) or "unknown"
 
-    # We only have 80% PI columns. Widen by ~2x for an approximate 95% PI
-    # so the evaluator's coverage column is at least populated.
+    # We only have 80% PI columns, so the 95% one is synthesised by widening
+    # that half-width. For a normal-ish error the ratio of the two z-scores is
+    # 1.96 / 1.2816 ≈ 1.53, not the 2.0 this used — a 30% over-wide interval,
+    # which over-covers and so flatters `intervalCoverage95`. Nothing in src/
+    # reads that column yet; it would have been wrong the day someone did.
     half80 = (p90 - p10) / 2.0
     centre = preds
-    lower95 = centre - half80 * 2.0
-    upper95 = centre + half80 * 2.0
+    lower95 = centre - half80 * _PI95_FROM_PI80
+    upper95 = centre + half80 * _PI95_FROM_PI80
 
     window_start = min(dates)
     window_end = max(dates)

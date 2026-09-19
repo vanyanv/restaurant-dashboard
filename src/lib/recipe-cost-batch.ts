@@ -25,6 +25,7 @@ export async function batchRecipeCosts(
       where: { accountId },
       select: {
         id: true,
+        servingSize: true,
         foodCostOverride: true,
         ingredients: {
           select: {
@@ -131,8 +132,17 @@ export async function batchRecipeCosts(
       partial = true
     }
 
+    // `totalCost` is a PORTION cost — every consumer multiplies it by units
+    // sold or by a parent's quantity — so the walked batch total is divided by
+    // the portions the batch yields. `foodCostOverride` is a plate figure an
+    // owner typed in and stands as it is. Same rule as both walks in
+    // `recipe-cost.ts`; this is the third implementation of it, and the three
+    // must not disagree about what a plate costs.
     if (total === 0 && recipe.foodCostOverride != null) {
       total = recipe.foodCostOverride
+    } else {
+      const yielded = recipe.servingSize
+      total = total / (yielded != null && Number.isFinite(yielded) && yielded > 0 ? yielded : 1)
     }
 
     stack.delete(recipeId)

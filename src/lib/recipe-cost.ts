@@ -27,7 +27,30 @@ export type RecipeCostLine = {
 export type RecipeCostResult = {
   recipeId: string
   itemName: string
+  /**
+   * The cost of ONE portion — what a plate costs, which is what every consumer
+   * of this type means by it (a parent recipe multiplies it by its own
+   * quantity; COGS multiplies it by units sold).
+   *
+   * That is `batchCost / servingSize`. The divide was missing: `servingSize`
+   * was selected by both walks and never used, so a recipe entered as a batch
+   * yield — ingredients scaled to the whole batch, `servingSize` set to the
+   * portions it makes — reported the WHOLE BATCH as the plate cost, straight
+   * into COGS and every food-cost percentage above it. Harmless while all 60
+   * production recipes sit at `servingSize = 1`, which is exactly how it
+   * survived; the `recipe_serving_size_positive` CHECK constraint was added in
+   * the 2026-05-02 migration for "a divide-by-servingSize consumer", and this
+   * is that consumer.
+   */
   totalCost: number
+  /**
+   * What the lines below add up to: the whole batch. `totalCost` is this
+   * divided by `servingSize`, so a reader reconciling the lines against the
+   * headline has the figure they reconcile to.
+   */
+  batchCost: number
+  /** Portions the batch yields. Guaranteed > 0 by a DB CHECK constraint. */
+  servingSize: number
   lines: RecipeCostLine[]
   /** True if any ingredient or sub-component had no resolvable cost. */
   partial: boolean
@@ -124,6 +147,17 @@ export async function computeRecipeCost(
 ): Promise<RecipeCostResult> {
   const memo = new Map<string, RecipeCostResult>()
   return walk(recipeId, asOf, [], memo, options?.storeId)
+}
+
+/**
+ * A usable portion count. The DB CHECK constraint makes `> 0` an invariant,
+ * but this code also runs against mocked Prisma in tests and against rows
+ * written before the constraint existed, and a division that can produce
+ * Infinity has no business being the only thing standing between a batch and
+ * a plate cost.
+ */
+function servingSizeOf(raw: number | null | undefined): number {
+  return raw != null && Number.isFinite(raw) && raw > 0 ? raw : 1
 }
 
 async function walk(
@@ -291,14 +325,21 @@ async function walk(
   // cost, and (b) empty — no ingredient lines at all (common for modifier
   // recipes that just carry an override dollar amount).
   const walkedToNothing = total === 0
+  const batchCost = total
+  // `foodCostOverride` is a plate figure an owner typed in, not a batch one,
+  // so it stands as the portion cost and is not divided. The walked total is.
   if (total === 0 && recipe.foodCostOverride != null) {
     total = recipe.foodCostOverride
+  } else {
+    total = total / servingSizeOf(recipe.servingSize)
   }
 
   const result: RecipeCostResult = {
     recipeId: recipe.id,
     itemName: recipe.itemName,
     totalCost: total,
+    batchCost,
+    servingSize: servingSizeOf(recipe.servingSize),
     lines,
     partial,
     // Recorded BEFORE the override fallback above could disguise it. A recipe
@@ -480,12 +521,18 @@ export async function batchRecipeCosts(
     }
 
     const walkedToNothing = total === 0
+    const batchCost = total
+    // Same rule as the single-recipe walk above: the override is a plate
+    // figure and stands; the walked total is a batch and is divided.
     if (total === 0 && recipe.foodCostOverride != null) total = recipe.foodCostOverride
+    else total = total / servingSizeOf(recipe.servingSize)
 
     const result: RecipeCostResult = {
       recipeId: recipe.id,
       itemName: recipe.itemName,
       totalCost: total,
+      batchCost,
+      servingSize: servingSizeOf(recipe.servingSize),
       lines,
       partial,
       emptyWalk: walkedToNothing,

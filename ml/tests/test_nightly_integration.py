@@ -334,3 +334,35 @@ def test_the_prefix_is_still_read_as_the_baseline_reference():
     assert not any(
         b == a for b, a in zip(inp.baseline_predictions, inp.actuals) if a == 500.0
     )
+
+
+def test_the_model_label_is_the_newest_date_even_when_rows_sort_by_sku():
+    """MENU_ITEM's SQL orders by `otterItemSkuId` first, then by date.
+
+    So `rows[-1]` is the last SKU's last date, not the window's newest — the
+    label stamped a trailing statistic with whichever generation happened to
+    serve the alphabetically-last item.
+    """
+    today = dt.date(2026, 5, 12)
+    rows = [
+        # SKU A, oldest to newest — its newest row ran on the new model.
+        (today - dt.timedelta(days=3), 1.0, 1.0, 0.0, 2.0, "v2", "SKU-A"),
+        (today - dt.timedelta(days=2), 1.0, 1.0, 0.0, 2.0, "v3", "SKU-A"),
+        # SKU B, which stopped selling a week ago and was last forecast on v1.
+        (today - dt.timedelta(days=9), 1.0, 1.0, 0.0, 2.0, "v1", "SKU-B"),
+    ]
+    inp = ni._build_eval_input(
+        rows, target="MENU_ITEM", store_id="s1", today=today, series_index=6
+    )
+    assert inp is not None
+    assert inp.model_version == "v3"
+
+
+def test_the_95_percent_interval_is_widened_by_the_z_ratio_not_by_two():
+    today = dt.date(2026, 5, 12)
+    rows = [(today - dt.timedelta(days=1), 100.0, 100.0, 90.0, 110.0, "v1")]
+    inp = ni._build_eval_input(rows, target="REVENUE", store_id="s1", today=today)
+    assert inp is not None
+    # An 80% half-width of 10 becomes 1.96/1.2816 ≈ 1.53 times that, not 20.
+    assert inp.upper95[0] == pytest.approx(100 + 10 * 1.5295, abs=0.01)
+    assert inp.lower95[0] == pytest.approx(100 - 10 * 1.5295, abs=0.01)

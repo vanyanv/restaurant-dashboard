@@ -200,8 +200,11 @@ function linesFrom(k: RollupLines): StatementLines {
     otherOperating: Math.max(0, k.fixedCosts - k.laborValue - occupancy),
     bottomLine: k.bottomLine,
     marginPct: k.grossSales <= 0 ? null : k.marginPct,
-    cogsPct: k.cogsPct,
-    laborPct: k.laborPct,
+    // The same guard the margin gets. These two came through unguarded, so a
+    // negative-sales window carried a sign-flipped cost percentage onto the
+    // statement even though the margin beside it had been withheld.
+    cogsPct: k.grossSales <= 0 ? 0 : k.cogsPct,
+    laborPct: k.grossSales <= 0 ? 0 : k.laborPct,
   }
 }
 

@@ -272,3 +272,36 @@ describe("computeVitals — the sales-per-labor-hour target", () => {
     expect(computeVitals({ days, scorecard: null }).splh.target).toBeNull()
   })
 })
+
+describe("computeVitals — rounding the week, not the days", () => {
+  /**
+   * `computeLaborLane` rounds each day to one decimal for its own ribbon, and
+   * that is right — nobody reads "7.43 hours short". Summing those rounded
+   * figures and rounding again is sum-of-rounded where round-of-summed is
+   * meant: seven days of error compound instead of cancelling.
+   */
+  const exactDay = (scheduled: number, needed: number): VitalsDay =>
+    day({
+      labor: {
+        scheduledHours: Math.round(scheduled * 10) / 10,
+        neededHours: Math.round(needed * 10) / 10,
+        gapHours: Math.round((scheduled - needed) * 10) / 10,
+        status: "level",
+        unfilledSlots: 0,
+        exact: { scheduledHours: scheduled, neededHours: needed, gapHours: scheduled - needed },
+      },
+    })
+
+  it("sums the unrounded gaps and rounds the total once", () => {
+    // Seven days each 0.04 short: −0.28 over the week, which rounds to −0.3.
+    // Each day rounds to −0.0 on its own, so the rounded sum was 0.
+    const days = Array.from({ length: 7 }, () => exactDay(100, 100.04))
+    const v = computeVitals({ days, scorecard: null })
+    expect(v.laborGap.hours).toBe(-0.3)
+  })
+
+  it("still reports the total when a caller supplies no exact figures", () => {
+    const v = computeVitals({ days: week(), scorecard: null })
+    expect(v.laborGap.hours).toBe(0)
+  })
+})

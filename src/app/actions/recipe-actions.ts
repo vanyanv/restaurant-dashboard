@@ -215,6 +215,14 @@ export async function previewRecipeCost(input: {
     unit: string
     ingredientName?: string | null
   }>
+  /**
+   * Portions the batch yields, as the editor's own field has it. Omitted
+   * means one, which is what every saved recipe is today — but a preview that
+   * ignored it would print a different plate cost from the one the recipe
+   * gets the moment it is saved, which is the worst way for a reader to find
+   * out the two disagree.
+   */
+  servingSize?: number
 }): Promise<RecipeCostResult> {
   const scope = await requireScope()
   if (!scope) throw new Error("Not authenticated")
@@ -318,10 +326,17 @@ export async function previewRecipeCost(input: {
     }
   }
 
+  const servingSize =
+    input.servingSize != null && Number.isFinite(input.servingSize) && input.servingSize > 0
+      ? input.servingSize
+      : 1
+
   return {
     recipeId: "",
     itemName: "",
-    totalCost: total,
+    totalCost: total / servingSize,
+    batchCost: total,
+    servingSize,
     lines,
     partial,
     emptyWalk: total === 0,

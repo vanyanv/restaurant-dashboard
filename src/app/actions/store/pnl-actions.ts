@@ -68,13 +68,19 @@ function periodLines(
       at((c) => c.cleaningValues) +
       total(computeds.map((c) => total(c.customFixedValues.map((row) => row[i] ?? 0))))
     const bottom = at((c) => c.bottomLine)
-    const r = (v: number) => (gross === 0 ? 0 : v / gross)
+    // `<= 0`, not `=== 0`. A window that took in less than nothing — heavy
+    // refunds — has a negative denominator, and dividing by it inverts every
+    // ratio's sign: a cost reads as a credit, a loss reads as a margin. Zero
+    // sales and negative sales say the same thing here: there is no revenue
+    // for these to be a percentage of. `prime-cost.ts`, `statement.ts` and
+    // `cogs.ts` all guard with `<= 0` already; this layer was the survivor.
+    const r = (v: number) => (gross <= 0 ? 0 : v / gross)
     return {
       grossSales: gross,
       netAfterCommissions: at((c) => c.netAfterCommissions),
       fixedCosts: fixed,
       bottomLine: bottom,
-      marginPct: gross === 0 ? 0 : bottom / gross,
+      marginPct: gross <= 0 ? 0 : bottom / gross,
       cogsValue: cogs,
       cogsPct: r(cogs),
       laborValue: labor,
@@ -475,7 +481,7 @@ export async function getStorePnL(input: {
     const netAfterCommissions = sum(computed.netAfterCommissions)
     const totalCogs = sum(computed.cogsValues)
     const grossProfit = sum(computed.grossProfit)
-    const grossMarginPct = grossSales === 0 ? 0 : grossProfit / grossSales
+    const grossMarginPct = grossSales <= 0 ? 0 : grossProfit / grossSales
     const fixedCosts =
       sum(computed.laborValues) +
       sum(computed.rentValues) +
@@ -483,7 +489,7 @@ export async function getStorePnL(input: {
       sum(computed.cleaningValues) +
       sum(computed.customFixedValues.flat())
     const bottomLine = sum(computed.bottomLine)
-    const marginPct = grossSales === 0 ? 0 : bottomLine / grossSales
+    const marginPct = grossSales <= 0 ? 0 : bottomLine / grossSales
 
     const totalChannelVals = computed.perPeriodSalesValues.reduce<number[]>(
       (acc, periodVals) => {
@@ -722,8 +728,8 @@ export async function getAllStoresPnL(input: {
         sum(computed.cleaningValues) +
         sum(computed.customFixedValues.flat())
       const bottomLine = sum(computed.bottomLine)
-      const marginPct = grossSales === 0 ? 0 : bottomLine / grossSales
-      const ratio = (v: number) => (grossSales === 0 ? 0 : v / grossSales)
+      const marginPct = grossSales <= 0 ? 0 : bottomLine / grossSales
+      const ratio = (v: number) => (grossSales <= 0 ? 0 : v / grossSales)
 
       const totalChannelVals = computed.perPeriodSalesValues.reduce<number[]>(
         (acc, periodVals) => {
@@ -770,14 +776,14 @@ export async function getAllStoresPnL(input: {
       bottomLine: sum(perStore.map((p) => p.bottomLine)),
       marginPct: 0,
       cogsValue: combinedCogs,
-      cogsPct: combinedGross === 0 ? 0 : combinedCogs / combinedGross,
+      cogsPct: combinedGross <= 0 ? 0 : combinedCogs / combinedGross,
       laborValue: combinedLabor,
-      laborPct: combinedGross === 0 ? 0 : combinedLabor / combinedGross,
+      laborPct: combinedGross <= 0 ? 0 : combinedLabor / combinedGross,
       rentValue: combinedRent,
-      rentPct: combinedGross === 0 ? 0 : combinedRent / combinedGross,
+      rentPct: combinedGross <= 0 ? 0 : combinedRent / combinedGross,
     }
     combined.marginPct =
-      combined.grossSales === 0 ? 0 : combined.bottomLine / combined.grossSales
+      combined.grossSales <= 0 ? 0 : combined.bottomLine / combined.grossSales
 
     // Merge by row code (not index): robust to stores having different custom
     // fixed expenses. Stores lacking a given code contribute 0 to that line.

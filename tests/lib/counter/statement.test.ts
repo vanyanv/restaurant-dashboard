@@ -497,3 +497,50 @@ describe("loadWeekStatements — scope", () => {
     expect(mockPnL).toHaveBeenCalledTimes(1)
   })
 })
+
+describe("the cascade on a window that took in less than nothing", () => {
+  /**
+   * Heavy refunds can net a window below zero. Dividing by that denominator
+   * inverts every ratio's sign: a cost reads as a credit. `marginPct` was
+   * already withheld on `<= 0`; the two cost percentages beside it came
+   * through unguarded and carried the flipped sign onto the statement.
+   */
+  const refunded = {
+    grossSales: -2_000,
+    netAfterCommissions: -2_000,
+    bottomLine: -9_000,
+    marginPct: -9_000 / -2_000, // 4.5 — the flip, as the rollup hands it over
+    cogsValue: 3_000,
+    cogsPct: 3_000 / -2_000,
+    laborValue: 4_000,
+    laborPct: 4_000 / -2_000,
+  }
+
+  it("withholds the margin and refuses the flipped cost percentages", async () => {
+    mockPnL.mockResolvedValue(
+      rollup({
+        combined: kpis(refunded),
+        perStore: [store("holly", "Hollywood", refunded)],
+      }) as never,
+    )
+    const s = await load()
+    expect(s.marginPct).toBeNull()
+    // Not 4.5, and not −1.5 and −2.0: there is no revenue for these to be a
+    // percentage of.
+    expect(s.cogsPct).toBe(0)
+    expect(s.laborPct).toBe(0)
+  })
+
+  it("still reports the dollars, which are real", async () => {
+    mockPnL.mockResolvedValue(
+      rollup({
+        combined: kpis(refunded),
+        perStore: [store("holly", "Hollywood", refunded)],
+      }) as never,
+    )
+    const s = await load()
+    expect(s.grossSales).toBe(-2_000)
+    expect(s.cogsValue).toBe(3_000)
+    expect(s.bottomLine).toBe(-9_000)
+  })
+})

@@ -164,8 +164,21 @@ export function buildPeriods(
 const DAYS_PER_MONTH = 365.25 / 12 // ≈ 30.4375
 
 /**
- * Convert a monthly fixed-cost figure to the amount applicable to a period of `days` days.
- * Uses a 30.4375-day month so weekly (7d) ≈ monthly/4.348 and full-month values match exactly.
+ * Convert a monthly fixed-cost figure to the amount applicable to a period of
+ * `days` days.
+ *
+ * The divisor is the AVERAGE month — 365.25/12 ≈ 30.4375 days — because the
+ * caller's window is arbitrary: a 7-day range, a 22-day range, a range that
+ * straddles two months. There is no month to be a fraction of, so an average
+ * one is the only answer that is stable across windows and sums to the year.
+ *
+ * What that costs: a calendar month does NOT come back at its own figure. A
+ * 31-day month prorates to 1.85% over the real rent and February to about 8%
+ * under, and month-to-date rent, cleaning, towels and the fixed-labour
+ * fallback all carry it. This docblock used to claim "full-month values match
+ * exactly", which they never did — stated here because someone will otherwise
+ * reconcile a month against a landlord's invoice and go looking for the
+ * difference in the data.
  */
 export function monthlyCostForDays(
   monthlyAmount: number | null | undefined,

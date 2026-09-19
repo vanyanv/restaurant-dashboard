@@ -18,7 +18,7 @@ vi.mock("@/lib/chat/owner-scope", () => ({
   assertOwnerOwnsStores: vi.fn(async () => ["s1"]),
 }))
 
-import { getOrderById, listOrdersByDay } from "@/lib/chat/tools/orders"
+import { getOrderById, getOrderItemFrequency, listOrdersByDay } from "@/lib/chat/tools/orders"
 import type { ChatToolContext } from "@/lib/chat/tools/types"
 
 /** `3926DEFE` — a real 50%-off DoorDash order, read from the database. */
@@ -100,5 +100,42 @@ describe("listOrdersByDay — a subtotal is not a ticket", () => {
     expect(row.ticket).toBeCloseTo(37.47, 2)
     expect(row.marketplaceFee).toBeCloseTo(9.37, 2)
     expect(row.netToRestaurant).toBeCloseTo(28.1, 2)
+  })
+})
+
+describe("getOrderItemFrequency — the average price it reports", () => {
+  function ctxWithItems(items: Array<{ name: string; quantity: number; price: number; orderId: string }>) {
+    return {
+      ownerId: "u1",
+      accountId: "acct-A",
+      prisma: {
+        otterOrderItem: { findMany: vi.fn(async () => items) },
+      } as unknown as ChatToolContext["prisma"],
+    }
+  }
+
+  const run = (items: Parameters<typeof ctxWithItems>[0]) =>
+    getOrderItemFrequency.execute(
+      { dateRange: { from: "2026-08-01", to: "2026-08-31" }, minOrders: 1, limit: 20 },
+      ctxWithItems(items),
+    )
+
+  it("weights by quantity, so it agrees with the revenue beside it", async () => {
+    // One line of six at $10, one line of one at $16. The unweighted mean of
+    // the listed prices is $13; the item actually sold at $76/7 ≈ $10.86.
+    const [row] = await run([
+      { name: "Fries", quantity: 6, price: 10, orderId: "o1" },
+      { name: "Fries", quantity: 1, price: 16, orderId: "o2" },
+    ])
+    expect(row.totalRevenue).toBe(76)
+    expect(row.totalQty).toBe(7)
+    // The model is going to do this division to check itself. It has to match.
+    expect(row.avgPrice).toBeCloseTo(row.totalRevenue / row.totalQty, 10)
+    expect(row.avgPrice).not.toBe(13)
+  })
+
+  it("reports nothing rather than dividing by no quantity", async () => {
+    const [row] = await run([{ name: "Fries", quantity: 0, price: 10, orderId: "o1" }])
+    expect(row.avgPrice).toBe(0)
   })
 })

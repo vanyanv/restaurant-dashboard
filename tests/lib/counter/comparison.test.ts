@@ -62,6 +62,15 @@ describe("comparisonPhrase", () => {
     expect(r.tone).toBeUndefined()
   })
 
+  it("does not turn a rise into a fall against a prior period below zero", () => {
+    // A window of heavy refunds nets out negative. Dividing by a negative
+    // denominator inverts the sign, so $1,000 against −$500 printed ▼ 300% —
+    // a fall, which is the one direction a reader acts on.
+    const r = comparisonPhrase(1000, comparisonContext("prev", scope), -500)
+    expect(r.text).toBe("the prior period was negative")
+    expect(r.tone).toBe("is-flat")
+  })
+
   it("says there is nothing to compare rather than dividing by zero", () => {
     const r = comparisonPhrase(1000, comparisonContext("prev", scope), 0)
     expect(r.text).toBe("nothing in the prior period to compare")
