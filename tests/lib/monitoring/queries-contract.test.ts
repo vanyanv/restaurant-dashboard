@@ -30,6 +30,13 @@ import {
   getStaleStores,
 } from "@/lib/monitoring/queries"
 import { resolveWindow } from "@/lib/monitoring/time-range"
+/**
+ * Every AI/chat monitoring query takes the account whose rows it may read.
+ * They took none until 2026-09-19 and returned every tenant's — see the header
+ * of `src/lib/monitoring/queries/ai-chat.ts`.
+ */
+const ACCOUNT = "acct_test"
+
 
 const NOW = new Date("2026-06-12T12:00:00Z")
 
@@ -64,7 +71,7 @@ describe("hourly bucket rollups (mobile sparklines)", () => {
       { bucket, cost: 1.25 },
       { bucket, cost: null },
     ] as never)
-    expect(await getAiCostByHour(24)).toEqual([
+    expect(await getAiCostByHour(ACCOUNT, 24)).toEqual([
       { bucket, cost: 1.25 },
       { bucket, cost: 0 },
     ])
@@ -99,7 +106,7 @@ describe("TimeWindow support (global range control)", () => {
 
   it("getAiCostByHour threads window.since and window.until into the query", async () => {
     const w = resolveWindow("7d")
-    await getAiCostByHour(w)
+    await getAiCostByHour(ACCOUNT, w)
     const dates = datesPassedToQuery()
     expect(dates).toContainEqual(w.since)
     expect(dates).toContainEqual(w.until)

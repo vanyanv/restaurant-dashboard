@@ -289,6 +289,115 @@ Plainspoken. Numbers are tabular. No filler ("Sure!", "I'd be happy to"). No res
 No em dashes. Use a period, comma, semicolon, colon, or parentheses instead. Never " — ", never "--". Two short sentences beat one sentence broken with a dash.`
 
 /**
+ * THE GUIDE IS NARROWED WITH THE TOOLS, OR IT LIES TO THE MODEL.
+ *
+ * `tool-groups.ts` narrows what a turn is OFFERED — as few as nine schemas on
+ * the Labor page against fifty-eight in the registry. This block was not
+ * narrowed with it. It names every tool in the product, on every turn, and
+ * `describeSchema` (always offered) repeats the claim, while "# Meta" below
+ * forbids refusing with "I don't have a tool for that" before checking that
+ * catalogue. So a question that reached for a tool this turn did not carry
+ * had two exits and both were wrong: refuse against three sources saying the
+ * tool exists, or answer without it.
+ *
+ * Section granularity, not line granularity. A `##` section is the unit a
+ * reader of this file already thinks in, sections are kept whole so no rule
+ * is split from the caveat under it, and the text is sliced rather than
+ * rewritten so narrowing cannot change what an included rule says.
+ *
+ * A section naming no tool at all (the guide's own preamble, prose about
+ * sign conventions) is always kept: it is context, not routing.
+ */
+const GUIDE_HEADING = "# Tool selection guide"
+const GUIDE_END_HEADING = "# Self-check before sending"
+
+interface GuideSection {
+  text: string
+  /** Backticked identifiers in this section that are real tool names. */
+  tools: string[]
+}
+
+interface ParsedPrompt {
+  head: string
+  preamble: string
+  sections: GuideSection[]
+  tail: string
+}
+
+/** Every `` `identifier` `` in a chunk of the guide. */
+function backticked(text: string): string[] {
+  return [...text.matchAll(/`([A-Za-z][A-Za-z0-9]*)`/g)].map((m) => m[1])
+}
+
+/**
+ * Split once per tool list, not once per request. The parse is pure text
+ * work, but it runs on a 36KB string and every turn would pay for it.
+ */
+const parseCache = new Map<string, ParsedPrompt>()
+
+function parsePrompt(allTools: readonly string[]): ParsedPrompt {
+  const cacheKey = [...allTools].sort().join(",")
+  const hit = parseCache.get(cacheKey)
+  if (hit) return hit
+
+  const known = new Set(allTools)
+  const start = STATIC_PROMPT.indexOf(`\n${GUIDE_HEADING}`)
+  const end = STATIC_PROMPT.indexOf(`\n${GUIDE_END_HEADING}`)
+  // A prompt that no longer has the guide is not a crash: the whole thing
+  // becomes the head and narrowing is a no-op, which is what it was before.
+  if (start === -1 || end === -1 || end < start) {
+    const whole: ParsedPrompt = {
+      head: STATIC_PROMPT,
+      preamble: "",
+      sections: [],
+      tail: "",
+    }
+    parseCache.set(cacheKey, whole)
+    return whole
+  }
+
+  const head = STATIC_PROMPT.slice(0, start + 1)
+  const guide = STATIC_PROMPT.slice(start + 1, end + 1)
+  const tail = STATIC_PROMPT.slice(end + 1)
+
+  const parts = guide.split(/\n(?=## )/)
+  const parsed: ParsedPrompt = {
+    head,
+    preamble: parts[0],
+    sections: parts.slice(1).map((text) => ({
+      text,
+      tools: [...new Set(backticked(text))].filter((n) => known.has(n)),
+    })),
+    tail,
+  }
+  parseCache.set(cacheKey, parsed)
+  return parsed
+}
+
+/**
+ * The guide as this turn should read it.
+ *
+ * `active === null` means "no department was established", which is the full
+ * menu — and this must return the guide BYTE FOR BYTE as it was written, so
+ * the golden set's prompt fingerprint does not move when nothing narrowed.
+ * `tests/lib/chat/system-prompt.test.ts` asserts exactly that.
+ */
+export function renderToolGuide(
+  allTools: readonly string[],
+  active: readonly string[] | null,
+): { head: string; guide: string; tail: string } {
+  const { head, preamble, sections, tail } = parsePrompt(allTools)
+  if (!active) {
+    return { head, guide: preamble + sections.map((s) => `\n${s.text}`).join(""), tail }
+  }
+  const on = new Set(active)
+  const kept = sections.filter(
+    (s) => s.tools.length === 0 || s.tools.some((t) => on.has(t)),
+  )
+  return { head, guide: preamble + kept.map((s) => `\n${s.text}`).join(""), tail }
+}
+
+/**
  * Builds the system prompt for the owner-analytics chat.
  *
  * The static rules/tool-guide/voice block is a module-level constant so
@@ -302,12 +411,22 @@ No em dashes. Use a period, comma, semicolon, colon, or parentheses instead. Nev
 export async function buildSystemPrompt(
   accountId: string,
   now: Date = new Date(),
+  /**
+   * Every tool in the registry, and the subset this turn is offering. The
+   * route has both; passing them rather than importing `chatTools` here keeps
+   * the prompt module free of the tool layer (and of Prisma behind it), which
+   * is what lets the golden set render it from frozen inputs.
+   *
+   * Omit both and nothing narrows — the behaviour before narrowing existed.
+   */
+  tools?: { all: readonly string[]; active: readonly string[] | null },
 ): Promise<string> {
   const [stores, snapshot] = await Promise.all([
     listOwnerStores(accountId),
     buildSituationSnapshot(accountId, now),
   ])
   return composeSystemPrompt({
+    tools,
     // THE LA BUSINESS DAY, not a UTC slice. `toISOString().slice(0, 10)` was
     // here and returns TOMORROW for the last seven hours of every LA day —
     // measured at 17:34 PDT on 2026-08-27, it said `2026-08-28`. The model
@@ -333,9 +452,20 @@ export function composeSystemPrompt(ctx: {
   today: string
   storeBlock: string
   snapshot: string
+  /**
+   * Narrows the tool-selection guide to what this turn can actually call.
+   * Absent, or `active: null`, renders the guide byte for byte as written —
+   * which is the shape the golden set fingerprints.
+   */
+  tools?: { all: readonly string[]; active: readonly string[] | null }
 }): string {
-  const { today, storeBlock, snapshot } = ctx
-  return `${STATIC_PROMPT}
+  const { today, storeBlock, snapshot, tools } = ctx
+  const { head, guide, tail } = renderToolGuide(
+    tools?.all ?? [],
+    tools?.active ?? null,
+  )
+  const staticPrompt = `${head}${guide}${tail}`
+  return `${staticPrompt}
 
 # Per-request context
 

@@ -59,6 +59,11 @@ const CATALOG: SchemaDomain[] = [
       { name: "getPlatformBreakdown", useFor: "per-platform totals (DoorDash / UberEats / first-party)" },
       { name: "getStoreBreakdown", useFor: "side-by-side per-store totals" },
       { name: "getOperationalCosts", useFor: "fees, refunds, discounts, lost revenue per store" },
+      // Absent from this catalogue until 2026-09-19, while the prompt carried
+      // a routing rule for it — so the one tool the model is sent here to
+      // check for was the one it could not find. `tests/lib/chat/tools/
+      // describe-schema.test.ts` now fails on any tool missing from here.
+      { name: "getRefunds", useFor: "third-party refunds by platform over a date range" },
     ],
   },
   {
@@ -191,12 +196,30 @@ export const describeSchema: ChatTool<
     "Meta-tool: returns the catalog of data domains and tools available in this chat. Call when the user asks 'what can you do?', 'what data do you have?', or 'how do you know X?' — or when you're unsure whether a tool exists for a question. Domains: stores, sales, orders, menu, recipes, ingredients, invoices, cogs, pnl, inventory, vendors, forecasts, anomalies, elasticity.",
   parameters: params,
   async execute(args, ctx) {
-    void ctx
-    const domains =
+    const byDomain =
       args.domain === "all" || !args.domain
         ? CATALOG
         : CATALOG.filter((d) => d.domain === args.domain)
-    const totalToolCount = CATALOG.reduce((acc, d) => acc + d.tools.length, 0)
+
+    /*
+     * ONLY WHAT THIS TURN CAN CALL.
+     *
+     * The prompt sends the model here before it is allowed to refuse, so a
+     * catalogue that answers "yes, getInvoiceSpend exists" on a turn whose
+     * menu does not carry it is worse than no catalogue: the model then
+     * reaches for a schema it was never given. `tool-groups.ts` narrows a
+     * Labor-page turn to nine tools; this is the same narrowing, told
+     * straight. A domain left with no reachable tool is dropped whole rather
+     * than shown empty.
+     */
+    const active = ctx.activeTools ? new Set(ctx.activeTools) : null
+    const domains = active
+      ? byDomain
+          .map((d) => ({ ...d, tools: d.tools.filter((t) => active.has(t.name)) }))
+          .filter((d) => d.tools.length > 0)
+      : byDomain
+
+    const totalToolCount = domains.reduce((acc, d) => acc + d.tools.length, 0)
     return { domains, totalToolCount }
   },
 }

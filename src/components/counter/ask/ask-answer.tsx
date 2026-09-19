@@ -11,6 +11,7 @@ import { CacheTag, HowIGotHere, ReadRow } from "@/components/counter/ask/read-ro
 import type { FigureProps } from "@/components/counter/surface/figure"
 import { labelFor } from "@/components/chat/tool-labels"
 import type { AskContext } from "@/lib/counter/ask-context"
+import { failureClause } from "@/lib/counter/ask-meta"
 import {
   askAnswer,
   askFailure,
@@ -317,6 +318,24 @@ export function AskAnswerBody({
             figures === "mstrip" ? <MStrip cells={cells} /> : <Strip cells={cells} />
           ) : null}
           {caveat ? <p className="callout">{caveat}</p> : null}
+          {/* A TURN THAT FAILED OUTRIGHT COULD NOT BE ASKED AGAIN.
+              Both retry affordances on this surface were gated on a turn that
+              SUCCEEDED — "Try again" needs `meta.failed`, "Re-ask fresh"
+              needs `meta.cached` — so a 500, a rate limit or a dropped stream
+              rendered one bare sentence and no way forward but retyping the
+              question. `failure` is the one state that has a question and no
+              answer, which is exactly when a retry is worth the most. */}
+          {failure && onFresh ? (
+            <div className="btnrow">
+              <button
+                className="btn btn--primary"
+                type="button"
+                onClick={() => onFresh(askQuestion(state))}
+              >
+                Ask again
+              </button>
+            </div>
+          ) : null}
           {/* COULD NOT FINISH ("Ask in Motion II", D). A source that did not
               come back is named in place, beside the ones that did, and the
               answer above it is whatever those could support. One retry —
@@ -330,10 +349,13 @@ export function AskAnswerBody({
                   <span>{r.params ?? "complete"}</span>
                 </div>
               ))}
+              {/* WHY, not just WHICH. A timeout, a rejected argument and a
+                  source this account cannot see all used to read as the same
+                  three words; the message was on the row the whole time. */}
               {answer.meta.failed.map((t) => (
                 <div className="rsrc is-out" key={t}>
                   <b>{labelFor(t).short}</b>
-                  <span>did not come back</span>
+                  <span>{failureClause(answer.meta?.failedReasons[t])}</span>
                 </div>
               ))}
               {onFresh ? (

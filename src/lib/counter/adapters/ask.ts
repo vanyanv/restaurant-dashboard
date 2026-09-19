@@ -14,7 +14,7 @@ import {
   type ShownPresentation,
 } from "@/lib/chat/return"
 import { classify, guardSection, type StreamedSections } from "@/lib/counter/adapters/types"
-import type { AskTurnMeta } from "@/lib/counter/ask-meta"
+import { readFailedReasons, type AskTurnMeta } from "@/lib/counter/ask-meta"
 import type { SectionData } from "@/lib/counter/section-data"
 
 /**
@@ -328,6 +328,9 @@ const loadThread = cache(
           row.toolErrors && typeof row.toolErrors === "object" && !Array.isArray(row.toolErrors)
             ? Object.keys(row.toolErrors)
             : [],
+        // The same row carries WHY each one failed, and the reopened answer
+        // should say it for the same reason the live one does.
+        failedReasons: readFailedReasons(row.toolErrors),
       }
     }
 

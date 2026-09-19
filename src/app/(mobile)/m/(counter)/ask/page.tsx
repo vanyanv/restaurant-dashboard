@@ -82,6 +82,11 @@ export default async function MobileAskPage({
   const sections = getAskSectionPromises({
     accountId: session.user.accountId,
     conversationId: params.get("c"),
+    // `?cq=` is what the threads sheet's search box writes, debounced. It was
+    // not read here — only on the desk page — so the phone's search filtered
+    // nothing and the box was decoration. Same key, same adapter, same
+    // meaning on both surfaces.
+    query: params.get("cq"),
   })
 
   // The morning brief, streamed — see the desk page.
