@@ -13,6 +13,16 @@ import { startOfDayUTC as startOfDayUtc } from "@/lib/date-utils"
 // trailing 7-day mean qty extended forward (no growth assumption — see
 // caveats). 80% CI is ±1.28 × σ_daily / √7.
 //
+// "Trailing 7 days" means the last seven days the STORE TRADED, with a zero
+// on a trading day this item did not sell. `OtterMenuItem` has no row for an
+// item that sold nothing, and this used to take the last seven ROWS — the
+// last seven days the item sold, however far apart they were. A new item
+// selling on seven of the last thirty days therefore had its mean computed
+// over its good days only and then multiplied by ninety, projecting a slow
+// mover as though it sold every day: the 90-day figure came out about four
+// times what the item was doing. A day the store was shut is not a zero
+// either; it is not a day at all, which is why the window is trading days.
+//
 // Caveats baked in:
 //   - V1 does NOT retrieve pgvector analogues. Shape is reserved (see
 //     analogues field, always []) so the card and chat tool can opt into
@@ -24,6 +34,12 @@ import { startOfDayUTC as startOfDayUtc } from "@/lib/date-utils"
 //     projection (insufficient signal for a 90-day extrapolation).
 
 import { prisma } from "@/lib/prisma"
+import {
+  tradingDayKey,
+  tradingDaysIn,
+  trailingTradingDayQtys,
+  tradingRate,
+} from "@/lib/trading-days"
 import { getCachedSession, resolveStoreContext } from "./_shared"
 
 interface SessionUser {
@@ -38,6 +54,10 @@ const DEFAULT_RECENT_DAYS = 60
 const DEFAULT_PRIOR_BASELINE_DAYS = 90
 const PROJECTION_HORIZON_DAYS = 90
 const MIN_DAYS_FOR_PROJECTION = 7
+/** Trading days the projection's rate is measured over. */
+const TRAILING_DAYS = 7
+/** Calendar days the store's opening pattern is measured over. */
+const TRADING_RATE_DAYS = 28
 
 export interface LaunchDailyPoint {
   date: Date
@@ -142,11 +162,16 @@ export async function getLaunchTrajectory(input: {
       points: { date: Date; qty: number; revenue: number }[]
     }
   >()
+  /** storeId -> the days that store sold anything at all. See the header. */
+  const tradedDays = new Map<string, Set<string>>()
   for (const r of rows) {
     const key = keyOf(r)
     const qty = (r.fpQuantitySold ?? 0) + (r.tpQuantitySold ?? 0)
     const revenue = (r.fpTotalSales ?? 0) + (r.tpTotalSales ?? 0)
     if (qty <= 0 && revenue <= 0) continue
+    const traded = tradedDays.get(r.storeId) ?? new Set<string>()
+    traded.add(tradingDayKey(r.date as Date))
+    tradedDays.set(r.storeId, traded)
     const bucket = byKey.get(key) ?? {
       storeId: r.storeId,
       category: r.category,
@@ -181,18 +206,44 @@ export async function getLaunchTrajectory(input: {
 
     let projection: LaunchProjection | null = null
     if (daysSinceLaunch >= MIN_DAYS_FOR_PROJECTION) {
-      const trailing = daily.slice(-7).map((d) => d.qty)
-      const meanQ = mean(trailing)
-      const stdQ = trailing.length > 1 ? stdSample(trailing) : 0
-      const projectedQty = meanQ * PROJECTION_HORIZON_DAYS
-      const ciHalf =
-        1.28 * (stdQ / Math.sqrt(trailing.length)) * PROJECTION_HORIZON_DAYS
-      projection = {
-        meanDailyQtyTrailing7: meanQ,
-        stdDailyQtyTrailing7: stdQ,
-        projectedQty90d: projectedQty,
-        projectedQtyCI80Low: Math.max(0, projectedQty - ciHalf),
-        projectedQtyCI80High: projectedQty + ciHalf,
+      const trailing = trailingTradingDayQtys({
+        tradedDayKeys: tradedDays.get(bucket.storeId) ?? new Set(),
+        qtyByDateKey: new Map(
+          bucket.points.map((p) => [tradingDayKey(p.date), p.qty]),
+        ),
+        sinceKey: tradingDayKey(firstSale),
+        untilKey: tradingDayKey(windowEnd),
+        days: TRAILING_DAYS,
+      })
+      // Two trading days is the floor for a standard deviation; below it the
+      // interval would come out ±0, which is a claim of certainty.
+      if (trailing.length >= 2) {
+        const meanQ = mean(trailing)
+        const stdQ = stdSample(trailing)
+        // 90 CALENDAR days ahead, but the mean is per TRADING day, so the
+        // horizon is the trading days those 90 calendar days will contain at
+        // this store's observed rate. For a store open every day this is
+        // exactly 90; for one dark on Mondays it is not.
+        // Over a RECENT window: the store's current opening pattern, not
+        // whatever span its oldest row happens to reach back to.
+        const rateSince = new Date(windowEnd)
+        rateSince.setUTCDate(rateSince.getUTCDate() - (TRADING_RATE_DAYS - 1))
+        const recentTradingDays = tradingDaysIn(
+          tradedDays.get(bucket.storeId) ?? new Set(),
+          { sinceKey: tradingDayKey(rateSince), untilKey: tradingDayKey(windowEnd) },
+        )
+        const horizonTradingDays =
+          PROJECTION_HORIZON_DAYS * tradingRate(recentTradingDays)
+        const projectedQty = meanQ * horizonTradingDays
+        const ciHalf =
+          1.28 * (stdQ / Math.sqrt(trailing.length)) * horizonTradingDays
+        projection = {
+          meanDailyQtyTrailing7: meanQ,
+          stdDailyQtyTrailing7: stdQ,
+          projectedQty90d: projectedQty,
+          projectedQtyCI80Low: Math.max(0, projectedQty - ciHalf),
+          projectedQtyCI80High: projectedQty + ciHalf,
+        }
       }
     }
 

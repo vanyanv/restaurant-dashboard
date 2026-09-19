@@ -29,6 +29,7 @@ import { startOfDayUTC as startOfDay, ymdUTC as ymd } from "@/lib/date-utils"
 //  - Detecting partial-day stock-outs (we only have day grain).
 
 import { prisma } from "@/lib/prisma"
+import { tradingDayKey, tradingDaysIn } from "@/lib/trading-days"
 import { getCachedSession, resolveStoreContext } from "./_shared"
 
 const DEFAULT_LOOKBACK_DAYS = 60
@@ -123,7 +124,7 @@ export async function getLostSales(input: {
     const list = series.get(key) ?? []
     const qty = (r.fpQuantitySold ?? 0) + (r.tpQuantitySold ?? 0)
     const sales = (r.fpTotalSales ?? 0) + (r.tpTotalSales ?? 0)
-    const dateKey = ymd(r.date as Date)
+    const dateKey = tradingDayKey(r.date as Date)
     list.push({ dateKey, qty, sales, category: r.category })
     series.set(key, list)
     const traded = tradedDays.get(r.storeId) ?? new Set<string>()
@@ -204,12 +205,10 @@ function fillDailyGaps(
   tradedDayKeys: Set<string>,
 ): FilledPoint[] {
   const byKey = new Map(points.map((p) => [p.dateKey, p]))
-  return [...tradedDayKeys]
-    .sort()
-    .map((k) => {
-      const p = byKey.get(k)
-      return { dateKey: k, qty: p?.qty ?? 0, sales: p?.sales ?? 0 }
-    })
+  return tradingDaysIn(tradedDayKeys).map((k) => {
+    const p = byKey.get(k)
+    return { dateKey: k, qty: p?.qty ?? 0, sales: p?.sales ?? 0 }
+  })
 }
 
 function detectGaps(args: {
