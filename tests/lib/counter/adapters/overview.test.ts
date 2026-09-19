@@ -75,6 +75,10 @@ function pnl(overrides: Record<string, unknown> = {}) {
     rentValue: 0,
     rentPct: 0,
   }
+  // Four entries because a `weekday` comparison asks for four windows, and
+  // each one is a whole occurrence of this fixture's trade — see
+  // `loadComparisonStatement`. The other comparisons read one.
+  const perPeriod = [kpis, kpis, kpis, kpis]
   return {
     storeCount: 2,
     combined: kpis,
@@ -86,8 +90,10 @@ function pnl(overrides: Record<string, unknown> = {}) {
         channelMix: [],
         fixedCostsConfigured: true,
         rows: pnlRows(),
+        perPeriod,
       },
     ],
+    perPeriod,
     consolidatedRows: pnlRows(),
     periods: [
       { label: "Tue Aug 18", startDate: range.start, endDate: range.start, days: 1, isPartial: false },
@@ -523,15 +529,16 @@ describe("getOverviewSections", () => {
     expect(food?.change).toContain("pts")
   })
 
-  it("divides the weekday window's money by four before reading it against one period", async () => {
-    // `comparisonRange("weekday")` returns a window CONTAINING four
-    // occurrences, not an equivalent period. Undivided, every weekday
-    // comparison would report this range as down 75%.
-    vi.mocked(getAllStoresPnL).mockImplementation(async (input) =>
-      (input.startDate.getTime() < primaryStart.getTime()
-        ? pnl({ combined: { ...pnl().combined, grossSales: 29_872 } })
-        : pnl()) as never,
-    )
+  it("divides the weekday comparison's four occurrences before reading them against one period", async () => {
+    // `comparisonWindows("weekday")` returns FOUR windows, each the length of
+    // the range, and the loader sums them — so a fixture answering $7,468 per
+    // window is four occurrences of $7,468, and the divisor turns that back
+    // into one. Undivided, every weekday comparison would report this range as
+    // down 75%.
+    //
+    // The four used to be loaded as their contiguous HULL, one window 22 days
+    // wide for a single day, with the same divisor applied to it.
+    vi.mocked(getAllStoresPnL).mockImplementation(async () => pnl() as never)
     const s = await load({ comparisonId: "weekday" })
     if (!hasData(s.comparison)) throw new Error("comparison")
     const net = s.comparison.data[0]

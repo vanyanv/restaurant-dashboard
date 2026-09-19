@@ -15,11 +15,19 @@ import type { DeltaTone } from "@/components/counter"
  *
  * Three decisions live here and nowhere else:
  *
- * - **The divisor.** `comparisonRange(r, "weekday")` returns a window
- *   CONTAINING four occurrences of the range's weekdays, not an equivalent
- *   period. Its MONEY has to be divided by four before it can be read against
- *   one period; its PERCENTAGES do not, because a ratio over four days is
+ * - **The divisor.** `comparisonWindows(r, "weekday")` returns FOUR windows,
+ *   each the same length as `r`, and `loadComparisonStatement` sums them. That
+ *   sum is four occurrences of MONEY and has to be divided by four before it
+ *   can be read against one period; its PERCENTAGES do not, because they are
+ *   recomputed from the summed dollars and a ratio of four periods' totals is
  *   already a ratio. Getting that backwards prints a quarter of a percentage.
+ *
+ *   The divisor is only ever correct because of what it now divides. Callers
+ *   used to load `comparisonRange(r, "weekday")` — the contiguous HULL of the
+ *   four, `span + 21` days wide — and divide THAT by four, which is right at
+ *   span 7 and nowhere else: a single day was read against 22/4 = 5.5 days of
+ *   trade. So this number and that loader are one decision in two files; do
+ *   not change either alone.
  * - **The absence of a comparison is a reading too.** "no comparison set" is
  *   `is-flat`, never unclassed — `.headline .d` and `.mhead .d` paint
  *   `var(--good)` by default, so an unclassed absence is good news about

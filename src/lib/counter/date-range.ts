@@ -201,21 +201,53 @@ export function comparisonRange(r: DateRange, mode: ComparisonId): DateRange | n
     const span = dayCount(r)
     return { start: addDays(r.start, -span), end: addDays(r.end, -span) }
   }
-  // weekday: NOT a same-length prior period. It returns a window that
-  // CONTAINS the four preceding occurrences of the period being compared —
-  // the four same-weekdays before a single day, or the four preceding weeks
-  // before a 7-day range — and a caller is expected to aggregate across that
-  // window (e.g. average it), not treat it as one equivalent period. That
-  // window is span + 21 days for any input, which is only a coherent "4
-  // preceding occurrences" concept up to a week (1..7 days: 4 same-weekdays
-  // through 4 same-weeks). Past a week it stops meaning anything — a 30-day
-  // range would return a 51-day window that isn't 4 of anything — so this
-  // returns null past 7 days rather than a plausible-looking range that
-  // answers no question. The date control should offer "prev" or "year"
-  // instead for longer ranges.
+  // weekday: the CONTIGUOUS HULL of the four windows `comparisonWindows`
+  // returns — `[start-28, end-7]`, which is `span + 21` days for any input.
+  //
+  // This is a span to shade and a span to bound a query by, NOT a figure to
+  // read. Only at span 7 does the hull equal the four occurrences laid end to
+  // end; below that it holds the unrelated days between them (22 days for a
+  // single day, 24 for three), so anything that sums it and divides by four is
+  // answering a different question by a factor of (span + 21) / (4 × span).
+  // `loadComparisonStatement` loads the four windows themselves. See
+  // `comparisonWindows`.
+  //
+  // Null past a week, because "4 preceding occurrences" stops meaning anything
+  // there — a 30-day range has no fourth preceding 30 days inside 51 — and the
+  // date control offers "prev" or "year" instead.
   const span = dayCount(r)
   if (span > 7) return null
   return { start: addDays(r.start, -28), end: addDays(r.end, -7) }
+}
+
+/**
+ * The windows a comparison actually MEASURES: one for `prev` and `year`, four
+ * for `weekday`.
+ *
+ * `comparisonRange` returns one contiguous span, which is what a calendar
+ * shades and what bounds a query. For `weekday` that span is the hull of four
+ * separate windows, and the days between them belong to nobody: a Saturday
+ * compared against "the same 4 weekdays" has a 22-day hull holding four
+ * Saturdays and eighteen other days. Every caller loaded the hull as one
+ * window and divided its money by four — so a single day was read against five
+ * and a half days of trade, and the default range (`yesterday`) printed a
+ * collapse that never happened. Only a 7-day range came out right, because
+ * there and only there the hull tiles exactly into four.
+ *
+ * Each window here is the SAME LENGTH as `r` and lands on the same weekdays,
+ * so four of them are four comparable periods and `ComparisonContext.divisor`
+ * is finally the number it says it is. Oldest first.
+ */
+export function comparisonWindows(r: DateRange, mode: ComparisonId): DateRange[] | null {
+  if (mode !== "weekday") {
+    const one = comparisonRange(r, mode)
+    return one === null ? null : [one]
+  }
+  if (comparisonRange(r, "weekday") === null) return null
+  return [4, 3, 2, 1].map((weeksBack) => ({
+    start: addDays(r.start, -7 * weeksBack),
+    end: addDays(r.end, -7 * weeksBack),
+  }))
 }
 
 /**

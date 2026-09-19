@@ -30,6 +30,7 @@ import {
 } from "@/lib/counter/service-profile"
 import {
   granularityFor,
+  loadComparisonStatement,
   loadStatement,
   rowValues,
   type Granularity,
@@ -44,7 +45,6 @@ import {
 } from "@/lib/counter/comparison"
 import { count, delta, money, pct, plural, points } from "@/lib/counter/format"
 import {
-  comparisonRange,
   dayCount,
   isoDay,
   rangeLabel,
@@ -1299,7 +1299,6 @@ export function getAnalyticsSectionPromises(
   // comparison alike: a `weekday` window contains four occurrences and would
   // derive its own, coarser grain from itself.
   const granularity = granularityFor(range)
-  const cmpRange = comparisonId === "none" ? null : comparisonRange(range, comparisonId)
 
   /* ── The loads. ── */
 
@@ -1309,11 +1308,12 @@ export function getAnalyticsSectionPromises(
     { retryAction: "retryStatement" },
   )
 
+  // `loadComparisonStatement`, not `loadStatement(comparisonRange(...))`: a
+  // `weekday` comparison is FOUR windows, and loading their contiguous hull as
+  // one window read a single day against five and a half days of trade.
   const cmpP = classify<Statement | null>(
     () =>
-      cmpRange
-        ? loadStatement({ range: cmpRange, storeId, granularity: "daily" })
-        : Promise.resolve(null),
+      loadComparisonStatement({ range, mode: comparisonId, storeId, granularity: "daily" }),
     { retryAction: "retryComparison" },
   )
 
@@ -1420,7 +1420,6 @@ export function getStoreAnalyticsSectionPromises(
   const { range, storeId, accountId } = input
   const comparisonId: ComparisonId = input.comparisonId ?? "none"
   const granularity = granularityFor(range)
-  const cmpRange = comparisonId === "none" ? null : comparisonRange(range, comparisonId)
   const days = dayCount(range)
 
   /* ── The loads. ── */
@@ -1430,11 +1429,12 @@ export function getStoreAnalyticsSectionPromises(
     { retryAction: "retryStatement" },
   )
 
+  // `loadComparisonStatement`, not `loadStatement(comparisonRange(...))`: a
+  // `weekday` comparison is FOUR windows, and loading their contiguous hull as
+  // one window read a single day against five and a half days of trade.
   const cmpP = classify<Statement | null>(
     () =>
-      cmpRange
-        ? loadStatement({ range: cmpRange, storeId, granularity: "daily" })
-        : Promise.resolve(null),
+      loadComparisonStatement({ range, mode: comparisonId, storeId, granularity: "daily" }),
     { retryAction: "retryComparison" },
   )
 

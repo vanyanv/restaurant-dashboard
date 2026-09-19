@@ -16,13 +16,18 @@ import {
   type ChannelReading,
 } from "@/lib/counter/channel-mix"
 import { loadStripTargets, type StripTargets, type Target } from "@/lib/counter/targets"
-import { granularityFor, loadStatement, rowValues, type Statement } from "@/lib/counter/statement"
+import {
+  granularityFor,
+  loadComparisonStatement,
+  loadStatement,
+  rowValues,
+  type Statement,
+} from "@/lib/counter/statement"
 import type { Reference } from "@/lib/counter/bullet-state"
 import type { ChartSpec } from "@/lib/counter/chart-geometry"
 import { count, delta, money, pct, plural, points } from "@/lib/counter/format"
 import {
   bucketFor,
-  comparisonRange,
   dayCount,
   toQueryBounds,
   type Bucket,
@@ -891,7 +896,6 @@ export function getOverviewSectionPromises(
   // "weekly" from itself; a weekly series drawn as the dashed reference under
   // daily bars is a chart comparing two different things.
   const granularity = granularityFor(range)
-  const cmpRange = comparisonId === "none" ? null : comparisonRange(range, comparisonId)
 
   /* ── The loads. Every one of them starts here; none is awaited here. ── */
 
@@ -901,9 +905,11 @@ export function getOverviewSectionPromises(
     retryAction: "retrySales",
   })
 
+  // `loadComparisonStatement`, not `loadStatement(comparisonRange(...))`: a
+  // `weekday` comparison is FOUR windows, and loading their contiguous hull as
+  // one window read a single day against five and a half days of trade.
   const cmpStmtP = classify<Statement | null>(
-    () =>
-      cmpRange ? loadStatement({ range: cmpRange, storeId, granularity }) : Promise.resolve(null),
+    () => loadComparisonStatement({ range, mode: comparisonId, storeId, granularity }),
     { retryAction: "retryComparison" },
   )
 

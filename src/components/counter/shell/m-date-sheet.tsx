@@ -5,7 +5,7 @@ import { businessCalendarDate } from "@/lib/counter/business-date"
 import { useId, useState, type CSSProperties } from "react"
 import { startOfMonth } from "date-fns"
 import {
-  COMPARISONS, PRESETS, comparisonRange, dayCount, rangeLabel,
+  COMPARISONS, PRESETS, comparisonWindows, dayCount, rangeLabel,
   type ComparisonId, type DateRange, type PresetId, type RangeId,
 } from "@/lib/counter/date-range"
 import { Calendar } from "./calendar"
@@ -123,7 +123,7 @@ export function MDateSheet({
   const days = dayCount(range)
   const today = businessCalendarDate(new Date())
   const comparisonOptions = COMPARISONS.filter(
-    (c) => c.id === "none" || comparisonRange(range, c.id) !== null,
+    (c) => c.id === "none" || comparisonWindows(range, c.id) !== null,
   )
 
   function replaceRange(fn: () => void) {
@@ -174,7 +174,7 @@ export function MDateSheet({
           <Calendar
             month={viewMonth ?? startOfMonth(range.end)}
             range={range}
-            compare={comparisonRange(range, comparisonId)}
+            compare={comparisonWindows(range, comparisonId)}
             today={today}
             pending={pending}
             onPickDay={pickDay}

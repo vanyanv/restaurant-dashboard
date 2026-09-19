@@ -6,6 +6,7 @@ import { loadChannelMix, type ChannelReading } from "@/lib/counter/channel-mix"
 import { loadStripTargets, type StripTargets, type Target } from "@/lib/counter/targets"
 import {
   granularityFor,
+  loadComparisonStatement,
   loadStatement,
   loadWeekStatements,
   type Statement,
@@ -19,7 +20,6 @@ import {
 import { PRIME_CEILING_PCT } from "@/lib/counter/prime-cost"
 import { count, delta, money, pct, plural, points } from "@/lib/counter/format"
 import {
-  comparisonRange,
   serializeWeekWindow,
   trailingWeeks,
   type ComparisonId,
@@ -1095,7 +1095,6 @@ export function getPnlSectionPromises(input: PnlSectionsInput): StreamedSections
   // too: a `weekday` window contains four occurrences and would derive
   // "weekly" from itself, which is a comparison of two different things.
   const granularity = granularityFor(range)
-  const cmpRange = comparisonId === "none" ? null : comparisonRange(range, comparisonId)
   const windows = trailingWeeks(businessCalendarDate(today), WEEKS_SHOWN)
 
   /* ── The loads. Every one of them starts here; none is awaited here. ── */
@@ -1104,9 +1103,11 @@ export function getPnlSectionPromises(input: PnlSectionsInput): StreamedSections
     retryAction: "retryStatement",
   })
 
+  // `loadComparisonStatement`, not `loadStatement(comparisonRange(...))`: a
+  // `weekday` comparison is FOUR windows, and loading their contiguous hull as
+  // one window read a single day against five and a half days of trade.
   const cmpP = classify<Statement | null>(
-    () =>
-      cmpRange ? loadStatement({ range: cmpRange, storeId, granularity }) : Promise.resolve(null),
+    () => loadComparisonStatement({ range, mode: comparisonId, storeId, granularity }),
     { retryAction: "retryComparison" },
   )
 

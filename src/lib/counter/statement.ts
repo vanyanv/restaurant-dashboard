@@ -4,9 +4,11 @@ import type { Period, PnLRow } from "@/lib/pnl"
 import { primeCost, type PrimeCost } from "@/lib/counter/prime-cost"
 import {
   bucketFor,
+  comparisonWindows,
   dayCount,
   toQueryBounds,
   type Bucket,
+  type ComparisonId,
   type DateRange,
   type WeekWindow,
 } from "@/lib/counter/date-range"
@@ -377,7 +379,7 @@ export async function loadWeekStatements(
      * prime-cost trail. The rollup now publishes `perStore[].perPeriod` by the
      * identical indexing route, so there is one right thing to read.
      */
-    const k = scoped ? scoped.perPeriod[i] : result.perPeriod[i]
+    const k = (scoped ? scoped.perPeriod : result.perPeriod)[i] ?? null
     /*
      * A selected store that the rollup has no row for is the same
      * `storeNotFound` case `loadStatement` reports, and for the same reason:
@@ -395,7 +397,14 @@ export async function loadWeekStatements(
         periods: result.periods,
       }
     }
-    const lines = linesFrom(k)
+    /*
+     * A window the rollup published no period for is zeroed, not crashed on.
+     * The rollup echoes the `periods` it was handed, so the lengths agree in
+     * production; this is here because the alternative is a `TypeError` inside
+     * `linesFrom` that takes out the whole section, and an absent window is
+     * already a reading every caller knows how to render.
+     */
+    const lines = k === null ? NO_LINES : linesFrom(k)
     return {
       ...lines,
       days: w.days,
@@ -407,4 +416,89 @@ export async function loadWeekStatements(
       periods: result.periods,
     }
   })
+}
+
+/**
+ * What the selected range is measured AGAINST, loaded as the windows the
+ * comparison actually names.
+ *
+ * `prev` and `year` are one window and load exactly as before. `weekday` is
+ * FOUR, and that is the whole reason this function exists: every caller used
+ * to load `comparisonRange(r, "weekday")` — the contiguous HULL of those four
+ * — as a single window, and `comparisonContext` then divided its money by
+ * four. The hull is `span + 21` days, so the divisor is only right at span 7:
+ *
+ *     span 1  →  22 days / 4  =  5.5 days read against 1
+ *     span 3  →  24 days / 4  =  6   days read against 3
+ *     span 7  →  28 days / 4  =  7   days read against 7   ✓
+ *
+ * `yesterday` is the default range, so picking "4 same weekdays" on the view
+ * an owner opens by default compared one day's trade against five and a half
+ * days of it and printed the shortfall as a collapse.
+ *
+ * The lines below are the SUM of the four occurrences, not their mean, because
+ * `ComparisonContext.divisor` is what divides — one place, so no caller can
+ * apply it twice or forget it. The percentages are recomputed from the summed
+ * dollars rather than averaged, for the usual reason: a mean of four ratios is
+ * not the ratio of the four totals.
+ *
+ * `rows` is empty on a multi-window comparison. There is no honest per-bucket
+ * series for four disjoint windows drawn under one contiguous range, and
+ * `buildSalesChart` already withholds its dashed reference when the two
+ * series' lengths disagree — which, for every weekday hull, they already did.
+ */
+export async function loadComparisonStatement(input: {
+  range: DateRange
+  mode: ComparisonId
+  storeId: string | null
+  /** The SELECTED range's granularity — see `granularityFor`. */
+  granularity?: Granularity
+}): Promise<Statement | null> {
+  const { range, mode, storeId, granularity } = input
+  const windows = comparisonWindows(range, mode)
+  if (windows === null || windows.length === 0) return null
+
+  // One window is the ordinary case and stays the ordinary load, rows and all.
+  if (windows.length === 1) {
+    return loadStatement({ range: windows[0], storeId, granularity })
+  }
+
+  const parts = await loadWeekStatements(
+    windows.map((w) => ({ ...w, days: dayCount(w), partial: false })),
+    storeId,
+  )
+  if (parts.length === 0) return null
+  if (parts[0].storeNotFound) return parts[0]
+
+  const total = (pick: (s: Statement) => number) =>
+    parts.reduce((acc, p) => acc + pick(p), 0)
+
+  const grossSales = total((p) => p.grossSales)
+  const cogsValue = total((p) => p.cogsValue)
+  const laborValue = total((p) => p.laborValue)
+  const lines: StatementLines = {
+    grossSales,
+    commissions: total((p) => p.commissions),
+    cogsValue,
+    laborValue,
+    occupancy: total((p) => p.occupancy),
+    otherOperating: total((p) => p.otherOperating),
+    bottomLine: total((p) => p.bottomLine),
+    // Null with no sales, never 0 — the rule `linesFrom` applies, applied to a
+    // figure `linesFrom` never saw.
+    marginPct: grossSales <= 0 ? null : total((p) => p.bottomLine) / grossSales,
+    cogsPct: grossSales <= 0 ? 0 : cogsValue / grossSales,
+    laborPct: grossSales <= 0 ? 0 : laborValue / grossSales,
+  }
+
+  return {
+    ...lines,
+    days: total((p) => p.days),
+    prime: primeFor(lines),
+    perStore: [],
+    allStores: parts[0].allStores,
+    storeNotFound: false,
+    rows: [],
+    periods: parts[0].periods,
+  }
 }

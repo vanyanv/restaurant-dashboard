@@ -2,7 +2,7 @@
 import { describe, it, expect, vi } from "vitest"
 import { render, screen, fireEvent } from "@testing-library/react"
 import { Calendar } from "@/components/counter/shell/calendar"
-import { comparisonRange } from "@/lib/counter/date-range"
+import { comparisonWindows } from "@/lib/counter/date-range"
 
 // August 2026: the 1st is a Saturday, so a Monday-start grid needs FIVE
 // lead-in blanks. That is the arithmetic `(first.getDay() + 6) % 7` does, and
@@ -55,18 +55,35 @@ describe("Calendar", () => {
     expect(marked).toEqual(["21"])
   })
 
-  it("shades the window the page ACTUALLY compares against", () => {
-    // `comparisonRange(range, "prev")` for Aug 15–21 is Aug 8–14. The shading
-    // is drawn from the same function the figures are computed from, so the
-    // calendar cannot disagree with the deltas above it.
-    const compare = comparisonRange(range, "prev")
+  it("shades the windows the page ACTUALLY compares against", () => {
+    // `comparisonWindows(range, "prev")` for Aug 15–21 is one window, Aug
+    // 8–14. The shading is drawn from the same function the figures are
+    // computed from, so the calendar cannot disagree with the deltas above it.
+    const compare = comparisonWindows(range, "prev")
     const { container } = draw({ compare })
     const shaded = [...container.querySelectorAll("button.drd.cmp")].map((b) => b.textContent)
     expect(shaded).toEqual(["8", "9", "10", "11", "12", "13", "14"])
   })
 
+  it("shades four separate weeks for a weekday comparison, not the span between them", () => {
+    /*
+     * Aug 15–21 is seven days, so its four occurrences tile: Jul 18 – Aug 14.
+     * A SHORTER range is where the hull and the windows part company, and
+     * where this used to shade days nothing was read against — see the module
+     * comment.
+     */
+    const oneDay = { start: new Date(2026, 7, 21), end: new Date(2026, 7, 21) }
+    const { container } = draw({ range: oneDay, compare: comparisonWindows(oneDay, "weekday") })
+    const shaded = [...container.querySelectorAll("button.drd.cmp")].map((b) => b.textContent)
+    // Aug 21 2026 is a Friday; its four preceding Fridays are Jul 24, Jul 31,
+    // Aug 7 and Aug 14, of which this grid draws the two in August. The
+    // eighteen days BETWEEN them are the point: the hull would have shaded
+    // Aug 1–14 solid.
+    expect(shaded).toEqual(["7", "14"])
+  })
+
   it("shades nothing when the comparison is off", () => {
-    const { container } = draw({ compare: comparisonRange(range, "none") })
+    const { container } = draw({ compare: comparisonWindows(range, "none") })
     expect(container.querySelectorAll("button.drd.cmp")).toHaveLength(0)
   })
 
