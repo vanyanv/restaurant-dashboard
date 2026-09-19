@@ -54,6 +54,15 @@ export interface RecipeCatalogue {
   rows: Row[]
   meta: string
   note: string
+  /**
+   * Every category already in use, for the "New recipe" control.
+   *
+   * The create path offers the account's own vocabulary rather than a free
+   * text box: a recipe filed under "Burgers" and another under "burger" are
+   * two categories to every grouping in the product, and the catalogue's own
+   * Category column is where that shows up first.
+   */
+  categories: string[]
 }
 
 export interface RecipeWork {
@@ -397,6 +406,7 @@ function catalogueOf(d: RecipeData): RecipeCatalogue {
         },
       }
     }),
+    categories: [...new Set(d.rows.map((r) => r.category).filter(Boolean))].sort(),
     meta: `${count(sellable.length)} sellable · ${count(shown.length)} shown`,
     note:
       `Sorted by what is wrong with it, then by what it sold. ` +
@@ -456,6 +466,10 @@ function workOf(d: RecipeData): RecipeWork {
 
   const unconfirmed = sellable.filter((r) => !r.confirmed)
   const unconfirmedRevenue = unconfirmed.reduce((t, r) => t + r.revenue, 0)
+  // What those recipes put INTO cost of goods, which is the half the revenue
+  // figure does not say. `cost` is per serving and `soldQty` is the range's
+  // own count, so the product is this window's COGS off unconfirmed lines.
+  const unconfirmedCogs = unconfirmed.reduce((t, r) => t + (r.cost ?? 0) * r.soldQty, 0)
   if (unconfirmed.length > 0) {
     const biggest = [...unconfirmed].sort((a, b) => b.revenue - a.revenue).slice(0, 3)
     items.push({
@@ -466,9 +480,20 @@ function workOf(d: RecipeData): RecipeWork {
       title: "Costing real plates, unconfirmed",
       body:
         `${money(unconfirmedRevenue)} sold over ${d.rangeLabel} on recipes nobody has checked — ` +
-        `${biggest.map((r) => r.name).join(", ")} lead them. ` +
+        `${biggest.map((r) => r.name).join(", ")} lead them, and ${money(unconfirmedCogs)} of ` +
+        `cost of goods over the same window comes off their lines. ` +
         `These feed the COGS page, the menu margins and the P&L food line, so confirming is not ` +
         `bookkeeping: it is whether those three are reading a quantity somebody stands behind. ` +
+        // CONFIRMING CHANGES NO NUMBER, and the product has never said so.
+        // `isConfirmed` is written by `confirmRecipe`, read by this page and
+        // the recipe's own header, and by nothing in the cost chain — the
+        // COGS materializer costs an unconfirmed recipe exactly as it costs a
+        // confirmed one. That is the right behaviour (gating COGS on a
+        // checkbox would take real cost OUT of the P&L and make food cost
+        // look better the less anybody had checked), but a control that
+        // silently changes nothing is worse than one that says what it is.
+        `Confirming does not change any of those figures: the cost is counted either way, and ` +
+        `the mark records that a person has read the lines. ` +
         `None of them is AI-generated — every recipe in this account was typed by hand.`,
       act: "Open the catalogue",
       href: "/dashboard/recipes",

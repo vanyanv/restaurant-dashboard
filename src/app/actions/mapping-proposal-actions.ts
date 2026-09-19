@@ -14,6 +14,7 @@ import { prisma } from "@/lib/prisma"
 import { getAccountStoreRows } from "@/lib/account-stores"
 import { revalidatePath } from "next/cache"
 import { assertNoCycles } from "@/lib/recipe-cost"
+import { validateRecipeShape } from "@/lib/recipe-validation"
 import {
   generateMappingProposalsCore,
   type GenerateProposalsResult,
@@ -137,6 +138,36 @@ export async function acceptMappingProposal(
       (c) => c.componentRecipeId || c.canonicalIngredientId
     )
     if (components.length === 0) return { ok: false, error: "invalid_proposal" }
+
+    /*
+     * THE CHECK THIS PATH NEVER RAN.
+     *
+     * Creating a recipe from an accepted proposal was the only way an owner
+     * could create a recipe at all, and it wrote the model's quantities and
+     * units straight to `recipeIngredient.createMany` — no exactly-one-
+     * reference rule, no quantity floor, no check that the unit could convert
+     * into what the ingredient is priced in, and no database CHECK behind any
+     * of it. The edit path had all of that; this one had none.
+     *
+     * Run before the transaction opens: a bad proposal is rejected, not
+     * half-written. The payload is also stored JSON, which means it was
+     * written by a model at some earlier date against a pantry that may since
+     * have changed — so it is re-checked at accept time, not at propose time.
+     */
+    try {
+      await validateRecipeShape(
+        { servingSize: 1, yieldUnit: null, ingredients: components.map((c) => ({
+          canonicalIngredientId: c.canonicalIngredientId ?? null,
+          componentRecipeId: c.componentRecipeId ?? null,
+          quantity: c.quantity,
+          unit: c.unit,
+        })) },
+        scope.accountId,
+        prisma
+      )
+    } catch {
+      return { ok: false, error: "invalid_proposal" }
+    }
 
     // Recipe names are unique per (accountId, itemName, category) — if one
     // already exists, map to it rather than failing on the constraint.

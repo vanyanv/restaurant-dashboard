@@ -14,6 +14,7 @@ import { revalidatePath } from "next/cache"
 import { generateProposalDrafts } from "@/lib/proposal-llm"
 import { computeRecipeSuggestions } from "@/lib/recipe-suggestions-core"
 import { normalizeItemName } from "@/lib/item-name-normalize"
+import { resolveYieldQuantity, unitsCompatible } from "@/lib/unit-conversion"
 
 const DEFAULT_MAX_ITEMS = 10
 
@@ -109,11 +110,11 @@ export async function generateMappingProposalsCore(
   const [recipes, canonicals, confirmedMappings] = await Promise.all([
     prisma.recipe.findMany({
       where: { accountId: scope.accountId },
-      select: { id: true, itemName: true, category: true },
+      select: { id: true, itemName: true, category: true, yieldUnit: true },
     }),
     prisma.canonicalIngredient.findMany({
       where: { accountId: scope.accountId },
-      select: { id: true, name: true },
+      select: { id: true, name: true, recipeUnit: true },
     }),
     prisma.otterItemMapping.findMany({
       where: { store: { accountId: scope.accountId } },
@@ -205,8 +206,16 @@ export async function generateMappingProposalsCore(
       category: i.category,
       qty30d: i.qty30d,
     })),
-    recipeVocab: recipes.map((r) => ({ itemName: r.itemName, category: r.category })),
-    ingredientVocab: canonicals.map((c) => c.name),
+    recipeVocab: recipes.map((r) => ({
+      itemName: r.itemName,
+      category: r.category,
+      yieldUnit: r.yieldUnit,
+    })),
+    // Names AND the unit each one is priced in. Without the unit the model was
+    // guessing blind against a cost engine that only converts within a family,
+    // which is how "2 leaf lettuce" against a price per each became a line
+    // that costed $0.00 on every recosting for the life of the recipe.
+    ingredientVocab: canonicals.map((c) => ({ name: c.name, recipeUnit: c.recipeUnit })),
     confirmedExamples,
     storeId: input.storeId ?? null,
     userId: scope.ownerId,
@@ -254,9 +263,31 @@ export async function generateMappingProposalsCore(
     let confidence = draft.confidence
     const components: ProposalComponent[] = []
     for (const c of draft.components) {
+      if (!isFinite(c.quantity) || c.quantity <= 0) {
+        confidence = Math.max(0, confidence - 0.1)
+        continue
+      }
       if (c.type === "recipe") {
         const recipe = resolveRecipe(c.name)
         if (!recipe) {
+          confidence = Math.max(0, confidence - 0.1)
+          continue
+        }
+        /*
+         * A unit that cannot be measured against the sub-recipe's own batch
+         * is dropped here rather than stored. The accept path used to write
+         * whatever the model said straight into `recipeIngredient.createMany`
+         * — it was the product's only recipe-CREATION route and its only
+         * unvalidated one — and a line the cost walk cannot reconcile is a
+         * plate cost that is silently wrong forever.
+         */
+        if (
+          resolveYieldQuantity({
+            quantity: c.quantity,
+            unit: c.unit,
+            yieldUnit: recipe.yieldUnit,
+          }) == null
+        ) {
           confidence = Math.max(0, confidence - 0.1)
           continue
         }
@@ -269,6 +300,14 @@ export async function generateMappingProposalsCore(
       } else {
         const canonical = resolveCanonical(c.name)
         if (!canonical) {
+          confidence = Math.max(0, confidence - 0.1)
+          continue
+        }
+        // Same rule for an ingredient: the line's unit has to convert into the
+        // unit the ingredient is priced in. A canonical with no recipe unit
+        // has nothing to check against, so it passes — the walk falls back to
+        // the raw invoice unit there.
+        if (canonical.recipeUnit && !unitsCompatible(c.unit, canonical.recipeUnit)) {
           confidence = Math.max(0, confidence - 0.1)
           continue
         }

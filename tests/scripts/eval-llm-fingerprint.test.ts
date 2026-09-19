@@ -66,4 +66,24 @@ describe("prompt fingerprints", () => {
       expect(r.model.length).toBeGreaterThan(0)
     }
   })
+
+  // The tripwire above has one failure mode: edit a prompt, find this file
+  // red, paste the new hash in, and the scorecard vouches for a run nobody
+  // did. `pendingReEval` is the sanctioned way to refresh a hash without the
+  // paid eval, and this is the price of using it — a pending record may not
+  // carry numbers, so there is no way to record a pass you did not measure.
+  it("a record whose eval has not been re-run carries no results", () => {
+    const recorded = recordedFingerprints()
+    for (const feature of FINGERPRINTED_FEATURES) {
+      const r = recorded[feature]
+      if (!r.pendingReEval) continue
+      expect(r.passed, `${feature} is pending re-eval but claims passes`).toBe(0)
+      expect(r.passRate, `${feature} is pending re-eval but claims a pass rate`).toBe(0)
+      expect(r.costUsd, `${feature} is pending re-eval but claims a spend`).toBe(0)
+      expect(
+        r.pendingReason?.length ?? 0,
+        `${feature} is pending re-eval with no reason recorded`,
+      ).toBeGreaterThan(0)
+    }
+  })
 })

@@ -144,6 +144,28 @@ export interface CatalogProposals {
     kind: string
     confidence: number | null
     reasoning: string
+    /**
+     * True when accepting CREATES a recipe rather than mapping onto one that
+     * exists. `proposed` carries a name either way — the model's suggestion
+     * when there is nothing to map to — so the name alone never said which,
+     * and Accept did two very different things behind one word.
+     */
+    creates: boolean
+    /**
+     * WHAT ACCEPTING WOULD ACTUALLY WRITE.
+     *
+     * A proposal whose `proposedRecipeId` is null does not map an item to an
+     * existing recipe — it CREATES one, out of `payload.components`, and
+     * those lines become a plate cost that feeds COGS and the P&L. The panel
+     * showed the item name, the suggested recipe name, one sentence of the
+     * model's reasoning and a confidence percentage, and Accept wrote a
+     * recipe the reviewer had never seen. "Would map to: a new recipe" is not
+     * a description of a recipe.
+     *
+     * Empty when the proposal maps to a recipe that already exists, where
+     * there is nothing new to show and the recipe's own page has it all.
+     */
+    lines: Array<{ name: string; quantity: number; unit: string; kind: "ingredient" | "component" }>
   }>
   /** Sold item names with no recipe — what a generate run would work on. */
   unmapped: number
@@ -647,7 +669,7 @@ function unmappedItemCount(sd: SectionData<CatalogData>): number {
 }
 
 /** See `CatalogProposals` for why an empty queue still gets a panel. */
-function proposalsOf(
+export function proposalsOf(
   rows: Awaited<ReturnType<typeof listMappingProposals>>,
   unmapped: number,
 ): CatalogProposals {
@@ -655,9 +677,22 @@ function proposalsOf(
     id: r.id,
     item: r.otterItemName,
     proposed: r.proposedRecipeName ?? r.payload?.suggestedName ?? null,
+    creates: r.proposedRecipeId === null,
     kind: r.kind,
     confidence: r.confidence,
     reasoning: r.payload?.reasoning ?? "",
+    // Only for a proposal that would CREATE a recipe. When it maps onto one
+    // that exists, the components are not what gets written and showing them
+    // would describe a recipe nobody is about to make.
+    lines:
+      r.proposedRecipeId !== null
+        ? []
+        : (r.payload?.components ?? []).map((c) => ({
+            name: c.name,
+            quantity: c.quantity,
+            unit: c.unit,
+            kind: c.componentRecipeId ? ("component" as const) : ("ingredient" as const),
+          })),
   }))
   return {
     pending,
@@ -672,9 +707,11 @@ function proposalsOf(
           `${count(unmapped)} sold item names still carry no recipe, and proposing matches for ` +
           `them is what fills this queue. A normalised exact-name match costs nothing; the rest ` +
           `go to the model, one billed call each, so this page never generates on its own.`
-        : `Each one names the item, the recipe it would map to and why. Accepting writes the ` +
-          `mapping for every store; rejecting records the no, and the generator will not ask ` +
-          `about that item again.`,
+        : `Each one names the item, the recipe it would map to and why. Select a row to see the ` +
+          `lines it would write — a proposal that maps to “a new recipe” CREATES one, and those ` +
+          `lines become a plate cost that reaches the P&L. Accepting writes the mapping for ` +
+          `every store; rejecting records the no, and the generator will not ask about that ` +
+          `item again.`,
   }
 }
 
