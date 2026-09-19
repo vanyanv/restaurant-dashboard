@@ -146,13 +146,12 @@ export type RecipeCostResult = {
    */
   hasLines: boolean
   /**
-   * The recipe-level override was used because the walk produced nothing.
-   * Kept as a FALLBACK rather than a replacement: an override that outranked a
-   * computed total would move the food cost of any recipe carrying both, and
-   * `scripts/seed-r365-recipes.ts` wrote exactly that shape (an R365 food cost
-   * alongside real ingredient lines). What changes is that the fallback is no
-   * longer silent — `computedCost` below says what the lines actually came to,
-   * so a page can print both instead of presenting a placeholder as an answer.
+   * The recipe-level fallback was used because the walk is incomplete: it
+   * produced no cost, or at least one line could not be priced. A complete
+   * walk still wins, which preserves recipes imported from R365 with both a
+   * reference cost and real ingredient lines. `computedCost` keeps the amount
+   * established by the priced lines visible while `totalCost` is the safer
+   * figure booked into COGS.
    */
   overrideApplied: boolean
   /** What the lines came to, before any override fallback. Per serving. */
@@ -520,12 +519,15 @@ async function walk(
     })
   }
 
-  // Apply the recipe-level override as a fallback whenever we couldn't produce
-  // a real total. Covers two cases: (a) partial — some ingredients missing
-  // cost, and (b) empty — no ingredient lines at all (common for modifier
-  // recipes that just carry an override dollar amount).
+  // Apply the recipe-level value as a fallback whenever the walk is incomplete.
+  // A partially priced recipe has only established a known minimum; booking it
+  // as the whole plate cost understates COGS. `partial` is intentionally not
+  // the condition here because it also marks a price-spike guard that DID find
+  // and use a trusted historical price. Missing lines are the decisive signal.
   const walkedToNothing = batch === 0
-  const overrideApplied = walkedToNothing && recipe.foodCostOverride != null
+  const hasMissingLines = lines.some((line) => line.missingCost)
+  const overrideApplied =
+    (walkedToNothing || hasMissingLines) && recipe.foodCostOverride != null
   const computedBatch = batch
   if (overrideApplied) batch = recipe.foodCostOverride as number
 

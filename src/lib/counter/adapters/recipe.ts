@@ -249,6 +249,8 @@ export interface Loaded {
   lines: RecipeCostLine[]
   totalCost: number
   batchCost: number
+  /** What priced lines established before a fallback replaced the booked cost. */
+  computedCost: number
   partial: boolean
   emptyWalk: boolean
   hasLines: boolean
@@ -383,6 +385,7 @@ async function loadRecipe(input: RecipeInput): Promise<Loaded | null> {
     lines: walked?.lines ?? [],
     totalCost: walked?.totalCost ?? 0,
     batchCost: walked?.batchCost ?? 0,
+    computedCost: walked?.computedCost ?? 0,
     partial: walked?.partial ?? false,
     emptyWalk: walked?.emptyWalk ?? true,
     hasLines: walked?.hasLines ?? false,
@@ -459,8 +462,10 @@ function headOf(d: Loaded): RecipeHead {
     // whether the number was computed at all.
     delta: zero
       ? "nothing was costed"
-      : d.partial
-        ? "at least — one line unpriced"
+      : d.overrideApplied
+        ? "fallback used: one line unpriced"
+        : d.partial
+          ? "at least — one line unpriced"
         : `${count(d.lines.length)} ${d.lines.length === 1 ? "line" : "lines"}, all priced`,
     deltaTone: zero || d.partial ? "is-down" : "is-flat",
   }
@@ -605,12 +610,11 @@ export function builderOf(d: Loaded, today: Date): RecipeBuilder {
       },
       {
         key: "foodCostOverride",
-        label: "Cost override",
+        label: "Fallback batch cost",
         kind: "money",
         value: d.override === null ? "" : String(d.override),
         placeholder: "None",
-        // WHICH cost it overrides, which the label alone never said. The walk
-        // treats it as the BATCH — everything in a recipe's body is one batch
+        // This is a BATCH value — everything in a recipe's body is one batch
         // and `totalCost` is what comes out after the yield divides it — so
         // on a recipe that makes 24, an override of $48 is $2.00 a serving.
         // With every recipe in this account yielding 1 the two readings are
@@ -618,9 +622,9 @@ export function builderOf(d: Loaded, today: Date): RecipeBuilder {
         // down before the first batch recipe is entered.
         hint:
           d.servingSize > 1 || d.yieldUnit
-            ? `Used only when none of the lines below can be priced. It is the cost of the ` +
+            ? `Used when any line below cannot be priced. It is the cost of the ` +
               `whole batch, so it is divided by the yield above.`
-            : "Used only when none of the lines below can be priced.",
+            : "Used when any line below cannot be priced; complete recipes use their line total.",
       },
       {
         key: "notes",
@@ -803,7 +807,7 @@ export function costOf(d: Loaded): RecipeCost {
  * What is wrong with this cost, in the order it matters.
  *
  * Three cases, where there used to be two. The one that is new is the recipe
- * that HAS lines, priced none of them, and fell back to its override — the
+ * that HAS lines, could not price all of them, and used its fallback — the
  * catalogue reported that as "No lines", which is a false sentence about a
  * recipe whose lines are the whole problem. `emptyWalk` means "walked to
  * nothing"; `hasLines` is what separates the two, and both now travel out of
@@ -821,13 +825,15 @@ function gapOf(d: Loaded, missing: RecipeCostLine[]): RecipeCost["gap"] {
   }
 
   if (d.overrideApplied) {
+    const pricedCount = d.lines.length - missing.length
     return {
-      lead: "override in use",
+      lead: "fallback in use",
       href: missing[0] ? `/dashboard/ingredients/${missing[0].refId}` : undefined,
       body:
-        `Not one of this recipe's ${count(d.lines.length)} lines could be priced, so the ` +
-        `${unitCost(d.totalCost)} above is the cost override rather than anything computed. ` +
-        `Fix the lines and the override stops being used.`,
+        `${count(pricedCount)} of ${count(d.lines.length)} lines produced a known minimum of ` +
+        `${unitCost(d.computedCost)} per serving. Because the recipe is incomplete, ` +
+        `${unitCost(d.totalCost)} is the fallback booked into COGS. Price the missing ` +
+        `${missing.length === 1 ? "line" : "lines"} and the complete line total takes over.`,
     }
   }
 

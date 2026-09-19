@@ -265,8 +265,8 @@ describe("an ingredient's usable yield raises what the line really costs", () =>
   })
 })
 
-describe("the override is still a fallback, but it no longer hides what the lines came to", () => {
-  it("a walk that produced a number keeps it, and says the override was not used", async () => {
+describe("the fallback protects COGS without hiding what the lines established", () => {
+  it("uses the fallback when only some lines price, and preserves the known minimum", async () => {
     serve([
       recipe({
         id: "wings",
@@ -281,7 +281,63 @@ describe("the override is still a fallback, but it no longer hides what the line
       id === "salt" ? price(0.5, "oz") : null) as never)
 
     const r = await computeRecipeCost("wings")
+    expect(r.totalCost).toBe(6)
+    expect(r.batchCost).toBe(6)
+    expect(r.computedCost).toBe(0.5)
+    expect(r.overrideApplied).toBe(true)
+    expect(r.partial).toBe(true)
+  })
+
+  it("keeps a complete computed cost even when a fallback is present", async () => {
+    serve([
+      recipe({
+        id: "wings",
+        foodCostOverride: 6,
+        lines: [{ canonicalIngredientId: "wing", quantity: 10, unit: "each" }],
+      }),
+    ])
+    getCost.mockResolvedValue(price(0.7, "each"))
+
+    const r = await computeRecipeCost("wings")
+    expect(r.totalCost).toBe(7)
+    expect(r.computedCost).toBe(7)
+    expect(r.overrideApplied).toBe(false)
+    expect(r.partial).toBe(false)
+  })
+
+  it("does not replace a trusted historical price selected by the spike guard", async () => {
+    serve([
+      recipe({
+        id: "wings",
+        foodCostOverride: 6,
+        lines: [{ canonicalIngredientId: "wing", quantity: 10, unit: "each" }],
+      }),
+    ])
+    getCost.mockResolvedValue({ ...price(0.7, "each"), costGuardTriggered: true })
+
+    const r = await computeRecipeCost("wings")
+    expect(r.totalCost).toBe(7)
+    expect(r.overrideApplied).toBe(false)
+    expect(r.partial).toBe(true)
+    expect(r.lines[0].missingCost).toBe(false)
+  })
+
+  it("keeps a partial known minimum when no fallback exists", async () => {
+    serve([
+      recipe({
+        id: "wings",
+        lines: [
+          { id: "a", canonicalIngredientId: "salt", quantity: 1, unit: "oz" },
+          { id: "b", canonicalIngredientId: "wing", quantity: 10, unit: "each" },
+        ],
+      }),
+    ])
+    getCost.mockImplementation((async (id: string) =>
+      id === "salt" ? price(0.5, "oz") : null) as never)
+
+    const r = await computeRecipeCost("wings")
     expect(r.totalCost).toBe(0.5)
+    expect(r.computedCost).toBe(0.5)
     expect(r.overrideApplied).toBe(false)
     expect(r.partial).toBe(true)
   })

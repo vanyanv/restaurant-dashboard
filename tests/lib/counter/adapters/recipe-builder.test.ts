@@ -70,6 +70,7 @@ function loaded(over: Partial<Loaded> = {}): Loaded {
     lines: [line()],
     totalCost: 1,
     batchCost: 1,
+    computedCost: 1,
     partial: false,
     emptyWalk: false,
     hasLines: true,
@@ -121,8 +122,9 @@ describe("every field a recipe's cost depends on is a control", () => {
     expect(unit?.options?.[0]).toEqual({ value: "", label: "portions" })
   })
 
-  it("says the override is a BATCH cost once the recipe is a batch", () => {
+  it("labels the fallback plainly and says it is a BATCH cost once the recipe is a batch", () => {
     const plate = builderOf(loaded(), TODAY).fields.find((f) => f.key === "foodCostOverride")
+    expect(plate?.label).toBe("Fallback batch cost")
     expect(plate?.hint).not.toContain("whole batch")
 
     const batch = builderOf(
@@ -131,6 +133,33 @@ describe("every field a recipe's cost depends on is a control", () => {
     ).fields.find((f) => f.key === "foodCostOverride")
     expect(batch?.hint).toContain("whole batch")
     expect(batch?.hint).toContain("divided by the yield")
+  })
+})
+
+describe("an incomplete recipe distinguishes booked COGS from its known minimum", () => {
+  it("explains both figures when the fallback is in use", () => {
+    const missing = line({
+      refId: "wing",
+      name: "wing",
+      missingCost: true,
+      missingReason: "no-price",
+      unitCost: null,
+      lineCost: 0,
+    })
+    const c = costOf(
+      loaded({
+        lines: [line({ lineCost: 0.5 }), missing],
+        totalCost: 6,
+        batchCost: 6,
+        computedCost: 0.5,
+        partial: true,
+        overrideApplied: true,
+      }),
+    )
+
+    expect(c.gap?.lead).toBe("fallback in use")
+    expect(c.gap?.body).toContain("known minimum of $0.50")
+    expect(c.gap?.body).toContain("$6.00 is the fallback booked into COGS")
   })
 })
 
