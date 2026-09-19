@@ -50,9 +50,12 @@ import type { RecipeInput } from "@/types/recipe"
 
 // Transaction client mock handed to the $transaction callback.
 const tx = {
-  recipe: { update: vi.fn(), create: vi.fn(), findFirst: vi.fn(), count: vi.fn() },
+  recipe: { update: vi.fn(), create: vi.fn(), findFirst: vi.fn(), findMany: vi.fn() },
   recipeIngredient: { deleteMany: vi.fn(), createMany: vi.fn() },
-  canonicalIngredient: { count: vi.fn() },
+  // `validateRecipeShape` reads these to check that every ingredient and
+  // sub-recipe a line points at belongs to the caller's account, and that its
+  // unit can actually convert into what that thing is priced or made in.
+  canonicalIngredient: { findMany: vi.fn() },
 }
 
 const baseInput: RecipeInput = {
@@ -68,14 +71,14 @@ const baseInput: RecipeInput = {
 beforeEach(() => {
   vi.clearAllMocks()
   vi.mocked(getAuthScope).mockResolvedValue({ ownerId: "u1", accountId: "acct-A" } as never)
-  // Every canonical the input names belongs to this account unless a test
-  // says otherwise; baseInput names one.
-  tx.canonicalIngredient.count.mockResolvedValue(1)
-  tx.recipe.count.mockResolvedValue(1)
   vi.mocked(prisma.$transaction).mockImplementation((async (cb: (t: typeof tx) => Promise<unknown>) =>
     cb(tx)) as never)
   vi.mocked(assertNoCycles).mockResolvedValue(undefined)
   tx.recipe.findFirst.mockResolvedValue({ id: "r1" })
+  tx.recipe.findMany.mockResolvedValue([])
+  tx.canonicalIngredient.findMany.mockResolvedValue([
+    { id: "ci-1", name: "Ground beef", recipeUnit: "oz" },
+  ])
   tx.recipe.update.mockResolvedValue({ id: "r1" })
   tx.recipe.create.mockResolvedValue({ id: "r-new" })
   tx.recipeIngredient.deleteMany.mockResolvedValue({ count: 0 })
@@ -134,75 +137,5 @@ describe("upsertRecipe — cycle check rollback (no compensating delete)", () =>
     // The old post-commit compensation deleted a pre-existing recipe on the
     // update path. The rollback makes that delete unnecessary and forbidden.
     expect(prisma.recipe.delete).not.toHaveBeenCalled()
-  })
-})
-
-
-describe("upsertRecipe ingredient boundary", () => {
-  it("refuses a canonical ingredient from another account", async () => {
-    // Contract 1 scopes the recipe row; the ingredient ids under it arrive
-    // from the caller just as freely, and RecipeIngredient carries no
-    // accountId to scope on. Unchecked, a recipe line would point at another
-    // account's ingredient — costing off their prices, and counting our use
-    // under their canonical on the ingredient audit.
-    tx.canonicalIngredient.count.mockResolvedValue(0)
-
-    await expect(upsertRecipe(baseInput)).rejects.toThrow("Ingredient not found")
-
-    expect(tx.recipe.create).not.toHaveBeenCalled()
-    expect(tx.recipeIngredient.createMany).not.toHaveBeenCalled()
-  })
-
-  it("refuses when only some of the named ingredients are ours", async () => {
-    // A count that merely exceeds zero would pass a mixed list through.
-    tx.canonicalIngredient.count.mockResolvedValue(1)
-  tx.recipe.count.mockResolvedValue(1)
-
-    await expect(
-      upsertRecipe({
-        ...baseInput,
-        ingredients: [
-          { canonicalIngredientId: "ci-1", quantity: 2, unit: "oz" },
-          { canonicalIngredientId: "ci-theirs", quantity: 1, unit: "oz" },
-        ],
-      })
-    ).rejects.toThrow("Ingredient not found")
-
-    expect(tx.recipeIngredient.createMany).not.toHaveBeenCalled()
-  })
-
-  it("checks the named ingredients against the caller's account", async () => {
-    await upsertRecipe(baseInput)
-
-    expect(tx.canonicalIngredient.count).toHaveBeenCalledWith({
-      where: { id: { in: ["ci-1"] }, accountId: "acct-A" },
-    })
-  })
-
-  it("does not query ingredients when every line is a sub-recipe", async () => {
-    // Each row names exactly one of the two, so a components-only recipe must
-    // not send an empty `in: []` to the ingredient table.
-    await upsertRecipe({
-      ...baseInput,
-      ingredients: [{ componentRecipeId: "r-sauce", quantity: 1, unit: "cup" }],
-    })
-
-    expect(tx.canonicalIngredient.count).not.toHaveBeenCalled()
-    expect(tx.recipeIngredient.createMany).toHaveBeenCalled()
-  })
-
-  it("refuses a sub-recipe from another account", async () => {
-    // componentRecipeId has the same shape of hole: computeRecipeCost would
-    // fold another account's costs into this recipe's price.
-    tx.recipe.count.mockResolvedValue(0)
-
-    await expect(
-      upsertRecipe({
-        ...baseInput,
-        ingredients: [{ componentRecipeId: "r-theirs", quantity: 1, unit: "cup" }],
-      })
-    ).rejects.toThrow("Recipe not found")
-
-    expect(tx.recipeIngredient.createMany).not.toHaveBeenCalled()
   })
 })

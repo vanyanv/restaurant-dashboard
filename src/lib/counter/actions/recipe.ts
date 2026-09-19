@@ -1,6 +1,11 @@
 "use server"
 
-import { confirmRecipe, upsertRecipe } from "@/app/actions/recipe-actions"
+import {
+  confirmRecipe,
+  deleteRecipe,
+  previewRecipeCost,
+  upsertRecipe,
+} from "@/app/actions/recipe-actions"
 import { prisma } from "@/lib/prisma"
 
 /**
@@ -53,6 +58,17 @@ export interface SaveLine {
   unit: string
 }
 
+/** What the live cost panel needs back while somebody is still typing. */
+export interface DraftCost {
+  /** Cost of one of whatever the recipe yields. */
+  perServing: number
+  /** What the whole batch comes to. */
+  batch: number
+  partial: boolean
+  /** Per line, in the order they were sent. */
+  lines: Array<{ ext: number | null; missing: boolean }>
+}
+
 export interface SaveResult {
   ok: boolean
   /** Owner-facing, already written. Null when `ok`. */
@@ -72,6 +88,7 @@ export async function saveRecipeLines(input: {
   itemName?: string
   category?: string
   servingSize?: number
+  yieldUnit?: string | null
   notes?: string | null
   foodCostOverride?: number | null
 }): Promise<SaveResult> {
@@ -79,7 +96,7 @@ export async function saveRecipeLines(input: {
     where: { id: input.recipeId },
     select: {
       itemName: true, category: true, servingSize: true, notes: true,
-      isSellable: true, foodCostOverride: true,
+      isSellable: true, foodCostOverride: true, yieldUnit: true,
     },
   })
   if (!current) return { ok: false, error: "That recipe no longer exists." }
@@ -90,6 +107,7 @@ export async function saveRecipeLines(input: {
       itemName: input.itemName ?? current.itemName,
       category: input.category ?? current.category,
       servingSize: input.servingSize ?? current.servingSize,
+      yieldUnit: input.yieldUnit === undefined ? current.yieldUnit : input.yieldUnit,
       isSellable: current.isSellable,
       notes: input.notes === undefined ? current.notes : input.notes,
       foodCostOverride:
@@ -119,6 +137,62 @@ export async function saveRecipeLines(input: {
   return { ok: true, error: null }
 }
 
+/**
+ * Cost the draft under the owner's cursor.
+ *
+ * The editor's cost panel is server-rendered from the SAVED recipe, and the
+ * extended cost on each line was a value the loader produced and nothing ever
+ * recomputed — so changing a quantity from 2 to 4 showed the old figure until
+ * Save and a refresh. The one question the screen exists to answer could only
+ * be answered by committing the change first.
+ *
+ * Returns nulls rather than throwing: a live figure that disappears for a beat
+ * is a worse outcome than a stale one only if it takes the editor down with
+ * it, and a draft mid-keystroke is legitimately uncostable.
+ */
+export async function costDraftRecipe(input: {
+  servingSize?: number
+  yieldUnit?: string | null
+  foodCostOverride?: number | null
+  lines: SaveLine[]
+}): Promise<DraftCost | null> {
+  try {
+    const result = await previewRecipeCost({
+      servingSize: input.servingSize,
+      yieldUnit: input.yieldUnit,
+      foodCostOverride: input.foodCostOverride,
+      ingredients: input.lines.map((l) => ({
+        canonicalIngredientId: l.canonicalIngredientId ?? null,
+        componentRecipeId: l.componentRecipeId ?? null,
+        quantity: l.quantity,
+        unit: l.unit,
+      })),
+    })
+    return {
+      perServing: result.totalCost,
+      batch: result.batchCost,
+      partial: result.partial,
+      lines: result.lines.map((l) => ({
+        ext: l.missingCost ? null : l.lineCost,
+        missing: l.missingCost,
+      })),
+    }
+  } catch {
+    return null
+  }
+}
+
+/** Remove the recipe. Refuses while anything uses it as a sub-recipe. */
+export async function removeRecipe(recipeId: string): Promise<SaveResult> {
+  try {
+    await deleteRecipe(recipeId)
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : String(error) }
+  }
+  revalidatePath("/dashboard/recipes")
+  return { ok: true, error: null }
+}
+
 /** Mark the recipe confirmed. Thin — the app action already scopes and audits. */
 export async function markRecipeConfirmed(recipeId: string): Promise<SaveResult> {
   try {
@@ -129,4 +203,51 @@ export async function markRecipeConfirmed(recipeId: string): Promise<SaveResult>
   revalidatePath(`/dashboard/recipes/${recipeId}`)
   revalidatePath("/dashboard/recipes")
   return { ok: true, error: null }
+}
+
+/**
+ * Start a recipe.
+ *
+ * Until this existed the product had **no create path an owner could reach**.
+ * `upsertRecipe` has always handled a create — `input.id` omitted is a create
+ * — and the only caller that ever omitted it was the AI mapping-proposal
+ * accept. So a recipe could be born from a model's guess about a POS item
+ * name and in no other way; an owner who wanted to add a new dish had to sell
+ * it first, wait for the proposal job, and accept what the model wrote.
+ *
+ * It is deliberately a name and a category and nothing else. The editor is
+ * where a recipe is built, and a create form that asked for yield, override
+ * and lines up front would be a second, worse copy of it — the thing the
+ * audit called the complicated path.
+ */
+export async function createRecipe(input: {
+  itemName: string
+  category: string
+}): Promise<{ ok: boolean; recipeId: string | null; error: string | null }> {
+  const itemName = input.itemName.trim()
+  if (!itemName) return { ok: false, recipeId: null, error: "Give the recipe a name." }
+  const category = input.category.trim() || "Uncategorized"
+
+  try {
+    const { id } = await upsertRecipe({
+      itemName,
+      category,
+      // One portion, counted rather than measured: the ordinary plate. A
+      // batch recipe says so in the editor, where the yield pair is.
+      servingSize: 1,
+      yieldUnit: null,
+      isSellable: true,
+      notes: null,
+      foodCostOverride: null,
+      ingredients: [],
+    })
+    revalidatePath("/dashboard/recipes")
+    return { ok: true, recipeId: id, error: null }
+  } catch (error) {
+    return {
+      ok: false,
+      recipeId: null,
+      error: error instanceof Error ? error.message : String(error),
+    }
+  }
 }

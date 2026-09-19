@@ -24,14 +24,19 @@ type IngredientRow = {
 
 type RecipeRow = {
   id: string
+  itemName: string
+  servingSize: number
+  yieldUnit: string | null
   foodCostOverride: number | null
   ingredients: IngredientRow[]
 }
 
 function recipe(id: string, ingredients: IngredientRow[], foodCostOverride: number | null = null): RecipeRow {
-  return { id, foodCostOverride, ingredients }
+  return { id, itemName: id, servingSize: 1, yieldUnit: null, foodCostOverride, ingredients }
 }
 
+// `ea` is one of PORTION_UNITS, so this draws one whole serving out of a
+// portion-yield sub-recipe — the shape every recipe in this account has.
 function componentLine(componentRecipeId: string, quantity = 1): IngredientRow {
   return { quantity, unit: "ea", canonicalIngredientId: null, componentRecipeId }
 }
@@ -103,7 +108,7 @@ describe("batchRecipeCosts — cycle parity with the canonical walker", () => {
 
     expect(map.has("r1")).toBe(false)
     expect(map.has("r2")).toBe(false)
-    expect(map.get("r4")).toEqual({ totalCost: 15, partial: false })
+    expect(map.get("r4")).toMatchObject({ totalCost: 15, partial: false })
   })
 
   it("keeps partial: true (not omission) for a recipe that merely contains an uncosted line", async () => {
@@ -113,6 +118,6 @@ describe("batchRecipeCosts — cycle parity with the canonical walker", () => {
 
     const map = await batchRecipeCosts("acct-1", new Map())
 
-    expect(map.get("r5")).toEqual({ totalCost: 0, partial: true })
+    expect(map.get("r5")).toMatchObject({ totalCost: 0, partial: true })
   })
 })

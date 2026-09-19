@@ -46,6 +46,7 @@ export async function batchCanonicalCosts(
       costPerRecipeUnit: true,
       costSource: true,
       costUpdatedAt: true,
+      yieldFactor: true,
     },
   })
 
@@ -102,6 +103,7 @@ export async function batchCanonicalCosts(
         sourceVendor: prov?.vendorName ?? null,
         sourceSku: prov?.sku ?? null,
         sourceProductName: prov?.productName ?? null,
+        yieldFactor: c.yieldFactor,
       })
       continue
     }
@@ -130,6 +132,7 @@ export async function batchCanonicalCosts(
           sourceVendor: prov.vendorName,
           sourceSku: prov.sku,
           sourceProductName: prov.productName,
+          yieldFactor: c.yieldFactor,
         })
         continue
       }
@@ -147,6 +150,7 @@ export async function batchCanonicalCosts(
         sourceVendor: prov.vendorName,
         sourceSku: prov.sku,
         sourceProductName: prov.productName,
+        yieldFactor: c.yieldFactor,
       })
     }
   }
@@ -217,6 +221,7 @@ export async function batchCanonicalCosts(
             sourceVendor: li.invoice.vendorName,
             sourceSku: li.sku,
             sourceProductName: li.productName,
+            yieldFactor: c.yieldFactor,
           })
           break
         }

@@ -3,13 +3,12 @@
 import { getAuthScope as requireScope } from "@/lib/auth-scope"
 import { prisma } from "@/lib/prisma"
 import {
-  computeRecipeCost,
-  computeIngredientLineCost,
   assertNoCycles,
-  type RecipeCostLine,
+  previewRecipeCost as computeDraftCost,
   type RecipeCostResult,
 } from "@/lib/recipe-cost"
-import { costRecipeCached, costIngredientCached } from "@/lib/cached"
+import { assertYieldUnitChangeSafe, validateRecipeShape } from "@/lib/recipe-validation"
+import { costRecipeCached } from "@/lib/cached"
 import { batchRecipeCosts } from "@/lib/recipe-cost-batch"
 import { revalidatePath } from "next/cache"
 import type { RecipeInput, RecipeSummary } from "@/types/recipe"
@@ -18,24 +17,6 @@ import {
   getMenuItemsForCatalog,
 } from "@/app/actions/menu-item-actions"
 import { resolveSellPriceForRecipe } from "@/lib/menu-sell-price"
-
-function validateIngredients(input: RecipeInput): void {
-  for (const [i, ing] of input.ingredients.entries()) {
-    const hasCanonical = !!ing.canonicalIngredientId
-    const hasComponent = !!ing.componentRecipeId
-    if (hasCanonical === hasComponent) {
-      throw new Error(
-        `Ingredient row ${i + 1}: exactly one of canonicalIngredientId or componentRecipeId is required`
-      )
-    }
-    if (ing.quantity <= 0) {
-      throw new Error(`Ingredient row ${i + 1}: quantity must be > 0`)
-    }
-    if (!ing.unit?.trim()) {
-      throw new Error(`Ingredient row ${i + 1}: unit is required`)
-    }
-  }
-}
 
 export async function listRecipes(): Promise<RecipeSummary[]> {
   const scope = await requireScope()
@@ -106,12 +87,14 @@ export async function upsertRecipe(
   const scope = await requireScope()
   if (!scope) throw new Error("Not authenticated")
   const { ownerId, accountId } = scope
-  validateIngredients(input)
 
   const { id } = await prisma.$transaction(async (tx) => {
     if (input.id) {
       // Scope the update by accountId — a bare update({ where: { id } })
       // would let any authenticated user overwrite another account's recipe.
+      // FIRST, before any other check: a caller poking at somebody else's
+      // recipe id must get "not found" and learn nothing else, so the shape
+      // of their payload can never change the answer.
       const existing = await tx.recipe.findFirst({
         where: { id: input.id, accountId },
         select: { id: true },
@@ -119,34 +102,18 @@ export async function upsertRecipe(
       if (!existing) throw new Error("Recipe not found")
     }
 
-    // Same boundary as the recipe itself, one level down. Every row names
-    // either a canonical ingredient or a sub-recipe, both ids come from the
-    // caller, and RecipeIngredient has no accountId of its own to scope on.
-    // Unchecked, a recipe line would point at another account's ingredient or
-    // sub-recipe — costing this recipe off their prices, and counting our use
-    // under their canonical on the ingredient audit.
-    const ids = (key: "canonicalIngredientId" | "componentRecipeId") => [
-      ...new Set(
-        input.ingredients
-          .map((ing) => ing[key])
-          .filter((v): v is string => typeof v === "string" && v.length > 0)
-      ),
-    ]
-    const canonicalIds = ids("canonicalIngredientId")
-    const componentIds = ids("componentRecipeId")
-    // Count, not findMany: an id repeated across rows is de-duplicated above,
-    // so an exact match is the only way every named id is ours.
-    if (canonicalIds.length > 0) {
-      const owned = await tx.canonicalIngredient.count({
-        where: { id: { in: canonicalIds }, accountId },
-      })
-      if (owned !== canonicalIds.length) throw new Error("Ingredient not found")
-    }
-    if (componentIds.length > 0) {
-      const owned = await tx.recipe.count({
-        where: { id: { in: componentIds }, accountId },
-      })
-      if (owned !== componentIds.length) throw new Error("Recipe not found")
+    // Inside the transaction and against `tx`, so the checks see the same
+    // state the writes below will land on, and a failure rolls everything
+    // back rather than leaving a half-saved recipe. This is also where a
+    // reference to another account's ingredient or sub-recipe is refused —
+    // scoping the recipe row by accountId never covered what it points at.
+    await validateRecipeShape(input, accountId, tx)
+
+    // And the recipes that draw on THIS one, which `validateRecipeShape` has
+    // no way to see. A yield unit is a contract with every parent line, so
+    // changing it can break a recipe nobody touched.
+    if (input.id) {
+      await assertYieldUnitChangeSafe(input.id, normalizeYieldUnit(input.yieldUnit), accountId, tx)
     }
 
     const recipe = input.id
@@ -156,6 +123,7 @@ export async function upsertRecipe(
             itemName: input.itemName.trim(),
             category: input.category,
             servingSize: input.servingSize,
+            yieldUnit: normalizeYieldUnit(input.yieldUnit),
             isSellable: input.isSellable,
             notes: input.notes ?? null,
             foodCostOverride: input.foodCostOverride ?? null,
@@ -168,6 +136,7 @@ export async function upsertRecipe(
             itemName: input.itemName.trim(),
             category: input.category,
             servingSize: input.servingSize,
+            yieldUnit: normalizeYieldUnit(input.yieldUnit),
             isSellable: input.isSellable,
             notes: input.notes ?? null,
             foodCostOverride: input.foodCostOverride ?? null,
@@ -205,6 +174,16 @@ export async function upsertRecipe(
   return { id }
 }
 
+/**
+ * Empty string and whitespace both mean "this recipe yields portions", which
+ * is `null` in the column. A `""` stored there would canonicalize to nothing
+ * and make every line drawing on the recipe unresolvable.
+ */
+function normalizeYieldUnit(raw: string | null | undefined): string | null {
+  const trimmed = raw?.trim()
+  return trimmed ? trimmed : null
+}
+
 export async function deleteRecipe(recipeId: string): Promise<void> {
   const scope = await requireScope()
   if (!scope) throw new Error("Not authenticated")
@@ -217,12 +196,12 @@ export async function deleteRecipe(recipeId: string): Promise<void> {
   if (!recipe) throw new Error("Recipe not found")
 
   const referenced = await prisma.recipeIngredient.findFirst({
-    where: { componentRecipeId: recipeId },
-    select: { recipeId: true },
+    where: { componentRecipeId: recipeId, recipe: { accountId } },
+    select: { recipe: { select: { itemName: true } } },
   })
   if (referenced) {
     throw new Error(
-      "Cannot delete: this recipe is used as a sub-recipe elsewhere"
+      `Cannot delete: “${referenced.recipe.itemName}” uses this recipe as a sub-recipe.`
     )
   }
 
@@ -234,10 +213,23 @@ export async function deleteRecipe(recipeId: string): Promise<void> {
 }
 
 /**
- * Compute the live cost of an in-flight (unsaved) recipe. Used by the editor
- * preview panel so the user sees cost updates as they edit.
+ * Cost a recipe the owner is still typing, so the figure under their cursor is
+ * the figure they will get after Save.
+ *
+ * This used to be a fourth hand-written copy of the cost walk — it did not
+ * apply the override fallback, did not flag the price-spike guard, multiplied
+ * a sub-recipe line by its quantity without reading the unit, and had no
+ * tenancy check on the ids it was handed. It is now a scope check in front of
+ * `previewRecipeCost` in `@/lib/recipe-cost`, which builds the draft into the
+ * one walk.
+ *
+ * It was also dead: nothing in the product called it, which is why the
+ * editor's cost panel never moved until you saved.
  */
 export async function previewRecipeCost(input: {
+  servingSize?: number
+  yieldUnit?: string | null
+  foodCostOverride?: number | null
   ingredients: Array<{
     canonicalIngredientId?: string | null
     componentRecipeId?: string | null
@@ -248,114 +240,50 @@ export async function previewRecipeCost(input: {
 }): Promise<RecipeCostResult> {
   const scope = await requireScope()
   if (!scope) throw new Error("Not authenticated")
-  const { ownerId, accountId } = scope
+  const { accountId } = scope
 
-  const lines: RecipeCostLine[] = []
-  let total = 0
-  let partial = false
+  // The draft is unsaved, so nothing has scoped its references yet. Price only
+  // what this account owns; anything else is dropped rather than costed, which
+  // shows up as a missing line instead of leaking another account's prices.
+  const canonicalIds = [
+    ...new Set(input.ingredients.map((l) => l.canonicalIngredientId).filter((v): v is string => !!v)),
+  ]
+  const componentIds = [
+    ...new Set(input.ingredients.map((l) => l.componentRecipeId).filter((v): v is string => !!v)),
+  ]
+  const [ownCanonicals, ownComponents] = await Promise.all([
+    canonicalIds.length > 0
+      ? prisma.canonicalIngredient.findMany({
+          where: { id: { in: canonicalIds }, accountId },
+          select: { id: true },
+        })
+      : Promise.resolve([]),
+    componentIds.length > 0
+      ? prisma.recipe.findMany({
+          where: { id: { in: componentIds }, accountId },
+          select: { id: true },
+        })
+      : Promise.resolve([]),
+  ])
+  const okCanonical = new Set(ownCanonicals.map((c) => c.id))
+  const okComponent = new Set(ownComponents.map((r) => r.id))
 
-  for (const ing of input.ingredients) {
-    if (ing.componentRecipeId) {
-      const sub = await computeRecipeCost(ing.componentRecipeId).catch(() => null)
-      if (!sub) {
-        partial = true
-        lines.push({
-          kind: "component",
-          refId: ing.componentRecipeId,
-          name: ing.ingredientName ?? "sub-recipe",
-          quantity: ing.quantity,
-          unit: ing.unit,
-          unitCost: null,
-          lineCost: 0,
-          missingCost: true,
-        })
-        continue
-      }
-      const lineCost = sub.totalCost * ing.quantity
-      total += lineCost
-      if (sub.partial) partial = true
-      lines.push({
-        kind: "component",
-        refId: ing.componentRecipeId,
-        name: sub.itemName,
-        quantity: ing.quantity,
-        unit: ing.unit,
-        unitCost: sub.totalCost,
-        lineCost,
-        missingCost: sub.partial,
-      })
-      continue
-    }
-    if (ing.canonicalIngredientId) {
-      const cost = await costIngredientCached(ing.canonicalIngredientId)
-      if (!cost) {
-        partial = true
-        lines.push({
-          kind: "ingredient",
-          refId: ing.canonicalIngredientId,
-          name: ing.ingredientName ?? "ingredient",
-          quantity: ing.quantity,
-          unit: ing.unit,
-          unitCost: null,
-          lineCost: 0,
-          missingCost: true,
-        })
-        continue
-      }
-      const { lineCost, qtyInCostUnit } = computeIngredientLineCost({
-        ingredientQuantity: ing.quantity,
-        ingredientUnit: ing.unit,
-        costUnitCost: cost.unitCost,
-        costUnit: cost.unit,
-      })
-      if (qtyInCostUnit == null) {
-        partial = true
-        lines.push({
-          kind: "ingredient",
-          refId: ing.canonicalIngredientId,
-          name: ing.ingredientName ?? "ingredient",
-          quantity: ing.quantity,
-          unit: ing.unit,
-          unitCost: cost.unitCost,
-          costUnit: cost.unit,
-          lineCost: 0,
-          missingCost: true,
-          sourceInvoiceId: cost.sourceInvoiceId,
-          sourceLineItemId: cost.sourceLineItemId,
-          sourceVendor: cost.sourceVendor,
-          sourceSku: cost.sourceSku,
-          sourceInvoiceDate: cost.asOfDate,
-        })
-        continue
-      }
-      total += lineCost
-      lines.push({
-        kind: "ingredient",
-        refId: ing.canonicalIngredientId,
-        name: ing.ingredientName ?? "ingredient",
-        quantity: ing.quantity,
-        unit: ing.unit,
-        unitCost: cost.unitCost,
-        costUnit: cost.unit,
-        lineCost,
-        missingCost: false,
-        sourceInvoiceId: cost.sourceInvoiceId,
-        sourceLineItemId: cost.sourceLineItemId,
-        sourceVendor: cost.sourceVendor,
-        sourceSku: cost.sourceSku,
-        sourceInvoiceDate: cost.asOfDate,
-      })
-    }
-  }
-
-  return {
-    recipeId: "",
-    itemName: "",
-    totalCost: total,
-    lines,
-    partial,
-    emptyWalk: total === 0,
-  }
+  return computeDraftCost({
+    servingSize: input.servingSize,
+    yieldUnit: input.yieldUnit,
+    foodCostOverride: input.foodCostOverride,
+    ingredients: input.ingredients.map((ing) => ({
+      ...ing,
+      canonicalIngredientId:
+        ing.canonicalIngredientId && okCanonical.has(ing.canonicalIngredientId)
+          ? ing.canonicalIngredientId
+          : null,
+      componentRecipeId:
+        ing.componentRecipeId && okComponent.has(ing.componentRecipeId)
+          ? ing.componentRecipeId
+          : null,
+    })),
+  })
 }
 
 export async function confirmRecipe(
