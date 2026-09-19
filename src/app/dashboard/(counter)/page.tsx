@@ -63,6 +63,9 @@ export default async function DashboardPage({
     comparisonId: counterParams.comparisonId,
     storeId: counterParams.storeId,
     accountId: session.user.accountId,
+    // The alert queue's "days open" is a business-date count. Taking its own
+    // clock would leave it on UTC, and unpinnable by COUNTER_TODAY.
+    today,
   })
 
   // The rail's switcher is the LAYOUT's now; this list is for the page's own

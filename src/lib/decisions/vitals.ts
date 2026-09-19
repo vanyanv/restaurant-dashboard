@@ -111,7 +111,12 @@ export function computeVitals(input: {
   const gapHours =
     judged.length > 0 ? round1(judged.reduce((s, d) => s + (d.labor.gapHours ?? 0), 0)) : null
 
-  const neededTotal = days.reduce((s, d) => s + (d.labor.neededHours ?? 0), 0)
+  // `neededHours` is null on a day `computeLaborLane` has no weekday SPLH
+  // target for — independent of whether that day has forecast revenue. So the
+  // days with a needed figure are the only ones that can appear on BOTH sides
+  // of a revenue-over-hours rate; the rest have revenue and no denominator.
+  const needed = days.filter((d) => d.labor.neededHours != null)
+  const neededTotal = needed.reduce((s, d) => s + (d.labor.neededHours ?? 0), 0)
   const scheduledTotal = days.reduce((s, d) => s + d.labor.scheduledHours, 0)
 
   // Same tolerance the per-day lane and the SPLH chart use, so all three
@@ -131,7 +136,13 @@ export function computeVitals(input: {
   // it this way keeps the cell and the lane quoting the same target even if
   // weekdayTargets() changes underneath them.
   const actual = total != null && scheduledTotal > 0 ? total / scheduledTotal : null
-  const target = total != null && neededTotal > 0 ? total / neededTotal : null
+  // Over the days that HAVE a needed figure, not the whole week. Dividing the
+  // week's whole revenue by a denominator missing those days put every
+  // unscorable day's revenue into the numerator and nothing into the bottom,
+  // which inflates the recovered target and tips `rateStatus` toward "below"
+  // — the reading that says the week is understaffed.
+  const neededRevenue = needed.reduce((s, d) => s + d.predictedRevenue, 0)
+  const target = neededTotal > 0 ? neededRevenue / neededTotal : null
 
   const rateStatus: RateStatus =
     actual == null || target == null

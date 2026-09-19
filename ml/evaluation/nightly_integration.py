@@ -34,6 +34,15 @@ _LOG = logging.getLogger(__name__)
 # in `by_date` and silently fall back to `actual` (0 error), biasing baselineWape
 # toward zero. 35d = 28d evaluation + 7d seasonal-naive prefix.
 _EVAL_WINDOW_DAYS = 35
+
+#: The window actually SCORED. The extra 7 days that `_EVAL_WINDOW_DAYS`
+#: fetches are the seasonal-naive prefix: they exist so the oldest scored date
+#: has a t-7 reference, not so they can be scored themselves. Nothing used to
+#: trim back to this, so the oldest 7 dates were scored with no t-7 reference
+#: and fell back to their own actuals — a fifth of every night's sample handing
+#: the baseline a free zero error, and a `sampleSize` of ~35 under a comment
+#: promising 28.
+_SCORE_WINDOW_DAYS = 28
 _CONSISTENCY_WINDOW_DAYS = 14
 _DISCREPANCY_THRESHOLD_PCT = 15.0
 
@@ -260,6 +269,7 @@ def _seasonal_naive_baseline(
     dates: list[dt.date],
     actuals: np.ndarray,
     series: list | None = None,
+    score_from: dt.date | None = None,
 ) -> np.ndarray:
     """Compute y[t-7] from the observed actuals, falling back to the row's own
     actual when t-7 is not in the window.
@@ -275,17 +285,24 @@ def _seasonal_naive_baseline(
     Tuesday before it. The `baselineWape` that came out is the denominator of
     the model's skill ratio, which is what the operator gate reads.
 
-    With the 35-day fetch window paired with the 28-day evaluation window the
-    fallback should be rare — every evaluation date has its t-7 reference. A
-    fallback row scores zero error and flatters the baseline, so past
-    `_BASELINE_FALLBACK_WARN` of the window we say so at warning level rather
-    than publishing a skill ratio nobody can read.
+    `score_from` marks where the scored window begins. Rows before it are the
+    seasonal-naive prefix: they populate the lookup and are not returned, so
+    the result lines up with the scored rows alone. Passing None returns one
+    value per input row.
+
+    With the 7-day prefix in front of the scored window the fallback should be
+    rare — every scored date has its t-7 reference. A fallback row scores zero
+    error and flatters the baseline, so past `_BASELINE_FALLBACK_WARN` of the
+    window we say so at warning level rather than publishing a skill ratio
+    nobody can read.
     """
     keys = series if series is not None else [None] * len(dates)
     by_key = {(k, d): float(a) for k, d, a in zip(keys, dates, actuals)}
     out = []
     fallback_count = 0
     for k, d, a in zip(keys, dates, actuals):
+        if score_from is not None and d < score_from:
+            continue
         prev = by_key.get((k, d - dt.timedelta(days=7)))
         if prev is None:
             fallback_count += 1
@@ -293,13 +310,14 @@ def _seasonal_naive_baseline(
         else:
             out.append(float(prev))
     if fallback_count > 0:
-        share = fallback_count / len(dates) if dates else 0.0
+        share = fallback_count / len(out) if out else 0.0
         _LOG.log(
             logging.WARNING if share > _BASELINE_FALLBACK_WARN else logging.DEBUG,
-            "_seasonal_naive_baseline: %d/%d rows (%.0f%%) fell back to actual "
-            "(no t-7 reference in window); baselineWape is flattered by that much",
+            "_seasonal_naive_baseline: %d/%d scored rows (%.0f%%) fell back to "
+            "actual (no t-7 reference in window); baselineWape is flattered by "
+            "that much",
             fallback_count,
-            len(dates),
+            len(out),
             share * 100.0,
         )
     return np.asarray(out, dtype=float)
@@ -343,6 +361,25 @@ def _build_eval_input(
 ) -> EvaluationInput | None:
     if not rows:
         return None
+    all_dates = [r[0] for r in rows]
+    all_acts = np.asarray([r[2] for r in rows], dtype=float)
+    # `series_index` names the column that separates one series from another
+    # within a date — the hour bucket, the SKU. Targets with one row per date
+    # leave it None.
+    all_series = None if series_index is None else [r[series_index] for r in rows]
+
+    # The baseline is built from EVERY fetched row, so the 7-day prefix can
+    # serve as a t-7 reference; only the trailing `_SCORE_WINDOW_DAYS` come
+    # back, and only those are scored.
+    score_from = today - dt.timedelta(days=_SCORE_WINDOW_DAYS)
+    baseline_preds = _seasonal_naive_baseline(
+        all_dates, all_acts, all_series, score_from=score_from
+    )
+
+    rows = [r for r in rows if r[0] >= score_from]
+    if not rows:
+        return None
+
     dates = [r[0] for r in rows]
     preds = np.asarray([r[1] for r in rows], dtype=float)
     acts = np.asarray([r[2] for r in rows], dtype=float)
@@ -357,11 +394,6 @@ def _build_eval_input(
     # number, but it names the generation the window is converging on rather
     # than the one it is leaving.
     model_version = rows[-1][5] or rows[0][5] or "unknown"
-    # `series_index` names the column that separates one series from another
-    # within a date — the hour bucket, the SKU. Targets with one row per date
-    # leave it None.
-    series = None if series_index is None else [r[series_index] for r in rows]
-    baseline_preds = _seasonal_naive_baseline(dates, acts, series)
 
     # We only have 80% PI columns. Widen by ~2x for an approximate 95% PI
     # so the evaluator's coverage column is at least populated.

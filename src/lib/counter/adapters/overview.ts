@@ -8,6 +8,7 @@ import type { InvoiceKpis } from "@/types/invoice"
 import type { LifecycleStage } from "@/generated/prisma/enums"
 import { isOperational } from "@/lib/store-lifecycle"
 import { foldSplhSeries } from "@/lib/dashboard/splh-fold"
+import { businessQueryDate } from "@/lib/counter/business-date"
 import type { SplhPoint } from "@/lib/splh"
 import { COGS_CODE, LABOR_CODE, TOTAL_SALES_CODE, type PnLRow } from "@/lib/pnl"
 import {
@@ -324,6 +325,19 @@ export interface OverviewSectionsInput {
    * lookup, the same way `src/app/dashboard/cogs/page.tsx` does.
    */
   accountId: string
+  /**
+   * The page's own clock, from `counterToday()`. Only the alert queue reads
+   * it, and only to say how long an alert has been open.
+   *
+   * It has to come in rather than be taken here. `Alert.occurredOn` is a
+   * `@db.Date` holding the LA BUSINESS date; flooring a raw `new Date()` to
+   * UTC midnight compares that against the UTC day, and between 00:00 and
+   * 08:00 UTC — 4pm to midnight in Los Angeles, dinner service — the UTC day
+   * is one ahead. Every alert aged a day early through every evening. Taking
+   * the clock from the page also means `COUNTER_TODAY` pins this section for a
+   * fidelity run, which it could not before.
+   */
+  today?: Date
 }
 
 export interface OverviewSections {
@@ -821,9 +835,11 @@ function buildQueue(
   today: Date,
 ): QueueEntry[] {
   return alerts.slice(0, QUEUE_LIMIT).map((a) => {
+    // Both sides in the @db.Date encoding: UTC midnight of an LA business
+    // date. `occurredOn` already is one; `today` becomes one here.
     const days = Math.max(
       0,
-      Math.round((startOfDayUtc(today) - startOfDayUtc(a.occurredOn)) / 86_400_000),
+      Math.round((businessQueryDate(today).getTime() - a.occurredOn.getTime()) / 86_400_000),
     )
     return {
       key: a.id,
@@ -842,10 +858,6 @@ function buildQueue(
       actLabel: "Open in the queue",
     }
   })
-}
-
-function startOfDayUtc(d: Date): number {
-  return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate())
 }
 
 /**
@@ -907,6 +919,7 @@ export function getOverviewSectionPromises(
   input: OverviewSectionsInput,
 ): StreamedSections<OverviewSections> {
   const { range, storeId, accountId } = input
+  const today = input.today ?? new Date()
   const comparisonId: ComparisonId = input.comparisonId ?? "none"
   const bounds = toQueryBounds(range)
   const bucket = bucketFor(range)
@@ -1109,7 +1122,7 @@ export function getOverviewSectionPromises(
     ),
 
     needsYou: guardSection(
-      queueP.then((queueSd) => mapReady(queueSd, (d) => buildQueue(d.alerts, new Date()))),
+      queueP.then((queueSd) => mapReady(queueSd, (d) => buildQueue(d.alerts, today))),
       "retryNeedsYou",
     ),
 

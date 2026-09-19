@@ -650,6 +650,18 @@ export function consolidateRows(
 
   return order.map((code) => {
     const meta = template.get(code)!
+    // A label like "Labor (actual)" or "Labor (partial)" is a claim about one
+    // store's data. `template` holds whichever store came first, so a
+    // consolidated line was stamped with that store's state and read as a
+    // claim about all of them. Where the contributing stores disagree, the
+    // line takes the bare name.
+    const labels = new Set(
+      perStoreRows
+        .map((rows) => rows.find((r) => r.code === code)?.label)
+        .filter((l): l is string => l !== undefined)
+    )
+    const label =
+      labels.size > 1 ? (meta.label.split(" (")[0] ?? meta.label) : meta.label
     const contributing = perStoreRows.filter((rows) =>
       rows.some((r) => r.code === code)
     )
@@ -659,17 +671,22 @@ export function consolidateRows(
         0
       )
     )
-    // Unknown only when every store that has this row flags it unknown.
+    // Unknown when ANY contributing store is unknown, because the line is a
+    // SUM and a store that does not know its figure contributes nothing to it.
+    // Hollywood's $10k of rent plus Glendale's missing rent is a consolidated
+    // Rent of $10k — Glendale's real rent has entered the group P&L as zero,
+    // and the group bottom line is overstated by exactly that. The flag used
+    // to require EVERY store to be unknown, which is the test for "we know
+    // nothing about this line", not for "this total is short a store".
     const combinedUnknown = periods.map((_, pi) =>
-      contributing.length > 0 &&
-      contributing.every(
+      contributing.some(
         (rows) => rows.find((r) => r.code === code)?.isUnknown?.[pi] === true
       )
     )
     const anyUnknown = combinedUnknown.some(Boolean)
     return {
       code,
-      label: meta.label,
+      label,
       values,
       percents: values.map((v, i) =>
         combinedGrossPerPeriod[i] === 0 ? 0 : v / combinedGrossPerPeriod[i]

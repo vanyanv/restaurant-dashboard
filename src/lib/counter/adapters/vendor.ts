@@ -242,11 +242,20 @@ async function loadVendor(input: VendorInput): Promise<Loaded | null> {
   // The basket: every canonical this vendor bills for, and the newest price
   // any OTHER vendor charged for the same canonical.
   const priced = await prisma.$queryRaw<
-    Array<{ cid: string; name: string; vendor: string; px: number; unit: string | null; n: number }>
+    Array<{
+      cid: string
+      name: string
+      vendor: string
+      px: number
+      unit: string | null
+      n: number
+      last: Date | null
+    }>
   >`
     SELECT li."canonicalIngredientId" AS cid, ci.name AS name, i."vendorName" AS vendor,
            (ARRAY_AGG(li."unitPrice" ORDER BY i."invoiceDate" DESC))[1]::float AS px,
-           MAX(li.unit) AS unit, COUNT(*)::int AS n
+           MAX(li.unit) AS unit, COUNT(*)::int AS n,
+           MAX(i."invoiceDate") AS last
     FROM "InvoiceLineItem" li
     JOIN "Invoice" i ON i.id = li."invoiceId"
     JOIN "CanonicalIngredient" ci ON ci.id = li."canonicalIngredientId"
@@ -255,7 +264,7 @@ async function loadVendor(input: VendorInput): Promise<Loaded | null> {
 
   const byIngredient = new Map<
     string,
-    { name: string; byVendor: Map<string, { px: number; unit: string; n: number }> }
+    { name: string; byVendor: Map<string, { px: number; unit: string; last: number }> }
   >()
   for (const row of priced) {
     // A delivery surcharge is not a basket item. It reaches this query because
@@ -265,8 +274,16 @@ async function loadVendor(input: VendorInput): Promise<Loaded | null> {
     const v = normalizeVendorName(row.vendor)
     const entry = byIngredient.get(row.cid) ?? { name: row.name, byVendor: new Map() }
     const prev = entry.byVendor.get(v)
-    if (!prev || row.n > prev.n) {
-      entry.byVendor.set(v, { px: row.px, unit: row.unit ?? "unit", n: row.n })
+    // The query hands back one row per RAW spelling, each already carrying
+    // that spelling's newest price. Folding the spellings onto one vendor used
+    // to keep whichever row had the most invoices behind it, which throws the
+    // recency the query just computed away: when a vendor bills under two
+    // spellings and the rarer one carries the more recent invoice, the older
+    // price was presented as current — as `mine`, and as the `cheapest` that
+    // `gapPct` is measured against.
+    const last = row.last?.getTime() ?? 0
+    if (!prev || last > prev.last) {
+      entry.byVendor.set(v, { px: row.px, unit: row.unit ?? "unit", last })
     }
     byIngredient.set(row.cid, entry)
   }

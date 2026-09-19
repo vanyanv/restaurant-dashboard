@@ -34,7 +34,7 @@ import { loadChannelMix, loadChannelMixByStore } from "@/lib/counter/channel-mix
 import { loadStripTargets } from "@/lib/counter/targets"
 import { toQueryBounds } from "@/lib/counter/date-range"
 import { PRIME_CEILING_PCT } from "@/lib/counter/prime-cost"
-import { hasData } from "@/lib/counter/section-data"
+import { dataOf, hasData } from "@/lib/counter/section-data"
 import {
   getOverviewSections,
   type OverviewSections,
@@ -717,5 +717,42 @@ describe("getOverviewSections", () => {
     for (const [arg] of vi.mocked(loadChannelMixByStore).mock.calls) {
       expect(arg.accountId).toBe(accountId)
     }
+  })
+})
+
+describe("the alert queue's days open", () => {
+  /**
+   * `Alert.occurredOn` is a `@db.Date`: UTC midnight encoding the LA BUSINESS
+   * date. Flooring the clock to UTC midnight compared it against the UTC day,
+   * and between 00:00 and 08:00 UTC — 4pm to midnight in Los Angeles, dinner
+   * service — the UTC day is one ahead of the restaurant's. Every alert read a
+   * day older than it was, right through every evening.
+   */
+  const duringDinner = new Date("2026-08-20T02:00:00.000Z") // 7pm Wed 19 Aug in LA
+
+  it("says today for an alert raised on the business day it is still on", async () => {
+    vi.mocked(getAlertInbox).mockResolvedValue(
+      inbox([alert({ occurredOn: new Date(Date.UTC(2026, 7, 19)) })]) as never,
+    )
+    const s = await load({ today: duringDinner })
+    expect(dataOf(s.needsYou)?.[0].lead).toBe("today")
+  })
+
+  it("counts whole business days for an older one", async () => {
+    vi.mocked(getAlertInbox).mockResolvedValue(
+      inbox([alert({ occurredOn: new Date(Date.UTC(2026, 7, 17)) })]) as never,
+    )
+    const s = await load({ today: duringDinner })
+    expect(dataOf(s.needsYou)?.[0].lead).toBe("2")
+    expect(dataOf(s.needsYou)?.[0].unit).toBe("days open")
+  })
+
+  it("reads the same before midnight UTC, when the two calendars agree", async () => {
+    vi.mocked(getAlertInbox).mockResolvedValue(
+      inbox([alert({ occurredOn: new Date(Date.UTC(2026, 7, 19)) })]) as never,
+    )
+    // 11am LA on the same Wednesday: UTC is still the 19th too.
+    const s = await load({ today: new Date("2026-08-19T18:00:00.000Z") })
+    expect(dataOf(s.needsYou)?.[0].lead).toBe("today")
   })
 })

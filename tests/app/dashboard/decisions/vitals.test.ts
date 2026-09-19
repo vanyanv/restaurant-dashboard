@@ -238,3 +238,37 @@ describe("accuracySubtitle", () => {
     )
   })
 })
+
+describe("computeVitals — the sales-per-labor-hour target", () => {
+  /**
+   * The target is recovered as revenue ÷ needed hours. `neededHours` is null
+   * on a day `computeLaborLane` has no weekday SPLH target for — a new store,
+   * or a gap in that weekday's history. That day still has forecast revenue.
+   */
+  it("counts revenue only for the days it counts needed hours for", () => {
+    const days = [
+      ...Array.from({ length: 5 }, () => day()), // 8,000 over 100 needed hours
+      day({ predictedRevenue: 20_000, labor: { scheduledHours: 100, neededHours: null, gapHours: null, status: "unknown", unfilledSlots: 0 } }),
+      day({ predictedRevenue: 20_000, labor: { scheduledHours: 100, neededHours: null, gapHours: null, status: "unknown", unfilledSlots: 0 } }),
+    ]
+    const v = computeVitals({ days, scorecard: null })
+
+    // Five scorable days: $40,000 over 500 hours is $80/hr. Putting the two
+    // unscorable days' $40,000 into the numerator and nothing into the
+    // denominator read $160/hr — twice the real target, which tips the status
+    // toward "below" and says the week is understaffed.
+    expect(v.splh.target).toBe(80)
+  })
+
+  it("still reads the whole week when every day is scorable", () => {
+    const v = computeVitals({ days: week(), scorecard: null })
+    expect(v.splh.target).toBe(80)
+  })
+
+  it("has no target at all when no day has one", () => {
+    const days = week({
+      labor: { scheduledHours: 100, neededHours: null, gapHours: null, status: "unknown", unfilledSlots: 0 },
+    })
+    expect(computeVitals({ days, scorecard: null }).splh.target).toBeNull()
+  })
+})

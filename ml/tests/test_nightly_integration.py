@@ -292,3 +292,45 @@ def test_a_window_mostly_falling_back_says_so_out_loud(caplog):
     with caplog.at_level(logging.WARNING):
         ni._seasonal_naive_baseline(dates, np.asarray([1.0] * 5))
     assert any("fell back to actual" in r.message for r in caplog.records)
+
+
+def test_only_the_trailing_28_days_are_scored():
+    """The fetch is 35 days; the extra 7 are the seasonal-naive prefix.
+
+    Nothing trimmed back, so the oldest 7 dates were scored with no t-7
+    reference and fell back to their own actuals — a fifth of every night's
+    sample handing the baseline a free zero error, under a `sampleSize` that
+    claimed 28.
+    """
+    today = dt.date(2026, 5, 12)
+    rows = [
+        (today - dt.timedelta(days=n), 100.0, 110.0, 90.0, 130.0, "v1")
+        for n in range(34, 0, -1)
+    ]
+    inp = ni._build_eval_input(rows, target="REVENUE", store_id="s1", today=today)
+
+    assert inp is not None
+    assert inp.actuals.size == 28
+    assert inp.window_start == today - dt.timedelta(days=28)
+    assert inp.baseline_predictions.size == 28
+
+
+def test_the_prefix_is_still_read_as_the_baseline_reference():
+    """Trimming the scored window must not trim what the baseline looks up."""
+    today = dt.date(2026, 5, 12)
+    # Every day is 100 except one in the prefix, which the scored day 7 days
+    # later must reference.
+    rows = []
+    for n in range(35, 0, -1):
+        day = today - dt.timedelta(days=n)
+        actual = 500.0 if n == 35 else 100.0
+        rows.append((day, 100.0, actual, 90.0, 130.0, "v1"))
+
+    inp = ni._build_eval_input(rows, target="REVENUE", store_id="s1", today=today)
+    assert inp is not None
+    # t-28 is the first scored day, and its t-7 reference is the prefix's t-35.
+    assert inp.baseline_predictions[0] == 500.0
+    # No scored row fell back to its own actual.
+    assert not any(
+        b == a for b, a in zip(inp.baseline_predictions, inp.actuals) if a == 500.0
+    )
