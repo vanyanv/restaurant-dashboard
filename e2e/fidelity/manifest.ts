@@ -1153,7 +1153,41 @@ export const PAGES: FidelityPage[] = [
     status: "counter",
     baseline: { desktop: 15, mobile: 5 },
   },
-  { protoId: "recipes", name: "Recipes", protoRoute: "/dashboard/recipes", route: "/dashboard/recipes", mobileRoute: "/m/recipes", report: true, status: "counter", baseline: { desktop: 14, mobile: 5 } },
+  {
+    protoId: "recipes",
+    name: "Recipes",
+    protoRoute: "/dashboard/recipes",
+    route: "/dashboard/recipes",
+    mobileRoute: "/m/recipes",
+    report: true,
+    // MEASURED 2026-09-01 at 14 of 14 on the desk and 5 of 5 on the phone,
+    // landmark for landmark, with nothing declared. The extra below arrived
+    // afterwards and is NOT re-measured — see its reason.
+    status: "counter",
+    baseline: { desktop: 14, mobile: 5 },
+    extraLandmarks: [
+      {
+        landmark: "btn",
+        desktop: 1,
+        mobile: 0,
+        reason:
+          "\"New recipe\". `P.recipes` is a catalogue and draws no create " +
+          "control, because the prototype has no write path anywhere in it. " +
+          "This product now does: `upsertRecipe` always treated an omitted " +
+          "`id` as a create, and until #82 the only caller that omitted one " +
+          "was the AI mapping-proposal accept — so an owner who wanted a new " +
+          "dish had to sell it first and accept whatever the model guessed. " +
+          "The control is a name, a category and a button, and it renders " +
+          "unconditionally above the catalogue table, which is why this is " +
+          "one and not a range. The phone client is a separate file and did " +
+          "not get it: the standing rule is that a phone glances and the " +
+          "desk edits, and naming a recipe is editing. " +
+          "NOT MEASURED — declared from the JSX on 2026-09-19 while the " +
+          "fidelity suite could not be run. The next run either takes it or " +
+          "reports it stale.",
+      },
+    ],
+  },
   {
     protoId: "recipe",
     name: "Recipe",
@@ -1224,18 +1258,30 @@ export const PAGES: FidelityPage[] = [
     absentLandmarks: [
       {
         landmark: "btn",
-        desktop: 3,
+        desktop: 2,
         mobile: 0,
         reason:
-          "Three of the design's six. TWO are controls this product does not " +
-          "have: \"Duplicate\", which no action performs, and \"Link " +
-          "another item\", which nothing does by hand — `sellsAsOf` reads a " +
-          "recipe's POS links, it never writes one. THE THIRD is \"Match it " +
-          "now\", which IS built: it renders whenever a line could not be " +
-          "priced, and every line on this recipe is priced, so the panel says " +
-          "that instead. The day this recipe loses a matched SKU the button " +
-          "lands and this line reports itself stale, which is the right " +
-          "prompt rather than a false alarm.",
+          "TWO of the design's six, and it was three until #83 added Delete. " +
+          "The three the design draws and we do not are unchanged: " +
+          "\"Duplicate\", which no action performs, \"Link another item\", " +
+          "which nothing does by hand — `sellsAsOf` reads a recipe's POS " +
+          "links, it never writes one — and \"Match it now\", which IS " +
+          "built and renders whenever a line could not be priced, which no " +
+          "line on this recipe is. What changed is OUR count, not theirs. " +
+          "Delete is a control `P.recipe` does not draw at all (the action " +
+          "has always existed; no screen offered it), so the desk now renders " +
+          "four `.btn` against the prototype's six. " +
+          "IT READS AS A CLOSED ABSENCE RATHER THAN AN EXTRA, and that is " +
+          "worth saying out loud: `compareLandmarks` aligns on the sorted " +
+          "class signature, and every one of these is plain `btn`, so a " +
+          "button we ADD is matched against a button we are MISSING and the " +
+          "shortfall simply drops by one. The gate cannot tell the two apart " +
+          "here. Six against four is a shortfall of two and nothing else. " +
+          "NOT MEASURED — recounted from the JSX on 2026-09-19 while the " +
+          "fidelity suite could not be run; Delete renders on every recipe, " +
+          "disabled when a parent recipe uses this one, so the count does " +
+          "not depend on the record. The next run either takes it or reports " +
+          "it stale.",
       },
       {
         landmark: "mbtn",
