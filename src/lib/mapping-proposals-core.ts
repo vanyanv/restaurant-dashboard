@@ -14,7 +14,7 @@ import { revalidatePath } from "next/cache"
 import { generateProposalDrafts } from "@/lib/proposal-llm"
 import { computeRecipeSuggestions } from "@/lib/recipe-suggestions-core"
 import { normalizeItemName } from "@/lib/item-name-normalize"
-import { resolveYieldQuantity, unitsCompatible } from "@/lib/unit-conversion"
+import { canonicalizeUnit, resolveYieldQuantity, unitsCompatible } from "@/lib/unit-conversion"
 
 const DEFAULT_MAX_ITEMS = 10
 
@@ -303,11 +303,23 @@ export async function generateMappingProposalsCore(
           confidence = Math.max(0, confidence - 0.1)
           continue
         }
-        // Same rule for an ingredient: the line's unit has to convert into the
-        // unit the ingredient is priced in. A canonical with no recipe unit
-        // has nothing to check against, so it passes — the walk falls back to
-        // the raw invoice unit there.
-        if (canonical.recipeUnit && !unitsCompatible(c.unit, canonical.recipeUnit)) {
+        /*
+         * Same rule for an ingredient, and the SAME rule `validateRecipeShape`
+         * applies: refuse only a mismatch we can prove. `unitsCompatible` is
+         * false when either side is a unit we do not recognise, and
+         * `recipeUnit` is free text an owner types — "case", "sleeve". Reading
+         * it directly dropped every component of such an ingredient even when
+         * the model used exactly the unit the prompt had just shown it, and
+         * discarded the whole proposal when it was the only one. A canonical
+         * with no recipe unit passes for the same reason: the walk falls back
+         * to the raw invoice unit there, so there is nothing to judge against.
+         */
+        const provablyWrong =
+          !!canonical.recipeUnit &&
+          !!canonicalizeUnit(c.unit) &&
+          !!canonicalizeUnit(canonical.recipeUnit) &&
+          !unitsCompatible(c.unit, canonical.recipeUnit)
+        if (provablyWrong) {
           confidence = Math.max(0, confidence - 0.1)
           continue
         }

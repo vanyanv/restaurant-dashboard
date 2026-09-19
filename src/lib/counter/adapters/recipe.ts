@@ -61,7 +61,7 @@ import type { CostBand, FigureProps, MoneyLine, Row } from "@/components/counter
  * already there. An empty list would leave the owner with no way to keep a
  * line they cannot currently fix.
  */
-function unitChoices(unit: string | null | undefined): string[] {
+export function unitChoices(unit: string | null | undefined): string[] {
   const options = unitsCompatibleWith(unit)
   if (options.length > 0) return [...options]
   return unit?.trim() ? [unit.trim()] : [PORTION_UNIT_LABEL]
@@ -403,17 +403,26 @@ async function loadRecipe(input: RecipeInput): Promise<Loaded | null> {
     ].sort(),
     usedInCount: usedIn.length,
     usedInName: usedIn[0]?.name ?? null,
-    pantry: canonicals.map((c) => ({
-      id: c.id,
-      name: titleCase(c.name),
-      price:
-        c.costPerRecipeUnit === null
-          ? "no price"
-          : `${unitCost(c.costPerRecipeUnit)} / ${(c.recipeUnit ?? "unit").toLowerCase()}`,
-      unit: c.recipeUnit ?? "each",
-      kind: "ingredient" as const,
-      unitOptions: unitChoices(c.recipeUnit),
-    })),
+    pantry: canonicals.map((c) => {
+      // `unitChoices(null)` answers with the PORTION label, which is a
+      // sub-recipe's fallback and not an ingredient's: an unpriced pantry item
+      // was offered "serving" while the line it produced carried "each", so
+      // the one control that exists to make an uncostable line unreachable
+      // was handing out a unit the ingredient can never be measured in.
+      // Resolve the unit first, then ask what converts into THAT.
+      const unit = c.recipeUnit ?? "each"
+      return {
+        id: c.id,
+        name: titleCase(c.name),
+        price:
+          c.costPerRecipeUnit === null
+            ? "no price"
+            : `${unitCost(c.costPerRecipeUnit)} / ${(c.recipeUnit ?? "unit").toLowerCase()}`,
+        unit,
+        kind: "ingredient" as const,
+        unitOptions: unitChoices(unit),
+      }
+    }),
     components: allRecipes
       .filter((r) => !reachable.has(r.id))
       .map((r) => {
@@ -451,7 +460,7 @@ async function loadRecipe(input: RecipeInput): Promise<Loaded | null> {
 const marginOf = (d: Loaded): number | null =>
   d.price === null || d.price <= 0 ? null : ((d.price - d.totalCost) / d.price) * 100
 
-function headOf(d: Loaded): RecipeHead {
+export function headOf(d: Loaded): RecipeHead {
   const margin = marginOf(d)
   const zero = d.emptyWalk && Math.abs(d.totalCost) < 0.005
 
@@ -463,7 +472,14 @@ function headOf(d: Loaded): RecipeHead {
     delta: zero
       ? "nothing was costed"
       : d.overrideApplied
-        ? "fallback used — a line is unpriced"
+        ? // `overrideApplied` covers two shapes: a recipe whose lines could
+          // not all be priced, and a recipe with no lines at all — the ~19
+          // modifiers that carry only a figure. Saying "a line is unpriced"
+          // about the second contradicts `gapOf`'s "no lines" four inches
+          // below it on the same screen. `hasLines` separates them.
+          d.hasLines
+          ? "fallback used — a line is unpriced"
+          : "fallback used — no lines to cost"
         : d.partial
           ? "at least — one line unpriced"
           : `${count(d.lines.length)} ${d.lines.length === 1 ? "line" : "lines"}, all priced`,
@@ -724,11 +740,21 @@ export function builderOf(d: Loaded, today: Date): RecipeBuilder {
  */
 export function costOf(d: Loaded): RecipeCost {
   const priced = d.lines.filter((l) => !l.missingCost)
+  /*
+   * PER SERVING, like the figure the bar sits under.
+   *
+   * `lineCost` is a whole batch's worth — the builder's rows show batch
+   * quantities, so a batch cost is the right number THERE. This bar sits
+   * directly beneath "Cost per serving", and on a 24-portion chili it read
+   * $2.00 in the headline with a $48.00 band under it. Two true numbers in
+   * the same panel, describing different things, with nothing saying which.
+   */
+  const perServing = d.servingSize > 0 ? d.servingSize : 1
   const byCategory = new Map<string, number>()
   for (const l of priced) {
     const cat =
       l.kind === "component" ? "Sub-recipes" : (d.categoryOf.get(l.refId) ?? "Uncategorised")
-    byCategory.set(cat, (byCategory.get(cat) ?? 0) + l.lineCost)
+    byCategory.set(cat, (byCategory.get(cat) ?? 0) + l.lineCost / perServing)
   }
   const ordered = [...byCategory].sort((a, b) => b[1] - a[1])
   const head = ordered.slice(0, MAX_BANDS - 1)

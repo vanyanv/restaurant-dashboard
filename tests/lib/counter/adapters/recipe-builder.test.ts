@@ -32,7 +32,7 @@ vi.mock("@/lib/prisma", () => ({ prisma: {} }))
 vi.mock("@/lib/account-stores", () => ({ getScopedStores: vi.fn() }))
 vi.mock("@/lib/recipe-cost", async () => ({ batchRecipeCosts: vi.fn() }))
 
-import { builderOf, costOf, type Loaded } from "@/lib/counter/adapters/recipe"
+import { builderOf, costOf, headOf, unitChoices, type Loaded } from "@/lib/counter/adapters/recipe"
 import type { RecipeCostLine } from "@/lib/recipe-cost"
 
 const TODAY = new Date("2026-09-19T00:00:00Z")
@@ -282,5 +282,71 @@ describe("delete explains itself rather than throwing", () => {
     const b = builderOf(loaded({ usedInCount: 3, usedInName: "Smash Combo" }), TODAY)
     expect(b.deleteBlockedBy).toContain("3")
     expect(b.deleteBlockedBy).toContain("Smash Combo")
+  })
+})
+
+describe("the cost bar is in the same unit as the figure above it", () => {
+  it("divides bands by the yield, so a batch recipe's bands add to the per-serving cost", () => {
+    const c = costOf(
+      loaded({
+        servingSize: 24,
+        yieldUnit: null,
+        batchCost: 48,
+        totalCost: 2,
+        lines: [line({ quantity: 12, lineCost: 48 })],
+      }),
+    )
+    // Not $48.00, which is what the bar read under a $2.00 headline.
+    expect(c.bands[0].value).toBe("$2.00")
+    expect(c.bands[0].weight).toBeCloseTo(2)
+  })
+
+  it("leaves a one-plate recipe exactly as it was", () => {
+    const c = costOf(loaded())
+    expect(c.bands[0].value).toBe("$1.00")
+  })
+})
+
+describe("the headline does not report unpriced lines on a recipe that has none", () => {
+  it("says there are no lines when there are no lines", () => {
+    const h = headOf(
+      loaded({ lines: [], hasLines: false, emptyWalk: true, overrideApplied: true, totalCost: 3 }),
+    )
+    expect(h.cells[0].delta).toContain("no lines")
+  })
+
+  it("says a line is unpriced when one is", () => {
+    const h = headOf(
+      loaded({
+        lines: [line(), line({ missingCost: true })],
+        hasLines: true,
+        overrideApplied: true,
+        totalCost: 3,
+      }),
+    )
+    expect(h.cells[0].delta).toContain("unpriced")
+  })
+})
+
+/*
+ * The unit picker exists to make the permanent $0.00 line unreachable. A
+ * fallback that answers with a SUB-RECIPE's portion label defeats that for an
+ * ingredient: an unpriced pantry item was offered "serving" while the line it
+ * produced carried "each", so the control handed out a unit the ingredient can
+ * never be measured in and validation waved it through (an ingredient with no
+ * recipe unit is exempt, by design).
+ */
+describe("an ingredient is never offered a unit it cannot be measured in", () => {
+  it("falls back to the count family, not the portion label", () => {
+    expect(unitChoices("each")).toContain("each")
+    expect(unitChoices("each")).not.toContain("serving")
+  })
+
+  it("offers the price's own family", () => {
+    expect(unitChoices("lb")).toEqual(["lb", "oz", "kg", "g"])
+  })
+
+  it("keeps a unit it does not recognise rather than offering nothing usable", () => {
+    expect(unitChoices("sleeve")).toEqual(["sleeve"])
   })
 })

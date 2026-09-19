@@ -76,6 +76,30 @@ export interface SaveResult {
 }
 
 /**
+ * Turn a write failure into a sentence an owner can act on.
+ *
+ * `Recipe` carries `@@unique([accountId, itemName, category])`, and both of
+ * this module's owner-facing write paths can hit it: naming a new recipe
+ * something that already exists, and renaming an existing one onto a name
+ * that does. Prisma's own text for that is `Unique constraint failed on the
+ * fields: (...)`, which was being shown verbatim. On the rename it is worse
+ * than ugly — the transaction aborts, so the yield, override and line edits
+ * from the same click are discarded too, and the message says nothing about
+ * any of that.
+ */
+function writeError(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error)
+  if (message.includes("Unique constraint failed") || (error as { code?: string })?.code === "P2002") {
+    return "A recipe with that name already exists in this category. Nothing was saved — pick another name and save again."
+  }
+  if (message.startsWith("Recipe cycle detected")) {
+    return "That sub-recipe already contains this one, so adding it would make a loop."
+  }
+  return message
+}
+
+
+/**
  * Persist the recipe's lines and header.
  *
  * Header fields are read from the row when the caller omits them, so a
@@ -121,15 +145,9 @@ export async function saveRecipeLines(input: {
       })),
     })
   } catch (error) {
-    // A cycle is the one failure a user can act on, so it is named. Everything
-    // else is reported as itself rather than as "something went wrong".
-    const message = error instanceof Error ? error.message : String(error)
-    return {
-      ok: false,
-      error: message.startsWith("Recipe cycle detected")
-        ? "That sub-recipe already contains this one, so adding it would make a loop."
-        : message,
-    }
+    // Failures a user can act on are named; everything else is reported as
+    // itself rather than as "something went wrong".
+    return { ok: false, error: writeError(error) }
   }
 
   revalidatePath(`/dashboard/recipes/${input.recipeId}`)
@@ -244,10 +262,6 @@ export async function createRecipe(input: {
     revalidatePath("/dashboard/recipes")
     return { ok: true, recipeId: id, error: null }
   } catch (error) {
-    return {
-      ok: false,
-      recipeId: null,
-      error: error instanceof Error ? error.message : String(error),
-    }
+    return { ok: false, recipeId: null, error: writeError(error) }
   }
 }
