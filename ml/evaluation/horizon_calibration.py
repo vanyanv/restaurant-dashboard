@@ -200,17 +200,29 @@ def split_fit_holdout(
     date, so it is dropped rather than left to fall wherever insertion order
     puts it — an undated set yields no split at all, and the caller reads that
     as "cannot validate".
+
+    The cut falls between generations, not between rows. One nightly run
+    writes a row per horizon and they all carry its `generatedAt`, so slicing
+    by row count puts part of a generation on each side — and the holdout is
+    then no longer made of runs the fit never saw, which is the whole claim
+    being tested. Errors within one generation share that night's conditions,
+    so the leak flatters the measured coverage rather than perturbing it.
     """
-    ordered = sorted(
+    dated = sorted(
         (r for r in rows if r.generated_at is not None),
         key=lambda r: r.generated_at,
     )
-    if not ordered:
+    if not dated:
         return [], []
-    holdout_size = int(round(len(ordered) * fraction))
-    if holdout_size == 0:
-        return ordered, []
-    return ordered[:-holdout_size], ordered[-holdout_size:]
+    stamps = sorted({r.generated_at for r in dated})
+    # Never hand back an empty fit half: one generation always stays behind.
+    holdout_stamps = min(round(len(stamps) * fraction), len(stamps) - 1)
+    if holdout_stamps <= 0:
+        return dated, []
+    first_held = stamps[len(stamps) - holdout_stamps]
+    fit_rows = [r for r in dated if r.generated_at < first_held]
+    holdout_rows = [r for r in dated if r.generated_at >= first_held]
+    return fit_rows, holdout_rows
 
 
 def measure_coverage(

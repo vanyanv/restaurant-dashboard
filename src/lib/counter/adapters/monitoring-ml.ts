@@ -195,15 +195,26 @@ async function loadMl(accountId: string): Promise<MlData> {
       select: { startedAt: true, target: true, modelVersion: true, status: true, sampleSize: true },
     }),
     prisma.$queryRaw<Array<{ d: Date; forecast: number; actual: number | null }>>`
-      WITH f AS (
-        SELECT DISTINCT ON ("forecastDate") "forecastDate" d, "predictedRevenue" forecast
+      -- The newest forecast each store made for each date. DISTINCT ON the
+      -- date alone kept one store's row per date, so an account with more
+      -- than one store charted a single store's forecast against the summed
+      -- sales of all of them — a comparison that gets worse as more stores
+      -- reach the ready stage. Latest per store first, then summed to the
+      -- account total the actuals below are already reporting.
+      WITH latest AS (
+        SELECT DISTINCT ON ("storeId", "forecastDate")
+               "storeId", "forecastDate", "predictedRevenue"
         FROM "ForecastDailyRevenue"
         -- CURRENT_DATE is UTC; at 8pm Pacific that is already tomorrow, which
         -- would let today's half-synced sales in as a 60% undershoot.
         WHERE "storeId" = ANY(${storeIds}::text[])
           AND "hourBucket" = 0
           AND "forecastDate" < (NOW() AT TIME ZONE 'America/Los_Angeles')::date
-        ORDER BY "forecastDate" DESC, "generatedAt" DESC
+        ORDER BY "storeId", "forecastDate", "generatedAt" DESC
+      ),
+      f AS (
+        SELECT "forecastDate" d, SUM("predictedRevenue") forecast
+        FROM latest GROUP BY 1
       ),
       a AS (
         SELECT date, SUM(COALESCE("fpNetSales", 0) + COALESCE("tpNetSales", 0)) net

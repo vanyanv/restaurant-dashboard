@@ -132,6 +132,39 @@ describe("GET /api/cron/proposals", () => {
     )
   })
 
+  it("keeps walking when a store throws instead of returning an error", async () => {
+    core.mockImplementation(async (_scope, opts) => {
+      const { storeId } = opts as { storeId: string }
+      if (storeId === "s-a") throw new Error("connection terminated")
+      return { ok: true, created: 0, skippedExisting: 0 } as never
+    })
+
+    const res = await GET(req())
+    const body = (await res.json()) as {
+      stores: Array<{ storeId: string; error?: string }>
+    }
+
+    // An uncaught throw would leave the loop before recordProgress, so the
+    // rotation would never advance past the store that threw.
+    expect(walkedIds()).toEqual(["s-a", "s-b", "s-c"])
+    expect(body.stores.find((s) => s.storeId === "s-a")?.error).toBe(
+      "connection terminated",
+    )
+    expect(updateJobRun).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: { metadata: { deferred: 0, lastStoreId: "s-c" } },
+      }),
+    )
+  })
+
+  it("fails the run rather than closing it with an unwritten cursor", async () => {
+    updateJobRun.mockRejectedValue(new Error("write conflict") as never)
+
+    // Swallowing this closed the run SUCCESS with no cursor, and the next run
+    // re-walked the prefix — under a budget, the tail would never be reached.
+    await expect(GET(req())).rejects.toThrow("write conflict")
+  })
+
   it("advances the cursor past a store whose generation failed", async () => {
     core.mockImplementation(async (_scope, opts) => {
       const { storeId } = opts as { storeId: string }

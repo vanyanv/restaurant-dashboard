@@ -227,3 +227,71 @@ def test_a_holdout_that_disagrees_wildly_falls_back_instead_of_scaling():
     ratio = 0.60 / 0.01
     assert ratio > MAX_VALIDATION_SCALE
     assert validated_half_widths(rows, min_samples=5, min_validation_rows=10) == {}
+
+
+def _generations(
+    horizons: list[int],
+    errors_by_generation: list[float],
+    *,
+    start_day: int = 1,
+    predicted: float = 1000.0,
+) -> list[HorizonRow]:
+    """One nightly generation per entry, writing a row for every horizon.
+
+    This is the real shape of ForecastDailyRevenue: `run_nightly` forecasts
+    the whole horizon in one pass, so every row it writes that night carries
+    the same generatedAt.
+    """
+    rows: list[HorizonRow] = []
+    for i, e in enumerate(errors_by_generation):
+        stamp = _dt.date(2026, 9, 1) + _dt.timedelta(days=start_day + i)
+        for h in horizons:
+            rows.append(
+                HorizonRow(
+                    horizon=h,
+                    predicted=predicted,
+                    actual=predicted * (1 + e),
+                    generated_at=stamp,
+                )
+            )
+    return rows
+
+
+def test_a_generation_is_never_split_across_fit_and_holdout():
+    """Slicing by row count cut inside a night's rows, so the holdout held
+    generations the fit had already seen. The cut belongs between them."""
+    # 11 nights x 3 horizons = 33 rows; 30% of 33 is 10, which is not a whole
+    # number of nights — so a count-based slice has to cut one of them in half.
+    rows = _generations([1, 2, 3], [0.02] * 11)
+
+    fit, holdout = split_fit_holdout(rows, fraction=0.30)
+
+    fit_stamps = {r.generated_at for r in fit}
+    holdout_stamps = {r.generated_at for r in holdout}
+    assert not (fit_stamps & holdout_stamps), "a generation landed on both sides"
+    assert max(fit_stamps) < min(holdout_stamps)
+    # Whole nights, so every horizon of every held-out night is present.
+    assert len(holdout) == 3 * len(holdout_stamps)
+
+
+def test_the_holdout_still_measures_drift_when_horizons_share_a_timestamp():
+    """The guard has to keep working on the real row shape, not just on the
+    one-row-per-night shape the first tests used."""
+    rows = _generations([1, 2, 3], [0.02] * 40 + [0.04] * 20)
+
+    naive = relative_half_widths(rows, min_samples=5)
+    guarded = validated_half_widths(rows, min_samples=5, min_validation_rows=10)
+
+    assert guarded, "a scalable miss should still yield a band"
+    assert guarded[1] > naive[1]
+
+
+def test_rows_of_one_single_generation_cannot_be_validated():
+    """Every row sharing one timestamp leaves nothing to hold out — there is
+    no second generation to check the first against."""
+    rows = _generations([1, 2, 3], [0.05])
+
+    fit, holdout = split_fit_holdout(rows, fraction=0.30)
+
+    assert len(fit) == 3 and holdout == []
+    assert validated_half_widths(rows, min_samples=1, min_validation_rows=1) == {}

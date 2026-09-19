@@ -43,21 +43,25 @@ function readLastStoreId(metadata: unknown): string | null {
 /**
  * withJobRun only writes metadata at create, so the rotation cursor and the
  * deferred count are written back here, on the row it created.
+ *
+ * A failure here is deliberately not swallowed. This is the only writer of
+ * `lastStoreId`, so losing the write loses the rotation: the row would still
+ * close as SUCCESS, carrying the metadata it was created with (none), and the
+ * next run would read no cursor and re-walk the same prefix — which under a
+ * 75s budget is how the tail of the list starves, the failure this whole
+ * route exists to fix. Letting it throw makes withJobRun record FAILURE
+ * instead, and `findFirst` below only reads SUCCESS/PARTIAL rows, so the next
+ * run falls back to the last cursor that was actually written.
  */
 async function recordProgress(
   jobRunId: string,
   deferred: number,
   lastStoreId: string | null,
 ): Promise<void> {
-  try {
-    await prisma.jobRun.update({
-      where: { id: jobRunId },
-      data: { metadata: { deferred, lastStoreId } as Prisma.InputJsonValue },
-    })
-  } catch {
-    // Metadata is a resume hint, not the result — a failed write costs the
-    // next run its rotation offset, nothing more.
-  }
+  await prisma.jobRun.update({
+    where: { id: jobRunId },
+    data: { metadata: { deferred, lastStoreId } as Prisma.InputJsonValue },
+  })
 }
 
 export const GET = withCronAuth(async () => {
@@ -118,27 +122,43 @@ export const GET = withCronAuth(async () => {
           deferred++
           continue
         }
-        const ownerId = await ownerFor(store.accountId)
-        const r = await generateMappingProposalsCore(
-          { accountId: store.accountId, ownerId },
-          { storeId: store.id }
-        )
-        if (r.ok) {
-          addRows(r.created)
-          perStore.push({
-            storeId: store.id,
-            storeName: store.name,
-            created: r.created,
-            skippedExisting: r.skippedExisting,
-          })
-        } else {
-          // "no_data" is normal for pre-open stores — record, don't fail.
+        try {
+          const ownerId = await ownerFor(store.accountId)
+          const r = await generateMappingProposalsCore(
+            { accountId: store.accountId, ownerId },
+            { storeId: store.id }
+          )
+          if (r.ok) {
+            addRows(r.created)
+            perStore.push({
+              storeId: store.id,
+              storeName: store.name,
+              created: r.created,
+              skippedExisting: r.skippedExisting,
+            })
+          } else {
+            // "no_data" is normal for pre-open stores — record, don't fail.
+            perStore.push({
+              storeId: store.id,
+              storeName: store.name,
+              created: 0,
+              skippedExisting: 0,
+              error: r.error,
+            })
+          }
+        } catch (err) {
+          // The core turns an OpenAI failure into empty drafts, but a Prisma
+          // or config failure still rejects. Uncaught, it would leave the loop
+          // before recordProgress and take the whole rotation with it: the run
+          // closes FAILURE, the next one resumes from the older cursor, and
+          // the store that threw gets retried first every time while the tail
+          // is never reached. Recorded per-store, the walk continues.
           perStore.push({
             storeId: store.id,
             storeName: store.name,
             created: 0,
             skippedExisting: 0,
-            error: r.error,
+            error: err instanceof Error ? err.message : String(err),
           })
         }
         // A store that errored still advances the rotation; otherwise one

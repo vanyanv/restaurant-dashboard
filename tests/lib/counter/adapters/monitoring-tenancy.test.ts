@@ -133,6 +133,21 @@ describe("monitoring · ingredient audit tab", () => {
       .toMatchObject({ invoice: { accountId: OURS } })
   })
 
+  it("carries the boundary into each per-canonical subquery", async () => {
+    await getAuditSections({ accountId: OURS })
+
+    // Scoping only the outer row is not enough. Every subquery correlates on
+    // canonicalIngredientId, and nothing in the schema keeps a link inside
+    // one account — so a foreign row attached to our canonical would be
+    // counted in our SKUs, recipes, spellings, lines and spend.
+    const catalogue = statementsMentioning("CanonicalIngredient")[0].sql
+    expect(catalogue).toMatch(/"IngredientSkuMatch"[\s\S]*?m\."accountId" = c\."accountId"/)
+    expect(catalogue).toMatch(/"RecipeIngredient"[\s\S]*?rc\."accountId" = c\."accountId"/)
+    // Both InvoiceLineItem subqueries reach the account through the invoice.
+    const throughInvoice = catalogue.match(/i\."accountId" = c\."accountId"/g) ?? []
+    expect(throughInvoice.length).toBe(3)
+  })
+
   it("scopes the canonical catalogue and the source breakdown", async () => {
     await getAuditSections({ accountId: OURS })
 
@@ -172,6 +187,20 @@ describe("monitoring · ml tab", () => {
     for (const call of tenant) {
       expect(call.params).toContainEqual(["store_a", "store_b"])
     }
+  })
+
+  it("sums the newest forecast per store before comparing to sales", async () => {
+    await getMlSections({ accountId: OURS })
+
+    // The actuals CTE sums every store by date. Picking one forecast row per
+    // date across all of them charted one store's forecast against the whole
+    // account's sales — wrong the moment a second store goes ready.
+    const chart = statementsMentioning("ForecastDailyRevenue").find((c) =>
+      c.sql.includes("OtterDailySummary"),
+    )
+    expect(chart).toBeDefined()
+    expect(chart!.sql).toMatch(/DISTINCT ON \(\s*"storeId",\s*"forecastDate"\s*\)/)
+    expect(chart!.sql).toMatch(/SUM\("predictedRevenue"\)/)
   })
 
   it("leaves the operator-gate verdicts global", async () => {

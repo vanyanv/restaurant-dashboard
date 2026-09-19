@@ -55,11 +55,12 @@ def _store_row(
     target: str,
     rows_today: int,
     is_trainable: bool,
-    is_ready: bool = True,
+    stage: str = "ready",
 ):
-    """A Gate 1 row. `is_ready` is the store's lifecycle stage, which decides
-    whether a pair with no SUCCEEDED training is an outage or the design."""
-    return (f"store-{name}", name, target, rows_today, is_trainable, is_ready)
+    """A Gate 1 row. `stage` is the store's lifecycle stage, which together
+    with the target decides whether a pair with no SUCCEEDED training is an
+    outage or the design."""
+    return (f"store-{name}", name, target, rows_today, is_trainable, stage)
 
 
 def test_gate1_passes_target_date_into_window_end_and_train_cutoff():
@@ -98,21 +99,23 @@ def test_gate1_fails_when_trainable_pair_missing_for_target_date():
     assert "missing for windowEnd=2026-05-13" in detail
 
 
-def test_gate1_skips_pairs_whose_store_is_not_yet_ready():
-    """`run_nightly.main` trains nothing for a pre_open store and only REVENUE
-    for a warming_up one, so an untrained pair there is the design. Glendale
-    and Van Nuys sat in exactly this state while the gate ran."""
+def test_gate1_skips_a_pre_open_store_on_every_target():
+    """`run_nightly.main` trains nothing at all for a pre_open store, so every
+    untrained pair there is the design. Glendale and Van Nuys sat in exactly
+    this state while the gate ran."""
     target = date(2026, 5, 14)
     canned = [[
         _store_row("alpha", "REVENUE", 1, True),
-        _store_row("beta", "REVENUE", 0, False, is_ready=False),
+        _store_row("beta", "REVENUE", 0, False, stage="pre_open"),
+        _store_row("beta", "BUSY_HOURS", 0, False, stage="pre_open"),
+        _store_row("beta", "MENU_ITEM", 0, False, stage="pre_open"),
     ]]
     conn = _FakeConn(canned)
 
     ok, detail = ogc.gate1_eval_rows_today(conn, target)
 
     assert ok, detail
-    assert "not trained (store is not `ready`)" in detail
+    assert "not trained (stage `pre_open`)" in detail
 
 
 def test_gate1_fails_when_a_ready_store_has_no_successful_training():
@@ -121,7 +124,7 @@ def test_gate1_fails_when_a_ready_store_has_no_successful_training():
     target = date(2026, 5, 14)
     canned = [[
         _store_row("alpha", "REVENUE", 1, True),
-        _store_row("alpha", "BUSY_HOURS", 0, False, is_ready=True),
+        _store_row("alpha", "BUSY_HOURS", 0, False, stage="ready"),
     ]]
     conn = _FakeConn(canned)
 
@@ -130,6 +133,56 @@ def test_gate1_fails_when_a_ready_store_has_no_successful_training():
     assert not ok
     assert "no SUCCEEDED training" in detail
     assert "BUSY_HOURS" in detail
+
+
+def test_gate1_fails_when_a_warming_up_store_stops_training_revenue():
+    """main() DOES train REVENUE for a warming_up store — natively, so the
+    warming_up -> ready gate has something to evaluate. Reading the stage as a
+    bare ready / not-ready split skipped it anyway, which left a warming_up
+    store's revenue outage as silent as a ready store's had been."""
+    target = date(2026, 5, 14)
+    canned = [[
+        _store_row("beta", "REVENUE", 0, False, stage="warming_up"),
+    ]]
+    conn = _FakeConn(canned)
+
+    ok, detail = ogc.gate1_eval_rows_today(conn, target)
+
+    assert not ok
+    assert "no SUCCEEDED training" in detail
+    assert "warming_up" in detail
+
+
+def test_gate1_still_skips_the_targets_a_warming_up_store_never_trains():
+    """Only REVENUE is expected at warming_up; demanding the other two would
+    be guaranteed-to-fail noise, which is what the skip exists to avoid."""
+    target = date(2026, 5, 14)
+    canned = [[
+        _store_row("beta", "REVENUE", 1, True, stage="warming_up"),
+        _store_row("beta", "BUSY_HOURS", 0, False, stage="warming_up"),
+        _store_row("beta", "MENU_ITEM", 0, False, stage="warming_up"),
+    ]]
+    conn = _FakeConn(canned)
+
+    ok, detail = ogc.gate1_eval_rows_today(conn, target)
+
+    assert ok, detail
+    assert "not trained (stage `warming_up`)" in detail
+
+
+def test_gate1_treats_an_unknown_lifecycle_stage_as_ready():
+    """A stage added to the schema but not to _STAGE_TARGETS should make the
+    gate noisy rather than silent — silence is the failure it exists to end."""
+    target = date(2026, 5, 14)
+    canned = [[
+        _store_row("beta", "REVENUE", 0, False, stage="mothballed"),
+    ]]
+    conn = _FakeConn(canned)
+
+    ok, detail = ogc.gate1_eval_rows_today(conn, target)
+
+    assert not ok
+    assert "no SUCCEEDED training" in detail
 
 
 def test_gate2_window_ends_at_target_date():

@@ -119,6 +119,36 @@ export async function upsertRecipe(
       if (!existing) throw new Error("Recipe not found")
     }
 
+    // Same boundary as the recipe itself, one level down. Every row names
+    // either a canonical ingredient or a sub-recipe, both ids come from the
+    // caller, and RecipeIngredient has no accountId of its own to scope on.
+    // Unchecked, a recipe line would point at another account's ingredient or
+    // sub-recipe — costing this recipe off their prices, and counting our use
+    // under their canonical on the ingredient audit.
+    const ids = (key: "canonicalIngredientId" | "componentRecipeId") => [
+      ...new Set(
+        input.ingredients
+          .map((ing) => ing[key])
+          .filter((v): v is string => typeof v === "string" && v.length > 0)
+      ),
+    ]
+    const canonicalIds = ids("canonicalIngredientId")
+    const componentIds = ids("componentRecipeId")
+    // Count, not findMany: an id repeated across rows is de-duplicated above,
+    // so an exact match is the only way every named id is ours.
+    if (canonicalIds.length > 0) {
+      const owned = await tx.canonicalIngredient.count({
+        where: { id: { in: canonicalIds }, accountId },
+      })
+      if (owned !== canonicalIds.length) throw new Error("Ingredient not found")
+    }
+    if (componentIds.length > 0) {
+      const owned = await tx.recipe.count({
+        where: { id: { in: componentIds }, accountId },
+      })
+      if (owned !== componentIds.length) throw new Error("Recipe not found")
+    }
+
     const recipe = input.id
       ? await tx.recipe.update({
           where: { id: input.id },

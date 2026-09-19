@@ -140,15 +140,32 @@ async function loadAudit(accountId: string): Promise<IngredientAuditData> {
         spend: number | null
       }>
     >`
+      -- Scoping the outer row is not enough: every subquery correlates on
+      -- canonicalIngredientId alone, and no foreign key makes a link stay
+      -- inside one account. A row another account attached to our canonical
+      -- would be counted in our SKUs, recipes, spellings, lines and spend.
+      -- Each subquery carries the boundary itself, through the owning
+      -- Recipe or Invoice where the model has no accountId of its own.
       SELECT c.name,
-             (SELECT COUNT(*) FROM "IngredientSkuMatch" m WHERE m."canonicalIngredientId" = c.id) skus,
-             (SELECT COUNT(*) FROM "RecipeIngredient" r WHERE r."canonicalIngredientId" = c.id) recipes,
+             (SELECT COUNT(*) FROM "IngredientSkuMatch" m
+                WHERE m."canonicalIngredientId" = c.id
+                  AND m."accountId" = c."accountId") skus,
+             (SELECT COUNT(*) FROM "RecipeIngredient" r
+                JOIN "Recipe" rc ON rc.id = r."recipeId"
+                WHERE r."canonicalIngredientId" = c.id
+                  AND rc."accountId" = c."accountId") recipes,
              (SELECT COUNT(DISTINCT li."productName") FROM "InvoiceLineItem" li
-                WHERE li."canonicalIngredientId" = c.id) spellings,
+                JOIN "Invoice" i ON i.id = li."invoiceId"
+                WHERE li."canonicalIngredientId" = c.id
+                  AND i."accountId" = c."accountId") spellings,
              (SELECT COUNT(*) FROM "InvoiceLineItem" li
-                WHERE li."canonicalIngredientId" = c.id) lines,
+                JOIN "Invoice" i ON i.id = li."invoiceId"
+                WHERE li."canonicalIngredientId" = c.id
+                  AND i."accountId" = c."accountId") lines,
              (SELECT COALESCE(SUM(li."extendedPrice"), 0) FROM "InvoiceLineItem" li
-                WHERE li."canonicalIngredientId" = c.id) spend
+                JOIN "Invoice" i ON i.id = li."invoiceId"
+                WHERE li."canonicalIngredientId" = c.id
+                  AND i."accountId" = c."accountId") spend
       FROM "CanonicalIngredient" c
       WHERE c."accountId" = ${accountId}`,
     prisma.invoiceLineItem.findMany({

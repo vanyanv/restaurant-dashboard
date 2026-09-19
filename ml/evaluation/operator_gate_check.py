@@ -157,22 +157,49 @@ def _schema_ready(conn) -> bool:
     return bool(ready)
 
 
+#: What `ml.run_nightly.main` trains at each lifecycle stage. pre_open stores
+#: are skipped outright; warming_up stores get REVENUE only (native, so the
+#: warming_up -> ready gate has something to evaluate); ready stores get
+#: everything. Mirrors the stage branching at the foot of `main()`.
+_STAGE_TARGETS: dict[str, tuple[str, ...]] = {
+    "pre_open": (),
+    "warming_up": ("REVENUE",),
+    "ready": ("REVENUE", "BUSY_HOURS", "MENU_ITEM"),
+}
+
+
+def _expects_training(stage: str | None, target: str) -> bool:
+    """Whether main() trains `target` for a store at `stage`.
+
+    An unrecognised stage is read as `ready` — a stage added to the schema
+    without being added here should make the gate noisy, not silent, since
+    silence is the failure this gate was built to end.
+    """
+    expected = _STAGE_TARGETS.get(stage or "", _STAGE_TARGETS["ready"])
+    return target in expected
+
+
 def gate1_eval_rows_today(conn, target_date: date) -> tuple[bool, str]:
     """Each trainable (active store × MlTarget) wrote at least one row with
     windowEnd = target_date - 1.
 
     A pair is "trainable" if it has at least one SUCCEEDED MlTrainingRun in
     the trailing _WINDOW_DAYS ending at target_date. A pair with none is read
-    against the store's lifecycle stage, because the two cases are opposite:
+    against what `ml.run_nightly.main` actually trains at that store's
+    lifecycle stage (_STAGE_TARGETS), because the two cases are opposite:
 
-      - The store is not `ready`. `ml.run_nightly.main` trains nothing for a
-        pre_open store and only REVENUE for a warming_up one, so the absence
-        is the design. Skipped, and counted in the detail so it stays visible.
-      - The store IS `ready`. main() trains every target for it nightly, so
-        the absence means the nightly job is failing for that pair. That is
-        the outage this gate exists to catch, and it now fails the gate.
-        Until 2026-09-19 both cases took the skip path, so a ready store that
-        silently stopped training was reported and passed anyway.
+      - main() does not train that pair at that stage. The absence is the
+        design. Skipped, and counted in the detail so it stays visible.
+      - main() does train it. The absence means the nightly job is failing
+        for that pair — the outage this gate exists to catch — and it fails
+        the gate.
+
+    Until 2026-09-19 both cases took the skip path, so a ready store that
+    silently stopped training was reported and passed anyway. Reading the
+    stage as a bare `ready` / not-`ready` split fixed that for ready stores
+    and left the same hole one stage down: main() trains REVENUE for a
+    warming_up store, so a warming_up store whose revenue training stopped
+    was still skipped. The expectation is per (stage, target), not per store.
     """
     window_end = target_date - timedelta(days=1)
     train_cutoff = target_date - timedelta(days=_WINDOW_DAYS)
@@ -189,7 +216,7 @@ def gate1_eval_rows_today(conn, target_date: date) -> tuple[bool, str]:
             SELECT s.id AS "storeId", s.name, t.target,
                    COUNT(e.id) AS rows_today,
                    (tr."storeId" IS NOT NULL) AS is_trainable,
-                   (s."lifecycleStage" = 'ready'::"LifecycleStage") AS is_ready
+                   s."lifecycleStage"::text AS stage
             FROM "Store" s
             CROSS JOIN (VALUES ('REVENUE'::"MlTarget"),
                                ('BUSY_HOURS'::"MlTarget"),
@@ -214,24 +241,23 @@ def gate1_eval_rows_today(conn, target_date: date) -> tuple[bool, str]:
     missing = []
     untrained = []
     skipped = 0
-    for _, name, target, count, is_trainable, is_ready in rows:
+    for _, name, target, count, is_trainable, stage in rows:
         if not is_trainable:
-            if is_ready:
-                # `ml.run_nightly.main` trains every `ready` store on every
-                # target, so a ready pair with no SUCCEEDED run is the nightly
-                # job failing for it — the exact outage this gate exists to
-                # catch. Skipping it was silent: the gate reported the line and
-                # still passed.
+            if _expects_training(stage, target):
+                # main() trains this pair at this stage, so no SUCCEEDED run
+                # is the nightly job failing for it — the exact outage this
+                # gate exists to catch. Skipping it was silent: the gate
+                # reported the line and still passed.
                 lines.append(
-                    f"  {name:<24} {target:<11} NO SUCCEEDED training in {_WINDOW_DAYS}d"
+                    f"  {name:<24} {target:<11} NO SUCCEEDED training in "
+                    f"{_WINDOW_DAYS}d (stage `{stage}`)"
                 )
                 untrained.append((name, target))
             else:
-                # pre_open and warming_up stores are skipped by design: main()
-                # trains no target for pre_open, and only REVENUE for
-                # warming_up. Demanding rows would be guaranteed-to-fail noise.
+                # main() does not train this pair at this stage, so demanding
+                # rows would be guaranteed-to-fail noise.
                 lines.append(
-                    f"  {name:<24} {target:<11} not trained (store is not `ready`)"
+                    f"  {name:<24} {target:<11} not trained (stage `{stage}`)"
                 )
                 skipped += 1
         else:
@@ -240,11 +266,11 @@ def gate1_eval_rows_today(conn, target_date: date) -> tuple[bool, str]:
                 missing.append((name, target))
     detail = "\n".join(lines)
     if skipped:
-        detail = f"{detail}\n  ({skipped} pair(s) skipped — store not yet `ready`)"
+        detail = f"{detail}\n  ({skipped} pair(s) skipped — not trained at that stage)"
     if untrained:
         return False, (
-            f"{len(untrained)} ready (store, target) pair(s) have no SUCCEEDED "
-            f"training in {_WINDOW_DAYS}d\n{detail}"
+            f"{len(untrained)} expected (store, target) pair(s) have no "
+            f"SUCCEEDED training in {_WINDOW_DAYS}d\n{detail}"
         )
     if missing:
         return False, f"{len(missing)} trainable (store, target) pairs missing for windowEnd={window_end}\n{detail}"
