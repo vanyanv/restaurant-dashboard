@@ -240,7 +240,7 @@ export function channelSeries(statement: Statement): ChannelSeries {
   const commission = bands.reduce((acc, b) => acc + (b.commission ?? 0), 0)
   const commissionPct = ratio(commission, total)
   const marketplaceTotal = total - house
-  const blendedPct = marketplaceTotal === 0 ? null : ratio(commission, marketplaceTotal)
+  const blendedPct = marketplaceTotal <= 0 ? null : ratio(commission, marketplaceTotal)
 
   // The per-bucket commission, off the SAME two GL rows the range totals read,
   // negated once (`computeStorePnL` writes them negative). Grubhub publishes no

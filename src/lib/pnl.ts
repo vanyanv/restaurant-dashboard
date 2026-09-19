@@ -303,10 +303,36 @@ export function salesRowValues(rows: OtterSummaryRow[]): number[] {
   ]
 }
 
-/** Compute % of Total Sales for each value. Returns 0 when total is 0. */
+/**
+ * Compute % of Total Sales for each value. Returns 0 when there are no sales.
+ *
+ * See `pctOfSales` for why the guard is `<= 0` and not `=== 0`.
+ */
 export function percents(values: number[], total: number): number[] {
-  if (total === 0) return values.map(() => 0)
+  if (total <= 0) return values.map(() => 0)
   return values.map((v) => v / total)
+}
+
+/**
+ * One value as a share of that period's Total Sales.
+ *
+ * The one function that owns the P&L percent column. Fourteen copies of
+ * `totalSales[i] === 0 ? 0 : v / totalSales[i]` stood in this file, and every
+ * one of them divided by a denominator it had only checked for exact zero.
+ *
+ * Total Sales for a period CAN be negative — a day of refunds against a
+ * closed range, a correction posted after the fact, a store that traded one
+ * void. A negative denominator does not throw and does not produce Infinity;
+ * it silently flips the sign of every line in the column. COGS of $4,000 on
+ * Total Sales of −$200 printed as +2000% food cost, and Net Income of −$900
+ * printed as a positive margin. The owner reads that column to decide whether
+ * a store is making money.
+ *
+ * Zero is the fallback rather than null because `PnLRow.percents` is
+ * `number[]`; the row's `isUnknown` flags carry "not configured" separately.
+ */
+export function pctOfSales(value: number, totalSales: number): number {
+  return totalSales <= 0 ? 0 : value / totalSales
 }
 
 // ─── Channel mix helpers ───
@@ -412,7 +438,7 @@ export function computeStorePnL(input: {
       code: meta.code,
       label: meta.label,
       values,
-      percents: values.map((v, i) => (totalSales[i] === 0 ? 0 : v / totalSales[i])),
+      percents: values.map((v, i) => pctOfSales(v, totalSales[i])),
     }
   })
 
@@ -433,14 +459,14 @@ export function computeStorePnL(input: {
     code: UBER_COMMISSION_CODE,
     label: `Uber Commission (${(store.uberCommissionRate * 100).toFixed(0)}%)`,
     values: uberCommission,
-    percents: uberCommission.map((v, i) => (totalSales[i] === 0 ? 0 : v / totalSales[i])),
+    percents: uberCommission.map((v, i) => pctOfSales(v, totalSales[i])),
     isFixed: true,
   })
   rows.push({
     code: DOORDASH_COMMISSION_CODE,
     label: `DoorDash Commission (${(store.doordashCommissionRate * 100).toFixed(0)}%)`,
     values: doordashCommission,
-    percents: doordashCommission.map((v, i) => (totalSales[i] === 0 ? 0 : v / totalSales[i])),
+    percents: doordashCommission.map((v, i) => pctOfSales(v, totalSales[i])),
     isFixed: true,
   })
 
@@ -451,7 +477,7 @@ export function computeStorePnL(input: {
     code: NET_AFTER_COMMISSIONS_CODE,
     label: "Net Sales After Commissions",
     values: netAfterCommissions,
-    percents: netAfterCommissions.map((v, i) => (totalSales[i] === 0 ? 0 : v / totalSales[i])),
+    percents: netAfterCommissions.map((v, i) => pctOfSales(v, totalSales[i])),
     isSubtotal: true,
   })
 
@@ -463,13 +489,13 @@ export function computeStorePnL(input: {
       code: COGS_CODE,
       label: "Cost of Goods Sold",
       values: cogs.map((v) => -v),
-      percents: cogs.map((v, i) => (totalSales[i] === 0 ? 0 : -v / totalSales[i])),
+      percents: cogs.map((v, i) => pctOfSales(-v, totalSales[i])),
     })
     rows.push({
       code: GROSS_PROFIT_CODE,
       label: "Gross Profit",
       values: grossProfit,
-      percents: grossProfit.map((v, i) => (totalSales[i] === 0 ? 0 : v / totalSales[i])),
+      percents: grossProfit.map((v, i) => pctOfSales(v, totalSales[i])),
       isSubtotal: true,
     })
   }
@@ -543,7 +569,7 @@ export function computeStorePnL(input: {
     code: LABOR_CODE,
     label: laborLabel,
     values: laborValues.map((v) => -v),
-    percents: laborValues.map((v, i) => (totalSales[i] === 0 ? 0 : -v / totalSales[i])),
+    percents: laborValues.map((v, i) => pctOfSales(-v, totalSales[i])),
     isFixed: true,
     isUnknown: laborUnknown,
   })
@@ -551,7 +577,7 @@ export function computeStorePnL(input: {
     code: RENT_CODE,
     label: "Rent (fixed)",
     values: rentValues.map((v) => -v),
-    percents: rentValues.map((v, i) => (totalSales[i] === 0 ? 0 : -v / totalSales[i])),
+    percents: rentValues.map((v, i) => pctOfSales(-v, totalSales[i])),
     isFixed: true,
     isUnknown: rentUnknown,
   })
@@ -559,7 +585,7 @@ export function computeStorePnL(input: {
     code: CLEANING_CODE,
     label: "Store Cleaning (fixed)",
     values: cleaningValues.map((v) => -v),
-    percents: cleaningValues.map((v, i) => (totalSales[i] === 0 ? 0 : -v / totalSales[i])),
+    percents: cleaningValues.map((v, i) => pctOfSales(-v, totalSales[i])),
     isFixed: true,
     isUnknown: cleaningUnknown,
   })
@@ -567,7 +593,7 @@ export function computeStorePnL(input: {
     code: TOWELS_CODE,
     label: "Towels (fixed)",
     values: towelsValues.map((v) => -v),
-    percents: towelsValues.map((v, i) => (totalSales[i] === 0 ? 0 : -v / totalSales[i])),
+    percents: towelsValues.map((v, i) => pctOfSales(-v, totalSales[i])),
     isFixed: true,
     isUnknown: towelsUnknown,
   })
@@ -583,7 +609,7 @@ export function computeStorePnL(input: {
       code: exp.code,
       label: exp.label,
       values: vals.map((v) => -v),
-      percents: vals.map((v, i) => (totalSales[i] === 0 ? 0 : -v / totalSales[i])),
+      percents: vals.map((v, i) => pctOfSales(-v, totalSales[i])),
       isFixed: true,
     })
   })
@@ -605,7 +631,7 @@ export function computeStorePnL(input: {
     code: AFTER_LABOR_RENT_CODE,
     label: "Net After Commissions & Fixed Costs",
     values: bottomLine,
-    percents: bottomLine.map((v, i) => (totalSales[i] === 0 ? 0 : v / totalSales[i])),
+    percents: bottomLine.map((v, i) => pctOfSales(v, totalSales[i])),
     isSubtotal: true,
   })
 
@@ -701,9 +727,7 @@ export function consolidateRows(
       code,
       label,
       values,
-      percents: values.map((v, i) =>
-        combinedGrossPerPeriod[i] === 0 ? 0 : v / combinedGrossPerPeriod[i]
-      ),
+      percents: values.map((v, i) => pctOfSales(v, combinedGrossPerPeriod[i])),
       isSubtotal: meta.isSubtotal,
       isFixed: meta.isFixed,
       isUnknown: anyUnknown ? combinedUnknown : undefined,

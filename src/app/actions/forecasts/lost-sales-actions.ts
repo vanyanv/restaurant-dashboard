@@ -9,6 +9,19 @@ import { startOfDayUTC as startOfDay, ymdUTC as ymd } from "@/lib/date-utils"
 //
 // Source: OtterMenuItem (already aggregated daily, FP+TP). Modifiers excluded.
 //
+// The series is built over the days the STORE TRADED, not over the calendar.
+// `OtterMenuItem` has no row for an item that sold nothing, so a missing day
+// is indistinguishable from a zero day — and a day with no rows AT ALL is a
+// day the store was shut or Otter did not sync. Filling those with qty 0, the
+// way this used to, made a two-day closure or a two-day sync outage look like
+// a simultaneous stock-out of EVERY item on the menu, each priced at its own
+// baseline and summed into `totalEstimatedLost`. `minGapDays` is 2, so two
+// quiet days was all it took, and the window that ends at `startOfDay(asOf)`
+// always included a today with nothing posted yet. A day on which some other
+// item sold is the only evidence that this one COULD have sold, so only those
+// days are in the series; `gapDays` therefore counts trading days missed,
+// which is the multiplier `baselineDailyQty` is per.
+//
 // What we are NOT doing here:
 //  - Distinguishing 86'd-by-store vs delisted: a permanent menu removal also
 //    looks like a long zero run. We mitigate by capping gaps at 14 days max
@@ -103,13 +116,19 @@ export async function getLostSales(input: {
   type SeriesKey = string // `${storeId}|${itemName}`
   type DailyPoint = { dateKey: string; qty: number; sales: number; category: string }
   const series = new Map<SeriesKey, DailyPoint[]>()
+  /** storeId -> the days that store has ANY menu-item row for. See the header. */
+  const tradedDays = new Map<string, Set<string>>()
   for (const r of rows) {
     const key = `${r.storeId}|${r.itemName}`
     const list = series.get(key) ?? []
     const qty = (r.fpQuantitySold ?? 0) + (r.tpQuantitySold ?? 0)
     const sales = (r.fpTotalSales ?? 0) + (r.tpTotalSales ?? 0)
-    list.push({ dateKey: ymd(r.date as Date), qty, sales, category: r.category })
+    const dateKey = ymd(r.date as Date)
+    list.push({ dateKey, qty, sales, category: r.category })
     series.set(key, list)
+    const traded = tradedDays.get(r.storeId) ?? new Set<string>()
+    traded.add(dateKey)
+    tradedDays.set(r.storeId, traded)
   }
 
   const events: LostSaleEvent[] = []
@@ -119,8 +138,10 @@ export async function getLostSales(input: {
     const [storeId, itemName] = key.split("|") as [string, string]
     const category = points[0]?.category ?? ""
 
-    // Build a contiguous day-by-day series with qty=0 for missing dates.
-    const filled = fillDailyGaps(points, windowStart, windowEnd)
+    // One entry per day THIS STORE traded, qty 0 on a trading day with no row
+    // for this item — that zero is the stock-out signal. A day the store did
+    // not trade is absent entirely rather than zero.
+    const filled = fillDailyGaps(points, tradedDays.get(storeId) ?? new Set())
 
     for (const event of detectGaps({
       filled,
@@ -170,21 +191,25 @@ interface FilledPoint {
   sales: number
 }
 
+/**
+ * The item's series over the store's TRADING days, in date order.
+ *
+ * `tradedDayKeys` is every day the store has a menu-item row for, any item.
+ * Walking the calendar instead — which is what this did until 2026-09-19 —
+ * puts a qty-0 entry on days the store was shut and days Otter did not sync,
+ * and `detectGaps` cannot tell those from a real 86.
+ */
 function fillDailyGaps(
   points: { dateKey: string; qty: number; sales: number }[],
-  windowStart: Date,
-  windowEnd: Date,
+  tradedDayKeys: Set<string>,
 ): FilledPoint[] {
   const byKey = new Map(points.map((p) => [p.dateKey, p]))
-  const out: FilledPoint[] = []
-  const cursor = new Date(windowStart)
-  while (cursor <= windowEnd) {
-    const k = ymd(cursor)
-    const p = byKey.get(k)
-    out.push({ dateKey: k, qty: p?.qty ?? 0, sales: p?.sales ?? 0 })
-    cursor.setUTCDate(cursor.getUTCDate() + 1)
-  }
-  return out
+  return [...tradedDayKeys]
+    .sort()
+    .map((k) => {
+      const p = byKey.get(k)
+      return { dateKey: k, qty: p?.qty ?? 0, sales: p?.sales ?? 0 }
+    })
 }
 
 function detectGaps(args: {
@@ -220,8 +245,9 @@ function detectGaps(args: {
       continue
     }
 
-    // Compute baseline over up to `baselineDays` days BEFORE i (non-zero only
-    // counts; we want the average daily volume on days the item was selling).
+    // Compute baseline over up to `baselineDays` TRADING days before i
+    // (non-zero only counts; we want the average daily volume on days the item
+    // was selling).
     const lookbackStart = Math.max(0, i - baselineDays)
     const window = filled.slice(lookbackStart, i)
     const nonZero = window.filter((p) => p.qty > 0)
