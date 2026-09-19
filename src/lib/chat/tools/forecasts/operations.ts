@@ -36,19 +36,6 @@ export type CashPositionChatDay = {
   cumulativeNet: number | null
 }
 
-/**
- * NOTE: `getCashPositionForecastTool.description` and the
- * `getCashPositionForecast` paragraph in `src/lib/chat/system-prompt.ts` still
- * describe `endingCumulativeNet` and `cumulativeNet` as always present. They
- * went nullable on 2026-09-19. The wording was NOT updated with them: every
- * word the routing model reads is fingerprinted by
- * `scripts/eval-llm/fingerprint.ts`, so changing it invalidates the recorded
- * golden-set scorecard until `npm run eval:llm -- --feature chat-tool-choice`
- * is re-run with an OPENAI_API_KEY. Re-run it, then say there: a null
- * cumulative means the horizon contains a day with no revenue forecast, so
- * the running total stops there — report the horizon as partly unforecast,
- * with `unforecastDays` days missing, never as a cash shortfall.
- */
 export type CashPositionChatResult = {
   horizonDays: number
   blendedCommissionRate: number
@@ -67,7 +54,7 @@ export const getCashPositionForecastTool: ChatTool<
 > = {
   name: "getCashPositionForecast",
   description:
-    "Projects daily cash flow for the next 14 days. Inflow = predicted revenue × (1 − blended commission); outflow = invoice dueDate matches + pro-rated monthly fixed costs (rent/labor/cleaning/towels). Returns DELTA cumulative cash, not absolute balance — say so once. goesNegativeOn is the first date where cumulativeNet drops below 0; null when never.",
+    "Projects daily cash flow for the next 14 days. Inflow = predicted revenue x (1 - blended commission, a rate against TOTAL revenue); outflow = invoice dueDate matches + pro-rated monthly fixed costs (rent/labor/cleaning/towels). Returns DELTA cumulative cash, not absolute balance — say so once. goesNegativeOn is the first date where cumulativeNet drops below 0; null when never. A null cumulativeNet, netCashFlow or endingCumulativeNet means that day had no revenue forecast and the running total stops there: report the horizon as partly unforecast with unforecastDays days missing, never as a cash shortfall.",
   parameters: cashPositionParams,
   async execute(args, ctx) {
     const result = await getCashPositionForecast({

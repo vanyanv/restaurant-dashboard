@@ -109,19 +109,6 @@ export type PromoRoiChatEvent = {
   roi: number | null
 }
 
-/**
- * NOTE: `getPromoRoiTool.description` and the `getPromoRoi` paragraph in
- * `src/lib/chat/system-prompt.ts` still describe lift and roi as always
- * present, and blendedRoi as totalLift / totalDiscount. Both went nullable /
- * matched-denominator on 2026-09-19. The wording was NOT updated with them:
- * every word the routing model reads is fingerprinted by
- * `scripts/eval-llm/fingerprint.ts`, so changing it invalidates the recorded
- * golden-set scorecard until `npm run eval:llm -- --feature chat-tool-choice`
- * is re-run with an OPENAI_API_KEY. Re-run it, then update both texts to say:
- * a null lift/roi/baselineNetSales means too few comparable days to price the
- * promo — unknown, never zero — and blendedRoi's denominator is
- * `measuredDiscount`, with `unmeasuredEvents` counting what it leaves out.
- */
 export type PromoRoiChatResult = {
   windowStart: string
   windowEnd: string
@@ -139,7 +126,7 @@ export const getPromoRoiTool: ChatTool<
 > = {
   name: "getPromoRoi",
   description:
-    "Returns historical promotion ROI events. We don't have an explicit Promotion entity, so this infers promo days from elevated daily discount-to-gross-sales share in OtterDailySummary, then compares actual net sales against same-weekday non-promo baseline. roi is lift_dollars / discount_dollars (e.g. 2.5× = $2.50 of lift per $1 of discount). Cannibalization is NOT computed (order-level signal only). State this is inferred, not from a campaigns table.",
+    "Returns historical promotion ROI events. We don't have an explicit Promotion entity, so this infers promo days from elevated daily discount-to-gross-sales share in OtterDailySummary, then compares actual net sales against same-weekday non-promo baseline. roi is lift_dollars / discount_dollars (e.g. 2.5x = $2.50 of lift per $1 of discount). An event with a null lift/roi/baselineNetSales had too few comparable days to price: report it as a promo whose return is unknown, never as zero lift. blendedRoi covers only the priced events, so it is totalLift / measuredDiscount, not totalLift / totalDiscount; unmeasuredEvents counts the rest. Cannibalization is NOT computed (order-level signal only). State this is inferred, not from a campaigns table.",
   parameters: promoRoiParams,
   async execute(args, ctx) {
     const result = await getPromoRoi({
