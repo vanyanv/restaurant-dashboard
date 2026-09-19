@@ -363,6 +363,7 @@ def _build_eval_input(
     today: dt.date,
     horizon_day: int = POOLED_HORIZON,
     series_index: int | None = None,
+    min_scored_rows: int = 0,
 ) -> EvaluationInput | None:
     if not rows:
         return None
@@ -383,6 +384,14 @@ def _build_eval_input(
 
     rows = [r for r in rows if r[0] >= score_from]
     if not rows:
+        return None
+    # The caller's floor applies to the rows that are SCORED, not to the rows
+    # that were fetched. `split_rows_by_horizon` counts over the full 35-day
+    # fetch, and the trim above drops the 7-day prefix that only ever existed
+    # to give the seasonal-naive baseline a t-7 reference. A horizon with five
+    # fetched rows, three of them in that prefix, cleared a floor of five and
+    # then published a statistic computed from two.
+    if len(rows) < min_scored_rows:
         return None
 
     dates = [r[0] for r in rows]
@@ -466,6 +475,7 @@ def _write_revenue_horizon_rows(conn, store_id: str, today: dt.date) -> int:
             store_id=store_id,
             today=today,
             horizon_day=horizon,
+            min_scored_rows=MIN_ROWS_PER_HORIZON,
         )
         if inp is None:
             continue

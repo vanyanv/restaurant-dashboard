@@ -43,9 +43,17 @@ import type { FigureProps, MListRow } from "@/components/counter"
  * "not recorded for this range", never a zero. `money(null)` is an em dash for
  * exactly this reason — **`$0.00` in a fee column is the claim that the
  * marketplaces took nothing**, which is a far worse error than an absence.
- * This page uses the same words for the same gap, because a reader who sees
- * "not recorded" on two pages has learned one fact, and a reader who sees it
- * once and a zero once has learned something false.
+ *
+ * This page went further, and the paragraph above described only the first
+ * half of the answer until the figure was corrected. Commission and Net are
+ * priced at the store's CONTRACT rate — `commissionRateFor`, the same rule
+ * `computeStorePnL` charges its `COM_UBER` and `COM_DD` lines at — so the fee
+ * shown against an item and the fee shown against the range come from one
+ * place. `OtterOrder.commission` is not consulted for these columns at all,
+ * which is why the gap measured above no longer empties them. What a contract
+ * rate cannot price is a channel the schema holds no rate for — Grubhub,
+ * ChowNow, Caviar — and those read "no rate on file", never zero, and poison
+ * the Kept total rather than shrinking it.
  *
  * ## What the channel table CAN say
  *
@@ -390,11 +398,11 @@ async function loadItem(input: MenuItemInput): Promise<ItemData | null> {
   }
 }
 
-/** The Orders page's own words for the same gap, in one place. */
-const FEES_ABSENT = "not recorded for this range"
-
 /** A channel this account holds no commission rate for — Grubhub, ChowNow, Caviar. */
 const RATE_ABSENT = "no rate on file"
+
+/** The order feed carries no row for this name, so there is no cut to take. */
+const CHANNELS_ABSENT = "no channel data"
 
 /**
  * What the kitchen keeps after the marketplaces take their share, or `null`
@@ -403,8 +411,18 @@ const RATE_ABSENT = "no rate on file"
  * Null rather than a partial subtraction, for the reason the whole page is
  * careful about: a "Kept" that silently omits Grubhub's cut is a number an
  * owner would price a menu off, and it is wrong in the flattering direction.
+ *
+ * NO channel rows at all is the same claim by a different route, and it used
+ * to fall straight through: `some` is false on an empty list, `taken` is 0,
+ * and Kept came out equal to Charged under the words "after commission" — the
+ * exact assertion this function was written to stop making. It is reachable.
+ * `revenue` comes from the POS daily rollup matched by slug; `byChannel` is
+ * built from the ORDER feed matched on the item's exact name, and skips any
+ * platform `CHANNEL_FOR_PLATFORM` does not name. The note further down this
+ * file exists because those two feeds are known to disagree about names.
  */
 function keptOf(d: ItemData): number | null {
+  if (d.byChannel.length === 0) return null
   if (d.byChannel.some((c) => c.commission === null)) return null
   const taken = d.byChannel.reduce((t, c) => t + (c.commission ?? 0), 0)
   return d.revenue - taken
@@ -440,7 +458,12 @@ function headlineOf(d: ItemData): ItemHeadline {
         // it was `money(d.revenue)`, the expression the comment here used to
         // forbid directly above the line that did it.
         value: kept === null ? "—" : money(kept),
-        delta: kept === null ? RATE_ABSENT : "after commission",
+        delta:
+          kept !== null
+            ? "after commission"
+            : d.byChannel.length === 0
+              ? CHANNELS_ABSENT
+              : RATE_ABSENT,
         deltaTone: "is-flat",
       },
       {
@@ -548,10 +571,13 @@ function channelsOf(d: ItemData): ItemChannels {
       `item — cancelled orders do not account for it. ` +
       (d.feesRecorded
         ? "Margin is against the plate cost, which does not vary by channel."
-        : `Commission and Net each read "${FEES_ABSENT}" because no order in this window ` +
-          `carries one — the last that did is dated 22 Jul. A zero there would say the ` +
-          `marketplaces took nothing. Margin is against the PLATE cost, which does not ` +
-          `vary by channel, so it is what the kitchen keeps before the marketplace's share.`),
+        : `No order in this window carries a recorded fee — the last that did is dated ` +
+          `22 Jul — so Commission and Net are priced at the store's CONTRACT rate, the ` +
+          `same rule the P&L charges its Uber and DoorDash lines at. A channel with no ` +
+          `rate on file reads "${RATE_ABSENT}" rather than zero, because a zero would ` +
+          `say the marketplaces took nothing. Margin is against the PLATE cost, which ` +
+          `does not vary by channel, so it is what the kitchen keeps before the ` +
+          `marketplace's share.`),
   }
 }
 

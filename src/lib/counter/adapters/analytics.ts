@@ -8,6 +8,7 @@ import {
   buildPeriods,
   COGS_CODE,
   LABOR_CODE,
+  pctOfSales,
   TOTAL_SALES_CODE,
   type PnLRow,
 } from "@/lib/pnl"
@@ -477,7 +478,10 @@ function foldStatement(
         code: r.code,
         label: r.label,
         values,
-        percents: values.map((v, i) => (gross[i] === 0 ? 0 : v / gross[i])),
+        // `pctOfSales`, not `gross[i] === 0 ? 0 : …`. A bucket that folds to a
+        // negative gross divides quite happily and inverts every percent in
+        // the column. This was the one copy of that guard the sweep missed.
+        percents: values.map((v, i) => pctOfSales(v, gross[i])),
         isSubtotal: r.isSubtotal,
         isFixed: r.isFixed,
         isUnknown,

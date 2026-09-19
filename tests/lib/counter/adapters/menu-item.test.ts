@@ -200,4 +200,19 @@ describe("menu item — Kept", () => {
     expect(kept).not.toBe(charged)
     expect(kept).toBe("$750")
   })
+
+  it("withholds itself when the order feed has no row for this name at all", async () => {
+    // The same false claim by a different route, and the one the rate guard
+    // above lets through: `some` is false on an empty list and the sum of
+    // nothing is 0, so Kept came out equal to Charged under the words "after
+    // commission". `revenue` comes from the POS daily rollup matched by slug
+    // while `byChannel` comes from the ORDER feed matched on the exact name,
+    // and this file's own note exists because the two are known to disagree.
+    setup([])
+    const { headline } = await load()
+    expect(cell(headline, "Charged")?.value).not.toBe("—")
+    expect(cell(headline, "Kept")?.value).toBe("—")
+    expect(cell(headline, "Kept")?.delta).toBe("no channel data")
+    expect(cell(headline, "Kept")?.delta).not.toBe("after commission")
+  })
 })

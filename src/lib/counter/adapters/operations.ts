@@ -121,9 +121,21 @@ async function loadOperations(input: OperationsInput): Promise<OperationsData> {
   // the stock-count queries beside them scoped to `storeIds`, so picking
   // Hollywood left the invoice spend, the unmatched-line count and the
   // packaging spend reading account-wide. One page, two scopes, no sign of it.
+  //
+  // `Prisma.join([])` THROWS a TypeError rather than producing an empty list,
+  // and `storeIds` is empty whenever `?store=` names a store this account does
+  // not own — a stale bookmark, a link from another account. `readCounterParams`
+  // takes that id off the URL without validating it and `getScopedStores`
+  // filters it to nothing, so an unguarded join here took the whole Operations
+  // page down. The two stock-count queries below already guard the same state,
+  // which is how we know it is reachable. `AND FALSE` is the honest scope for
+  // "no stores in view": it matches nothing, where omitting the clause would
+  // match everything on the account.
   const invoiceScope = storeId ? { storeId: { in: storeIds } } : {}
   const invoiceScopeSql = storeId
-    ? Prisma.sql`AND i."storeId" IN (${Prisma.join(storeIds)})`
+    ? storeIds.length === 0
+      ? Prisma.sql`AND FALSE`
+      : Prisma.sql`AND i."storeId" IN (${Prisma.join(storeIds)})`
     : Prisma.empty
 
   const [

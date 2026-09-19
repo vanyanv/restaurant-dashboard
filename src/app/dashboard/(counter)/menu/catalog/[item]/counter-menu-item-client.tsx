@@ -30,10 +30,11 @@ import type { ItemBehind, MenuItemSections } from "@/lib/counter/adapters/menu-i
  * (`docs/counter/counter-prototype.html:6934`): the strip, the units chart,
  * then the split of the channel table and what is behind the item.
  *
- * Two of the channel table's columns read "not recorded for this range" on
- * every row, and the section's note says why — no order in the window carries
- * a commission. That is the Orders page's answer to the same gap, in the same
- * words. The adapter's docblock has the measurement.
+ * The channel table's Commission and Net columns are priced at the store's
+ * contract rate, not from the recorded per-order fee, which is empty for the
+ * trailing window — the section's note says so, and the adapter's docblock has
+ * the measurement. A channel the schema holds no rate for reads "no rate on
+ * file" rather than a zero.
  */
 export type CounterMenuItemSections = SectionSources<MenuItemSections>
 

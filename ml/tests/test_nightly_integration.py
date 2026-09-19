@@ -366,3 +366,42 @@ def test_the_95_percent_interval_is_widened_by_the_z_ratio_not_by_two():
     # An 80% half-width of 10 becomes 1.96/1.2816 ≈ 1.53 times that, not 20.
     assert inp.upper95[0] == pytest.approx(100 + 10 * 1.5295, abs=0.01)
     assert inp.lower95[0] == pytest.approx(100 - 10 * 1.5295, abs=0.01)
+
+
+def test_the_per_horizon_floor_counts_scored_rows_not_fetched_rows():
+    """`split_rows_by_horizon` counts over the 35-day fetch, not the 28 scored.
+
+    A horizon whose rows are five, three of them inside the 7-day prefix that
+    only exists to give the seasonal-naive baseline a t-7 reference, cleared a
+    floor of five and then published a `sampleSize` of two. The floor belongs
+    after the trim.
+    """
+    today = dt.date(2026, 5, 12)
+    # Three rows in the prefix (t-35..t-29), two inside the scored window.
+    offsets = [35, 33, 31, 20, 10]
+    rows = [
+        (today - dt.timedelta(days=n), 100.0, 110.0, 90.0, 130.0, "v1")
+        for n in sorted(offsets, reverse=True)
+    ]
+
+    # Without the floor the row is still built — from two scored days.
+    loose = ni._build_eval_input(rows, target="REVENUE", store_id="s1", today=today)
+    assert loose is not None
+    assert loose.actuals.size == 2
+
+    # With the caller's floor it is withheld rather than published thin.
+    strict = ni._build_eval_input(
+        rows,
+        target="REVENUE",
+        store_id="s1",
+        today=today,
+        horizon_day=7,
+        min_scored_rows=ni.MIN_ROWS_PER_HORIZON,
+    )
+    assert strict is None
+
+
+def test_the_per_horizon_writer_applies_that_floor():
+    """The floor is only worth having if the caller that writes rows passes it."""
+    src = inspect.getsource(ni._write_revenue_horizon_rows)
+    assert "min_scored_rows=MIN_ROWS_PER_HORIZON" in src

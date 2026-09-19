@@ -117,3 +117,31 @@ describe("operations — no store picked stays account-wide", () => {
     for (const text of rawSql()) expect(text).not.toContain('i."storeId" IN')
   })
 })
+
+describe("operations — a store id that is not on this account", () => {
+  it("loads, rather than throwing, when the scope resolves to no stores", async () => {
+    // `?store=` comes off the URL unvalidated and `getScopedStores` filters a
+    // foreign or stale id to nothing. `Prisma.join([])` THROWS a TypeError
+    // rather than producing an empty list, so the unguarded join took the
+    // whole page down — on a stale bookmark, of all things.
+    vi.mocked(getScopedStores).mockResolvedValue([] as never)
+    await expect(load("a-store-on-another-account")).resolves.toBeUndefined()
+  })
+
+  it("matches no invoices rather than every invoice on the account", async () => {
+    // The dangerous repair is to drop the clause: that would silently widen
+    // the page from "one store" to "the whole account" on the same stale id.
+    vi.mocked(getScopedStores).mockResolvedValue([] as never)
+    await load("a-store-on-another-account")
+
+    for (const w of invoiceWheres()) {
+      expect(w.storeId).toEqual({ in: [] })
+    }
+    const scoped = rawSql().filter((q) => q.includes('"Invoice"') || q.includes("i."))
+    expect(scoped.length).toBeGreaterThan(0)
+    for (const q of scoped) {
+      expect(q).toContain("AND FALSE")
+      expect(q).not.toContain('i."storeId" IN ()')
+    }
+  })
+})

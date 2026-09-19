@@ -176,6 +176,35 @@ describe("getSplhSeries — the LEFT JOIN's misses", () => {
     expect(series.daysCovered).toBe(6)
   })
 
+  it("still reports a store whose sales feed missed on EVERY day", async () => {
+    // The worst case of the outage `daysMissingSales` exists to surface, and
+    // the one case it could not reach: with no priced day the store never
+    // landed in `byStore`, so the loop skipped it and the field went with it.
+    // The store vanished from the page entirely, which reads as "nothing to
+    // report" rather than "this store's sales feed is down".
+    const allNull = daysBetween("2026-06-01", "2026-08-24").map((r) => ({
+      ...r,
+      net: null,
+    }))
+    vi.mocked(prisma.$queryRaw).mockResolvedValue(allNull as never)
+
+    const series = await getSplhSeries("day", toQueryBounds(range))
+    expect(series).toHaveLength(1)
+    expect(series[0].storeId).toBe("s1")
+    // Nothing is drawn, because nothing can be priced — but the outage is
+    // counted, over the days the caller asked about.
+    expect(series[0].points).toEqual([])
+    expect(series[0].daysCovered).toBe(0)
+    expect(series[0].daysMissingSales).toBeGreaterThan(0)
+  })
+
+  it("still skips a store the query returned no rows for at all", async () => {
+    // No labour, no sales, no outage to report — that store is simply absent
+    // from the window, and an empty card would be noise.
+    vi.mocked(prisma.$queryRaw).mockResolvedValue([] as never)
+    expect(await getSplhSeries("day", toQueryBounds(range))).toEqual([])
+  })
+
   it("keeps the 0 out of the weekday median every other Thursday is scored on", async () => {
     // 2026-08-13 is a Thursday in the medians' history, not a bar. With its
     // NULL read as 0, that 0 joined the Thursday bucket and dragged the target

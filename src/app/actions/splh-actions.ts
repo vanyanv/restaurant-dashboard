@@ -229,9 +229,16 @@ async function loadSplhSeries(input: {
 
   const out: SplhSeries[] = []
   for (const store of stores) {
-    const all = byStore.get(store.id)
-    if (!all || all.length === 0) continue
+    const all = byStore.get(store.id) ?? []
     const missingSales = missingSalesByStore.get(store.id) ?? []
+    // A store with NO priced days but days of labour whose sales reading
+    // missed still gets a series, with no points and `daysMissingSales` set.
+    // `daysMissingSales` exists to make exactly that outage visible, and
+    // dropping the store here made the total outage — every day of the window
+    // unpriced, the worst case the field was added for — the one case it
+    // could never report. Only a store the query returned nothing at all for
+    // is skipped.
+    if (all.length === 0 && missingSales.length === 0) continue
 
     const daily = all
 
