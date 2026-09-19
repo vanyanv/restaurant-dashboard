@@ -7,7 +7,7 @@ import {
   previewRecipeCost as computeDraftCost,
   type RecipeCostResult,
 } from "@/lib/recipe-cost"
-import { validateRecipeShape } from "@/lib/recipe-validation"
+import { assertYieldUnitChangeSafe, validateRecipeShape } from "@/lib/recipe-validation"
 import { costRecipeCached } from "@/lib/cached"
 import { batchRecipeCosts } from "@/lib/recipe-cost-batch"
 import { revalidatePath } from "next/cache"
@@ -108,6 +108,13 @@ export async function upsertRecipe(
     // reference to another account's ingredient or sub-recipe is refused —
     // scoping the recipe row by accountId never covered what it points at.
     await validateRecipeShape(input, accountId, tx)
+
+    // And the recipes that draw on THIS one, which `validateRecipeShape` has
+    // no way to see. A yield unit is a contract with every parent line, so
+    // changing it can break a recipe nobody touched.
+    if (input.id) {
+      await assertYieldUnitChangeSafe(input.id, normalizeYieldUnit(input.yieldUnit), accountId, tx)
+    }
 
     const recipe = input.id
       ? await tx.recipe.update({

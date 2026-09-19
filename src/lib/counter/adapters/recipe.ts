@@ -553,10 +553,25 @@ function whyMissing(l: RecipeCostLine): string | null {
  * between two ounces of house sauce costing $0.47 and costing $60.
  */
 export function builderOf(d: Loaded, today: Date): RecipeBuilder {
-  const unitFor = (l: RecipeCostLine): string[] =>
-    l.kind === "component"
-      ? (d.componentUnits.get(l.refId) ?? [PORTION_UNIT_LABEL])
-      : unitChoices(d.costUnitOf.get(l.refId) ?? l.costUnit ?? l.unit)
+  /*
+   * `l.costUnit` FIRST, not the canonical's `recipeUnit`.
+   *
+   * They are usually the same and occasionally are not: when
+   * `deriveCostFromLineItem` cannot read an invoice line's pack shape, the
+   * cost layer falls back to the raw invoice unit, and THAT is what the walk
+   * multiplies against. Offering `recipeUnit`'s family in that case would
+   * offer every unit except the one that works.
+   *
+   * The line's own unit is kept whatever happens, so a control can never
+   * silently change a line by rendering it.
+   */
+  const unitFor = (l: RecipeCostLine): string[] => {
+    const base =
+      l.kind === "component"
+        ? (d.componentUnits.get(l.refId) ?? [PORTION_UNIT_LABEL])
+        : unitChoices(l.costUnit ?? d.costUnitOf.get(l.refId) ?? l.unit)
+    return base.includes(l.unit) ? base : [...base, l.unit]
+  }
 
   return {
     fields: [
@@ -624,7 +639,13 @@ export function builderOf(d: Loaded, today: Date): RecipeBuilder {
         name: titleCase(l.name),
         sub:
           l.kind === "component"
-            ? `sub-recipe · ${unitCost(l.unitCost)} / ${(l.costUnit ?? PORTION_UNIT_LABEL).toLowerCase()}`
+            ? `sub-recipe · ${unitCost(l.unitCost)} / ${(l.costUnit ?? PORTION_UNIT_LABEL).toLowerCase()}` +
+              // The unit on the line is not the unit it was costed in. The
+              // sub-recipe yields portions, so `2 oz` was counted as two
+              // servings — which is what this line has always cost, and is
+              // not what it says. Giving the sub-recipe a yield unit is the
+              // one-field fix, and the row is where somebody would notice.
+              (l.unitAssumed ? ` · counted as ${count(l.quantity)} servings, not ${l.unit}` : "")
             : [
                 // A HAND-TYPED PRICE IS NOT THE VENDOR'S.
                 //

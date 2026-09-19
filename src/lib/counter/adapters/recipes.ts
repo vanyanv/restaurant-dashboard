@@ -335,11 +335,14 @@ function headlineOf(d: RecipeData): RecipeHeadline {
 /**
  * The catalogue, WITHOUT the prototype's `Yield` column.
  *
- * `Recipe.servingSize` is 1 on all 60 rows. A yield column would be sixty
- * ones — it costs a reader a glance and returns nothing, and the per-serving
- * cost beside it is already per one. The prototype's component section is
- * built on the same missing shape (`House sauce · 96 oz · $0.22 / oz`); see
- * `componentsOf`.
+ * `Recipe.servingSize` is 1 on all 60 rows and there was no way to type
+ * another, so a yield column would have been sixty ones — a glance for
+ * nothing, with the per-serving cost beside it already per one. The recipe
+ * editor can set a yield now, so this stops being permanently true the first
+ * time somebody enters a batch; the column comes back when the data does, and
+ * the recipe's own page shows "Batch $48.20 ÷ 24 fl oz" in the meantime. The
+ * prototype's component section assumed the same shape (`House sauce · 96 oz
+ * · $0.22 / oz`); see `componentsOf`.
  *
  * Sellable recipes only. Nineteen of the sixty are modifiers that never sell
  * on their own, and a `Margin` column against a null price is a column of
@@ -398,8 +401,18 @@ function catalogueOf(d: RecipeData): RecipeCatalogue {
             margin === null || zero
               ? "—"
               : pct(margin, { scaled: true }),
+          /*
+           * TWO STATES, NOT ONE. A plate costing nothing because it has no
+           * lines and a plate costing nothing because not one of its lines
+           * could be priced are different problems with different fixes, and
+           * this column called both "No lines" — a false sentence about a
+           * recipe whose lines are the whole trouble. `lines` is the row's
+           * own ingredient count, so the two are trivially separable and the
+           * recipe's own page has said so since the walk started carrying
+           * `hasLines`.
+           */
           state: zero
-            ? { v: "No lines", cls: "hot" }
+            ? { v: r.lines === 0 ? "No lines" : "Nothing priced", cls: "hot" }
             : r.confirmed
               ? "Confirmed"
               : { v: "Unconfirmed", cls: "hot" },
@@ -445,7 +458,10 @@ function workOf(d: RecipeData): RecipeWork {
       unit: zeroCost.length === 1 ? "plate" : "plates",
       title: "Sold, and costing nothing",
       body:
-        `"${worst.name}" has no ingredient lines at all, so nothing was ever costed and its ` +
+        (worst.lines === 0
+          ? `"${worst.name}" has no ingredient lines at all, so nothing was ever costed and its `
+          : `"${worst.name}" has ${count(worst.lines)} ingredient ` +
+            `${worst.lines === 1 ? "line" : "lines"} and not one of them could be priced, so its `) +
         `recipe-level override stands in as the answer: ${unitCost(worst.cost ?? 0)} a serving. ` +
         (worst.soldQty > 0
           ? `It sold ${count(worst.soldQty)} for ${money(worst.revenue)} over ${d.rangeLabel}, ` +
@@ -457,7 +473,7 @@ function workOf(d: RecipeData): RecipeWork {
             `separate days and no rule has ever surfaced it.`
           : "") +
         (zeroCost.length > 1
-          ? ` ${count(zeroCost.length - 1)} more ${zeroCost.length === 2 ? "plate does" : "plates do"} the same.`
+          ? ` ${count(zeroCost.length - 1)} more ${zeroCost.length === 2 ? "plate reports" : "plates report"} a cost nobody computed.`
           : ""),
       act: "Give it lines",
       href: `/dashboard/recipes/${worst.id}`,

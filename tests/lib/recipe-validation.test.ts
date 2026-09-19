@@ -14,8 +14,10 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
 
 import {
+  assertYieldUnitChangeSafe,
   validateRecipeShape,
   RecipeValidationError,
+  type RecipeParentDb,
   type RecipeValidationDb,
 } from "@/lib/recipe-validation"
 
@@ -245,5 +247,100 @@ describe("the yield itself", () => {
     await expect(
       validateRecipeShape({ servingSize: 24, yieldUnit: "", ingredients: [] }, ACCOUNT, db),
     ).resolves.toBeUndefined()
+  })
+})
+
+/*
+ * A YIELD UNIT IS A CONTRACT WITH EVERY RECIPE THAT DRAWS ON THIS ONE.
+ *
+ * `validateRecipeShape` judges the lines of the recipe being saved. The
+ * recipes that USE it are invisible to it, and they are exactly what a yield
+ * unit governs: a parent's line reading `2 serving` is fine while this recipe
+ * yields portions and becomes unmeasurable the moment it yields `fl oz`.
+ * Nothing in the parent changed and nobody edited it, but its line goes to
+ * $0.00 on the next recosting — into COGS, understating food cost, with no
+ * screen anywhere reporting that a save somewhere else did it.
+ */
+describe("changing a yield unit cannot silently zero somebody else's lines", () => {
+  const parentFindMany = vi.fn()
+  const parentDb = {
+    recipeIngredient: { findMany: parentFindMany },
+  } as unknown as RecipeParentDb
+
+  beforeEach(() => {
+    parentFindMany.mockResolvedValue([])
+  })
+
+  it("refuses, and names the recipe that would break and the unit it needs", async () => {
+    parentFindMany.mockResolvedValue([
+      { quantity: 2, unit: "serving", recipe: { itemName: "Double Slider" } },
+    ])
+    const message = await reason(() =>
+      assertYieldUnitChangeSafe("sauce", "fl oz", ACCOUNT, parentDb),
+    )
+    expect(message).toContain("Double Slider")
+    expect(message).toContain("fl oz")
+    expect(message).toContain("serving")
+  })
+
+  it("allows it when every parent line already converts", async () => {
+    parentFindMany.mockResolvedValue([
+      { quantity: 2, unit: "cup", recipe: { itemName: "Double Slider" } },
+    ])
+    await expect(
+      assertYieldUnitChangeSafe("sauce", "fl oz", ACCOUNT, parentDb),
+    ).resolves.toBeUndefined()
+  })
+
+  it("never blocks a change TO portions, which the walk counts rather than refuses", async () => {
+    parentFindMany.mockResolvedValue([
+      { quantity: 2, unit: "gal", recipe: { itemName: "Double Slider" } },
+    ])
+    await expect(
+      assertYieldUnitChangeSafe("sauce", null, ACCOUNT, parentDb),
+    ).resolves.toBeUndefined()
+    expect(parentFindMany).not.toHaveBeenCalled()
+  })
+
+  it("scopes the parent lookup by the caller's accountId", async () => {
+    await assertYieldUnitChangeSafe("sauce", "fl oz", ACCOUNT, parentDb)
+    expect(parentFindMany.mock.calls[0][0].where.recipe.accountId).toBe(ACCOUNT)
+    expect(parentFindMany.mock.calls[0][0].where.componentRecipeId).toBe("sauce")
+  })
+})
+
+/*
+ * `recipeUnit` is what an ingredient is MEANT to be priced in, and it is not
+ * always what the walk costs against: when `deriveCostFromLineItem` cannot
+ * read an invoice line's pack shape, the cost layer falls back to the raw
+ * invoice unit — "CS", "BX", a vendor's own word. A rule that refused
+ * anything outside `recipeUnit`'s family would refuse a line that costs
+ * correctly today, make the recipe uneditable, and offer no unit that fixes
+ * it. So the test is a PROVEN mismatch: two units we understand, in different
+ * families.
+ */
+describe("a unit we do not recognise is not evidence of anything", () => {
+  beforeEach(() => {
+    canonicalFindMany.mockResolvedValue([{ id: "flour", name: "Flour", recipeUnit: "lb" }])
+  })
+
+  it("lets a vendor's own unit through rather than blocking the save", async () => {
+    await expect(
+      validateRecipeShape(
+        { ingredients: [{ canonicalIngredientId: "flour", quantity: 1, unit: "CS" }] },
+        ACCOUNT,
+        db,
+      ),
+    ).resolves.toBeUndefined()
+  })
+
+  it("still refuses the mismatch it can prove", async () => {
+    await reason(() =>
+      validateRecipeShape(
+        { ingredients: [{ canonicalIngredientId: "flour", quantity: 2, unit: "cup" }] },
+        ACCOUNT,
+        db,
+      ),
+    )
   })
 })

@@ -195,7 +195,7 @@ describe("a sub-recipe line draws a measured share of the batch", () => {
     expect(r.lines[0].qtyInYieldUnit).toBeNull()
   })
 
-  it("a portion-yield sub-recipe counts servings, and refuses a weight", async () => {
+  it("a portion-yield sub-recipe counts servings, whatever a legacy line calls them", async () => {
     const patty = recipe({
       id: "patty",
       itemName: "Beef Patty",
@@ -212,9 +212,15 @@ describe("a sub-recipe line draws a measured share of the batch", () => {
     expect(ok.totalCost).toBe(2) // 2 × (4 oz × $0.25)
     expect(ok.partial).toBe(false)
 
+    // NOT zero. `yieldUnit` is a new column with no backfill, so every
+    // existing sub-recipe reads as portions and every existing line against
+    // one would drop to $0.00 on the day this ships. The quantity is counted
+    // as servings — what the old walk did with it — and `unitAssumed` says
+    // the unit was not believed. See the group at the foot of this file.
     const bad = await computeRecipeCost("odd")
-    expect(bad.totalCost).toBe(0)
-    expect(bad.lines[0].missingReason).toBe("yield-mismatch")
+    expect(bad.totalCost).toBe(2)
+    expect(bad.lines[0].missingCost).toBe(false)
+    expect(bad.lines[0].unitAssumed).toBe(true)
   })
 
   it("a component recipe that has gone missing is one bad line, not a dead account", async () => {
@@ -338,5 +344,98 @@ describe("the live data's shape is untouched — this is what makes the change s
     // invisible on this account.
     expect(combo.batchCost).toBe(combo.totalCost)
     expect(combo.partial).toBe(false)
+  })
+})
+
+/*
+ * THE MIGRATION HAS NO BACKFILL, AND THAT IS THE WHOLE POINT OF THESE.
+ *
+ * `Recipe.yieldUnit` arrives NULL on every row in every existing account,
+ * which means portions. A component line reading "2 oz" against one of those
+ * is a unit that cannot be reconciled with a count — and refusing it would
+ * take a figure that is WRONG today and make it $0.00 tomorrow, which is the
+ * same understatement this change exists to remove, shipped as a migration.
+ *
+ * So the walk counts it as servings, which is exactly what the old walk did
+ * with it, and flags the line. Nothing moves the day this ships. The SAVE
+ * path still refuses the same line, because there somebody is present to fix
+ * it — the two rules differ on purpose and these tests hold both.
+ */
+describe("a legacy line against a portions recipe keeps the cost it has today", () => {
+  const patty = recipe({
+    id: "patty",
+    itemName: "Beef Patty",
+    servingSize: 1,
+    yieldUnit: null,
+    lines: [{ canonicalIngredientId: "beef", quantity: 0.25, unit: "lb", name: "Ground beef" }],
+  })
+
+  it("counts an unmeasurable unit as servings rather than zeroing the line", async () => {
+    serve([
+      patty,
+      recipe({
+        id: "burger",
+        itemName: "Double Burger",
+        lines: [{ componentRecipeId: "patty", quantity: 2, unit: "oz", name: "Beef Patty" }],
+      }),
+    ])
+    getCost.mockResolvedValue(price(4, "lb"))
+
+    const r = await computeRecipeCost("burger")
+    // One patty costs $1.00; the line asks for 2, however it labels them.
+    expect(r.totalCost).toBe(2)
+    expect(r.lines[0].missingCost).toBe(false)
+    expect(r.partial).toBe(false)
+  })
+
+  it("says the unit was not believed, so the page can offer the one-field fix", async () => {
+    serve([
+      patty,
+      recipe({
+        id: "burger",
+        lines: [{ componentRecipeId: "patty", quantity: 2, unit: "oz" }],
+      }),
+    ])
+    getCost.mockResolvedValue(price(4, "lb"))
+
+    const r = await computeRecipeCost("burger")
+    expect(r.lines[0].unitAssumed).toBe(true)
+  })
+
+  it("does not flag a line that genuinely counts servings", async () => {
+    serve([
+      patty,
+      recipe({
+        id: "burger",
+        lines: [{ componentRecipeId: "patty", quantity: 2, unit: "serving" }],
+      }),
+    ])
+    getCost.mockResolvedValue(price(4, "lb"))
+
+    const r = await computeRecipeCost("burger")
+    expect(r.lines[0].unitAssumed).toBe(false)
+    expect(r.totalCost).toBe(2)
+  })
+
+  it("still refuses an unmeasurable unit against a MEASURED batch, where nothing legacy exists", async () => {
+    serve([
+      recipe({
+        id: "sauce",
+        itemName: "House Sauce",
+        servingSize: 128,
+        yieldUnit: "fl oz",
+        lines: [{ canonicalIngredientId: "base", quantity: 1, unit: "gal", name: "Sauce base" }],
+      }),
+      recipe({
+        id: "burger",
+        lines: [{ componentRecipeId: "sauce", quantity: 2, unit: "lb" }],
+      }),
+    ])
+    getCost.mockResolvedValue(price(30, "gal"))
+
+    const r = await computeRecipeCost("burger")
+    expect(r.lines[0].missingCost).toBe(true)
+    expect(r.lines[0].missingReason).toBe("yield-mismatch")
+    expect(r.totalCost).toBe(0)
   })
 })

@@ -95,11 +95,14 @@ import type {
  * read the draft too.
  *
  * So the draft lives here, keyed on the SERVER's line array by identity. That
- * key is not decoration. It is what makes `router.refresh()` after a save
- * behave the way local state did: a refreshed loader hands down a new
- * `builder.lines`, the key stops matching, and the draft is dropped in favour
- * of what was actually written. Nothing re-syncs mid-edit — a row edited and
- * not saved is still the only truth until Save.
+ * key is not decoration: a refreshed loader hands down a new `builder.lines`,
+ * the key stops matching, and a draft belonging to a version of the recipe
+ * that no longer exists cannot be mistaken for one that does. A successful
+ * save ALSO drops the draft by hand (`clearDraft`), because the key governs
+ * what is rendered and not what the live-cost effect is watching — without
+ * it the cost panel goes on reporting "unsaved" over a figure the save has
+ * already superseded. Nothing re-syncs mid-edit: a row edited and not saved
+ * is still the only truth until Save.
  */
 export type CounterRecipeSections = SectionSources<RecipeSections>
 
@@ -139,8 +142,26 @@ const moneyOrNull = (raw: string): number | null => {
   return Number.isFinite(v) ? v : null
 }
 
+/**
+ * The yield as typed, for the SAVE.
+ *
+ * `NaN` is deliberate on an empty or nonsense box: `validateRecipeShape`
+ * refuses it and the owner reads "a recipe has to make at least some of
+ * something". Substituting 1 here would take a cleared field and write a
+ * yield — and on a recipe that makes 128 fl oz, quietly multiplying its
+ * per-serving cost by a hundred and twenty-eight.
+ */
+const yieldTyped = (raw: string): number => Number(raw.trim() === "" ? NaN : raw)
+
+/**
+ * The yield for the LIVE PREVIEW, which is a different question.
+ *
+ * A draft mid-keystroke is legitimately half-typed, and a preview that
+ * vanishes every time the box is empty for a moment is worse than one that
+ * falls back to a single serving for that moment. Nothing is written from it.
+ */
 const yieldOrOne = (raw: string): number => {
-  const v = Number(raw.trim())
+  const v = yieldTyped(raw)
   return Number.isFinite(v) && v > 0 ? v : 1
 }
 
@@ -194,6 +215,18 @@ export function CounterRecipeClient({
       }),
     [],
   )
+  /*
+   * Drop the draft outright.
+   *
+   * The identity key alone is not enough after a SAVE. `router.refresh()`
+   * hands down a new `builder.lines`, so `draftOf` stops returning the draft
+   * — but the `draft` STATE still holds the old object, the live-cost effect
+   * still sees it, and the cost panel goes on reporting "unsaved" over a
+   * figure that was superseded, with each row's extended cost read out of a
+   * preview taken before the save. So the save says so explicitly.
+   */
+  const clearDraft = useCallback(() => setDraft(null), [])
+
   const editField = useCallback(
     (b: RecipeBuilder, key: BuilderField["key"], value: string) =>
       setDraft((d) => {
@@ -229,9 +262,18 @@ export function CounterRecipeClient({
           quantity: l.quantity,
           unit: l.unit,
         })),
-      }).then((result) => {
-        if (alive) setLive(result)
-      })
+      }).then(
+        (result) => {
+          if (alive) setLive(result)
+        },
+        // A transport failure is not a cost of zero and not the previous
+        // cost either. Dropping back to the server's own figure is the only
+        // honest answer, and an unhandled rejection would leave the stale one
+        // on screen wearing the word "unsaved".
+        () => {
+          if (alive) setLive(null)
+        },
+      )
     }, COST_DEBOUNCE_MS)
     return () => {
       alive = false
@@ -299,6 +341,7 @@ export function CounterRecipeClient({
               live={live}
               onLines={(fn) => editLines(b, fn)}
               onField={(key, value) => editField(b, key, value)}
+              onSaved={clearDraft}
             />
           )}
         </Section>
@@ -695,12 +738,15 @@ function Builder({
   live,
   onLines,
   onField,
+  onSaved,
 }: {
   builder: RecipeBuilder
   draft: Draft
   live: DraftCost | null
   onLines: (fn: (prev: BuilderLine[]) => BuilderLine[]) => void
   onField: (key: BuilderField["key"], value: string) => void
+  /** Drop the draft — what was on screen is now what is stored. */
+  onSaved: () => void
 }) {
   const router = useRouter()
   const setLines = onLines
@@ -729,7 +775,7 @@ function Builder({
         recipeId: builder.recipeId,
         itemName: draft.fields.itemName?.trim() || undefined,
         category: draft.fields.category?.trim() || undefined,
-        servingSize: yieldOrOne(draft.fields.servingSize ?? "1"),
+        servingSize: yieldTyped(draft.fields.servingSize ?? ""),
         // "" is portions, which is a value and not an omission — hence the
         // `?? ""` rather than a truthiness test that would send `undefined`
         // and leave a measured batch measured.
@@ -744,7 +790,10 @@ function Builder({
         })),
       })
       setNote({ ok: result.ok, text: result.ok ? "Saved." : result.error ?? "Could not save." })
-      if (result.ok) router.refresh()
+      if (result.ok) {
+        onSaved()
+        router.refresh()
+      }
     })
   }
 

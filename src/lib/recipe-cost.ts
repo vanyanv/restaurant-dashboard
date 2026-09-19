@@ -87,6 +87,14 @@ export type RecipeCostLine = {
    * could not be reconciled with the batch's.
    */
   qtyInYieldUnit?: number | null
+  /**
+   * Component line only. True when the sub-recipe yields PORTIONS and this
+   * line's unit is not a portion — "2 oz" of something counted in servings.
+   * The quantity is counted as servings, which is exactly what the old walk
+   * did with it, and this flag is what lets a page say the unit was not
+   * believed rather than silently costing a measure as a count.
+   */
+  unitAssumed?: boolean
   /** Invoice provenance (ingredient kind only; null for sub-recipes or manual costs). */
   sourceInvoiceId?: string | null
   sourceLineItemId?: string | null
@@ -350,11 +358,33 @@ async function walk(
        * charge the whole batch, or charge nothing — are worse than a line
        * the page can point at.
        */
-      const qtyInYieldUnit = resolveYieldQuantity({
+      const resolved = resolveYieldQuantity({
         quantity: ing.quantity,
         unit: ing.unit,
         yieldUnit: sub.yieldUnit,
       })
+
+      /*
+       * A RECIPE THAT YIELDS PORTIONS HAS NO MEASURE TO REFUSE AGAINST.
+       *
+       * `yieldUnit` is a new column and every row in every existing account
+       * is NULL, which means portions. Refusing a line reading "2 oz" against
+       * one would take a figure that is WRONG today and make it $0.00
+       * tomorrow — the same understatement this change exists to remove,
+       * arriving as a migration with no backfill. The old walk ignored the
+       * unit entirely and multiplied the sub-recipe's cost by the quantity,
+       * so counting the quantity as servings is exactly what those lines
+       * cost today, and nothing moves the day this ships.
+       *
+       * The unit is not thereby believed. `unitAssumed` travels out so the
+       * page can say the line is being counted rather than measured, and the
+       * fix is one field away: give the sub-recipe a yield unit and the line
+       * converts properly. A MEASURED batch is a different case — nothing in
+       * any account has one yet, so refusing there breaks nothing and stops
+       * the $60 line from ever being entered again.
+       */
+      const countedAsServings = resolved == null && !sub.yieldUnit
+      const qtyInYieldUnit = countedAsServings ? ing.quantity : resolved
 
       if (qtyInYieldUnit == null) {
         partial = true
@@ -389,6 +419,7 @@ async function walk(
         missingCost: sub.partial,
         missingReason: sub.partial ? "no-price" : null,
         qtyInYieldUnit,
+        unitAssumed: countedAsServings,
       })
       continue
     }

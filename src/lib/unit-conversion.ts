@@ -174,9 +174,16 @@ export const PORTION_UNIT_LABEL = "serving"
  * batch instead of two whole batches.
  *
  * `yieldUnit` null means the batch yields portions; the line is then counted
- * in portions and any of `PORTION_UNITS` is accepted (an empty or unrecognised
- * portion word is NOT — see below). Otherwise the line's unit must convert
+ * in portions and any of `PORTION_UNITS` is accepted — including the empty
+ * string, which is what a line carrying no unit at all amounts to. A word
+ * that is not in that list is refused. Otherwise the line's unit must convert
  * into the yield unit.
+ *
+ * A refusal here is not the same as a $0.00 line. The recipe walk treats a
+ * refusal against a PORTIONS recipe as "count the quantity as servings",
+ * because that is what those lines have always cost and a new column with no
+ * backfill must not change a single figure; the save path refuses it outright,
+ * because there the owner is present to fix it. See the walk's own comment.
  *
  * Returns null when the two cannot be reconciled. A null is a REFUSAL, not a
  * zero: the caller marks the line missing rather than costing it, because the
