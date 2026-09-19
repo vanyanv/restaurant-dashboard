@@ -1140,16 +1140,25 @@ function buildDayBook(
     const dayLabor = labor?.[i] ?? null
     const orders = ordersByDay.get(key) ?? null
 
-    // One `primeCost` per day, on that day's own denominator. A day with no
-    // COGS posted has no food percentage and no prime cost, and reads as an
-    // em-dash rather than as a restaurant that spent nothing on food.
+    /*
+     * One `primeCost` per day, on that day's own denominator. A day with no
+     * COGS posted has no food percentage and no prime cost, and reads as an
+     * em-dash rather than as a restaurant that spent nothing on food.
+     *
+     * `||`, not `&&`: prime is food plus labour and needs both. Requiring both
+     * to be MISSING before withholding it meant a day with labour and no COGS
+     * still printed a prime cost — computed with `cogsValue: 0`, so labour
+     * alone, under the ceiling, `over: false` — on a row whose Food column
+     * showed an em-dash two cells to its left. The row said both that food was
+     * unknown and that prime was 24%, which cannot both be true.
+     */
     const prime =
-      dayFood === null && dayLabor === null
+      dayFood === null || dayLabor === null
         ? null
         : primeCost({
             grossSales: dayNet,
-            cogsValue: dayFood ?? 0,
-            laborValue: dayLabor ?? 0,
+            cogsValue: dayFood,
+            laborValue: dayLabor,
           })
 
     return {

@@ -488,9 +488,20 @@ export function computeStorePnL(input: {
     laborUnknown = periods.map((p, i) => {
       const h = harriLaborByPeriod[i]
       if (h.coveredDays >= p.days) return false
-      // Partial / no Harri coverage falls back on fixed; flag as unknown only
-      // when the fixed estimate is also missing.
-      return store.fixedMonthlyLabor == null && h.coveredDays === 0
+      /*
+       * Partial / no Harri coverage falls back on fixed; flag as unknown when
+       * the fixed estimate is also missing — whatever the coverage.
+       *
+       * This carried `&& h.coveredDays === 0`, which is not what the sentence
+       * above it says and not what the arithmetic does. With no
+       * `fixedMonthlyLabor`, `fixedLaborByPeriod[i]` is 0, so `perDayFixed` is
+       * 0 and the uncovered days contribute NOTHING — not an estimate, an
+       * omission. A store with three of seven days synced and no labour budget
+       * on file reported a week's labour built from three days and called it
+       * known. Labour understated means bottom line, margin and prime cost all
+       * overstated, which is the direction nobody goes looking in.
+       */
+      return store.fixedMonthlyLabor == null
     })
     const totalDays = periods.reduce((a, p) => a + p.days, 0)
     const totalCovered = harriLaborByPeriod.reduce((a, h) => a + Math.max(0, h.coveredDays), 0)

@@ -637,6 +637,33 @@ describe("getOverviewSections", () => {
     expect(cell(s, "Orders")).toBeDefined()
   })
 
+  it("leaves food and prime out entirely rather than printing a 0.0% nobody achieved", async () => {
+    /*
+     * The mirror of the labour case above, and the one that was missing.
+     * `cogsValue: 0` over a range with sales is a range whose DailyCogsItem
+     * rows have not materialised — `getAllStoresPnL` logs a warning on this
+     * exact test — and it printed "Food cost 0.0%" with a green bullet, plus a
+     * prime cost of labour alone sitting under the 60% ceiling.
+     */
+    vi.mocked(getAllStoresPnL).mockResolvedValue(
+      pnl({ combined: { ...pnl().combined, cogsValue: 0, cogsPct: 0 } }) as never,
+    )
+    const s = await load()
+    expect(cell(s, "Food cost")).toBeUndefined()
+    expect(cell(s, "Prime cost")).toBeUndefined()
+    // The figures that ARE known still render.
+    expect(cell(s, "Labor")).toBeDefined()
+    expect(cell(s, "Orders")).toBeDefined()
+  })
+
+  it("keeps prime out when EITHER half of it is missing, because it is their sum", async () => {
+    vi.mocked(getAllStoresPnL).mockResolvedValue(
+      pnl({ combined: { ...pnl().combined, cogsValue: 0, cogsPct: 0, laborValue: 0, laborPct: 0 } }) as never,
+    )
+    const s = await load()
+    expect(cell(s, "Prime cost")).toBeUndefined()
+  })
+
   it("fails ONE section without taking the others down", async () => {
     vi.mocked(loadChannelMix).mockRejectedValue(new Error("Otter sync timed out"))
     const s = await load()

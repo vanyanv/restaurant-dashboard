@@ -472,9 +472,25 @@ function buildStrip(
     }
   }
 
-  // Rounded once, at the figure — the delta beside a printed 28.4 must be
-  // derivable from 28.4, the same rule primeCost() applies to roomPp.
-  const foodPct = p.grossSales > 0 ? Math.round(p.cogsPct * 1000) / 10 : null
+  /*
+   * Zero COGS over a range with sales is not a kitchen that bought nothing.
+   * It is a range whose `DailyCogsItem` rows have not materialised — a state
+   * `getAllStoresPnL` already logs a warning for, on exactly this test
+   * (`rowCountPerPeriod[i] === 0 && totalSales[i] > 0`) — and "0.0%" for it is
+   * the same lie as a $0 Grubhub commission.
+   *
+   * The labour cell below has guarded this since it was written; food never
+   * did. So a range with no COGS posted printed a perfect 0.0% food cost with
+   * a green bullet against the store's plan, and a prime cost of labour alone
+   * — roughly 25% where the truth is nearer 55% — sitting comfortably under
+   * the 60% ceiling with "5.0 pts of room". Both readings are wrong in the
+   * flattering direction, which is the direction nobody investigates.
+   *
+   * Rounded once, at the figure — the delta beside a printed 28.4 must be
+   * derivable from 28.4, the same rule primeCost() applies to roomPp.
+   */
+  const foodKnown = p.grossSales > 0 && p.cogsValue > 0
+  const foodPct = foodKnown ? Math.round(p.cogsPct * 1000) / 10 : null
   if (foodPct !== null) {
     const plan = targets?.foodCost ?? null
     cells.push({
@@ -528,7 +544,10 @@ function buildStrip(
   // statement's own denominator. `laborKnown` is a decision about the CELL —
   // whether this figure is fit to print — not about the statement, which is
   // why the gate stays here and the arithmetic does not.
-  const prime = laborKnown ? p.prime : null
+  // Prime is food PLUS labour, so it needs both halves to be real. It was
+  // gated on labour alone, which let a missing COGS line through as a zero and
+  // printed the sum of one of its two terms as though it were the sum.
+  const prime = laborKnown && foodKnown ? p.prime : null
   if (prime?.primePct != null) {
     const cogsSeries = rowPercents(p.rows, COGS_CODE)
     const laborSeries = rowPercents(p.rows, LABOR_CODE)
