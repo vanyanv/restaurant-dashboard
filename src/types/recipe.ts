@@ -81,7 +81,14 @@ export type RecipeInput = {
   id?: string
   itemName: string
   category: string
+  /** How many of whatever this makes come out of one batch. Must be > 0. */
   servingSize: number
+  /**
+   * The unit `servingSize` is measured in — `fl oz`, `lb`, `qt`. Null or
+   * omitted means the recipe yields portions and a line drawing on it counts
+   * servings. See `Recipe.yieldUnit` in the schema.
+   */
+  yieldUnit?: string | null
   isSellable: boolean
   notes?: string | null
   foodCostOverride?: number | null
@@ -95,6 +102,7 @@ export type RecipeSummary = {
   isSellable: boolean
   isConfirmed: boolean
   ingredientCount: number
+  /** Cost of ONE of whatever the recipe yields — batch cost ÷ yield. */
   computedCost: number | null
   partialCost: boolean
   updatedAt: Date

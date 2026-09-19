@@ -3144,3 +3144,145 @@ html[data-theme-switching] .ct-root *::after {
     transform: none !important;
   }
 }
+
+/* ---- the recipe builder, once its header fields became controls ------
+ *
+ * `.rfields` was a four-column grid of read-only `<span>`s: recipe name,
+ * category, Serves and Cost override, all rendered as text. That is why
+ * `servingSize` reads 1 on all sixty recipes — the product had never had a
+ * box to type it in, so nobody ever typed one.
+ *
+ * Six fields now, and the yield pair has to read as a pair: "one batch makes
+ * [24] [portions]" is one sentence in two controls, and a grid that lets them
+ * land on different rows turns it back into two unrelated numbers. So the
+ * pair is a nested grid inside one cell, and the name and the notes span the
+ * full width because a recipe name in a 90px box is not a name. */
+.rfields {
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  align-items: start;
+}
+.rfields .field2--wide { grid-column: 1 / -1 }
+.rfields .field2--pair { display: grid; grid-template-columns: 1fr 1.2fr; gap: 7px; align-items: end }
+
+.rfields .inp { transition: border-color 0.18s var(--ease), box-shadow 0.22s var(--ease) }
+.rfields .inp:focus-within {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-wash);
+}
+.rfields .inp input,
+.rfields .inp select,
+.rfields .inp textarea {
+  flex: 1;
+  min-width: 0;
+  width: 100%;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  outline: 0;
+  font: inherit;
+  color: var(--ink);
+  appearance: none;
+}
+.rfields .inp textarea { resize: vertical; min-height: 2.6em; line-height: 1.45 }
+.rfields .inp input::placeholder,
+.rfields .inp textarea::placeholder { color: var(--ink-3) }
+.rfields .inp input[type="number"] { font-variant-numeric: tabular-nums }
+.rfields .field2:focus-within label { color: var(--accent) }
+/* The caret the native select loses to `appearance: none`. Mono, because
+ * every other small affordance on this page is. */
+.rfields .inp--select::after {
+  content: "▾";
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--ink-3);
+  flex: none;
+}
+.rfields .hint {
+  font-family: var(--mono);
+  font-size: 9.5px;
+  line-height: 1.5;
+  letter-spacing: .04em;
+  color: var(--ink-3);
+}
+
+/* A line's unit is a control now too. It was a `<span>`: an ingredient priced
+ * per lb and wanted by the ounce meant typing 0.25 into a box labelled lb, and
+ * a unit that could not convert was unfixable from this page. The options are
+ * only ever units that convert into what the thing is priced or made in, so
+ * the $0.00 line is unreachable rather than merely discouraged. */
+.rowline select.unit {
+  width: 100%;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-sm);
+  background: var(--surface);
+  padding: 5px 6px;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--ink-2);
+  appearance: none;
+  text-align: left;
+}
+.rowline select.unit:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+/* Why a line could not be priced, on the line. "no price" and "cannot measure
+ * cup against lb" are different problems with different fixes, and the row
+ * used to print the same sentence for both. */
+.rowline .why {
+  display: block;
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: .06em;
+  color: var(--bad);
+  margin-top: 1px;
+}
+.rowline .stale { color: var(--warn) }
+
+/* ---- starting a recipe ------------------------------------------------
+ *
+ * There was no way to. `upsertRecipe` has always handled a create, and the
+ * only caller that ever made one was the AI mapping-proposal accept — so a
+ * recipe could be born from a model's guess about a POS item name and in no
+ * other way. This row is the create path, and it sits at the head of the
+ * catalogue because that is where somebody goes looking for a recipe that is
+ * not there yet.
+ *
+ * It lives inside a `pad={false}` section, so it carries `.sec__body`'s own
+ * inset rather than inheriting one. */
+.newrec {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 7px;
+  padding: 11px 15px;
+  border-bottom: 1px solid var(--line);
+}
+.newrec .inp { flex: 1 1 190px; min-width: 0 }
+.newrec .inp--select { flex: 0 1 150px }
+.newrec .inp input,
+.newrec .inp select {
+  flex: 1;
+  min-width: 0;
+  width: 100%;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  outline: 0;
+  font: inherit;
+  color: var(--ink);
+  appearance: none;
+}
+.newrec .inp input::placeholder { color: var(--ink-3) }
+.newrec .inp:focus-within {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-wash);
+}
+.newrec .inp--select::after {
+  content: "▾";
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--ink-3);
+  flex: none;
+}

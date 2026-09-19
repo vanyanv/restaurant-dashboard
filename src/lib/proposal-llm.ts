@@ -40,8 +40,14 @@ export type ProposalDraft = {
 
 export function buildProposalPrompt(input: {
   items: { itemName: string; category: string; qty30d: number }[]
-  recipeVocab: { itemName: string; category: string }[]
-  ingredientVocab: string[]
+  recipeVocab: { itemName: string; category: string; yieldUnit: string | null }[]
+  /**
+   * Each canonical ingredient with the unit it is PRICED in. The unit is the
+   * load-bearing half: the model used to get bare names, so it was choosing a
+   * unit blind against a cost engine that only pays out on a same-family
+   * match. See the rules section below.
+   */
+  ingredientVocab: { name: string; recipeUnit: string | null }[]
   /** Human-confirmed (POS name → recipe) pairs — teaches house naming patterns. */
   confirmedExamples?: { itemName: string; recipeName: string }[]
 }): string {
@@ -54,11 +60,19 @@ ${confirmedExamples.map((e) => `- sold "${e.itemName}" → recipe "${e.recipeNam
   return `You are a restaurant recipe analyst for Chris N Eddy's, a slider restaurant. The POS reports sold items below that have no recipe mapping yet — usually new combos or renamed items. Propose how to map each one.
 
 ## Existing recipes (the ONLY recipes that exist — reference them by exact name)
-${recipeVocab.map((r) => `- ${r.itemName} [${r.category}]`).join("\n")}
+${recipeVocab
+  .map(
+    (r) =>
+      `- ${r.itemName} [${r.category}] — ` +
+      (r.yieldUnit ? `made in batches measured in ${r.yieldUnit}` : `counted in servings`)
+  )
+  .join("\n")}
 ${examplesSection}
 
 ## Canonical ingredients available (for NEW_RECIPE fallback only)
-${ingredientVocab.join(", ")}
+${ingredientVocab
+  .map((i) => `- ${i.name}${i.recipeUnit ? ` — priced per ${i.recipeUnit}` : ""}`)
+  .join("\n")}
 
 ## Sold items needing a mapping
 ${items.map((i) => `- ${i.itemName} [${i.category}] — ${i.qty30d} sold in the last 30 days`).join("\n")}
@@ -73,7 +87,7 @@ For each item return one proposal. Return JSON:
       "suggestedName": "recipe name to create (non-MATCH)",
       "suggestedCategory": "category to create under (non-MATCH)",
       "components": [
-        { "type": "recipe" | "ingredient", "name": "exact name from the lists above", "quantity": number, "unit": "each|oz|lb|leaf|slice|portion" }
+        { "type": "recipe" | "ingredient", "name": "exact name from the lists above", "quantity": number, "unit": "the unit shown beside that name above" }
       ],
       "reasoning": "one sentence",
       "confidence": 0.0-1.0
@@ -88,6 +102,9 @@ Rules:
 - COMBO_DECOMPOSITION for combos/bundles with no matching recipe: compose EXISTING recipes by exact name (e.g. "2 Slider Combo" = 2 × "Double Slider" + 1 × "Fries" + 1 × "Fountain Drink"). Never re-list a recipe's raw ingredients.
 - NEW_RECIPE only when no existing recipe covers a component — then use canonical ingredient names from the list.
 - Quantities are per one sold unit of the item.
+- UNITS: use the unit shown beside the name. For an ingredient that is "priced per lb", the unit must be lb, oz, kg or g; per "gal", it must be gal, qt, pt, cup, fl oz, l or ml; per "each", it must be each or dz. For a recipe "counted in servings", the unit is "serving". For one "made in batches measured in fl oz", use fl oz, cup, qt or gal.
+- Never invent a unit. "leaf", "slice", "portion", "piece" and "pinch" are not units — express them in the unit shown beside the name, or leave the component out. A component whose unit cannot be converted into that one is DISCARDED, so a guess costs the restaurant the whole line.
+- Never omit the unit.
 - confidence: 0.9+ obvious, 0.7–0.9 reasonable, below 0.7 uncertain.`
 }
 
@@ -124,11 +141,23 @@ export function parseProposalDrafts(content: string): ProposalDraft[] {
         if (typeof rc.name !== "string" || rc.name.length === 0) continue
         if (typeof rc.quantity !== "number" || !isFinite(rc.quantity) || rc.quantity <= 0)
           continue
+        /*
+         * A MISSING UNIT IS DROPPED, NOT DEFAULTED.
+         *
+         * This used to read `: "each"`. A component the model meant as four
+         * ounces of beef arrived as four whole beefs, and nothing downstream
+         * could tell the difference — the line saved, costed, and fed the P&L
+         * at roughly sixty-four times its real value. Dropping the component
+         * docks the proposal's confidence (see mapping-proposals-core) and
+         * leaves a gap a human can see, which is the only honest option when
+         * the one field that scales the cost is absent.
+         */
+        if (typeof rc.unit !== "string" || !rc.unit.trim()) continue
         components.push({
           type: rc.type,
           name: stripCategoryBracket(rc.name),
           quantity: rc.quantity,
-          unit: typeof rc.unit === "string" && rc.unit ? rc.unit : "each",
+          unit: rc.unit.trim(),
         })
       }
     }
@@ -160,8 +189,8 @@ export function parseProposalDrafts(content: string): ProposalDraft[] {
  */
 export async function generateProposalDrafts(input: {
   items: { itemName: string; category: string; qty30d: number }[]
-  recipeVocab: { itemName: string; category: string }[]
-  ingredientVocab: string[]
+  recipeVocab: { itemName: string; category: string; yieldUnit: string | null }[]
+  ingredientVocab: { name: string; recipeUnit: string | null }[]
   confirmedExamples?: { itemName: string; recipeName: string }[]
   storeId?: string | null
   userId?: string | null
