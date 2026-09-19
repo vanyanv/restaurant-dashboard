@@ -159,7 +159,7 @@ describe("an incomplete recipe distinguishes booked COGS from its known minimum"
 
     expect(c.gap?.lead).toBe("fallback in use")
     expect(c.gap?.body).toContain("known minimum of $0.50")
-    expect(c.gap?.body).toContain("$6.00 is the fallback booked into COGS")
+    expect(c.gap?.body).toContain("$6.00 fallback is what goes into COGS")
   })
 })
 

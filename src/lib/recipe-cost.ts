@@ -406,6 +406,7 @@ async function walk(
       const lineCost = sub.totalCost * qtyInYieldUnit
       batch += lineCost
       if (sub.partial) partial = true
+      const subHasMissing = sub.lines.some((l) => l.missingCost)
       lines.push({
         kind: "component",
         refId: ing.componentRecipeId,
@@ -415,8 +416,16 @@ async function walk(
         unitCost: sub.totalCost,
         costUnit: sub.yieldUnit,
         lineCost,
-        missingCost: sub.partial,
-        missingReason: sub.partial ? "no-price" : null,
+        // NOT `sub.partial`, which is a wider flag than this line needs.
+        // `partial` is also raised by the price-spike guard — a case where
+        // every line DID get a price, just a trusted older one — so reading
+        // it here marked a fully costed sub-recipe's line as having no cost,
+        // and, now that an incomplete walk books the fallback, made a
+        // grandchild's rejected spike quietly replace this recipe's whole
+        // plate cost with its reference figure. A line is missing a cost when
+        // something underneath it is actually missing one.
+        missingCost: subHasMissing,
+        missingReason: subHasMissing ? "no-price" : null,
         qtyInYieldUnit,
         unitAssumed: countedAsServings,
       })
@@ -526,10 +535,28 @@ async function walk(
   // and use a trusted historical price. Missing lines are the decisive signal.
   const walkedToNothing = batch === 0
   const hasMissingLines = lines.some((line) => line.missingCost)
-  const overrideApplied =
-    (walkedToNothing || hasMissingLines) && recipe.foodCostOverride != null
   const computedBatch = batch
-  if (overrideApplied) batch = recipe.foodCostOverride as number
+
+  /*
+   * THE FALLBACK IS A FLOOR, NOT A REPLACEMENT.
+   *
+   * An incomplete walk has established a MINIMUM: every priced line is a real
+   * cost this plate genuinely incurs. So a fallback below that minimum is
+   * provably an understatement, and booking it would do the very thing this
+   * branch exists to stop — quietly take cost out of the P&L — only from the
+   * other direction. A reference figure from R365 has no guarantee of being
+   * the larger of the two, and on the recipes carrying both it is frequently
+   * the smaller.
+   *
+   * So the incomplete walk books whichever is higher, and `overrideApplied`
+   * says whether the fallback is what was actually booked rather than merely
+   * what was available. A page that reads it is asking "is this figure the
+   * fallback?", and the answer has to be no when the lines won.
+   */
+  const fallback = recipe.foodCostOverride
+  const incomplete = walkedToNothing || hasMissingLines
+  const overrideApplied = incomplete && fallback != null && fallback >= computedBatch
+  if (overrideApplied) batch = fallback as number
 
   // `servingSize` carries a DB CHECK for > 0, but a walk that divides by a
   // number it did not validate is one bad row away from Infinity landing in

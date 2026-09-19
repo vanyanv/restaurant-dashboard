@@ -463,10 +463,10 @@ function headOf(d: Loaded): RecipeHead {
     delta: zero
       ? "nothing was costed"
       : d.overrideApplied
-        ? "fallback used: one line unpriced"
+        ? "fallback used — a line is unpriced"
         : d.partial
           ? "at least — one line unpriced"
-        : `${count(d.lines.length)} ${d.lines.length === 1 ? "line" : "lines"}, all priced`,
+          : `${count(d.lines.length)} ${d.lines.length === 1 ? "line" : "lines"}, all priced`,
     deltaTone: zero || d.partial ? "is-down" : "is-flat",
   }
   const marginCell: FigureProps = {
@@ -831,9 +831,11 @@ function gapOf(d: Loaded, missing: RecipeCostLine[]): RecipeCost["gap"] {
       href: missing[0] ? `/dashboard/ingredients/${missing[0].refId}` : undefined,
       body:
         `${count(pricedCount)} of ${count(d.lines.length)} lines produced a known minimum of ` +
-        `${unitCost(d.computedCost)} per serving. Because the recipe is incomplete, ` +
-        `${unitCost(d.totalCost)} is the fallback booked into COGS. Price the missing ` +
-        `${missing.length === 1 ? "line" : "lines"} and the complete line total takes over.`,
+        `${unitCost(d.computedCost)} per serving. Because the recipe is incomplete, the higher ` +
+        `${unitCost(d.totalCost)} fallback is what goes into COGS — a fallback BELOW that ` +
+        `minimum would understate the plate, so the lines win when they are the larger. ` +
+        `Price the missing ${missing.length === 1 ? "line" : "lines"} and the complete line ` +
+        `total takes over.`,
     }
   }
 

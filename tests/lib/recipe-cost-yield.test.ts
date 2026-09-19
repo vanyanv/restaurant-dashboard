@@ -495,3 +495,132 @@ describe("a legacy line against a portions recipe keeps the cost it has today", 
     expect(r.totalCost).toBe(0)
   })
 })
+
+/*
+ * THE FALLBACK IS A FLOOR, NOT A REPLACEMENT.
+ *
+ * Booking the recipe-level figure on an incomplete walk is right when that
+ * figure is the larger one: a partial total understates COGS, and understating
+ * COGS is what this whole branch exists to stop. It is WRONG when the figure
+ * is smaller. Every priced line is a real cost the plate genuinely incurs, so
+ * the priced total is a proven minimum, and booking anything below it takes
+ * cost out of the P&L — the same defect, arriving from the other side. An
+ * R365 reference cost carries no guarantee of being the larger of the two.
+ */
+describe("an incomplete walk books whichever figure is higher", () => {
+  it("uses the fallback when it is above the known minimum", async () => {
+    serve([
+      recipe({
+        id: "plate",
+        foodCostOverride: 6,
+        lines: [
+          { canonicalIngredientId: "beef", quantity: 1, unit: "lb", name: "Ground beef" },
+          { canonicalIngredientId: "mystery", quantity: 1, unit: "lb", name: "Mystery" },
+        ],
+      }),
+    ])
+    getCost.mockImplementation((async (id: string) =>
+      id === "beef" ? price(4, "lb") : null) as never)
+
+    const r = await computeRecipeCost("plate")
+    expect(r.computedCost).toBe(4)
+    expect(r.totalCost).toBe(6)
+    expect(r.overrideApplied).toBe(true)
+  })
+
+  it("keeps the priced lines when the fallback is BELOW them, and says the fallback was not used", async () => {
+    serve([
+      recipe({
+        id: "plate",
+        foodCostOverride: 2.5,
+        lines: [
+          { canonicalIngredientId: "beef", quantity: 1, unit: "lb", name: "Ground beef" },
+          { canonicalIngredientId: "mystery", quantity: 1, unit: "lb", name: "Mystery" },
+        ],
+      }),
+    ])
+    getCost.mockImplementation((async (id: string) =>
+      id === "beef" ? price(4, "lb") : null) as never)
+
+    const r = await computeRecipeCost("plate")
+    // $2.50 is below a cost we can prove the plate incurs. Booking it would
+    // understate COGS, which is the defect, not the fix.
+    expect(r.totalCost).toBe(4)
+    expect(r.overrideApplied).toBe(false)
+    expect(r.partial).toBe(true)
+  })
+
+  it("still divides the fallback by the yield, so a batch recipe is per serving", async () => {
+    serve([
+      recipe({
+        id: "batch",
+        servingSize: 4,
+        foodCostOverride: 20,
+        lines: [
+          { canonicalIngredientId: "beef", quantity: 1, unit: "lb" },
+          { canonicalIngredientId: "mystery", quantity: 1, unit: "lb" },
+        ],
+      }),
+    ])
+    getCost.mockImplementation((async (id: string) =>
+      id === "beef" ? price(4, "lb") : null) as never)
+
+    const r = await computeRecipeCost("batch")
+    expect(r.totalCost).toBe(5)
+    expect(r.batchCost).toBe(20)
+  })
+})
+
+/*
+ * `partial` is a wider flag than the fallback trigger needs. The price-spike
+ * guard raises it on a recipe where every line DID get a price, just a trusted
+ * older one — so reading `partial` through a sub-recipe let a grandchild's
+ * rejected spike replace a parent's whole plate cost with its reference
+ * figure, which is precisely what the guard exists to avoid.
+ */
+describe("a spike-guarded sub-recipe does not drag its parent onto a fallback", () => {
+  it("leaves the parent's line costed when nothing underneath is actually missing", async () => {
+    serve([
+      recipe({
+        id: "patty",
+        itemName: "Beef Patty",
+        lines: [{ canonicalIngredientId: "beef", quantity: 1, unit: "lb", name: "Ground beef" }],
+      }),
+      recipe({
+        id: "burger",
+        foodCostOverride: 99,
+        lines: [{ componentRecipeId: "patty", quantity: 2, unit: "serving" }],
+      }),
+    ])
+    getCost.mockResolvedValue({ ...price(4, "lb"), costGuardTriggered: true })
+
+    const sub = await computeRecipeCost("patty")
+    expect(sub.partial).toBe(true) // the guard fired
+    expect(sub.lines.every((l) => !l.missingCost)).toBe(true) // but nothing is missing
+
+    const r = await computeRecipeCost("burger")
+    expect(r.lines[0].missingCost).toBe(false)
+    expect(r.overrideApplied).toBe(false)
+    expect(r.totalCost).toBe(8)
+  })
+
+  it("still falls back when the sub-recipe genuinely could not price a line", async () => {
+    serve([
+      recipe({
+        id: "patty",
+        lines: [{ canonicalIngredientId: "mystery", quantity: 1, unit: "lb" }],
+      }),
+      recipe({
+        id: "burger",
+        foodCostOverride: 9,
+        lines: [{ componentRecipeId: "patty", quantity: 2, unit: "serving" }],
+      }),
+    ])
+    getCost.mockResolvedValue(null)
+
+    const r = await computeRecipeCost("burger")
+    expect(r.lines[0].missingCost).toBe(true)
+    expect(r.overrideApplied).toBe(true)
+    expect(r.totalCost).toBe(9)
+  })
+})
