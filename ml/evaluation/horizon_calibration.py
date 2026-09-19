@@ -39,6 +39,16 @@ Two deliberate choices:
 - **Pooled across weekdays.** Per-weekday would be better, but there are ~38
   reconciled rows per horizon — five or six per weekday. Splitting them would
   produce quantiles noisier than the constant being replaced.
+
+And one added on 2026-09-19, after the widths this module ships were measured
+in production at 58-70% coverage against the 80% they promise:
+
+- **Validated before use.** The quantile is unbiased on exchangeable rows;
+  these rows drift. `validated_half_widths` fits on the older rows, measures
+  what that would have covered on the newest 30%, and ships the widths only
+  if they held up — scaling them when they did not, and returning {} when the
+  holdout is too thin to judge. Returning {} keeps `forecast()` on the CQR
+  band, which is where it was before any of this.
 """
 from __future__ import annotations
 
@@ -76,12 +86,55 @@ TARGET_COVERAGE = 0.80
 #: uncertain day — a band wider than the forecast itself tells nobody anything.
 MAX_RELATIVE_HALF_WIDTH = 0.75
 
+#: Fraction of each horizon's reconciled history held out, newest first, to
+#: check the widths fitted on the rest before they are shipped.
+#:
+#: The quantile below is unbiased on exchangeable rows, and these rows are not
+#: exchangeable — error levels drift as the business and the model change. The
+#: docstring above already records what that costs: widths measured on the
+#: older half of the pre-fix history delivered 60-76% coverage on the newer
+#: half. Nothing acted on that. `forecast()` adopted any width backed by
+#: MIN_SAMPLES_PER_HORIZON rows, replacing the CQR band outright, and the only
+#: feedback was Gate 3 of the operator check telling a human days later. It
+#: did: Hollywood's measured 80% intervals covered 0.581 on 2026-09-14,
+#: climbing to 0.696 by 09-18 — inside the range this module predicted it
+#: would fail in, and outside the [0.75, 0.85] Gate 3 accepts.
+#:
+#: So the widths are now checked against held-out rows before use, and scaled
+#: to the multiple that would have delivered TARGET_COVERAGE on them.
+VALIDATION_FRACTION = 0.30
+
+#: Held-out rows needed, pooled across horizons, before the check can speak.
+#: Per-horizon there are only a few dozen rows in total, so a per-horizon
+#: holdout would be four or five points — noisier than what it is judging.
+#: Pooling the *ratio* of error to that horizon's own width makes the horizons
+#: comparable and puts 30-50 points behind the verdict.
+MIN_VALIDATION_ROWS = 20
+
+#: Held-out coverage at or above this is shipped as measured. Below it the
+#: widths are scaled up. Matches Gate 3's lower acceptance bound, so this
+#: module stops shipping exactly what the operator check would call broken.
+MIN_VALIDATED_COVERAGE = 0.75
+
+#: Cap on the scale-up. A factor beyond this means the held-out rows disagree
+#: with the fitted ones so completely that the measurement is not describing
+#: the same process; fall back rather than ship a band built on it.
+MAX_VALIDATION_SCALE = 2.5
+
 
 @dataclass(frozen=True)
 class HorizonRow:
     horizon: int
     predicted: float
     actual: float
+    #: When the forecast was generated. Used only to split fit from holdout in
+    #: `validated_half_widths`; `relative_half_widths` ignores it. Optional so
+    #: callers that only want the raw quantile need not supply one.
+    generated_at: object | None = None
+
+    @property
+    def relative_error(self) -> float:
+        return abs(self.actual - self.predicted) / self.predicted
 
 
 def relative_half_widths(
@@ -136,6 +189,128 @@ def enforce_monotonic(widths: dict[int, float]) -> dict[int, float]:
     return out
 
 
+def split_fit_holdout(
+    rows: list[HorizonRow], *, fraction: float = VALIDATION_FRACTION
+) -> tuple[list[HorizonRow], list[HorizonRow]]:
+    """Oldest `1 - fraction` to fit on, newest `fraction` to check against.
+
+    Split on time rather than at random: the failure being guarded against is
+    drift, and a random split hides drift by putting the same era on both
+    sides. A row with no `generated_at` cannot be placed on either side of a
+    date, so it is dropped rather than left to fall wherever insertion order
+    puts it — an undated set yields no split at all, and the caller reads that
+    as "cannot validate".
+    """
+    ordered = sorted(
+        (r for r in rows if r.generated_at is not None),
+        key=lambda r: r.generated_at,
+    )
+    if not ordered:
+        return [], []
+    holdout_size = int(round(len(ordered) * fraction))
+    if holdout_size == 0:
+        return ordered, []
+    return ordered[:-holdout_size], ordered[-holdout_size:]
+
+
+def measure_coverage(
+    widths: dict[int, float], rows: list[HorizonRow]
+) -> tuple[int, float | None]:
+    """How many of `rows` their own horizon's band would have contained.
+
+    Rows whose horizon has no measured width are not counted — they are not
+    what these widths claim to cover.
+    """
+    # Same admissibility rule as `relative_half_widths`: a non-positive
+    # prediction or actual is a data error, not a miss, and `relative_error`
+    # would divide by zero on it.
+    judged = [
+        r
+        for r in rows
+        if r.horizon in widths and r.predicted > 0 and r.actual > 0
+    ]
+    if not judged:
+        return 0, None
+    inside = sum(1 for r in judged if r.relative_error <= widths[r.horizon])
+    return len(judged), inside / len(judged)
+
+
+def validated_half_widths(
+    rows: list[HorizonRow],
+    *,
+    coverage: float = TARGET_COVERAGE,
+    min_samples: int = MIN_SAMPLES_PER_HORIZON,
+    fraction: float = VALIDATION_FRACTION,
+    min_validation_rows: int = MIN_VALIDATION_ROWS,
+) -> dict[int, float]:
+    """Per-horizon half-widths that have been checked against held-out rows.
+
+    Fit on the older rows, measure what that would have covered on the newer
+    ones, and only then decide:
+
+      - Held-out coverage at or above MIN_VALIDATED_COVERAGE — ship the widths
+        measured on everything, holdout included, since the fitted band has
+        been shown to hold up on rows it never saw.
+      - Below it — scale every width by the multiple that would have delivered
+        `coverage` on the held-out rows. Pooling the ratio of each row's error
+        to its own horizon's width is what makes horizons of different sizes
+        comparable in one quantile.
+      - Too few held-out rows to judge, or a scale beyond
+        MAX_VALIDATION_SCALE — return {} and let `forecast()` keep the CQR
+        band. An unvalidated width is not better than the path it replaces;
+        it was shipping unvalidated that produced 0.581 coverage.
+    """
+    # Only dated rows can be validated, so only dated rows are shipped —
+    # `full_widths` below is measured over the same set the check ran on.
+    dated = [r for r in rows if r.generated_at is not None]
+    fit_rows, holdout_rows = split_fit_holdout(dated, fraction=fraction)
+    fit_widths = relative_half_widths(
+        fit_rows, coverage=coverage, min_samples=min_samples
+    )
+    if not fit_widths:
+        return {}
+
+    judged, achieved = measure_coverage(fit_widths, holdout_rows)
+    if judged < min_validation_rows or achieved is None:
+        return {}
+
+    # Everything the store has, now that the shape has been checked. Fitting
+    # the shipped widths on the fit half alone would throw away the newest and
+    # most representative rows.
+    full_widths = relative_half_widths(
+        dated, coverage=coverage, min_samples=min_samples
+    )
+    if not full_widths:
+        return {}
+
+    if achieved >= MIN_VALIDATED_COVERAGE:
+        return enforce_monotonic(full_widths)
+
+    # The multiple of its own horizon's width that each held-out row needed.
+    # The `coverage` quantile of those is the smallest uniform scale that
+    # would have covered that fraction of them.
+    ratios = [
+        r.relative_error / fit_widths[r.horizon]
+        for r in holdout_rows
+        if r.horizon in fit_widths
+        and fit_widths[r.horizon] > 0
+        and r.predicted > 0
+        and r.actual > 0
+    ]
+    if not ratios:
+        return {}
+    scale = float(np.quantile(np.asarray(ratios), coverage))
+    if scale > MAX_VALIDATION_SCALE:
+        return {}
+    scale = max(scale, 1.0)
+
+    scaled = {h: w * scale for h, w in full_widths.items()}
+    scaled = {h: w for h, w in scaled.items() if 0 < w <= MAX_RELATIVE_HALF_WIDTH}
+    if not scaled:
+        return {}
+    return enforce_monotonic(scaled)
+
+
 def load_horizon_widths(
     store_id: str,
     *,
@@ -143,12 +318,18 @@ def load_horizon_widths(
     coverage: float = TARGET_COVERAGE,
     min_samples: int = MIN_SAMPLES_PER_HORIZON,
 ) -> dict[int, float]:
-    """Measured per-horizon half-widths for one store, or {} when too thin."""
+    """Measured per-horizon half-widths for one store, or {} when too thin.
+
+    {} is also what a store gets when its widths cannot be validated against
+    held-out rows — see `validated_half_widths`. `forecast()` treats both the
+    same way, by keeping the CQR band.
+    """
     sql = """
         SELECT COALESCE("horizonDay",
                         ("forecastDate" - "generatedAt"::date) + 1) AS horizon,
                "predictedRevenue" AS predicted,
-               "actualRevenue"    AS actual
+               "actualRevenue"    AS actual,
+               "generatedAt"      AS generated_at
         FROM "ForecastDailyRevenue"
         WHERE "storeId" = %s
           AND "hourBucket" = 0
@@ -161,10 +342,15 @@ def load_horizon_widths(
     with connect() as conn, conn.cursor() as cur:
         cur.execute(sql, (store_id, lookback_days, CALIBRATION_EPOCH))
         rows = [
-            HorizonRow(horizon=int(h), predicted=float(p), actual=float(a))
-            for h, p, a in cur.fetchall()
+            HorizonRow(
+                horizon=int(h),
+                predicted=float(p),
+                actual=float(a),
+                generated_at=g,
+            )
+            for h, p, a, g in cur.fetchall()
             if p is not None and a is not None
         ]
-    return enforce_monotonic(
-        relative_half_widths(rows, coverage=coverage, min_samples=min_samples)
+    return validated_half_widths(
+        rows, coverage=coverage, min_samples=min_samples
     )

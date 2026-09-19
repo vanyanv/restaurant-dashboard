@@ -50,8 +50,16 @@ class _FakeConn:
         return self.cursor_obj
 
 
-def _store_row(name: str, target: str, rows_today: int, is_trainable: bool):
-    return (f"store-{name}", name, target, rows_today, is_trainable)
+def _store_row(
+    name: str,
+    target: str,
+    rows_today: int,
+    is_trainable: bool,
+    is_ready: bool = True,
+):
+    """A Gate 1 row. `is_ready` is the store's lifecycle stage, which decides
+    whether a pair with no SUCCEEDED training is an outage or the design."""
+    return (f"store-{name}", name, target, rows_today, is_trainable, is_ready)
 
 
 def test_gate1_passes_target_date_into_window_end_and_train_cutoff():
@@ -90,18 +98,38 @@ def test_gate1_fails_when_trainable_pair_missing_for_target_date():
     assert "missing for windowEnd=2026-05-13" in detail
 
 
-def test_gate1_skips_non_trainable_pairs_without_failing():
+def test_gate1_skips_pairs_whose_store_is_not_yet_ready():
+    """`run_nightly.main` trains nothing for a pre_open store and only REVENUE
+    for a warming_up one, so an untrained pair there is the design. Glendale
+    and Van Nuys sat in exactly this state while the gate ran."""
     target = date(2026, 5, 14)
     canned = [[
         _store_row("alpha", "REVENUE", 1, True),
-        _store_row("beta", "REVENUE", 0, False),  # no recent training — skipped
+        _store_row("beta", "REVENUE", 0, False, is_ready=False),
     ]]
     conn = _FakeConn(canned)
 
     ok, detail = ogc.gate1_eval_rows_today(conn, target)
 
     assert ok, detail
-    assert "skipped" in detail
+    assert "not trained (store is not `ready`)" in detail
+
+
+def test_gate1_fails_when_a_ready_store_has_no_successful_training():
+    """The same missing training at a `ready` store is the nightly job failing
+    for it. Until 2026-09-19 this took the skip path and the gate passed."""
+    target = date(2026, 5, 14)
+    canned = [[
+        _store_row("alpha", "REVENUE", 1, True),
+        _store_row("alpha", "BUSY_HOURS", 0, False, is_ready=True),
+    ]]
+    conn = _FakeConn(canned)
+
+    ok, detail = ogc.gate1_eval_rows_today(conn, target)
+
+    assert not ok
+    assert "no SUCCEEDED training" in detail
+    assert "BUSY_HOURS" in detail
 
 
 def test_gate2_window_ends_at_target_date():
@@ -123,7 +151,7 @@ def test_gate2_window_ends_at_target_date():
 
 def test_gate2_fails_when_zero_mentions_in_window():
     target = date(2026, 5, 14)
-    canned = [[("REVENUE", 0, 5), ("BUSY_HOURS", 0, 4)]]
+    canned = [[("REVENUE", 0, 5), ("BUSY_HOURS", 0, 4)]]  # both gated, both silent
     conn = _FakeConn(canned)
 
     ok, detail = ogc.gate2_seasonal_naive_fired(conn, target)

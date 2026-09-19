@@ -22,11 +22,15 @@ Gates (from `docs/superpowers/plans/2026-05-12-...`, Task 13):
       Each (active store × target) wrote at least one MlForecastEvaluation
       row whose windowEnd = target_date - 1. Missing rows mean the nightly
       job failed for that store/target, or reconciliation hasn't caught up.
+      A pair with no SUCCEEDED training at all is only excused when its store
+      is not yet `ready`; a `ready` store that stopped training fails.
 
-  Gate 2 — Seasonal-naive gate fired
-      MlTrainingRun.errorMessage in the last 7 days mentions "seasonal-naive"
-      at least once. Zero mentions = either no model retrained, or the gate
-      string isn't being persisted (regression).
+  Gate 2 — Seasonal-naive gate recorded
+      Every target the promotion gate applies to (REVENUE, BUSY_HOURS) that
+      trained in the last 7 days recorded its decision on
+      MlTrainingRun.errorMessage. Silence from a target that trained means
+      the gate isn't being persisted (regression). MENU_ITEM is outside the
+      gate by design and is reported, not judged.
 
   Gate 3 — Empirical 80% coverage for REVENUE
       Measured coverage of the CURRENT model generation's reconciled forecasts
@@ -158,11 +162,17 @@ def gate1_eval_rows_today(conn, target_date: date) -> tuple[bool, str]:
     windowEnd = target_date - 1.
 
     A pair is "trainable" if it has at least one SUCCEEDED MlTrainingRun in
-    the trailing _WINDOW_DAYS ending at target_date. Stores with
-    insufficient_history will never produce an evaluation row, so demanding
-    one would be guaranteed-to-fail noise; we skip them with status
-    "skipped" and surface the count in the gate detail so they remain
-    visible.
+    the trailing _WINDOW_DAYS ending at target_date. A pair with none is read
+    against the store's lifecycle stage, because the two cases are opposite:
+
+      - The store is not `ready`. `ml.run_nightly.main` trains nothing for a
+        pre_open store and only REVENUE for a warming_up one, so the absence
+        is the design. Skipped, and counted in the detail so it stays visible.
+      - The store IS `ready`. main() trains every target for it nightly, so
+        the absence means the nightly job is failing for that pair. That is
+        the outage this gate exists to catch, and it now fails the gate.
+        Until 2026-09-19 both cases took the skip path, so a ready store that
+        silently stopped training was reported and passed anyway.
     """
     window_end = target_date - timedelta(days=1)
     train_cutoff = target_date - timedelta(days=_WINDOW_DAYS)
@@ -178,7 +188,8 @@ def gate1_eval_rows_today(conn, target_date: date) -> tuple[bool, str]:
             )
             SELECT s.id AS "storeId", s.name, t.target,
                    COUNT(e.id) AS rows_today,
-                   (tr."storeId" IS NOT NULL) AS is_trainable
+                   (tr."storeId" IS NOT NULL) AS is_trainable,
+                   (s."lifecycleStage" = 'ready'::"LifecycleStage") AS is_ready
             FROM "Store" s
             CROSS JOIN (VALUES ('REVENUE'::"MlTarget"),
                                ('BUSY_HOURS'::"MlTarget"),
@@ -189,7 +200,7 @@ def gate1_eval_rows_today(conn, target_date: date) -> tuple[bool, str]:
             LEFT JOIN trainable tr
               ON tr."storeId" = s.id AND tr.target = t.target
             WHERE s."isActive" = true
-            GROUP BY 1, 2, 3, tr."storeId"
+            GROUP BY 1, 2, 3, tr."storeId", s."lifecycleStage"
             ORDER BY 2, 3
             ''',
             (train_cutoff, target_date, window_end),
@@ -201,32 +212,75 @@ def gate1_eval_rows_today(conn, target_date: date) -> tuple[bool, str]:
 
     lines = []
     missing = []
+    untrained = []
     skipped = 0
-    for _, name, target, count, is_trainable in rows:
+    for _, name, target, count, is_trainable, is_ready in rows:
         if not is_trainable:
-            lines.append(f"  {name:<24} {target:<11} skipped (no SUCCEEDED training in {_WINDOW_DAYS}d)")
-            skipped += 1
+            if is_ready:
+                # `ml.run_nightly.main` trains every `ready` store on every
+                # target, so a ready pair with no SUCCEEDED run is the nightly
+                # job failing for it — the exact outage this gate exists to
+                # catch. Skipping it was silent: the gate reported the line and
+                # still passed.
+                lines.append(
+                    f"  {name:<24} {target:<11} NO SUCCEEDED training in {_WINDOW_DAYS}d"
+                )
+                untrained.append((name, target))
+            else:
+                # pre_open and warming_up stores are skipped by design: main()
+                # trains no target for pre_open, and only REVENUE for
+                # warming_up. Demanding rows would be guaranteed-to-fail noise.
+                lines.append(
+                    f"  {name:<24} {target:<11} not trained (store is not `ready`)"
+                )
+                skipped += 1
         else:
             lines.append(f"  {name:<24} {target:<11} {count} rows")
             if count == 0:
                 missing.append((name, target))
     detail = "\n".join(lines)
     if skipped:
-        detail = f"{detail}\n  ({skipped} pair(s) skipped — no recent training)"
+        detail = f"{detail}\n  ({skipped} pair(s) skipped — store not yet `ready`)"
+    if untrained:
+        return False, (
+            f"{len(untrained)} ready (store, target) pair(s) have no SUCCEEDED "
+            f"training in {_WINDOW_DAYS}d\n{detail}"
+        )
     if missing:
         return False, f"{len(missing)} trainable (store, target) pairs missing for windowEnd={window_end}\n{detail}"
     return True, detail
 
 
+#: Targets `ml.run_nightly._select_result` puts through the seasonal-naive
+#: promotion gate. MENU_ITEM is deliberately outside it — `train_menu_item`
+#: produces one flavor per SKU, so there is no baseline/enriched pair to
+#: choose between (see `run_menu_items_for_store`). Counting its runs as
+#: unmentioned printed a permanent `MENU_ITEM 0/N` that described the design,
+#: not a fault.
+_GATED_TARGETS = ("BUSY_HOURS", "REVENUE")
+
+
 def gate2_seasonal_naive_fired(conn, target_date: date) -> tuple[bool, str]:
-    """MlTrainingRun.errorMessage mentions the seasonal-naive gate in the 7
-    days ending at target_date.
+    """Every gated target that trained in the window recorded its promotion
+    decision on MlTrainingRun.errorMessage.
 
     Accepts either 'seasonal-naive' (post-fix label, commit 19b6be4) or
     'vs naive' (pre-fix label). Both indicate the seasonal-naive baseline
     gate was evaluated during that training run — the fix in 19b6be4 was
     purely a label-format change in promotion.decide_promotion's reason
     string, not a behavioral change to the gate itself.
+
+    Two things changed here on 2026-09-19, after this gate had been red since
+    09-14 with `0/8 runs mention seasonal-naive` on every target:
+
+      - `run_nightly` only wrote the decision when the gate REJECTED, so a
+        window in which every model was promoted — the healthy case — left
+        every errorMessage NULL and read exactly like a window in which the
+        gate never ran. It now records the decision on both branches, which
+        is what makes this gate's question answerable at all.
+      - The verdict was `any(mentions > 0)` across all targets, so one gated
+        target still reporting could mask the other going silent. Each gated
+        target that trained must now account for itself.
     """
     cutoff = target_date - timedelta(days=_WINDOW_DAYS)
     with conn.cursor() as cur:
@@ -251,13 +305,22 @@ def gate2_seasonal_naive_fired(conn, target_date: date) -> tuple[bool, str]:
     if not rows:
         return False, f"no MlTrainingRun rows in [{cutoff}, {target_date}]"
 
-    lines = [
-        f"  {target:<11} {naive}/{total} runs mention seasonal-naive"
-        for target, naive, total in rows
-    ]
+    lines = []
+    silent = []
+    for target, naive, total in rows:
+        if str(target) not in _GATED_TARGETS:
+            lines.append(f"  {target:<11} {total} runs (not gated by design)")
+            continue
+        lines.append(f"  {target:<11} {naive}/{total} runs recorded the gate")
+        if total > 0 and naive == 0:
+            silent.append(str(target))
+
     detail = "\n".join(lines)
-    any_fired = any(naive > 0 for _, naive, _ in rows)
-    return any_fired, detail
+    if silent:
+        return False, (
+            f"{', '.join(silent)} trained but recorded no promotion decision\n{detail}"
+        )
+    return True, detail
 
 
 @dataclass(frozen=True)

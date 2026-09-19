@@ -231,9 +231,15 @@ def run_revenue_for_store(store_id: str, model_version: str) -> dict:
             horizon_widths=horizon_widths,
         )
         written = _write_revenue_forecasts(store_id, selected_version, rows)
-        warning = None
-        if gate != "promoted":
-            warning = f"{gate}: {gate_reason}"
+        # Record the promotion decision whatever it was. This used to be
+        # written only when the gate REJECTED, which meant a run where the
+        # seasonal-naive gate was evaluated and passed left errorMessage NULL
+        # — indistinguishable from a run where the gate never ran. Gate 2 of
+        # the operator check counts runs whose errorMessage mentions the gate,
+        # so a clean sweep of promotions read as "the gate has stopped firing"
+        # and failed the check from 2026-09-14 on. `decide_promotion` returns a
+        # reason on both branches precisely so it can be persisted on both.
+        warning = f"{gate}: {gate_reason}"
 
         _close_run(
             run_id,
@@ -441,12 +447,14 @@ def run_busy_hours_for_store(store_id: str, model_version: str) -> dict:
             store_id, result, horizon_days=BUSY_HOURS_HORIZON_DAYS
         )
         written = _write_hourly_order_forecasts(store_id, selected_version, rows)
+        # As in run_revenue_for_store: the gate decision is recorded whether it
+        # promoted or rejected, so Gate 2 can tell "gate passed" from "gate
+        # never ran".
         warning = None
         if result.harri_coverage < 0.6:
             warning = f"low_harri_coverage:{result.harri_coverage:.2f}"
-        if gate != "promoted":
-            gate_warning = f"{gate}: {gate_reason}"
-            warning = f"{warning}; {gate_warning}" if warning else gate_warning
+        gate_warning = f"{gate}: {gate_reason}"
+        warning = f"{warning}; {gate_warning}" if warning else gate_warning
 
         _close_run(
             run_id,

@@ -119,3 +119,111 @@ def test_pre_fix_residuals_are_excluded_from_calibration():
     assert '"generatedAt" >= %s::date' in src
     assert "CALIBRATION_EPOCH" in src
     assert CALIBRATION_EPOCH == "2026-08-19"
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Held-out validation (2026-09-19)
+#
+# The widths above are an unbiased quantile on exchangeable rows. Production
+# rows drift, and the module's own docstring recorded what that cost — widths
+# fitted on the older half of the pre-fix history covered 60-76% of the newer
+# half. Nothing acted on it, so `forecast()` shipped whatever had
+# MIN_SAMPLES_PER_HORIZON rows behind it, replacing the CQR band outright.
+# Hollywood's measured 80% intervals then covered 0.581 on 2026-09-14, still
+# only 0.696 by 09-18. These cover the check that now stands in the way.
+# ─────────────────────────────────────────────────────────────────────────────
+import datetime as _dt
+
+from ml.evaluation.horizon_calibration import (
+    MAX_VALIDATION_SCALE,
+    MIN_VALIDATED_COVERAGE,
+    measure_coverage,
+    split_fit_holdout,
+    validated_half_widths,
+)
+
+
+def _dated_rows(
+    horizon: int,
+    errors: list[float],
+    *,
+    start_day: int = 1,
+    predicted: float = 1000.0,
+) -> list[HorizonRow]:
+    """Rows carrying ascending generatedAt, so the split is deterministic."""
+    return [
+        HorizonRow(
+            horizon=horizon,
+            predicted=predicted,
+            actual=predicted * (1 + e),
+            generated_at=_dt.date(2026, 9, 1) + _dt.timedelta(days=start_day + i),
+        )
+        for i, e in enumerate(errors)
+    ]
+
+
+def test_split_puts_the_newest_rows_in_the_holdout():
+    """Split on time, not at random: a random split puts the same era on both
+    sides, which is exactly how drift hides."""
+    rows = _dated_rows(1, [0.01] * 10)
+    fit, holdout = split_fit_holdout(rows, fraction=0.30)
+    assert len(fit) == 7 and len(holdout) == 3
+    assert max(r.generated_at for r in fit) < min(r.generated_at for r in holdout)
+
+
+def test_measure_coverage_ignores_horizons_the_widths_say_nothing_about():
+    widths = {1: 0.10}
+    rows = _dated_rows(1, [0.05, 0.20]) + _dated_rows(2, [0.99])
+    judged, achieved = measure_coverage(widths, rows)
+    assert judged == 2
+    assert achieved == pytest.approx(0.5)
+
+
+def test_stable_history_ships_its_measured_widths():
+    """When the holdout looks like the fit rows, the widths have earned the
+    band and are returned — the guard is not a blanket refusal."""
+    errors = [0.02 + (i % 10) / 200 for i in range(60)]
+    widths = validated_half_widths(
+        _dated_rows(1, errors), min_samples=5, min_validation_rows=10
+    )
+    assert widths, "stable history should still produce widths"
+    _, achieved = measure_coverage(widths, _dated_rows(1, errors))
+    assert achieved >= MIN_VALIDATED_COVERAGE
+
+
+def test_widths_are_scaled_up_when_the_holdout_undercovers():
+    """The 2026-09 shape: quiet history, then errors twice the size. The old
+    path shipped the quiet width and covered ~58%; the width must grow."""
+    calm = [0.02] * 40
+    drifted = [0.04] * 20
+    rows = _dated_rows(1, calm + drifted)
+
+    naive = relative_half_widths(rows, min_samples=5)
+    guarded = validated_half_widths(rows, min_samples=5, min_validation_rows=10)
+
+    assert guarded, "a scalable miss should still yield a band"
+    assert guarded[1] > naive[1]
+    # And the scaled band must actually cover the era that broke the old one.
+    _, achieved = measure_coverage(guarded, _dated_rows(1, drifted))
+    assert achieved >= MIN_VALIDATED_COVERAGE
+
+
+def test_a_holdout_too_thin_to_judge_falls_back_rather_than_guessing():
+    """Returning {} puts `forecast()` back on the CQR band. An unvalidated
+    width is not better than the path it replaces."""
+    assert validated_half_widths(_dated_rows(1, [0.05] * 12), min_samples=5) == {}
+
+
+def test_rows_without_timestamps_cannot_be_validated():
+    """No generatedAt means no time split, so nothing can be held out."""
+    rows = _rows(1, [0.05] * 60)
+    assert validated_half_widths(rows, min_samples=5, min_validation_rows=10) == {}
+
+
+def test_a_holdout_that_disagrees_wildly_falls_back_instead_of_scaling():
+    """Beyond MAX_VALIDATION_SCALE the two halves are not describing the same
+    process, and a band built on the older one should not ship at all."""
+    rows = _dated_rows(1, [0.01] * 40 + [0.60] * 20)
+    ratio = 0.60 / 0.01
+    assert ratio > MAX_VALIDATION_SCALE
+    assert validated_half_widths(rows, min_samples=5, min_validation_rows=10) == {}
