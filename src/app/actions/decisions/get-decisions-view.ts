@@ -380,11 +380,14 @@ export async function getDecisionsView(input: {
     // Labor hours joined to net sales, for the per-weekday productivity median.
     // Same sources and grain as getSplhSeries: HarriPositionDaily.actualSeconds
     // and OtterHourlySummary.netSales, both LA-calendar daily.
-    prisma.$queryRaw<Array<{ date: Date; hours: number | null; net: number | null }>>(
+    prisma.$queryRaw<
+      Array<{ date: Date; hours: number | null; net: number | null; unsynced: bigint }>
+    >(
       Prisma.sql`
         SELECT h."date",
                SUM(h."actualSeconds") / 3600.0  AS hours,
-               s.net                            AS net
+               SUM(s.net)                       AS net,
+               COUNT(DISTINCT h."storeId") FILTER (WHERE s.net IS NULL) AS unsynced
           FROM "HarriPositionDaily" h
           LEFT JOIN (
             SELECT "storeId", "date", SUM("netSales") AS net
@@ -399,7 +402,12 @@ export async function getDecisionsView(input: {
            -- Today is always partial; one low sample would drag a weekday
            -- median that only has ~17 observations behind it.
            AND h."date" < ${today}
-         GROUP BY h."date", s.net
+         -- One row per DAY, account-wide. Grouping by s.net as well used to
+         -- emit one row per store, so a three-store account produced three
+         -- entries sharing a date: the weekday medians below were medians of
+         -- store-days, and the 14-point sparkline drew under five real days
+         -- of mixed stores while its own comment promised fourteen.
+         GROUP BY h."date"
       `,
     ).catch(() => []),
     // The forecast's own explanation. Read here rather than through
@@ -498,7 +506,13 @@ export async function getDecisionsView(input: {
   // Median $/labor-hour per weekday. A flat target would just redraw the volume
   // curve and condemn every Tuesday, so the comparison is like-for-like.
   const splhHistory: SplhInput[] = splhHistoryRows
-    .filter((r) => Number(r.hours ?? 0) > 0 && Number(r.net ?? 0) > 0)
+    // `unsynced` counts stores that worked that day with no sales row behind
+    // them. Their hours are in the denominator and their sales are not in the
+    // numerator, so such a day reads as a productivity collapse that never
+    // happened. A day we only half know is not a day we can score.
+    .filter(
+      (r) => Number(r.hours ?? 0) > 0 && Number(r.net ?? 0) > 0 && Number(r.unsynced) === 0,
+    )
     .map((r) => ({
       date: ymd(r.date),
       netSales: Number(r.net ?? 0),

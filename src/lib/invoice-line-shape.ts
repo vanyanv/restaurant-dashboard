@@ -138,13 +138,28 @@ export function getLineItemBaseQty(
   }
 
   // Shape 1: pack-converts-to-base. quantity is in `unit`; multiply through
-  // packSize × unitSize to land in `unitSizeUom`. When unitSize is missing,
-  // we have no conversion to apply, so the base unit is whatever `unit` is.
+  // packSize × unitSize to land in `unitSizeUom`.
+  //
+  // That conversion needs both halves of the factor AND a UOM to land in.
+  // `unitSize` is the half that carries a magnitude (how much `unitSizeUom` is
+  // in one inner pack); `packSize` only counts inner packs. Applied on its own
+  // it converts nothing — it restates 1 CS of a 6-pack as "6 CS", which then
+  // divides the line's extended price by six and understates the cost of
+  // everything that case feeds by the pack size. `unitSizeUom` is the
+  // destination; without it there is nothing to convert into either.
+  //
+  // So unless both are present, the quantity stands exactly as the invoice
+  // wrote it, denominated in `unit`. And with no `unit` either, we do not know
+  // what the quantity counts, which is the one case that has no answer.
+  if (rawUnitSize === null || !line.unitSizeUom) {
+    if (!line.unit) return null
+    if (!isFinite(line.quantity) || line.quantity === 0) return null
+    return { totalBaseQty: line.quantity, baseUom: line.unit }
+  }
+
   const totalBaseQty = line.quantity * packSize * unitSize
   if (!isFinite(totalBaseQty) || totalBaseQty === 0) return null
-  const baseUom = (rawUnitSize ? line.unitSizeUom : null) ?? line.unit ?? line.unitSizeUom ?? ""
-  if (!baseUom) return null
-  return { totalBaseQty, baseUom }
+  return { totalBaseQty, baseUom: line.unitSizeUom }
 }
 
 /**

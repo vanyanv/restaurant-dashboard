@@ -8,6 +8,7 @@ SQL/calls they make.
 from __future__ import annotations
 
 import datetime as dt
+import inspect
 import logging
 from unittest.mock import MagicMock, patch
 
@@ -217,3 +218,77 @@ def test_evaluation_row_label_survives_a_single_generation():
         rows, target="REVENUE", store_id="store-hwd", today=dt.date(2026, 8, 21)
     )
     assert inp is not None and inp.model_version == "only-one"
+
+
+# ---------------------------------------------------------------------------
+# The seasonal-naive baseline, and which series it compares a row against.
+# ---------------------------------------------------------------------------
+
+
+def test_baseline_pairs_each_hour_with_the_same_hour_a_week_earlier():
+    """BUSY_HOURS and MENU_ITEM send ~24 rows (or one per SKU) per date.
+
+    Keyed on the date alone, the lookup dict kept only the last row written for
+    each day and handed that one actual to every row of the day a week later —
+    lunch scored against closing time. `baselineWape` is the denominator of the
+    model's skill ratio, so this is what the operator gate reads.
+    """
+    dates = []
+    series = []
+    actuals = []
+    for day in (dt.date(2026, 5, 1), dt.date(2026, 5, 8)):
+        for hour, orders in ((11, 40.0), (15, 5.0), (19, 60.0)):
+            dates.append(day)
+            series.append(hour)
+            actuals.append(orders)
+
+    out = ni._seasonal_naive_baseline(dates, np.asarray(actuals), series)
+
+    # The 1st has no t-7 in the window, so it falls back to its own actual.
+    assert list(out[:3]) == [40.0, 5.0, 60.0]
+    # The 8th takes each hour's own value from the 1st — not hour 19's for all.
+    assert list(out[3:]) == [40.0, 5.0, 60.0]
+
+
+def test_baseline_without_a_series_still_keys_on_the_date():
+    """Daily revenue has one row per date and passes no series."""
+    dates = [dt.date(2026, 5, 1), dt.date(2026, 5, 8)]
+    out = ni._seasonal_naive_baseline(dates, np.asarray([100.0, 130.0]))
+    assert list(out) == [100.0, 100.0]
+
+
+def test_hourly_and_item_fetches_select_the_column_the_baseline_needs():
+    """`series_index=6` is only meaningful if the fetch selects a 7th column.
+
+    The cursor is a mock, so the rows prove nothing — read the SQL the fetch
+    would actually send.
+    """
+    hourly_sql = inspect.getsource(ni._fetch_reconciled_hourly_orders)
+    item_sql = inspect.getsource(ni._fetch_reconciled_menu_item)
+    assert 'f."modelVersion",\n               f."hourBucket"' in hourly_sql
+    assert 'f."modelVersion",\n               f."otterItemSkuId"' in item_sql
+
+
+def test_build_eval_input_reads_the_series_column_it_is_pointed_at():
+    rows = [
+        (dt.date(2026, 5, 1), 38.0, 40.0, 30.0, 50.0, "v1", 11),
+        (dt.date(2026, 5, 1), 6.0, 5.0, 3.0, 9.0, "v1", 15),
+        (dt.date(2026, 5, 8), 41.0, 40.0, 30.0, 50.0, "v1", 11),
+        (dt.date(2026, 5, 8), 4.0, 5.0, 3.0, 9.0, "v1", 15),
+    ]
+    inp = ni._build_eval_input(
+        rows, target="BUSY_HOURS", store_id="s1", today=dt.date(2026, 5, 12), series_index=6
+    )
+    assert inp is not None
+    # Hour 11 on the 8th references hour 11 on the 1st (40), not hour 15's 5.
+    assert inp.baseline_predictions[2] == 40.0
+    assert inp.baseline_predictions[3] == 5.0
+
+
+def test_a_window_mostly_falling_back_says_so_out_loud(caplog):
+    """A fallback row scores zero error, so a window full of them makes the
+    baseline look perfect and the model look beaten by it."""
+    dates = [dt.date(2026, 5, 1) + dt.timedelta(days=i) for i in range(5)]
+    with caplog.at_level(logging.WARNING):
+        ni._seasonal_naive_baseline(dates, np.asarray([1.0] * 5))
+    assert any("fell back to actual" in r.message for r in caplog.records)

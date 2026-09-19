@@ -123,6 +123,13 @@ def _fetch_revenue_by_horizon(conn, store_id: str, today: dt.date) -> list[tuple
 def _fetch_reconciled_hourly_orders(conn, store_id: str, today: dt.date) -> list[tuple]:
     """Latest reconciled hourly-orders forecast per (storeId, forecastDate, hourBucket)
     over the trailing 28 days.
+
+    The seventh column is the hour bucket, and it is not decoration: these rows
+    are ~24 per date, and the seasonal-naive baseline pairs each row with the
+    same series a week earlier. Keyed on the date alone, all 24 of a day's
+    buckets took one arbitrary bucket's actual from t-7 as their reference —
+    lunch scored against closing time — which made `baselineWape` for
+    BUSY_HOURS a comparison against nothing in particular.
     """
     sql = """
         SELECT DISTINCT ON (f."forecastDate", f."hourBucket")
@@ -131,7 +138,8 @@ def _fetch_reconciled_hourly_orders(conn, store_id: str, today: dt.date) -> list
                f."actualOrders"::float,
                COALESCE(f.p10, f."predictedOrders")::float,
                COALESCE(f.p90, f."predictedOrders")::float,
-               f."modelVersion"
+               f."modelVersion",
+               f."hourBucket"
         FROM "ForecastHourlyOrders" f
         WHERE f."storeId" = %s
           AND f."actualOrders" IS NOT NULL
@@ -149,6 +157,10 @@ def _fetch_reconciled_menu_item(conn, store_id: str, today: dt.date) -> list[tup
     """Latest reconciled menu-item forecast per (storeId, otterItemSkuId,
     forecastDate) over the trailing 28 days. Aggregated across all SKUs into
     one evaluation row (per the "one row per target per night" pattern).
+
+    The seventh column is the SKU, for the same reason the hourly fetch carries
+    its hour bucket: one row per SKU per date, and a baseline keyed on the date
+    alone compared every SKU to whichever one happened to sort last a week ago.
     """
     sql = """
         SELECT DISTINCT ON (f."otterItemSkuId", f."forecastDate")
@@ -157,7 +169,8 @@ def _fetch_reconciled_menu_item(conn, store_id: str, today: dt.date) -> list[tup
                f."actualQty"::float,
                COALESCE(f.p10, f."predictedQty")::float,
                COALESCE(f.p90, f."predictedQty")::float,
-               f."modelVersion"
+               f."modelVersion",
+               f."otterItemSkuId"
         FROM "ForecastMenuItem" f
         WHERE f."storeId" = %s
           AND f."actualQty" IS NOT NULL
@@ -237,32 +250,57 @@ def _fetch_future_items_with_price(conn, store_id: str, today: dt.date) -> list[
 # ---------------------------------------------------------------------------
 
 
-def _seasonal_naive_baseline(dates: list[dt.date], actuals: np.ndarray) -> np.ndarray:
+#: Share of rows that may fall back to their own actual before the baseline
+#: stops being a baseline. A fallback row scores zero error, so a window full
+#: of them makes seasonal-naive look perfect and the model look beaten by it.
+_BASELINE_FALLBACK_WARN = 0.10
+
+
+def _seasonal_naive_baseline(
+    dates: list[dt.date],
+    actuals: np.ndarray,
+    series: list | None = None,
+) -> np.ndarray:
     """Compute y[t-7] from the observed actuals, falling back to the row's own
     actual when t-7 is not in the window.
 
+    `series` names which series each row belongs to — the hour bucket for
+    BUSY_HOURS, the SKU for MENU_ITEM — and the lookup is keyed on
+    `(series, date)`. Daily revenue has one row per date and passes None.
+
+    Without it the lookup was keyed on the date alone while the caller handed
+    in ~24 rows (or one per SKU) per date, so the dict kept only the last row
+    written for each day and handed that single actual to every row of the day
+    a week later. Every hour of a Tuesday was scored against one hour of the
+    Tuesday before it. The `baselineWape` that came out is the denominator of
+    the model's skill ratio, which is what the operator gate reads.
+
     With the 35-day fetch window paired with the 28-day evaluation window the
-    fallback should essentially never fire — every evaluation date has its t-7
-    reference in `by_date`. We still log the fallback count when >0 so
-    pre-rollout edges (sparse history, gaps in reconciliation) are visible
-    instead of silently biasing baselineWape toward zero.
+    fallback should be rare — every evaluation date has its t-7 reference. A
+    fallback row scores zero error and flatters the baseline, so past
+    `_BASELINE_FALLBACK_WARN` of the window we say so at warning level rather
+    than publishing a skill ratio nobody can read.
     """
-    by_date = {d: float(a) for d, a in zip(dates, actuals)}
+    keys = series if series is not None else [None] * len(dates)
+    by_key = {(k, d): float(a) for k, d, a in zip(keys, dates, actuals)}
     out = []
     fallback_count = 0
-    for d, a in zip(dates, actuals):
-        prev = by_date.get(d - dt.timedelta(days=7))
+    for k, d, a in zip(keys, dates, actuals):
+        prev = by_key.get((k, d - dt.timedelta(days=7)))
         if prev is None:
             fallback_count += 1
             out.append(float(a))
         else:
             out.append(float(prev))
     if fallback_count > 0:
-        _LOG.debug(
-            "_seasonal_naive_baseline: %d/%d rows fell back to actual "
-            "(no t-7 reference in window)",
+        share = fallback_count / len(dates) if dates else 0.0
+        _LOG.log(
+            logging.WARNING if share > _BASELINE_FALLBACK_WARN else logging.DEBUG,
+            "_seasonal_naive_baseline: %d/%d rows (%.0f%%) fell back to actual "
+            "(no t-7 reference in window); baselineWape is flattered by that much",
             fallback_count,
             len(dates),
+            share * 100.0,
         )
     return np.asarray(out, dtype=float)
 
@@ -301,6 +339,7 @@ def _build_eval_input(
     store_id: str,
     today: dt.date,
     horizon_day: int = POOLED_HORIZON,
+    series_index: int | None = None,
 ) -> EvaluationInput | None:
     if not rows:
         return None
@@ -318,7 +357,11 @@ def _build_eval_input(
     # number, but it names the generation the window is converging on rather
     # than the one it is leaving.
     model_version = rows[-1][5] or rows[0][5] or "unknown"
-    baseline_preds = _seasonal_naive_baseline(dates, acts)
+    # `series_index` names the column that separates one series from another
+    # within a date — the hour bucket, the SKU. Targets with one row per date
+    # leave it None.
+    series = None if series_index is None else [r[series_index] for r in rows]
+    baseline_preds = _seasonal_naive_baseline(dates, acts, series)
 
     # We only have 80% PI columns. Widen by ~2x for an approximate 95% PI
     # so the evaluator's coverage column is at least populated.
@@ -404,14 +447,18 @@ def run_evaluation_pass(conn, store_id: str, today: dt.date) -> int:
         _LOG.info("evaluator: wrote REVENUE row for %s (n=%d)", store_id, rev_input.actuals.size)
 
     hr_rows = _fetch_reconciled_hourly_orders(conn, store_id, today)
-    hr_input = _build_eval_input(hr_rows, target="BUSY_HOURS", store_id=store_id, today=today)
+    hr_input = _build_eval_input(
+        hr_rows, target="BUSY_HOURS", store_id=store_id, today=today, series_index=6
+    )
     if hr_input is not None:
         upsert_evaluation_row(conn, build_evaluation_row(hr_input))
         written += 1
         _LOG.info("evaluator: wrote BUSY_HOURS row for %s (n=%d)", store_id, hr_input.actuals.size)
 
     item_rows = _fetch_reconciled_menu_item(conn, store_id, today)
-    item_input = _build_eval_input(item_rows, target="MENU_ITEM", store_id=store_id, today=today)
+    item_input = _build_eval_input(
+        item_rows, target="MENU_ITEM", store_id=store_id, today=today, series_index=6
+    )
     if item_input is not None:
         upsert_evaluation_row(conn, build_evaluation_row(item_input))
         written += 1

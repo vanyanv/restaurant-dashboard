@@ -150,3 +150,55 @@ describe("getSplhSeries — with a range", () => {
     expect(series.points.map((p) => p.date)).toEqual(["2026-08-10", "2026-08-17"])
   })
 })
+
+/* ── A day the sales side never answered ──────────────────────────────── */
+
+describe("getSplhSeries — the LEFT JOIN's misses", () => {
+  /** `daysBetween`, with one day's sales row absent from the join. */
+  function withNullNet(from: string, to: string, missing: string) {
+    return daysBetween(from, to).map((r) =>
+      r.date.toISOString().slice(0, 10) === missing ? { ...r, net: null } : r,
+    )
+  }
+
+  it("does not draw a day whose sales are unknown as a day of no sales", async () => {
+    vi.mocked(prisma.$queryRaw).mockResolvedValue(
+      withNullNet("2026-06-01", "2026-08-24", "2026-08-20") as never,
+    )
+    const [series] = await getSplhSeries("day", toQueryBounds(range))
+
+    // Reading NULL as $0 gave that day an SPLH of 0, zero earned hours and a
+    // variance of every one of the 40 hours worked — the chart's worst day,
+    // invented out of a sync gap.
+    expect(series.points.map((p) => p.date)).not.toContain("2026-08-20")
+    expect(series.points.every((p) => p.splh !== 0)).toBe(true)
+    expect(series.daysMissingSales).toBe(1)
+    expect(series.daysCovered).toBe(6)
+  })
+
+  it("keeps the 0 out of the weekday median every other Thursday is scored on", async () => {
+    // 2026-08-13 is a Thursday in the medians' history, not a bar. With its
+    // NULL read as 0, that 0 joined the Thursday bucket and dragged the target
+    // every real Thursday — including the 20th — is scored against.
+    vi.mocked(prisma.$queryRaw).mockResolvedValue(
+      withNullNet("2026-06-01", "2026-08-24", "2026-08-13") as never,
+    )
+    const [series] = await getSplhSeries("day", toQueryBounds(range))
+    const thursday = series.points.find((p) => p.weekday === 4)
+    // Every scored day here is 4000/40; the target must land on it, not under.
+    expect(thursday?.targetSplh).toBe(100)
+    expect(thursday?.status).toBe("on")
+  })
+
+  it("withholds the whole week rather than drawing one a day's sales short", async () => {
+    vi.mocked(prisma.$queryRaw).mockResolvedValue(
+      withNullNet("2026-06-01", "2026-08-23", "2026-08-12") as never,
+    )
+    const [series] = await getSplhSeries("week", {
+      startDate: new Date(2026, 7, 10),
+      endDate: new Date(2026, 7, 23, 23, 59, 59),
+    })
+    // The week of the 10th is six days of sales against seven of labour.
+    expect(series.points.map((p) => p.date)).toEqual(["2026-08-17"])
+  })
+})

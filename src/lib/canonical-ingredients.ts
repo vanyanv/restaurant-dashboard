@@ -268,7 +268,7 @@ function shouldSkipRawInvoiceUnitFallback(
   )
 }
 
-type InvoiceLineForCost = {
+export type InvoiceLineForCost = {
   quantity: number
   unit: string | null
   packSize: number | null
@@ -284,7 +284,7 @@ type InvoiceLineForCost = {
  * first, then the legacy raw `extendedPrice / quantity` fallback. Returns null
  * when the line can't yield a usable positive cost (so callers can skip it).
  */
-function resolveLineUnitCost(
+export function resolveLineUnitCost(
   line: InvoiceLineForCost,
   recipeUnit: string | null | undefined,
   vendorMatch:
