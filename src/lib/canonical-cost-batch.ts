@@ -47,6 +47,7 @@ export async function batchCanonicalCosts(
       costPerRecipeUnit: true,
       costSource: true,
       costUpdatedAt: true,
+      yieldFactor: true,
     },
   })
 
@@ -145,6 +146,7 @@ export async function batchCanonicalCosts(
         sourceVendor: prov?.vendorName ?? null,
         sourceSku: prov?.sku ?? null,
         sourceProductName: prov?.productName ?? null,
+        yieldFactor: c.yieldFactor,
       })
       continue
     }
@@ -194,6 +196,7 @@ export async function batchCanonicalCosts(
       // partial: `recipe-cost.ts` branches on it, and the batch path — the
       // one every list uses — could never set it.
       costGuardTriggered: rejectedSpike,
+      yieldFactor: c.yieldFactor,
     })
   }
 
@@ -263,6 +266,7 @@ export async function batchCanonicalCosts(
             sourceVendor: li.invoice.vendorName,
             sourceSku: li.sku,
             sourceProductName: li.productName,
+            yieldFactor: c.yieldFactor,
           })
           break
         }

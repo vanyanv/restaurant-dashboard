@@ -245,6 +245,13 @@ export type CanonicalIngredientCost = {
    * surface the bad line for review. See `selectNonSpikeCostIndex`.
    */
   costGuardTriggered?: boolean
+  /**
+   * Usable fraction of what is purchased, in (0, 1]. 1 means no trim or
+   * cooking loss, which is every ingredient until somebody sets one. The
+   * recipe walk divides a line's cost by it: a line calling for 1 lb of
+   * usable product against a 0.8 yield costs 1.25 lb of purchased product.
+   */
+  yieldFactor: number
 }
 
 function shouldSkipRawInvoiceUnitFallback(
@@ -339,8 +346,10 @@ export async function getCanonicalIngredientCost(
       costPerRecipeUnit: true,
       costSource: true,
       costUpdatedAt: true,
+      yieldFactor: true,
     },
   })
+  const yieldFactor = canonical?.yieldFactor ?? 1
 
   // Manual prices are authoritative per-recipe-unit ($/each, $/oz, …) and
   // intentionally override both dated and store-scoped invoice lookup. We do
@@ -382,6 +391,7 @@ export async function getCanonicalIngredientCost(
       sourceVendor: latest?.invoice.vendorName ?? null,
       sourceSku: latest?.sku ?? null,
       sourceProductName: latest?.productName ?? null,
+      yieldFactor,
     }
   }
 
@@ -489,6 +499,7 @@ export async function getCanonicalIngredientCost(
         sourceSku: chosen.line.sku,
         sourceProductName: chosen.line.productName,
         costGuardTriggered: rejectedSpike,
+        yieldFactor,
       }
     }
   }
@@ -553,6 +564,7 @@ export async function getCanonicalIngredientCost(
       sourceVendor: li.invoice.vendorName,
       sourceSku: li.sku,
       sourceProductName: li.productName,
+      yieldFactor,
     }
   }
 

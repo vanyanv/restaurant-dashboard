@@ -85,11 +85,19 @@ describe("a batch recipe's plate cost", () => {
     expect(burger.batchCost).toBe(10)
   })
 
-  it("does not divide a food-cost override, which is already a plate figure", async () => {
-    // No ingredient lines to walk, so the override IS the answer.
-    const bare = { ...recipe("slider", 6, 3.5), ingredients: [] }
+  it("divides a food-cost override too, because it is a batch figure", async () => {
+    // No ingredient lines to walk, so the override IS the answer — but the
+    // answer to "what does this batch cost", not "what does a plate cost".
+    // This file first asserted the opposite, on the reading that an owner
+    // typing a dollar figure means a plate. The editor settles it: the "Cost
+    // override" field's own hint, on any recipe that yields more than one,
+    // reads "It is the cost of the whole batch, so it is divided by the yield
+    // above." The number an owner types is the number they were told to type.
+    const bare = { ...recipe("slider", 6, 21), ingredients: [] }
     vi.mocked(prisma.recipe.findMany).mockResolvedValue([bare] as never)
-    expect((await batchRecipeCosts("acct_1")).get("slider")!.totalCost).toBe(3.5)
+    const slider = (await batchRecipeCosts("acct_1")).get("slider")!
+    expect(slider.batchCost).toBe(21)
+    expect(slider.totalCost).toBe(3.5)
   })
 
   it("falls back to one portion rather than dividing by nothing", async () => {

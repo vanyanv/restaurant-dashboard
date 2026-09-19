@@ -60,9 +60,13 @@ function costResult(overrides: Partial<RecipeCostResult> = {}): RecipeCostResult
     totalCost: 2.5,
     batchCost: 2.5,
     servingSize: 1,
+    yieldUnit: null,
     lines: [costLine()],
     partial: false,
     emptyWalk: false,
+    hasLines: true,
+    overrideApplied: false,
+    computedCost: 2.5,
     ...overrides,
   }
 }

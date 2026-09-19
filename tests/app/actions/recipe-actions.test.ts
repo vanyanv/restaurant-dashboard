@@ -50,8 +50,12 @@ import type { RecipeInput } from "@/types/recipe"
 
 // Transaction client mock handed to the $transaction callback.
 const tx = {
-  recipe: { update: vi.fn(), create: vi.fn(), findFirst: vi.fn() },
+  recipe: { update: vi.fn(), create: vi.fn(), findFirst: vi.fn(), findMany: vi.fn() },
   recipeIngredient: { deleteMany: vi.fn(), createMany: vi.fn() },
+  // `validateRecipeShape` reads these to check that every ingredient and
+  // sub-recipe a line points at belongs to the caller's account, and that its
+  // unit can actually convert into what that thing is priced or made in.
+  canonicalIngredient: { findMany: vi.fn() },
 }
 
 const baseInput: RecipeInput = {
@@ -71,6 +75,10 @@ beforeEach(() => {
     cb(tx)) as never)
   vi.mocked(assertNoCycles).mockResolvedValue(undefined)
   tx.recipe.findFirst.mockResolvedValue({ id: "r1" })
+  tx.recipe.findMany.mockResolvedValue([])
+  tx.canonicalIngredient.findMany.mockResolvedValue([
+    { id: "ci-1", name: "Ground beef", recipeUnit: "oz" },
+  ])
   tx.recipe.update.mockResolvedValue({ id: "r1" })
   tx.recipe.create.mockResolvedValue({ id: "r-new" })
   tx.recipeIngredient.deleteMany.mockResolvedValue({ count: 0 })

@@ -1,6 +1,57 @@
 import { prisma } from "@/lib/prisma"
 import { getCanonicalIngredientCost } from "@/lib/canonical-ingredients"
-import { canonicalizeUnit, convert } from "@/lib/unit-conversion"
+import {
+  canonicalizeUnit,
+  convert,
+  resolveYieldQuantity,
+} from "@/lib/unit-conversion"
+
+/**
+ * THE recipe cost walk. One walk, two entry points.
+ *
+ * ## Why there is only one of it now
+ *
+ * There used to be four: this file's single-recipe walker, this file's
+ * `batchRecipeCosts`, a third in `recipe-cost-batch.ts` exporting the SAME
+ * NAME from a different path, and a fourth inlined in `previewRecipeCost` so
+ * the editor could price an unsaved recipe. Which behaviour a page got was
+ * decided by which module it happened to import, and they disagreed: one
+ * flagged a recipe partial when the price-spike guard rejected an invoice
+ * line and one had never heard of the guard; one reported `emptyWalk` so a
+ * $0.00 override could be told apart from a real cost and one did not; a
+ * missing component recipe was a harmless zero in one and a thrown error that
+ * aborted the whole account's cost map in another.
+ *
+ * `prime-cost.ts` already argues this case — "it is the one number in the
+ * product with a published ceiling behind it, so it cannot be two numbers."
+ * Recipe cost carries the food line of the P&L and had four. So: `walk` below
+ * is the only implementation, and the two entry points differ ONLY in how they
+ * fetch — `computeRecipeCost` queries per recipe and per ingredient (and can
+ * therefore honour `asOf` and `storeId`), `batchRecipeCosts` prefetches the
+ * whole account into two maps and hands the walk a synchronous lookup. Neither
+ * owns any arithmetic.
+ *
+ * ## The two numbers, and why both exist
+ *
+ * `batchCost` is what the lines add up to: one whole batch, as entered.
+ * `totalCost` is `batchCost / servingSize` — the cost of ONE of whatever the
+ * recipe yields, and the figure every consumer wants. `cogs-materializer.ts`
+ * multiplies it by plates sold; `adapters/recipe.ts` prints it as "Cost per
+ * serving"; the menu margin columns divide a sell price by it.
+ *
+ * Until 2026-09-19 there was only `totalCost`, and it was the BATCH — the
+ * walk selected `servingSize` and never divided by it. Every recipe in this
+ * account yields 1, so the figure was right by accident and the bug was
+ * dormant. It was also armed: the moment a yield box shipped, the first
+ * batch recipe an owner entered would have multiplied its own food cost by
+ * its yield, silently, all the way into Gross Profit.
+ *
+ * Naming `totalCost` as the per-serving figure rather than adding a second
+ * field is deliberate: it means every existing caller, including ones nobody
+ * has looked at, becomes CORRECT for a batch recipe rather than quietly
+ * wrong. A caller that genuinely wants the batch asks for `batchCost` by
+ * name.
+ */
 
 export type RecipeCostLine = {
   kind: "ingredient" | "component"
@@ -14,8 +65,36 @@ export type RecipeCostLine = {
   costUnit?: string | null
   lineCost: number
   missingCost: boolean
+  /**
+   * Why this line could not be costed, when it could not. Null on a costed
+   * line. This is here because "missing" used to cover three different
+   * failures that want three different sentences on the page: an ingredient
+   * nobody has priced, a unit that does not convert, and a sub-recipe whose
+   * batch this line cannot be measured against.
+   */
+  missingReason?: "no-price" | "unit-mismatch" | "yield-mismatch" | "unresolved" | null
   /** How the unit cost was established (ingredient kind only; undefined for sub-recipes). */
   costSource?: "manual" | "invoice" | null
+  /**
+   * Usable fraction applied to this line (ingredient kind only). 1 means no
+   * trim or cooking loss, which is every ingredient until somebody sets one.
+   */
+  yieldFactor?: number
+  /**
+   * For a component line: how much of the sub-recipe's own yield this line
+   * draws, in the sub's yield unit. `2` against a batch of `128 fl oz` means
+   * two fluid ounces, i.e. one sixty-fourth of it. Null when the line's unit
+   * could not be reconciled with the batch's.
+   */
+  qtyInYieldUnit?: number | null
+  /**
+   * Component line only. True when the sub-recipe yields PORTIONS and this
+   * line's unit is not a portion — "2 oz" of something counted in servings.
+   * The quantity is counted as servings, which is exactly what the old walk
+   * did with it, and this flag is what lets a page say the unit was not
+   * believed rather than silently costing a measure as a count.
+   */
+  unitAssumed?: boolean
   /** Invoice provenance (ingredient kind only; null for sub-recipes or manual costs). */
   sourceInvoiceId?: string | null
   sourceLineItemId?: string | null
@@ -28,29 +107,16 @@ export type RecipeCostResult = {
   recipeId: string
   itemName: string
   /**
-   * The cost of ONE portion — what a plate costs, which is what every consumer
-   * of this type means by it (a parent recipe multiplies it by its own
-   * quantity; COGS multiplies it by units sold).
-   *
-   * That is `batchCost / servingSize`. The divide was missing: `servingSize`
-   * was selected by both walks and never used, so a recipe entered as a batch
-   * yield — ingredients scaled to the whole batch, `servingSize` set to the
-   * portions it makes — reported the WHOLE BATCH as the plate cost, straight
-   * into COGS and every food-cost percentage above it. Harmless while all 60
-   * production recipes sit at `servingSize = 1`, which is exactly how it
-   * survived; the `recipe_serving_size_positive` CHECK constraint was added in
-   * the 2026-05-02 migration for "a divide-by-servingSize consumer", and this
-   * is that consumer.
+   * The cost of ONE of whatever this recipe yields — `batchCost / servingSize`.
+   * This is the figure COGS multiplies by plates sold and every page prints.
    */
   totalCost: number
-  /**
-   * What the lines below add up to: the whole batch. `totalCost` is this
-   * divided by `servingSize`, so a reader reconciling the lines against the
-   * headline has the figure they reconcile to.
-   */
+  /** What the lines add up to: one whole batch, as entered. */
   batchCost: number
-  /** Portions the batch yields. Guaranteed > 0 by a DB CHECK constraint. */
+  /** How many one batch makes. Always > 0 (DB CHECK). */
   servingSize: number
+  /** The unit `servingSize` is in. Null = portions. */
+  yieldUnit: string | null
   lines: RecipeCostLine[]
   /** True if any ingredient or sub-component had no resolvable cost. */
   partial: boolean
@@ -71,6 +137,26 @@ export type RecipeCostResult = {
    * be able to tell that apart from a cost that was actually computed.
    */
   emptyWalk: boolean
+  /**
+   * Whether the recipe has any lines at all, which `emptyWalk` deliberately
+   * does not tell you — a recipe whose every line failed to price also walks
+   * to nothing. The recipes catalogue printed "No lines" on both, which is a
+   * false sentence about the second one: it HAS lines, and they are the
+   * problem. Read the two together.
+   */
+  hasLines: boolean
+  /**
+   * The recipe-level override was used because the walk produced nothing.
+   * Kept as a FALLBACK rather than a replacement: an override that outranked a
+   * computed total would move the food cost of any recipe carrying both, and
+   * `scripts/seed-r365-recipes.ts` wrote exactly that shape (an R365 food cost
+   * alongside real ingredient lines). What changes is that the fallback is no
+   * longer silent — `computedCost` below says what the lines actually came to,
+   * so a page can print both instead of presenting a placeholder as an answer.
+   */
+  overrideApplied: boolean
+  /** What the lines came to, before any override fallback. Per serving. */
+  computedCost: number
   /** asOf snapshot actually used (undefined = latest). */
   asOf?: Date
 }
@@ -92,19 +178,30 @@ const loggedConversionFailures = new Set<string>()
 
 /**
  * Reconcile a recipe-line's quantity/unit against the canonical cost's unit
- * and produce a line cost. Single source of truth for both the single-recipe
- * walker and the batched loader.
+ * and produce a line cost. Single source of truth for every caller.
+ *
+ * `yieldFactor` is the usable fraction of what gets bought — 0.8 means a fifth
+ * of the lettuce is core and outer leaves. A recipe line states what lands on
+ * the plate, so the cost is what has to be PURCHASED to put it there:
+ * `qty × price ÷ yieldFactor`. It defaults to 1, which is every ingredient
+ * until somebody sets one, so no existing figure moves.
  *
  * Returns `qtyInCostUnit: null` (and `lineCost: 0`) when the units can't be
- * reconciled — callers should mark the line as missing in that case.
+ * reconciled — callers mark the line missing in that case.
  */
 export function computeIngredientLineCost(args: {
   ingredientQuantity: number
   ingredientUnit: string
   costUnitCost: number
   costUnit: string
+  /** Usable fraction, in (0, 1]. Anything else is ignored and treated as 1. */
+  yieldFactor?: number
 }): { lineCost: number; qtyInCostUnit: number | null } {
   const { ingredientQuantity, ingredientUnit, costUnitCost, costUnit } = args
+  const yieldFactor =
+    args.yieldFactor != null && isFinite(args.yieldFactor) && args.yieldFactor > 0 && args.yieldFactor <= 1
+      ? args.yieldFactor
+      : 1
   const recipeUnit = canonicalizeUnit(ingredientUnit)
   const normalizedCostUnit = canonicalizeUnit(costUnit)
   let qtyInCostUnit: number | null = ingredientQuantity
@@ -128,7 +225,336 @@ export function computeIngredientLineCost(args: {
     }
     return { lineCost: 0, qtyInCostUnit: null }
   }
-  return { lineCost: costUnitCost * qtyInCostUnit, qtyInCostUnit }
+  return { lineCost: (costUnitCost * qtyInCostUnit) / yieldFactor, qtyInCostUnit }
+}
+
+/* -- the walk --------------------------------------------------------- */
+
+/** One recipe as the walk needs it, however it was fetched. */
+export type RecipeRowForCost = {
+  id: string
+  itemName: string
+  servingSize: number
+  yieldUnit: string | null
+  foodCostOverride: number | null
+  ingredients: Array<{
+    id: string
+    quantity: number
+    unit: string
+    ingredientName: string | null
+    canonicalIngredientId: string | null
+    componentRecipeId: string | null
+    canonicalIngredient: { id: string; name: string } | null
+    componentRecipe: { id: string; itemName: string } | null
+  }>
+}
+
+/** What the walk needs to resolve an ingredient's price. */
+type ResolvedCost = {
+  unitCost: number
+  unit: string
+  source: "manual" | "invoice"
+  asOfDate: Date
+  sourceInvoiceId: string | null
+  sourceLineItemId: string | null
+  sourceVendor: string | null
+  sourceSku: string | null
+  costGuardTriggered?: boolean
+  yieldFactor?: number
+}
+
+type WalkIO = {
+  loadRecipe: (recipeId: string) => Promise<RecipeRowForCost | null> | RecipeRowForCost | null
+  resolveCost: (canonicalIngredientId: string) => Promise<ResolvedCost | null> | ResolvedCost | null
+  asOf?: Date
+}
+
+/** The `select` both fetch paths use, so neither can drift from the other. */
+export const RECIPE_COST_SELECT = {
+  id: true,
+  itemName: true,
+  servingSize: true,
+  yieldUnit: true,
+  foodCostOverride: true,
+  ingredients: {
+    select: {
+      id: true,
+      quantity: true,
+      unit: true,
+      ingredientName: true,
+      canonicalIngredientId: true,
+      componentRecipeId: true,
+      canonicalIngredient: { select: { id: true, name: true } },
+      componentRecipe: { select: { id: true, itemName: true } },
+    },
+  },
+} as const
+
+async function walk(
+  recipeId: string,
+  io: WalkIO,
+  stack: string[],
+  memo: Map<string, RecipeCostResult>,
+  /** True for a recipe reached as somebody's component, false for the one asked for. */
+  asComponent: boolean
+): Promise<RecipeCostResult | null> {
+  if (stack.includes(recipeId)) {
+    throw new RecipeCycleError([...stack, recipeId])
+  }
+  const cached = memo.get(recipeId)
+  if (cached) return cached
+
+  const recipe = await io.loadRecipe(recipeId)
+  if (!recipe) {
+    // A recipe asked for by name that does not exist is the caller's error and
+    // throws, as it always has. A COMPONENT that has gone missing is a broken
+    // line on an otherwise fine recipe, and costing the other fifty-nine
+    // recipes beats refusing to cost any of them — which is what the second
+    // batch implementation used to do here, by throwing a plain Error that no
+    // per-recipe catch was looking for.
+    if (!asComponent) throw new Error(`Recipe ${recipeId} not found`)
+    return null
+  }
+
+  const lines: RecipeCostLine[] = []
+  let batch = 0
+  let partial = false
+
+  for (const ing of recipe.ingredients) {
+    if (ing.componentRecipeId) {
+      const sub = await walk(ing.componentRecipeId, io, [...stack, recipeId], memo, true)
+      const name = ing.componentRecipe?.itemName ?? ing.ingredientName ?? "sub-recipe"
+
+      if (!sub) {
+        partial = true
+        lines.push({
+          kind: "component",
+          refId: ing.componentRecipeId,
+          name,
+          quantity: ing.quantity,
+          unit: ing.unit,
+          unitCost: null,
+          lineCost: 0,
+          missingCost: true,
+          missingReason: "unresolved",
+          qtyInYieldUnit: null,
+        })
+        continue
+      }
+
+      /*
+       * THE LINE THAT USED TO COST TWO WHOLE BATCHES.
+       *
+       * This was `sub.totalCost * ing.quantity`, with `ing.unit` stored,
+       * displayed, and never read. A burger carrying "2 oz of house sauce"
+       * was charged two entire batches of house sauce — $60.00 against a
+       * true $0.47 on a $30 gallon — and `partial` stayed false, so every
+       * page reported the plate as fully costed.
+       *
+       * `resolveYieldQuantity` turns the line into the batch's own unit:
+       * 2 oz of a 128 fl oz batch is 2, and `sub.totalCost` is now the cost
+       * of one fl oz. A line that cannot be expressed in the batch's unit is
+       * REFUSED rather than guessed at, because both available guesses —
+       * charge the whole batch, or charge nothing — are worse than a line
+       * the page can point at.
+       */
+      const resolved = resolveYieldQuantity({
+        quantity: ing.quantity,
+        unit: ing.unit,
+        yieldUnit: sub.yieldUnit,
+      })
+
+      /*
+       * A RECIPE THAT YIELDS PORTIONS HAS NO MEASURE TO REFUSE AGAINST.
+       *
+       * `yieldUnit` is a new column and every row in every existing account
+       * is NULL, which means portions. Refusing a line reading "2 oz" against
+       * one would take a figure that is WRONG today and make it $0.00
+       * tomorrow — the same understatement this change exists to remove,
+       * arriving as a migration with no backfill. The old walk ignored the
+       * unit entirely and multiplied the sub-recipe's cost by the quantity,
+       * so counting the quantity as servings is exactly what those lines
+       * cost today, and nothing moves the day this ships.
+       *
+       * The unit is not thereby believed. `unitAssumed` travels out so the
+       * page can say the line is being counted rather than measured, and the
+       * fix is one field away: give the sub-recipe a yield unit and the line
+       * converts properly. A MEASURED batch is a different case — nothing in
+       * any account has one yet, so refusing there breaks nothing and stops
+       * the $60 line from ever being entered again.
+       */
+      const countedAsServings = resolved == null && !sub.yieldUnit
+      const qtyInYieldUnit = countedAsServings ? ing.quantity : resolved
+
+      if (qtyInYieldUnit == null) {
+        partial = true
+        lines.push({
+          kind: "component",
+          refId: ing.componentRecipeId,
+          name,
+          quantity: ing.quantity,
+          unit: ing.unit,
+          unitCost: sub.totalCost,
+          costUnit: sub.yieldUnit,
+          lineCost: 0,
+          missingCost: true,
+          missingReason: "yield-mismatch",
+          qtyInYieldUnit: null,
+        })
+        continue
+      }
+
+      const lineCost = sub.totalCost * qtyInYieldUnit
+      batch += lineCost
+      if (sub.partial) partial = true
+      lines.push({
+        kind: "component",
+        refId: ing.componentRecipeId,
+        name,
+        quantity: ing.quantity,
+        unit: ing.unit,
+        unitCost: sub.totalCost,
+        costUnit: sub.yieldUnit,
+        lineCost,
+        missingCost: sub.partial,
+        missingReason: sub.partial ? "no-price" : null,
+        qtyInYieldUnit,
+        unitAssumed: countedAsServings,
+      })
+      continue
+    }
+
+    if (ing.canonicalIngredientId) {
+      const cost = await io.resolveCost(ing.canonicalIngredientId)
+      const name = ing.canonicalIngredient?.name ?? ing.ingredientName ?? "ingredient"
+
+      if (!cost) {
+        partial = true
+        lines.push({
+          kind: "ingredient",
+          refId: ing.canonicalIngredientId,
+          name,
+          quantity: ing.quantity,
+          unit: ing.unit,
+          unitCost: null,
+          lineCost: 0,
+          missingCost: true,
+          missingReason: "no-price",
+        })
+        continue
+      }
+
+      const yieldFactor = cost.yieldFactor ?? 1
+      const { lineCost, qtyInCostUnit } = computeIngredientLineCost({
+        ingredientQuantity: ing.quantity,
+        ingredientUnit: ing.unit,
+        costUnitCost: cost.unitCost,
+        costUnit: cost.unit,
+        yieldFactor,
+      })
+
+      const provenance = {
+        costSource: cost.source,
+        sourceInvoiceId: cost.sourceInvoiceId,
+        sourceLineItemId: cost.sourceLineItemId,
+        sourceVendor: cost.sourceVendor,
+        sourceSku: cost.sourceSku,
+        sourceInvoiceDate: cost.asOfDate,
+      }
+
+      if (qtyInCostUnit == null) {
+        partial = true
+        lines.push({
+          kind: "ingredient",
+          refId: ing.canonicalIngredientId,
+          name,
+          quantity: ing.quantity,
+          unit: ing.unit,
+          unitCost: cost.unitCost,
+          costUnit: cost.unit,
+          lineCost: 0,
+          missingCost: true,
+          missingReason: "unit-mismatch",
+          yieldFactor,
+          ...provenance,
+        })
+        continue
+      }
+
+      // The cost guard rejected an implausible price spike on the newest
+      // invoice line and fell back to an older one. The cost we used is the
+      // trusted fallback, but flag the recipe so the bad source line surfaces
+      // in the COGS data-quality panel for review.
+      if (cost.costGuardTriggered) partial = true
+
+      batch += lineCost
+      lines.push({
+        kind: "ingredient",
+        refId: ing.canonicalIngredientId,
+        name,
+        quantity: ing.quantity,
+        unit: ing.unit,
+        unitCost: cost.unitCost,
+        costUnit: cost.unit,
+        lineCost,
+        missingCost: false,
+        missingReason: null,
+        yieldFactor,
+        ...provenance,
+      })
+      continue
+    }
+
+    // Neither FK set — should be blocked by the DB CHECK constraint, but guard.
+    partial = true
+    lines.push({
+      kind: "ingredient",
+      refId: ing.id,
+      name: ing.ingredientName ?? "unknown",
+      quantity: ing.quantity,
+      unit: ing.unit,
+      unitCost: null,
+      lineCost: 0,
+      missingCost: true,
+      missingReason: "unresolved",
+    })
+  }
+
+  // Apply the recipe-level override as a fallback whenever we couldn't produce
+  // a real total. Covers two cases: (a) partial — some ingredients missing
+  // cost, and (b) empty — no ingredient lines at all (common for modifier
+  // recipes that just carry an override dollar amount).
+  const walkedToNothing = batch === 0
+  const overrideApplied = walkedToNothing && recipe.foodCostOverride != null
+  const computedBatch = batch
+  if (overrideApplied) batch = recipe.foodCostOverride as number
+
+  // `servingSize` carries a DB CHECK for > 0, but a walk that divides by a
+  // number it did not validate is one bad row away from Infinity landing in
+  // the P&L. Clamp rather than trust.
+  const servingSize =
+    isFinite(recipe.servingSize) && recipe.servingSize > 0 ? recipe.servingSize : 1
+
+  const result: RecipeCostResult = {
+    recipeId: recipe.id,
+    itemName: recipe.itemName,
+    totalCost: batch / servingSize,
+    batchCost: batch,
+    servingSize,
+    yieldUnit: recipe.yieldUnit,
+    lines,
+    partial,
+    // Recorded BEFORE the override fallback above could disguise it. A recipe
+    // with no lines and a $0.00 override is indistinguishable from a costed
+    // one by the time this object is read, unless the fact is carried out.
+    emptyWalk: walkedToNothing,
+    hasLines: recipe.ingredients.length > 0,
+    overrideApplied,
+    computedCost: computedBatch / servingSize,
+    asOf: io.asOf,
+  }
+  memo.set(recipeId, result)
+  return result
 }
 
 /**
@@ -146,209 +572,140 @@ export async function computeRecipeCost(
   options?: { storeId?: string }
 ): Promise<RecipeCostResult> {
   const memo = new Map<string, RecipeCostResult>()
-  return walk(recipeId, asOf, [], memo, options?.storeId)
+  const result = await walk(
+    recipeId,
+    {
+      asOf,
+      loadRecipe: (id) =>
+        prisma.recipe.findUnique({ where: { id }, select: RECIPE_COST_SELECT }),
+      resolveCost: (id) =>
+        getCanonicalIngredientCost(id, asOf, options?.storeId ? { storeId: options.storeId } : undefined),
+    },
+    [],
+    memo,
+    false
+  )
+  // `asComponent: false` means a missing recipe threw rather than returning
+  // null, so this cannot be null. The assertion says why rather than casting.
+  if (!result) throw new Error(`Recipe ${recipeId} not found`)
+  return result
 }
 
 /**
- * A usable portion count. The DB CHECK constraint makes `> 0` an invariant,
- * but this code also runs against mocked Prisma in tests and against rows
- * written before the constraint existed, and a division that can produce
- * Infinity has no business being the only thing standing between a batch and
- * a plate cost.
+ * Cost MANY recipes at once.
+ *
+ * `computeRecipeCost` memoizes within a single call, which is right for the
+ * builder — one recipe, its sub-recipes costed once each. It is the wrong
+ * shape for a listing: sixty separate calls each open their own memo, so
+ * `Straight Cut Fries` (a component of eight other recipes) is fetched and
+ * priced nine times, and every canonical cost is looked up again on every
+ * walk. Measured on this account's 60 recipes: **6.1s in parallel, 66.4s
+ * serially.** No page section can be built on that.
+ *
+ * This runs the SAME `walk` against two prefetched maps — every recipe with
+ * its lines in one query, every canonical cost in `batchCanonicalCosts`' three
+ * — and shares ONE memo across the whole set. Not "the same arithmetic": the
+ * same function. A figure here cannot disagree with a figure on the builder,
+ * because there is nothing here that could disagree.
+ *
+ * `asOf` is deliberately NOT a parameter. `batchCanonicalCosts` prices at the
+ * latest invoice, which is builder semantics; a historical walk needs the
+ * as-of provenance query per ingredient and belongs in `computeRecipeCost`.
+ * Taking an `asOf` here and quietly ignoring it would be worse than not
+ * offering it.
  */
-function servingSizeOf(raw: number | null | undefined): number {
-  return raw != null && Number.isFinite(raw) && raw > 0 ? raw : 1
+export async function batchRecipeCosts(
+  accountId: string,
+  canonicalCostMap?: Map<string, ResolvedCost>
+): Promise<Map<string, RecipeCostResult>> {
+  const { batchCanonicalCosts } = await import("@/lib/canonical-cost-batch")
+
+  const [recipes, costs] = await Promise.all([
+    prisma.recipe.findMany({ where: { accountId }, select: RECIPE_COST_SELECT }),
+    canonicalCostMap ? Promise.resolve(canonicalCostMap) : batchCanonicalCosts(accountId),
+  ])
+
+  const byId = new Map(recipes.map((r) => [r.id, r]))
+  const memo = new Map<string, RecipeCostResult>()
+  const io: WalkIO = {
+    loadRecipe: (id) => byId.get(id) ?? null,
+    resolveCost: (id) => costs.get(id) ?? null,
+  }
+
+  for (const r of recipes) {
+    // A cycle is a property of one subtree, not of the account. Costing the
+    // other 59 recipes is more useful than refusing to cost any of them, so
+    // the bad one is left out of the map and its callers see "no cost".
+    try {
+      await walk(r.id, io, [], memo, false)
+    } catch (error) {
+      if (error instanceof RecipeCycleError) {
+        console.warn(`[recipe-cost] cycle, recipe skipped: ${error.chain.join(" -> ")}`)
+        continue
+      }
+      throw error
+    }
+  }
+
+  return memo
 }
 
-async function walk(
-  recipeId: string,
-  asOf: Date | undefined,
-  stack: string[],
-  memo: Map<string, RecipeCostResult>,
-  storeId?: string
-): Promise<RecipeCostResult> {
-  if (stack.includes(recipeId)) {
-    throw new RecipeCycleError([...stack, recipeId])
-  }
-  const cached = memo.get(recipeId)
-  if (cached) return cached
-
-  const recipe = await prisma.recipe.findUnique({
-    where: { id: recipeId },
-    select: {
-      id: true,
-      itemName: true,
-      servingSize: true,
-      foodCostOverride: true,
-      ingredients: {
-        select: {
-          id: true,
-          quantity: true,
-          unit: true,
-          ingredientName: true,
-          canonicalIngredientId: true,
-          componentRecipeId: true,
-          canonicalIngredient: { select: { id: true, name: true } },
-          componentRecipe: { select: { id: true, itemName: true } },
-        },
-      },
-    },
-  })
-
-  if (!recipe) {
-    throw new Error(`Recipe ${recipeId} not found`)
-  }
-
-  const lines: RecipeCostLine[] = []
-  let total = 0
-  let partial = false
-
-  for (const ing of recipe.ingredients) {
-    if (ing.componentRecipeId) {
-      const sub = await walk(
-        ing.componentRecipeId,
-        asOf,
-        [...stack, recipeId],
-        memo,
-        storeId
-      )
-      const unitCost = sub.totalCost
-      const lineCost = unitCost * ing.quantity
-      total += lineCost
-      if (sub.partial) partial = true
-      lines.push({
-        kind: "component",
-        refId: ing.componentRecipeId,
-        name: ing.componentRecipe?.itemName ?? ing.ingredientName ?? "sub-recipe",
-        quantity: ing.quantity,
-        unit: ing.unit,
-        unitCost,
-        lineCost,
-        missingCost: sub.partial,
-      })
-      continue
-    }
-
-    if (ing.canonicalIngredientId) {
-      const cost = await getCanonicalIngredientCost(
-        ing.canonicalIngredientId,
-        asOf,
-        storeId ? { storeId } : undefined
-      )
-      if (!cost) {
-        partial = true
-        lines.push({
-          kind: "ingredient",
-          refId: ing.canonicalIngredientId,
-          name: ing.canonicalIngredient?.name ?? ing.ingredientName ?? "ingredient",
-          quantity: ing.quantity,
-          unit: ing.unit,
-          unitCost: null,
-          lineCost: 0,
-          missingCost: true,
-        })
-        continue
-      }
-
-      const { lineCost, qtyInCostUnit } = computeIngredientLineCost({
-        ingredientQuantity: ing.quantity,
-        ingredientUnit: ing.unit,
-        costUnitCost: cost.unitCost,
-        costUnit: cost.unit,
-      })
-
-      if (qtyInCostUnit == null) {
-        partial = true
-        lines.push({
-          kind: "ingredient",
-          refId: ing.canonicalIngredientId,
-          name: ing.canonicalIngredient?.name ?? ing.ingredientName ?? "ingredient",
-          quantity: ing.quantity,
-          unit: ing.unit,
-          unitCost: cost.unitCost,
-          costUnit: cost.unit,
-          lineCost: 0,
-          missingCost: true,
-          costSource: cost.source,
-          sourceInvoiceId: cost.sourceInvoiceId,
-          sourceLineItemId: cost.sourceLineItemId,
-          sourceVendor: cost.sourceVendor,
-          sourceSku: cost.sourceSku,
-          sourceInvoiceDate: cost.asOfDate,
-        })
-        continue
-      }
-
-      // The cost guard rejected an implausible price spike on the newest
-      // invoice line and fell back to an older one. The cost we used is the
-      // trusted fallback, but flag the recipe so the bad source line surfaces
-      // in the COGS data-quality panel for review.
-      if (cost.costGuardTriggered) partial = true
-
-      total += lineCost
-      lines.push({
-        kind: "ingredient",
-        refId: ing.canonicalIngredientId,
-        name: ing.canonicalIngredient?.name ?? ing.ingredientName ?? "ingredient",
-        quantity: ing.quantity,
-        unit: ing.unit,
-        unitCost: cost.unitCost,
-        costUnit: cost.unit,
-        lineCost,
-        missingCost: false,
-        costSource: cost.source,
-        sourceInvoiceId: cost.sourceInvoiceId,
-        sourceLineItemId: cost.sourceLineItemId,
-        sourceVendor: cost.sourceVendor,
-        sourceSku: cost.sourceSku,
-        sourceInvoiceDate: cost.asOfDate,
-      })
-      continue
-    }
-
-    // Neither FK set — should be blocked by the DB CHECK constraint, but guard.
-    partial = true
-    lines.push({
-      kind: "ingredient",
-      refId: ing.id,
-      name: ing.ingredientName ?? "unknown",
+/**
+ * Cost a recipe that has not been saved — the editor's live figure.
+ *
+ * Built out of the same `walk` by handing it an in-memory row for the draft
+ * and the database for everything the draft points at. The fourth
+ * implementation this replaces did not apply the override fallback and did not
+ * flag the price-spike guard, so the number under an owner's cursor could
+ * differ from the number they got after pressing Save.
+ */
+export async function previewRecipeCost(input: {
+  itemName?: string
+  servingSize?: number
+  yieldUnit?: string | null
+  foodCostOverride?: number | null
+  ingredients: Array<{
+    canonicalIngredientId?: string | null
+    componentRecipeId?: string | null
+    quantity: number
+    unit: string
+    ingredientName?: string | null
+  }>
+}): Promise<RecipeCostResult> {
+  const DRAFT = "__draft__"
+  const draft: RecipeRowForCost = {
+    id: DRAFT,
+    itemName: input.itemName ?? "",
+    servingSize: input.servingSize ?? 1,
+    yieldUnit: input.yieldUnit ?? null,
+    foodCostOverride: input.foodCostOverride ?? null,
+    ingredients: input.ingredients.map((ing, i) => ({
+      id: `draft:${i}`,
       quantity: ing.quantity,
       unit: ing.unit,
-      unitCost: null,
-      lineCost: 0,
-      missingCost: true,
-    })
+      ingredientName: ing.ingredientName ?? null,
+      canonicalIngredientId: ing.canonicalIngredientId ?? null,
+      componentRecipeId: ing.componentRecipeId ?? null,
+      canonicalIngredient: null,
+      componentRecipe: null,
+    })),
   }
 
-  // Apply the recipe-level override as a fallback whenever we couldn't produce
-  // a real total. Covers two cases: (a) partial — some ingredients missing
-  // cost, and (b) empty — no ingredient lines at all (common for modifier
-  // recipes that just carry an override dollar amount).
-  const walkedToNothing = total === 0
-  const batchCost = total
-  // `foodCostOverride` is a plate figure an owner typed in, not a batch one,
-  // so it stands as the portion cost and is not divided. The walked total is.
-  if (total === 0 && recipe.foodCostOverride != null) {
-    total = recipe.foodCostOverride
-  } else {
-    total = total / servingSizeOf(recipe.servingSize)
-  }
-
-  const result: RecipeCostResult = {
-    recipeId: recipe.id,
-    itemName: recipe.itemName,
-    totalCost: total,
-    batchCost,
-    servingSize: servingSizeOf(recipe.servingSize),
-    lines,
-    partial,
-    // Recorded BEFORE the override fallback above could disguise it. A recipe
-    // with no lines and a $0.00 override is indistinguishable from a costed
-    // one by the time this object is read, unless the fact is carried out.
-    emptyWalk: walkedToNothing,
-    asOf,
-  }
-  memo.set(recipeId, result)
+  const memo = new Map<string, RecipeCostResult>()
+  const result = await walk(
+    DRAFT,
+    {
+      loadRecipe: (id) =>
+        id === DRAFT
+          ? draft
+          : prisma.recipe.findUnique({ where: { id }, select: RECIPE_COST_SELECT }),
+      resolveCost: (id) => getCanonicalIngredientCost(id),
+    },
+    [],
+    memo,
+    false
+  )
+  if (!result) throw new Error("Draft recipe could not be costed")
   return result
 }
 
@@ -384,177 +741,4 @@ export async function assertNoCycles(
     }
   }
   await walkIds(recipeId, [])
-}
-
-/**
- * Cost MANY recipes at once.
- *
- * `computeRecipeCost` memoizes within a single call, which is right for the
- * builder — one recipe, its sub-recipes costed once each. It is the wrong
- * shape for a listing: sixty separate calls each open their own memo, so
- * `Straight Cut Fries` (a component of eight other recipes) is fetched and
- * priced nine times, and every canonical cost is looked up again on every
- * walk. Measured on this account's 60 recipes: **6.1s in parallel, 66.4s
- * serially.** No page section can be built on that.
- *
- * This does the same walk against two prefetched maps — every recipe with its
- * lines in one query, every canonical cost in `batchCanonicalCosts`' three —
- * and shares ONE memo across the whole set. The per-line arithmetic is
- * `computeIngredientLineCost`, the same function the single-recipe walker
- * calls, so a figure here cannot disagree with a figure on the builder.
- *
- * `asOf` is deliberately NOT a parameter. `batchCanonicalCosts` prices at the
- * latest invoice, which is builder semantics; a historical walk needs the
- * as-of provenance query per ingredient and belongs in `computeRecipeCost`.
- * Taking an `asOf` here and quietly ignoring it would be worse than not
- * offering it.
- */
-export async function batchRecipeCosts(
-  accountId: string
-): Promise<Map<string, RecipeCostResult>> {
-  const { batchCanonicalCosts } = await import("@/lib/canonical-cost-batch")
-
-  const [recipes, costs] = await Promise.all([
-    prisma.recipe.findMany({
-      where: { accountId },
-      select: {
-        id: true,
-        itemName: true,
-        servingSize: true,
-        foodCostOverride: true,
-        ingredients: {
-          select: {
-            id: true,
-            quantity: true,
-            unit: true,
-            ingredientName: true,
-            canonicalIngredientId: true,
-            componentRecipeId: true,
-            canonicalIngredient: { select: { id: true, name: true } },
-            componentRecipe: { select: { id: true, itemName: true } },
-          },
-        },
-      },
-    }),
-    batchCanonicalCosts(accountId),
-  ])
-
-  const byId = new Map(recipes.map((r) => [r.id, r]))
-  const memo = new Map<string, RecipeCostResult>()
-
-  const walkOne = (recipeId: string, stack: string[]): RecipeCostResult => {
-    const cached = memo.get(recipeId)
-    if (cached) return cached
-    if (stack.includes(recipeId)) throw new RecipeCycleError([...stack, recipeId])
-
-    const recipe = byId.get(recipeId)
-    if (!recipe) throw new Error(`Recipe ${recipeId} not found`)
-
-    const lines: RecipeCostLine[] = []
-    let total = 0
-    let partial = false
-
-    for (const ing of recipe.ingredients) {
-      if (ing.componentRecipeId) {
-        const sub = walkOne(ing.componentRecipeId, [...stack, recipeId])
-        const lineCost = sub.totalCost * ing.quantity
-        total += lineCost
-        if (sub.partial) partial = true
-        lines.push({
-          kind: "component",
-          refId: ing.componentRecipeId,
-          name: ing.componentRecipe?.itemName ?? ing.ingredientName ?? "sub-recipe",
-          quantity: ing.quantity,
-          unit: ing.unit,
-          unitCost: sub.totalCost,
-          lineCost,
-          missingCost: sub.partial,
-        })
-        continue
-      }
-
-      const cost = ing.canonicalIngredientId ? costs.get(ing.canonicalIngredientId) : undefined
-      const name = ing.canonicalIngredient?.name ?? ing.ingredientName ?? "ingredient"
-      const refId = ing.canonicalIngredientId ?? ing.id
-
-      if (!cost) {
-        partial = true
-        lines.push({
-          kind: "ingredient",
-          refId,
-          name,
-          quantity: ing.quantity,
-          unit: ing.unit,
-          unitCost: null,
-          lineCost: 0,
-          missingCost: true,
-        })
-        continue
-      }
-
-      const { lineCost, qtyInCostUnit } = computeIngredientLineCost({
-        ingredientQuantity: ing.quantity,
-        ingredientUnit: ing.unit,
-        costUnitCost: cost.unitCost,
-        costUnit: cost.unit,
-      })
-      if (qtyInCostUnit == null || cost.costGuardTriggered) partial = true
-      if (qtyInCostUnit != null) total += lineCost
-
-      lines.push({
-        kind: "ingredient",
-        refId,
-        name,
-        quantity: ing.quantity,
-        unit: ing.unit,
-        unitCost: cost.unitCost,
-        costUnit: cost.unit,
-        lineCost: qtyInCostUnit == null ? 0 : lineCost,
-        missingCost: qtyInCostUnit == null,
-        costSource: cost.source,
-        sourceInvoiceId: cost.sourceInvoiceId,
-        sourceLineItemId: cost.sourceLineItemId,
-        sourceVendor: cost.sourceVendor,
-        sourceSku: cost.sourceSku,
-        sourceInvoiceDate: cost.asOfDate,
-      })
-    }
-
-    const walkedToNothing = total === 0
-    const batchCost = total
-    // Same rule as the single-recipe walk above: the override is a plate
-    // figure and stands; the walked total is a batch and is divided.
-    if (total === 0 && recipe.foodCostOverride != null) total = recipe.foodCostOverride
-    else total = total / servingSizeOf(recipe.servingSize)
-
-    const result: RecipeCostResult = {
-      recipeId: recipe.id,
-      itemName: recipe.itemName,
-      totalCost: total,
-      batchCost,
-      servingSize: servingSizeOf(recipe.servingSize),
-      lines,
-      partial,
-      emptyWalk: walkedToNothing,
-    }
-    memo.set(recipeId, result)
-    return result
-  }
-
-  for (const r of recipes) {
-    // A cycle is a property of one subtree, not of the account. Costing the
-    // other 59 recipes is more useful than refusing to cost any of them, so
-    // the bad one is left out of the map and its callers see "no cost".
-    try {
-      walkOne(r.id, [])
-    } catch (error) {
-      if (error instanceof RecipeCycleError) {
-        console.warn(`[recipe-cost] cycle, recipe skipped: ${error.chain.join(" -> ")}`)
-        continue
-      }
-      throw error
-    }
-  }
-
-  return memo
 }
