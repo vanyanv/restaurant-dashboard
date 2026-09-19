@@ -6,12 +6,13 @@ import { CounterMlClient } from "./counter-ml-client"
 
 export const dynamic = "force-dynamic"
 
-/** See the adapter's docblock. No owner gate — the monitoring shell's note explains why. */
+/** See the adapter's docblock. Reads are account-scoped; the shell's
+ *  note explains why there is still no developer-only gate. */
 export default async function Page() {
   const session = await getServerSession(authOptions)
   if (!session) redirect("/login")
 
-  const sections = getMlSectionPromises()
+  const sections = getMlSectionPromises({ accountId: session.user.accountId })
 
   return (
     <>
