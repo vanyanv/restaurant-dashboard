@@ -193,19 +193,30 @@ def test_stable_history_ships_its_measured_widths():
 
 def test_widths_are_scaled_up_when_the_holdout_undercovers():
     """The 2026-09 shape: quiet history, then errors twice the size. The old
-    path shipped the quiet width and covered ~58%; the width must grow."""
+    path shipped the quiet width and covered ~58%; the width must grow to
+    what the new era needs — and stop there."""
     calm = [0.02] * 40
     drifted = [0.04] * 20
     rows = _dated_rows(1, calm + drifted)
 
-    naive = relative_half_widths(rows, min_samples=5)
+    fitted_on_calm = relative_half_widths(_dated_rows(1, calm), min_samples=5)
+    needed = relative_half_widths(_dated_rows(1, drifted), min_samples=5)
     guarded = validated_half_widths(rows, min_samples=5, min_validation_rows=10)
 
     assert guarded, "a scalable miss should still yield a band"
-    assert guarded[1] > naive[1]
-    # And the scaled band must actually cover the era that broke the old one.
+    assert guarded[1] > fitted_on_calm[1], "the band did not grow"
+    # It has to cover the era that broke the old one.
     _, achieved = measure_coverage(guarded, _dated_rows(1, drifted))
     assert achieved >= MIN_VALIDATED_COVERAGE
+    # And it must not double-count the drift. The scale is measured as a
+    # multiple of the FIT widths, so applying it to widths already measured
+    # over the holdout squares the correction and ships a band about twice
+    # what the holdout showed was enough. A too-wide interval is not a safe
+    # one — it is the uninformative $3,200 range this module exists to end.
+    assert guarded[1] <= needed[1] * 1.25, (
+        f"band {guarded[1]:.4f} is far wider than the {needed[1]:.4f} "
+        "the held-out era actually needed"
+    )
 
 
 def test_a_holdout_too_thin_to_judge_falls_back_rather_than_guessing():
@@ -279,11 +290,13 @@ def test_the_holdout_still_measures_drift_when_horizons_share_a_timestamp():
     one-row-per-night shape the first tests used."""
     rows = _generations([1, 2, 3], [0.02] * 40 + [0.04] * 20)
 
-    naive = relative_half_widths(rows, min_samples=5)
+    fitted_on_calm = relative_half_widths(
+        _generations([1, 2, 3], [0.02] * 40), min_samples=5
+    )
     guarded = validated_half_widths(rows, min_samples=5, min_validation_rows=10)
 
     assert guarded, "a scalable miss should still yield a band"
-    assert guarded[1] > naive[1]
+    assert guarded[1] > fitted_on_calm[1]
 
 
 def test_rows_of_one_single_generation_cannot_be_validated():
@@ -295,3 +308,21 @@ def test_rows_of_one_single_generation_cannot_be_validated():
 
     assert len(fit) == 3 and holdout == []
     assert validated_half_widths(rows, min_samples=1, min_validation_rows=1) == {}
+
+
+def test_a_band_that_would_exceed_the_cap_falls_back_whole():
+    """The cap used to be applied per horizon AFTER scaling, so the horizons
+    that tripped it were dropped and the rest shipped. That left `forecast()`
+    mixing two regimes in one band — near horizons on scaled widths, far ones
+    back on the flat CQR path the holdout had just found too narrow — and
+    `enforce_monotonic` only saw the survivors, so the shipped band could
+    narrow as the horizon grew. Either the whole band is trustworthy or none
+    of it is."""
+    # Horizon 1 stays well inside the cap; horizon 2 is scaled past it.
+    rows = _dated_rows(1, [0.05] * 40 + [0.10] * 20) + _dated_rows(
+        2, [0.40] * 40 + [0.70] * 20
+    )
+
+    guarded = validated_half_widths(rows, min_samples=5, min_validation_rows=10)
+
+    assert guarded == {}, f"shipped a partial band: {guarded}"

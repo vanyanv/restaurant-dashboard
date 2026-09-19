@@ -164,6 +164,15 @@ export const GET = withCronAuth(async () => {
         // A store that errored still advances the rotation; otherwise one
         // permanently failing store would pin every later run to itself.
         lastStoreId = store.id
+        // Written per store, not once at the end. The budget only decides
+        // whether to START a store, so a single store that runs long can
+        // carry the invocation past maxDuration — and a killed invocation
+        // never reaches the end of this callback, leaving the JobRun RUNNING
+        // with no cursor on it. The next run would then begin at the same
+        // slow store and be killed at the same place, which is the starvation
+        // the rotation was added to prevent. One small update per store buys
+        // a cursor that survives the kill.
+        await recordProgress(jobRunId, deferred, lastStoreId)
       }
 
       await recordProgress(jobRunId, deferred, lastStoreId)

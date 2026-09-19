@@ -212,11 +212,26 @@ def gate1_eval_rows_today(conn, target_date: date) -> tuple[bool, str]:
                 WHERE status = 'SUCCEEDED'
                   AND "startedAt" >= %s
                   AND "startedAt" <= %s + INTERVAL '1 day'
+            ),
+            -- Runs that DID happen and reported there was not enough data
+            -- to fit on. The nightly job is working in that case; the
+            -- store simply has no history yet. Without this, such a pair
+            -- reads exactly like one the job never touched.
+            thin AS (
+                SELECT DISTINCT scope AS "storeId", target
+                FROM "MlTrainingRun"
+                WHERE status <> 'SUCCEEDED'
+                  AND "startedAt" >= %s
+                  AND "startedAt" <= %s + INTERVAL '1 day'
+                  AND ("errorMessage" ILIKE '%%insufficient!_history%%' ESCAPE '!'
+                    OR "errorMessage" ILIKE '%%insufficient!_hourly!_history%%' ESCAPE '!'
+                    OR "errorMessage" ILIKE '%%no!_items!_in!_lookback%%' ESCAPE '!')
             )
             SELECT s.id AS "storeId", s.name, t.target,
                    COUNT(e.id) AS rows_today,
                    (tr."storeId" IS NOT NULL) AS is_trainable,
-                   s."lifecycleStage"::text AS stage
+                   s."lifecycleStage"::text AS stage,
+                   (th."storeId" IS NOT NULL) AS is_thin
             FROM "Store" s
             CROSS JOIN (VALUES ('REVENUE'::"MlTarget"),
                                ('BUSY_HOURS'::"MlTarget"),
@@ -226,11 +241,13 @@ def gate1_eval_rows_today(conn, target_date: date) -> tuple[bool, str]:
               AND e."windowEnd" = %s
             LEFT JOIN trainable tr
               ON tr."storeId" = s.id AND tr.target = t.target
+            LEFT JOIN thin th
+              ON th."storeId" = s.id AND th.target = t.target
             WHERE s."isActive" = true
-            GROUP BY 1, 2, 3, tr."storeId", s."lifecycleStage"
+            GROUP BY 1, 2, 3, tr."storeId", s."lifecycleStage", th."storeId"
             ORDER BY 2, 3
             ''',
-            (train_cutoff, target_date, window_end),
+            (train_cutoff, target_date, train_cutoff, target_date, window_end),
         )
         rows = cur.fetchall()
 
@@ -241,9 +258,22 @@ def gate1_eval_rows_today(conn, target_date: date) -> tuple[bool, str]:
     missing = []
     untrained = []
     skipped = 0
-    for _, name, target, count, is_trainable, stage in rows:
+    for _, name, target, count, is_trainable, stage, is_thin in rows:
         if not is_trainable:
-            if _expects_training(stage, target):
+            if is_thin:
+                # The job ran and said there was not enough history to fit on.
+                # `train_revenue` returns None under 60 days, so a store that
+                # has just started warming up produces two months of these;
+                # failing on them would light the gate red nightly for that
+                # whole period — the guaranteed-to-fail noise the skip exists
+                # to avoid. The same shape hits MENU_ITEM at a ready store
+                # whose lookback holds no items.
+                lines.append(
+                    f"  {name:<24} {target:<11} not enough history yet "
+                    f"(stage `{stage}`)"
+                )
+                skipped += 1
+            elif _expects_training(stage, target):
                 # main() trains this pair at this stage, so no SUCCEEDED run
                 # is the nightly job failing for it — the exact outage this
                 # gate exists to catch. Skipping it was silent: the gate
@@ -333,10 +363,12 @@ def gate2_seasonal_naive_fired(conn, target_date: date) -> tuple[bool, str]:
 
     lines = []
     silent = []
+    gated_runs = 0
     for target, naive, total in rows:
         if str(target) not in _GATED_TARGETS:
             lines.append(f"  {target:<11} {total} runs (not gated by design)")
             continue
+        gated_runs += total
         lines.append(f"  {target:<11} {naive}/{total} runs recorded the gate")
         if total > 0 and naive == 0:
             silent.append(str(target))
@@ -345,6 +377,15 @@ def gate2_seasonal_naive_fired(conn, target_date: date) -> tuple[bool, str]:
     if silent:
         return False, (
             f"{', '.join(silent)} trained but recorded no promotion decision\n{detail}"
+        )
+    if not gated_runs:
+        # Before the per-target rewrite the verdict was `any(naive > 0)`, which
+        # this case failed. Reporting it as healthy would mean a window holding
+        # nothing but MENU_ITEM rows — no revenue or busy-hours training at all
+        # — passed the gate that exists to notice exactly that kind of silence.
+        return False, (
+            f"no {' or '.join(_GATED_TARGETS)} runs at all in "
+            f"[{cutoff}, {target_date}]\n{detail}"
         )
     return True, detail
 

@@ -316,8 +316,22 @@ def validated_half_widths(
         return {}
     scale = max(scale, 1.0)
 
-    scaled = {h: w * scale for h, w in full_widths.items()}
-    scaled = {h: w for h, w in scaled.items() if 0 < w <= MAX_RELATIVE_HALF_WIDTH}
+    # Scale `fit_widths`, NOT `full_widths`. Every ratio above is an error
+    # divided by its horizon's FIT width, so `scale` is the multiple of the
+    # fit band — and only of the fit band — that would have covered the
+    # holdout. `full_widths` is measured over the holdout too, so it has
+    # already grown by roughly the same drift; multiplying it by `scale`
+    # counts that drift twice and ships a band about `scale` times wider
+    # than the one just shown to be sufficient.
+    scaled = {h: w * scale for h, w in fit_widths.items()}
+    # All or nothing on the cap. Dropping the horizons that exceed it left
+    # `forecast()` mixing two regimes in one band — short horizons on widths
+    # the holdout had just rejected as too narrow, long ones back on the flat
+    # CQR path — and `enforce_monotonic` then only saw the survivors, so what
+    # shipped could narrow as the horizon grew. A band this wide is the model
+    # saying it cannot predict that far; that is a fallback, not a trim.
+    if any(w <= 0 or w > MAX_RELATIVE_HALF_WIDTH for w in scaled.values()):
+        return {}
     if not scaled:
         return {}
     return enforce_monotonic(scaled)

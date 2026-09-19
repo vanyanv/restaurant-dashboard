@@ -56,11 +56,21 @@ def _store_row(
     rows_today: int,
     is_trainable: bool,
     stage: str = "ready",
+    is_thin: bool = False,
 ):
     """A Gate 1 row. `stage` is the store's lifecycle stage, which together
     with the target decides whether a pair with no SUCCEEDED training is an
-    outage or the design."""
-    return (f"store-{name}", name, target, rows_today, is_trainable, stage)
+    outage or the design. `is_thin` marks a pair whose runs reported there was
+    not enough history to fit on."""
+    return (
+        f"store-{name}",
+        name,
+        target,
+        rows_today,
+        is_trainable,
+        stage,
+        is_thin,
+    )
 
 
 def test_gate1_passes_target_date_into_window_end_and_train_cutoff():
@@ -77,10 +87,12 @@ def test_gate1_passes_target_date_into_window_end_and_train_cutoff():
 
     assert ok, detail
     sql, params = conn.cursor_obj.calls[0]
-    # Params order: (train_cutoff, target_date, window_end)
-    train_cutoff, td, window_end = params
+    # Params order: the trainable CTE's window, then the thin CTE's (the same
+    # one), then windowEnd.
+    train_cutoff, td, thin_cutoff, thin_td, window_end = params
     assert train_cutoff == target - timedelta(days=ogc._WINDOW_DAYS)
     assert td == target
+    assert (thin_cutoff, thin_td) == (train_cutoff, td)
     assert window_end == target - timedelta(days=1)
 
 
@@ -319,3 +331,51 @@ def test_gate3_treats_a_store_absent_from_post_epoch_counts_as_zero():
 
     assert strict and accept, detail
     assert "warming up" in detail
+
+
+def test_gate1_skips_a_pair_whose_training_said_there_is_no_history_yet():
+    """`train_revenue` returns None under 60 days of history and the run
+    closes FAILED with `insufficient_history`, so a store that has just begun
+    warming up has no SUCCEEDED run for its first two months. Expecting one
+    would light the gate red every night of that period — which is the noise
+    the skip exists to prevent, arriving by a different door."""
+    target = date(2026, 5, 14)
+    canned = [[
+        _store_row("beta", "REVENUE", 0, False, stage="warming_up", is_thin=True),
+    ]]
+    conn = _FakeConn(canned)
+
+    ok, detail = ogc.gate1_eval_rows_today(conn, target)
+
+    assert ok, detail
+    assert "not enough history yet" in detail
+
+
+def test_gate1_still_fails_when_nothing_ran_at_all():
+    """A pair with no SUCCEEDED run AND no run explaining why is the nightly
+    job not touching it — still the outage this gate exists to catch."""
+    target = date(2026, 5, 14)
+    canned = [[
+        _store_row("beta", "REVENUE", 0, False, stage="warming_up", is_thin=False),
+    ]]
+    conn = _FakeConn(canned)
+
+    ok, detail = ogc.gate1_eval_rows_today(conn, target)
+
+    assert not ok
+    assert "no SUCCEEDED training" in detail
+
+
+def test_gate2_fails_when_no_gated_target_trained_at_all():
+    """A window holding only MENU_ITEM rows means neither revenue nor busy
+    hours trained. The pre-rewrite `any(naive > 0)` verdict failed this; the
+    per-target rewrite passed it, which is the gate going quiet on the exact
+    silence it was built to report."""
+    target = date(2026, 5, 14)
+    canned = [[("MENU_ITEM", 0, 9)]]
+    conn = _FakeConn(canned)
+
+    ok, detail = ogc.gate2_seasonal_naive_fired(conn, target)
+
+    assert not ok
+    assert "no BUSY_HOURS or REVENUE runs at all" in detail

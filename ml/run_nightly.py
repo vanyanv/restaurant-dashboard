@@ -195,6 +195,25 @@ def _write_revenue_forecasts(store_id: str, model_version: str, rows: list) -> i
     return written
 
 
+def _promotion_note(gate: str, gate_reason: str) -> str:
+    """The promotion decision, tagged so Gate 2 can find it.
+
+    Gate 2 greps MlTrainingRun.errorMessage for 'seasonal-naive' or 'vs
+    naive', and only some of `select_with_gate`'s reasons contain either:
+    'enriched_skipped: enriched model returned None (...)' and 'fallback
+    (WAPE undefined for holdout); ...' contain neither. Recording the raw
+    reason therefore left a healthy run looking like one that never
+    evaluated the gate — and the enriched variant is skipped whenever
+    external-signal coverage drops below 0.6, so a degraded weather feed
+    alone was enough to trip it. That is the same false alarm this module
+    set out to end, one layer down.
+
+    The prefix is the invariant: whatever `decide_promotion` says, the run
+    records that a seasonal-naive promotion decision was reached.
+    """
+    return f"seasonal-naive promotion decision \u2014 {gate}: {gate_reason}"
+
+
 def run_revenue_for_store(store_id: str, model_version: str) -> dict:
     run_id = _open_run("REVENUE", store_id, model_version)
     try:
@@ -239,7 +258,7 @@ def run_revenue_for_store(store_id: str, model_version: str) -> dict:
         # so a clean sweep of promotions read as "the gate has stopped firing"
         # and failed the check from 2026-09-14 on. `decide_promotion` returns a
         # reason on both branches precisely so it can be persisted on both.
-        warning = f"{gate}: {gate_reason}"
+        warning = _promotion_note(gate, gate_reason)
 
         _close_run(
             run_id,
@@ -453,7 +472,7 @@ def run_busy_hours_for_store(store_id: str, model_version: str) -> dict:
         warning = None
         if result.harri_coverage < 0.6:
             warning = f"low_harri_coverage:{result.harri_coverage:.2f}"
-        gate_warning = f"{gate}: {gate_reason}"
+        gate_warning = _promotion_note(gate, gate_reason)
         warning = f"{warning}; {gate_warning}" if warning else gate_warning
 
         _close_run(

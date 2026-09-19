@@ -157,6 +157,23 @@ describe("GET /api/cron/proposals", () => {
     )
   })
 
+  it("writes the cursor after every store, not once at the end", async () => {
+    await GET(req())
+
+    // The budget only decides whether to START a store, so one slow store can
+    // carry the invocation past maxDuration and kill it mid-walk. A cursor
+    // written only after the loop would not survive that, and the next run
+    // would begin at the same slow store — the starvation the rotation exists
+    // to prevent.
+    const cursors = updateJobRun.mock.calls.map(
+      (c) => (c[0] as { data: { metadata: { lastStoreId: string } } }).data.metadata.lastStoreId,
+    )
+    expect(cursors).toEqual(
+      expect.arrayContaining(["s-a", "s-b", "s-c"]),
+    )
+    expect(cursors.indexOf("s-a")).toBeLessThan(cursors.indexOf("s-c"))
+  })
+
   it("fails the run rather than closing it with an unwritten cursor", async () => {
     updateJobRun.mockRejectedValue(new Error("write conflict") as never)
 

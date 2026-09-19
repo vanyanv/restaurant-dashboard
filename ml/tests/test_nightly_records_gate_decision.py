@@ -136,3 +136,38 @@ def test_busy_hours_keeps_the_harri_warning_alongside_the_decision():
 
     assert "low_harri_coverage:0.40" in error
     assert "seasonal-naive" in error
+
+
+# `select_with_gate` does not always mention the baseline by name. Two of its
+# reasons contain neither token Gate 2 greps for:
+#
+#   enriched_skipped -> "enriched model returned None (insufficient signal
+#                        coverage or history)"
+#   promoted/kept    -> "fallback (WAPE undefined for holdout); legacy gate ..."
+#
+# The first fires whenever external-signal coverage drops below 0.6, so a
+# degraded weather feed was enough to make a healthy run look like one that
+# never evaluated the gate.
+UNTAGGED_REASONS = [
+    "enriched model returned None (insufficient signal coverage or history)",
+    "fallback (WAPE undefined for holdout); legacy gate kept baseline",
+]
+
+
+@pytest.mark.parametrize("reason", UNTAGGED_REASONS)
+def test_a_decision_whose_reason_never_says_naive_is_still_findable(reason):
+    gate = "enriched_skipped" if "returned None" in reason else "promoted"
+    error = _run_revenue(gate, reason).call_args.kwargs["error"].lower()
+
+    # Gate 2's SQL is `errorMessage ILIKE '%seasonal-naive%' OR '%vs naive%'`.
+    assert "seasonal-naive" in error or "vs naive" in error
+    # And the reason itself is not lost to the tag.
+    assert reason.lower() in error
+
+
+@pytest.mark.parametrize("reason", UNTAGGED_REASONS)
+def test_busy_hours_tags_those_reasons_too(reason):
+    gate = "enriched_skipped" if "returned None" in reason else "promoted"
+    error = _run_busy_hours(gate, reason, 1.0).call_args.kwargs["error"].lower()
+
+    assert "seasonal-naive" in error or "vs naive" in error

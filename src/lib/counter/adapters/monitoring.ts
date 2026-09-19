@@ -174,10 +174,6 @@ function durationOf(d: Data): MonitoringDuration {
   }
 }
 
-export interface MonitoringInput {
-  accountId: string
-}
-
 /* -- loading ---------------------------------------------------------- */
 
 interface Provider {
