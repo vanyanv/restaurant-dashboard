@@ -37,6 +37,13 @@ export type SaveState = "saving" | "ok" | "failed"
  * it, and nobody walking seventy-six ingredients loses twenty lines because
  * the page reloaded before they reached a Save button.
  *
+ * `row.estimate` rides along on every write. It is the expectation the adapter
+ * took once, at `StockCount.startedAt`, for the whole session — already in the
+ * browser by the time a box is blurred, so carrying it costs the save nothing.
+ * That matters more here than anywhere else in the app: this form is used in a
+ * walk-in on one bar of signal, and a failed write shows only a small grey
+ * "not saved — try again". Nothing may be added in front of the write.
+ *
  * An empty box is not a zero. Blurring past an ingredient you have not counted
  * yet has to write nothing, or every untouched line becomes a recorded zero
  * the moment someone scrolls — which on a count sheet means "we have none of

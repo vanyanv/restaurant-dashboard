@@ -3,6 +3,21 @@
 // estimatedQtyAtCount (the model's prediction at save time), derive the
 // recount observation and upsert the per-(store, ingredient)
 // IngredientModelState. See src/lib/inventory/calibration.ts for the math.
+//
+// The early return below is NOT the defect it looks like. It fires when no
+// line on the count carries an expectation, and that is the correct outcome
+// for a count with nothing to learn from: an expectation is measured from the
+// last CLOSED count on the store, so the first count a store ever closes has
+// none and teaches the model nothing. It becomes the anchor, and the next
+// count against it arrives here with estimates on its lines.
+//
+// Where those estimates come from: `loadCountEntry` in
+// @/lib/counter/adapters/stock-counts takes one per ingredient at
+// `StockCount.startedAt`, and the entry form carries it down with each save.
+// Until 2026-09-20 that adapter hard-coded `estimate: null`, so this function
+// returned here on every count ever taken and IngredientModelState stayed
+// empty — which in turn was read as proof that no estimate could be produced.
+// Nothing in this file had to change to break that loop.
 
 import { prisma } from "@/lib/prisma"
 import { computeRunningOnHand } from "@/lib/inventory/running-on-hand"
