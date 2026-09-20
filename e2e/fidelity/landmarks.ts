@@ -723,6 +723,57 @@ export function matchedCount(proto: Landmark[], ours: Landmark[]): number {
   return n
 }
 
+/**
+ * Our page fell into an empty state the design does not draw.
+ *
+ * A PRECONDITION, not a finding. `.empty` is what `Section` renders when its
+ * `SectionData` came back empty or errored, so a page wearing one did not
+ * fail to MATCH its design — it failed to load, and every landmark the
+ * comparison then reports is an artefact of that. The 2026-09-20 run is the
+ * worked example: seventeen pages drew an empty state and contributed 56 of
+ * the 94 failures, read for a day as prototype drift. Nine were detail routes
+ * whose manifest fixture id no longer resolved; eight were the monitoring
+ * pages, whose loads were failing. Not one was a design difference, and the
+ * reports named landmarks on every one of them.
+ *
+ * This sits beside the redirect and non-2xx assertions in `openOurs` and is
+ * the same class of thing: a page that was never really served must not be
+ * reported as a page that does not match its design. It is separate from them
+ * because it is answered from the RENDER rather than from the response — a
+ * page that 200s on its own URL and then draws "nothing to show" is invisible
+ * to both.
+ *
+ * COMPARED AGAINST THE PROTOTYPE'S OWN COUNT rather than tripping on any
+ * `.empty` at all, because three pages are an empty state BY DESIGN and must
+ * stay measurable: `P.forbidden` draws one, and so do the 404 and the
+ * shutdown wall. Surplus is the signal — one more than the design asks for
+ * means a section that should hold content is holding an apology.
+ *
+ * It does NOT catch a section that rendered its container and put nothing in
+ * it: on 2026-09-20 the Recipes catalogue drew a `.queue` with no `.qitem`
+ * and no text, which is a real finding about a real page and is left to the
+ * structure and rendering passes, where it belongs.
+ *
+ * Returns null when the page is measurable.
+ */
+export function emptyStateDefect(
+  proto: Landmark[],
+  ours: Landmark[],
+): { protoCount: number; ourCount: number; texts: string[] } | null {
+  const isEmptyState = (l: Landmark) => l.classes.includes("empty")
+  const mine = ours.filter(isEmptyState)
+  const protoCount = proto.filter(isEmptyState).length
+  if (mine.length <= protoCount) return null
+  return {
+    protoCount,
+    ourCount: mine.length,
+    // `Landmark.text` is already trimmed to 60 characters. An empty state
+    // whose own text is blank still reports, as the empty string it is —
+    // "the page says nothing at all" is the loudest version of this.
+    texts: mine.map((l) => l.text),
+  }
+}
+
 /** A one-line count for a report headline. */
 export function landmarkTally(landmarks: Landmark[]): Record<string, number> {
   const tally: Record<string, number> = {}

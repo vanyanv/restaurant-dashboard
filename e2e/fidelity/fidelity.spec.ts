@@ -26,7 +26,7 @@
  */
 import fs from "node:fs"
 import path from "node:path"
-import { test, expect, type Page, type TestInfo } from "@playwright/test"
+import { test, expect, type Locator, type Page, type TestInfo } from "@playwright/test"
 import { PAGES, absenceBudget,
   extraBudget, styleBudget, type FidelityPage } from "./manifest"
 import { openPrototype, surfaceRoot, type Surface } from "./prototype"
@@ -40,6 +40,7 @@ import {
   applyStyleAllowances,
   compareLandmarks,
   defectWhere,
+  emptyStateDefect,
   matchedCount,
   findThemeDefects,
   landmarkTally,
@@ -297,6 +298,110 @@ async function attachBoth(
  * Sixteen elements against six is the sentence this whole project exists
  * because of; this is that sentence, computed.
  */
+/**
+ * The id this row substitutes into the prototype's own route.
+ *
+ * Read by DIFFERENCE rather than by pattern: `protoRoute` is the prototype's
+ * address and `route` is ours, and on a detail page the only thing that
+ * differs is the entity. `/dashboard/recipes/double-slider` against
+ * `/dashboard/recipes/cmm48cpo6000voxu9lafghk62` yields the cuid, and no
+ * regex has to know what a cuid, a uuid or a vendor name looks like — three
+ * shapes this manifest already carries.
+ *
+ * Segment counts must match, which is what keeps `P.forbidden` ("403" against
+ * "/dashboard/forbidden") from reporting a whole route as a fixture id.
+ */
+function fixtureIdOf(entry: FidelityPage): string {
+  const proto = entry.protoRoute.split("/")
+  const ours = entry.route.split("/")
+  if (proto.length !== ours.length) return "none — the two routes are different shapes"
+  const differing = ours.filter((seg, i) => seg !== proto[i])
+  return differing.length === 0 ? "none — this route carries no fixture" : differing.join(", ")
+}
+
+/** "1440x900 (fidelity)", for a diagnostic that has to say which run this was. */
+function viewportOf(page: Page, testInfo: TestInfo): string {
+  const v = page.viewportSize()
+  return `${v ? `${v.width}x${v.height}` : "unknown"} (${testInfo.project.name})`
+}
+
+/**
+ * The precondition: a page wearing an empty state cannot be measured.
+ *
+ * `emptyStateDefect` explains what it looks for, and why it counts against
+ * the prototype's own `.empty` rather than tripping on any at all. This is
+ * the part that DECIDES, and it runs before `compareLandmarks` is ever
+ * called — the point is that no landmark difference is computed, let alone
+ * reported, about a page that did not load. It stands beside the redirect and
+ * non-2xx checks in `openOurs` and replaces neither: those answer from the
+ * RESPONSE, and a page that 200s on its own URL and then draws "nothing to
+ * show" is invisible to both.
+ *
+ * It THROWS rather than asserting through `expect`. Everything expect() says
+ * in this file is a claim about how a page compares to its design; this is a
+ * claim that the comparison should not happen at all, and wearing the same
+ * clothes as the findings is what made the 2026-09-20 run take a day to read.
+ *
+ * The measurement is still written and both screenshots still attach, so
+ * `npm run fidelity:report` records WHY a page could not be measured rather
+ * than silently keeping the last good report for it.
+ */
+async function assertMeasurable(args: {
+  page: Page
+  tab: Page
+  root: Locator
+  testInfo: TestInfo
+  entry: FidelityPage
+  surface: Surface
+  proto: Landmark[]
+  ours: Landmark[]
+}): Promise<void> {
+  const { page, tab, root, testInfo, entry, surface, proto, ours } = args
+  const defect = emptyStateDefect(proto, ours)
+  if (!defect) return
+
+  const landed = new URL(page.url()).pathname
+  const texts = defect.texts
+    .map((t) => (t === "" ? "(no text at all)" : JSON.stringify(t)))
+    .join("; ")
+  const diagnostic =
+    `Fidelity precondition failed: page rendered an empty state\n\n` +
+    `  page          ${entry.protoId} (${surface})\n` +
+    `  route         ${entry.route}${entry.query ?? ""}\n` +
+    `  viewport      ${viewportOf(page, testInfo)}\n` +
+    `  landed path   ${landed}\n` +
+    `  fixture id    ${fixtureIdOf(entry)}\n` +
+    `  empty state   ${texts}\n\n` +
+    `The design draws ${defect.protoCount} \`.empty\` here and we draw ` +
+    `${defect.ourCount}. A section renders one when its data came back empty ` +
+    `or errored, so this page did not fail to MATCH its design — it failed ` +
+    `to load, and every landmark a comparison reported would be an artefact ` +
+    `of that. Nothing below this line ran.\n\n` +
+    `Fix the DATA, not the page. If the fixture id above names a row, check ` +
+    `that it still exists for this account; if it names none, this page's ` +
+    `own loaders are failing. Landmark budgets are not the answer here and ` +
+    `must not be touched to make this green.`
+
+  writeData(testInfo, entry, surface, {
+    gated: true,
+    proto: { count: proto.length, tally: landmarkTally(proto) },
+    ours: { count: ours.length, tally: landmarkTally(ours) },
+    precondition: {
+      kind: "empty-state",
+      protoCount: defect.protoCount,
+      ourCount: defect.ourCount,
+      texts: defect.texts,
+      route: `${entry.route}${entry.query ?? ""}`,
+      viewport: viewportOf(page, testInfo),
+      landed,
+      fixtureId: fixtureIdOf(entry),
+    },
+  })
+  await attachBoth(testInfo, root, page)
+  await tab.close()
+  throw new Error(diagnostic)
+}
+
 function headline(entry: FidelityPage, surface: Surface, proto: Landmark[], ours: Landmark[]): string {
   return (
     `${entry.protoId} (${surface}): the prototype renders ${proto.length} ` +
@@ -371,11 +476,22 @@ for (const entry of PAGES) {
     await openOurs(page, entry, "light")
     const ours = await extractOurs(page)
 
+    // BEFORE the comparison, deliberately. A page wearing an empty state is
+    // not a page that differs from its design, and the difference list below
+    // would describe the empty state rather than the page.
+    await assertMeasurable({ page, tab, root, testInfo, entry, surface, proto, ours })
+
     const differences = compareLandmarks(proto, ours)
     const structural = differences.filter((d) => d.kind !== "style")
 
     writeData(testInfo, entry, surface, {
       gated: true,
+      // Explicitly cleared, because `writeData` merges onto whatever the last
+      // run left in this file. Without it, a page that drew an empty state on
+      // Monday would still be reported as unmeasurable on Tuesday after the
+      // fixture was fixed — the report would keep saying the page never
+      // loaded while the run beside it went green.
+      precondition: null,
       proto: { count: proto.length, tally: landmarkTally(proto) },
       ours: { count: ours.length, tally: landmarkTally(ours) },
       differences: differences.slice(0, 500),
@@ -429,6 +545,10 @@ for (const entry of PAGES) {
 
     await openOurs(page, entry, "light")
     const ours = await extractOurs(page)
+
+    // As in the structure pass, and for the same reason: the properties of an
+    // empty state are not this page's rendering.
+    await assertMeasurable({ page, tab, root, testInfo, entry, surface, proto, ours })
 
     const styleDiffs = compareLandmarks(proto, ours).filter((d) => d.kind === "style")
     const matched = matchedCount(proto, ours)

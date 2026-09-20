@@ -25,6 +25,7 @@ import {
   compareLandmarks,
   contrastRatio,
   defectWhere,
+  emptyStateDefect,
   findThemeDefects,
   landmarkTally,
   matchedCount,
@@ -764,5 +765,59 @@ describe("contrast maths", () => {
     const grey767676 = { r: 118, g: 118, b: 118 }
     expect(contrastRatio(grey767676, white)).toBeGreaterThan(requiredContrast(13, 400))
     expect(contrastRatio(grey767676, white)).toBeLessThan(5)
+  })
+})
+
+describe("emptyStateDefect — the page did not load, so it cannot be measured", () => {
+  // Every case below was proved red first by inverting the comparison in
+  // emptyStateDefect, per this file's opening note.
+
+  it("reports a page that fell into an empty state the design does not draw", () => {
+    const proto = [lm(["sec"]), lm(["sec__head"]), lm(["strip"])]
+    const ours = [lm(["sec"]), lm(["empty"], { text: "We could not find that recipe." })]
+    const defect = emptyStateDefect(proto, ours)
+    expect(defect).not.toBeNull()
+    expect(defect?.protoCount).toBe(0)
+    expect(defect?.ourCount).toBe(1)
+    expect(defect?.texts).toEqual(["We could not find that recipe."])
+  })
+
+  it("stays silent on a page that renders its content", () => {
+    const proto = [lm(["sec"]), lm(["strip"])]
+    const ours = [lm(["sec"]), lm(["strip"])]
+    expect(emptyStateDefect(proto, ours)).toBeNull()
+  })
+
+  it("leaves a page that IS an empty state measurable", () => {
+    // `P.forbidden` draws one, and so do the 404 and the shutdown wall. A
+    // blanket "any .empty fails" would make three pages permanently
+    // unmeasurable — the design's own composition read as a broken load.
+    const proto = [lm(["empty"]), lm(["btnrow"]), lm(["btn"])]
+    const ours = [lm(["empty"]), lm(["btnrow"]), lm(["btn"])]
+    expect(emptyStateDefect(proto, ours)).toBeNull()
+  })
+
+  it("reports a SURPLUS empty state on a page whose design draws one", () => {
+    // The 404 that also failed to load the one section it does have.
+    const proto = [lm(["empty"]), lm(["sec"])]
+    const ours = [lm(["empty"]), lm(["empty"], { text: "" })]
+    const defect = emptyStateDefect(proto, ours)
+    expect(defect?.protoCount).toBe(1)
+    expect(defect?.ourCount).toBe(2)
+  })
+
+  it("reports an empty state that says nothing, as the empty string it is", () => {
+    const ours = [lm(["empty"], { text: "" })]
+    expect(emptyStateDefect([lm(["sec"])], ours)?.texts).toEqual([""])
+  })
+
+  it("does NOT fire on a container that rendered with nothing in it", () => {
+    // The Recipes catalogue on 2026-09-20: a `.queue` with no `.qitem` and no
+    // text. That is a real finding about a page that loaded, and it belongs
+    // to the structure and rendering passes. Swallowing it here would trade
+    // 56 misleading failures for one hidden true one.
+    const proto = [lm(["queue"]), lm(["qitem"]), lm(["qitem"])]
+    const ours = [lm(["queue"], { text: "" })]
+    expect(emptyStateDefect(proto, ours)).toBeNull()
   })
 })

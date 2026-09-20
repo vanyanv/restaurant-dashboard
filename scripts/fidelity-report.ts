@@ -44,6 +44,20 @@ interface Data {
   surface: string
   capturedAt: string
   gated?: boolean
+  /**
+   * Set when the page could not be measured at all, so nothing below it in
+   * this report means anything. See `assertMeasurable` in the spec.
+   */
+  precondition?: {
+    kind: "empty-state"
+    protoCount: number
+    ourCount: number
+    texts: string[]
+    route: string
+    viewport: string
+    landed: string
+    fixtureId: string
+  } | null
   proto?: { count: number; tally: Record<string, number> }
   ours?: { count: number; tally: Record<string, number> }
   differences?: Difference[]
@@ -77,6 +91,44 @@ function section(d: Data): string[] {
   const ours = d.ours?.count ?? 0
   out.push(`## ${d.project} — ${d.surface}`)
   out.push("")
+
+  /*
+   * A page that did not load gets the reason and NOT a landmark report. The
+   * tables below would be a description of an empty state, and on 2026-09-20
+   * seventeen pages' worth of exactly that was read for a day as prototype
+   * drift. The count line still prints, because "we render 5 against 29" is
+   * the shape of the problem; the missing and extra lists do not, because
+   * naming landmarks invites somebody to go and build them.
+   */
+  if (d.precondition) {
+    const texts = d.precondition.texts
+      .map((t) => (t === "" ? "(no text at all)" : `"${t}"`))
+      .join("; ")
+    out.push(`> **Not measured — the page rendered an empty state.**`)
+    out.push(">")
+    out.push(
+      `> The design draws ${d.precondition.protoCount} \`.empty\` here and we ` +
+        `drew ${d.precondition.ourCount}, so this is a page that failed to ` +
+        `LOAD rather than one that does not match its design. Fix the data, ` +
+        `not the page, and do not touch a landmark budget to make it green.`,
+    )
+    out.push(">")
+    out.push(`> | | |`)
+    out.push(`> |---|---|`)
+    out.push(`> | route | \`${d.precondition.route}\` |`)
+    out.push(`> | viewport | ${d.precondition.viewport} |`)
+    out.push(`> | landed path | \`${d.precondition.landed}\` |`)
+    out.push(`> | fixture id | ${d.precondition.fixtureId} |`)
+    out.push(`> | empty state | ${texts} |`)
+    out.push("")
+    out.push(
+      `The prototype renders ${proto} landmarks on this page. We rendered ` +
+        `${ours}, and they are the empty state's, not this page's.`,
+    )
+    out.push("")
+    return out
+  }
+
   out.push(
     `**The prototype renders ${proto} landmarks on this page. We render ${ours}.**`,
   )
