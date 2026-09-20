@@ -8,6 +8,7 @@ import {
   buildPeriods,
   COGS_CODE,
   LABOR_CODE,
+  pctOfSales,
   TOTAL_SALES_CODE,
   type PnLRow,
 } from "@/lib/pnl"
@@ -30,6 +31,7 @@ import {
 } from "@/lib/counter/service-profile"
 import {
   granularityFor,
+  loadComparisonStatement,
   loadStatement,
   rowValues,
   type Granularity,
@@ -44,7 +46,6 @@ import {
 } from "@/lib/counter/comparison"
 import { count, delta, money, pct, plural, points } from "@/lib/counter/format"
 import {
-  comparisonRange,
   dayCount,
   isoDay,
   rangeLabel,
@@ -477,7 +478,10 @@ function foldStatement(
         code: r.code,
         label: r.label,
         values,
-        percents: values.map((v, i) => (gross[i] === 0 ? 0 : v / gross[i])),
+        // `pctOfSales`, not `gross[i] === 0 ? 0 : …`. A bucket that folds to a
+        // negative gross divides quite happily and inverts every percent in
+        // the column. This was the one copy of that guard the sweep missed.
+        percents: values.map((v, i) => pctOfSales(v, gross[i])),
         isSubtotal: r.isSubtotal,
         isFixed: r.isFixed,
         isUnknown,
@@ -1140,16 +1144,25 @@ function buildDayBook(
     const dayLabor = labor?.[i] ?? null
     const orders = ordersByDay.get(key) ?? null
 
-    // One `primeCost` per day, on that day's own denominator. A day with no
-    // COGS posted has no food percentage and no prime cost, and reads as an
-    // em-dash rather than as a restaurant that spent nothing on food.
+    /*
+     * One `primeCost` per day, on that day's own denominator. A day with no
+     * COGS posted has no food percentage and no prime cost, and reads as an
+     * em-dash rather than as a restaurant that spent nothing on food.
+     *
+     * `||`, not `&&`: prime is food plus labour and needs both. Requiring both
+     * to be MISSING before withholding it meant a day with labour and no COGS
+     * still printed a prime cost — computed with `cogsValue: 0`, so labour
+     * alone, under the ceiling, `over: false` — on a row whose Food column
+     * showed an em-dash two cells to its left. The row said both that food was
+     * unknown and that prime was 24%, which cannot both be true.
+     */
     const prime =
-      dayFood === null && dayLabor === null
+      dayFood === null || dayLabor === null
         ? null
         : primeCost({
             grossSales: dayNet,
-            cogsValue: dayFood ?? 0,
-            laborValue: dayLabor ?? 0,
+            cogsValue: dayFood,
+            laborValue: dayLabor,
           })
 
     return {
@@ -1270,8 +1283,10 @@ function buildCategories(data: MenuEngineeringData): CategoryTable {
       key: name,
       name,
       net: money(b.net),
-      share: total === 0 ? DASH : pct((b.net / total) * 100, { scaled: true }),
-      food: b.net === 0 ? DASH : pct((b.cogs / b.net) * 100, { scaled: true }),
+      // `<= 0` on both: a category or a day that netted below zero inverts
+      // the share and the food-cost percentage, printing a cost as a credit.
+      share: total <= 0 ? DASH : pct((b.net / total) * 100, { scaled: true }),
+      food: b.net <= 0 ? DASH : pct((b.cogs / b.net) * 100, { scaled: true }),
     }))
 
   return {
@@ -1299,7 +1314,6 @@ export function getAnalyticsSectionPromises(
   // comparison alike: a `weekday` window contains four occurrences and would
   // derive its own, coarser grain from itself.
   const granularity = granularityFor(range)
-  const cmpRange = comparisonId === "none" ? null : comparisonRange(range, comparisonId)
 
   /* ── The loads. ── */
 
@@ -1309,11 +1323,12 @@ export function getAnalyticsSectionPromises(
     { retryAction: "retryStatement" },
   )
 
+  // `loadComparisonStatement`, not `loadStatement(comparisonRange(...))`: a
+  // `weekday` comparison is FOUR windows, and loading their contiguous hull as
+  // one window read a single day against five and a half days of trade.
   const cmpP = classify<Statement | null>(
     () =>
-      cmpRange
-        ? loadStatement({ range: cmpRange, storeId, granularity: "daily" })
-        : Promise.resolve(null),
+      loadComparisonStatement({ range, mode: comparisonId, storeId, granularity: "daily" }),
     { retryAction: "retryComparison" },
   )
 
@@ -1420,7 +1435,6 @@ export function getStoreAnalyticsSectionPromises(
   const { range, storeId, accountId } = input
   const comparisonId: ComparisonId = input.comparisonId ?? "none"
   const granularity = granularityFor(range)
-  const cmpRange = comparisonId === "none" ? null : comparisonRange(range, comparisonId)
   const days = dayCount(range)
 
   /* ── The loads. ── */
@@ -1430,11 +1444,12 @@ export function getStoreAnalyticsSectionPromises(
     { retryAction: "retryStatement" },
   )
 
+  // `loadComparisonStatement`, not `loadStatement(comparisonRange(...))`: a
+  // `weekday` comparison is FOUR windows, and loading their contiguous hull as
+  // one window read a single day against five and a half days of trade.
   const cmpP = classify<Statement | null>(
     () =>
-      cmpRange
-        ? loadStatement({ range: cmpRange, storeId, granularity: "daily" })
-        : Promise.resolve(null),
+      loadComparisonStatement({ range, mode: comparisonId, storeId, granularity: "daily" }),
     { retryAction: "retryComparison" },
   )
 

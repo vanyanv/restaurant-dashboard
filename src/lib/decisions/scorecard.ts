@@ -37,6 +37,24 @@ export interface Scorecard {
 }
 
 /**
+ * The newest evaluation per store; the rest are older model versions.
+ *
+ * Lived inline in `get-decisions-view.ts` until 2026-09-19, when a second
+ * reader (`getForecastQuality`, the chat tool) needed the same reduction. A
+ * dedupe copied rather than shared is a second definition of "the current
+ * accuracy", and the two surfaces would have printed different percentages
+ * for the same account on the same day.
+ *
+ * `rows` must already be ordered newest-first; both callers order by
+ * `computedAt desc` in the query.
+ */
+export function latestPerStore<T extends { storeId: string }>(rows: T[]): T[] {
+  const seen = new Map<string, T>()
+  for (const row of rows) if (!seen.has(row.storeId)) seen.set(row.storeId, row)
+  return [...seen.values()]
+}
+
+/**
  * Combine one evaluation row per store into a single portfolio reading.
  *
  * Weighted by `sampleSize`, so a store with three reconciled days can't drag

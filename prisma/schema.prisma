@@ -506,9 +506,28 @@ model Recipe {
   accountId        String
   itemName         String
   category         String
-  /// Portions yielded per recipe. Must be > 0 (DB CHECK constraint
-  /// `recipe_serving_size_positive` in the manual migration).
+  /// How many of whatever this recipe makes come out of ONE batch. Must be > 0
+  /// (DB CHECK constraint `recipe_serving_size_positive` in the manual
+  /// migration). Read it together with `yieldUnit`: with no yield unit this is
+  /// a count of portions ("makes 24 bowls"); with one it is a measured yield
+  /// ("makes 128 fl oz").
+  ///
+  /// This is NOT a display field. `computeRecipeCost` divides the batch cost
+  /// by it to get `totalCost`, which is what COGS multiplies by plates sold
+  /// and what the P&L food line is built from. It was ignored until
+  /// 2026-09-19, which is why every row in this account still reads 1.
   servingSize      Float    @default(1)
+  /// The unit `servingSize` is measured in — `fl oz`, `lb`, `qt`, and so on.
+  ///
+  /// Null means the recipe yields PORTIONS, and a recipe that uses it as a
+  /// sub-recipe counts servings. Non-null makes it a BATCH: a line drawing on
+  /// it converts into this unit and takes a share, so "2 fl oz of a 128 fl oz
+  /// batch" costs one sixty-fourth of the batch rather than two whole batches.
+  ///
+  /// Only ever a unit `canonicalizeUnit` recognises — enforced by
+  /// `validateRecipeShape`, because a yield unit nothing can convert into is a
+  /// batch nothing can draw on.
+  yieldUnit        String?
   notes            String?
   foodCostOverride Float?
   isSellable       Boolean  @default(true)
@@ -573,6 +592,15 @@ model CanonicalIngredient {
   costPerRecipeUnit Float?
   /// "manual" — user-entered; "invoice" — auto-derived from latest matched line item.
   costSource        String?
+  /// Usable fraction of what is purchased, 0 < x <= 1. 1 (the default, and
+  /// every row before 2026-09-19) means no loss.
+  ///
+  /// A recipe line states what lands on the plate. Lettuce bought by the head
+  /// arrives with a core and outer leaves; a roast loses weight in the oven.
+  /// 0.8 means a fifth of what is bought never reaches a plate, so a line
+  /// calling for 1 lb costs 1 lb ÷ 0.8 = 1.25 lb of purchased product. See
+  /// `computeIngredientLineCost`.
+  yieldFactor       Float     @default(1)
   /// When true, invoice-match recomputes won't overwrite a manually set cost.
   costLocked        Boolean   @default(false)
   costUpdatedAt     DateTime?

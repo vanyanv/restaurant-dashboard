@@ -9,6 +9,7 @@ import {
   Note,
   PageHead,
   Queue,
+  RowLine,
   Section,
   Strip,
   Table,
@@ -163,7 +164,14 @@ function Proposals({ data }: { data: CatalogProposals }) {
     selected: p.id === picked,
     cells: {
       item: p.item,
-      proposed: p.proposed ?? { v: "a new recipe", cls: "hot" },
+      // WHICH OF THE TWO THINGS ACCEPT DOES. A proposal that maps onto an
+      // existing recipe writes a mapping; one that does not writes a whole
+      // recipe out of the model's components, and both used to print a plain
+      // name here. The accent is the only thing on the row that separates
+      // them, and the lines below are what the accent is asking you to read.
+      proposed: p.creates
+        ? { v: `${p.proposed ?? "a new recipe"} — new`, cls: "hot" }
+        : (p.proposed ?? "—"),
       why: p.reasoning,
       conf:
         p.confidence === null
@@ -172,10 +180,41 @@ function Proposals({ data }: { data: CatalogProposals }) {
     },
   }))
 
+  const chosen = data.pending.find((p) => p.id === picked) ?? null
+
   return (
     <>
       {data.pending.length > 0 ? (
         <Table columns={PROPOSAL_COLUMNS} rows={rows} />
+      ) : null}
+      {/* What Accept would WRITE, before it is clicked. A proposal with no
+          existing recipe behind it creates one out of these lines, and they
+          become a plate cost that reaches COGS and the P&L — the panel used
+          to show a name, a sentence and a percentage, and then write a recipe
+          the reviewer had never seen. */}
+      {chosen && chosen.lines.length > 0 ? (
+        <div className="sec__body">
+          <span className="k">The recipe it would create</span>
+          {chosen.lines.map((l, i) => (
+            <RowLine
+              key={`${l.name}:${i}`}
+              columns="minmax(0,1fr) auto"
+              name={l.name}
+              sub={l.kind === "component" ? "sub-recipe" : "ingredient"}
+            >
+              <span className="ext">
+                {l.quantity} {l.unit}
+              </span>
+            </RowLine>
+          ))}
+        </div>
+      ) : null}
+      {chosen && chosen.creates && chosen.lines.length === 0 ? (
+        <Note flush tone="bad">
+          This proposal would create a recipe with no lines at all, so the plate would cost
+          nothing and every sale of it would show pure margin. Reject it and build the recipe by
+          hand.
+        </Note>
       ) : null}
       <div className="sec__body">
         <div className="btnrow">

@@ -246,6 +246,25 @@ export const SHOWABLE_TOOLS = [
   "getPnlSummary",
   "getRevenueForecast",
   "getFoodCostForecast",
+  /*
+   * Added 2026-09-19. Every one of these already returned a table's worth of
+   * rows and could show none of it, so the answer was a sentence and up to
+   * three scalars over a result the reader had asked to SEE. `getRatings` is
+   * the clearest case: a 1-5 distribution is a bar chart or it is nothing,
+   * and "4.6 average" hides whether that is everyone agreeing or half the
+   * guests at five and a tenth at one.
+   */
+  "getMenuEngineering",
+  "getIngredientPriceHistory",
+  "getMenuItemElasticity",
+  "getChannelMix",
+  "getInventoryStatus",
+  "getLostSales",
+  "getWasteRootCauses",
+  "rankRecipes",
+  "getRatings",
+  "getAlerts",
+  "getForecastQuality",
 ] as const
 
 export type ShowableTool = (typeof SHOWABLE_TOOLS)[number]
@@ -471,6 +490,275 @@ const BUILDERS = {
       days.map((d) => numOrNull(d.foodCostPct)),
       "pct",
       hasBand ? { lo, hi } : undefined,
+    )
+  },
+  getMenuEngineering(_args, result) {
+    if (!isRecord(result)) return null
+    const rows = Array.isArray(result.rows) ? result.rows.filter(isRecord) : []
+    // Biggest contributors first: the quadrant label is the finding, and the
+    // dollars are what makes one row's label matter more than another's.
+    const sorted = [...rows].sort(
+      (a, b) => num(b.totalContribution) - num(a.totalContribution),
+    )
+    return tableOf(
+      "Menu engineering",
+      [
+        { key: "item", label: "Item" },
+        { key: "quadrant", label: "Quadrant" },
+        { key: "qty", label: "Sold", numeric: true },
+        { key: "contribution", label: "Contribution", numeric: true },
+      ],
+      sorted,
+      (r) => ({
+        item: text(r.itemName),
+        quadrant: text(r.quadrant),
+        qty: countOf(num(r.soldQty)),
+        contribution: money(num(r.totalContribution)),
+      }),
+    )
+  },
+
+  getIngredientPriceHistory(_args, result) {
+    if (!isRecord(result)) return null
+    const rows = Array.isArray(result.rows) ? result.rows.filter(isRecord) : []
+    // `rows` is oldest first, which is already the axis order.
+    return lineOf(
+      `${text(result.name) || "Ingredient"} unit price`,
+      rows.map((r) => dayAxis(text(r.invoiceDate))),
+      rows.map((r) => numOrNull(r.unitPrice)),
+      "money",
+    )
+  },
+
+  getMenuItemElasticity(_args, result) {
+    const rows = asRows(result)
+    // Most price-sensitive first. `elasticity` is negative for a normal item,
+    // so the most sensitive is the most negative.
+    const sorted = [...rows].sort((a, b) => num(a.elasticity) - num(b.elasticity))
+    return tableOf(
+      "Price sensitivity",
+      [
+        { key: "item", label: "Item" },
+        { key: "elasticity", label: "Elasticity", numeric: true },
+        { key: "confidence", label: "Confidence" },
+        { key: "sample", label: "Days", numeric: true },
+      ],
+      sorted,
+      (r) => ({
+        item: text(r.itemSkuId),
+        elasticity: num(r.elasticity).toFixed(2),
+        confidence: text(r.confidence),
+        sample: countOf(num(r.sampleSize)),
+      }),
+    )
+  },
+
+  getChannelMix(_args, result) {
+    if (!isRecord(result)) return null
+    const rows = Array.isArray(result.rows) ? result.rows.filter(isRecord) : []
+    // The net RATE, not the gross: gross by platform is already
+    // `getPlatformBreakdown`, and the rate is the thing this tool knows that
+    // that one does not.
+    return barsOf(
+      "Net rate by channel",
+      rows.map((r) => platformLabel(text(r.platform))),
+      // A fraction, 0..1 — `pct` multiplies, so it must not arrive scaled.
+      rows.map((r) => num(r.netRatePct)),
+      "pct",
+    )
+  },
+
+  getInventoryStatus(_args, result) {
+    if (!isRecord(result)) return null
+    const rows = Array.isArray(result.rows) ? result.rows.filter(isRecord) : []
+    return tableOf(
+      "Inventory",
+      [
+        { key: "ingredient", label: "Ingredient" },
+        { key: "onHand", label: "On hand", numeric: true },
+        { key: "cover", label: "Days cover", numeric: true },
+        { key: "status", label: "Status" },
+      ],
+      rows,
+      (r) => {
+        const cover = numOrNull(r.daysOfCover)
+        return {
+          ingredient: text(r.ingredientName),
+          onHand: `${num(r.onHand).toFixed(1)} ${text(r.recipeUnit)}`.trim(),
+          // A null cover is "we cannot say", not zero days left.
+          cover: cover === null ? "—" : cover.toFixed(1),
+          status: text(r.status),
+        }
+      },
+    )
+  },
+
+  getLostSales(_args, result) {
+    if (!isRecord(result)) return null
+    const events = Array.isArray(result.events) ? result.events.filter(isRecord) : []
+    const sorted = [...events].sort(
+      (a, b) => num(b.estimatedLostRevenue) - num(a.estimatedLostRevenue),
+    )
+    return tableOf(
+      "Lost sales",
+      [
+        { key: "item", label: "Item" },
+        { key: "gap", label: "Gap" },
+        { key: "days", label: "Days", numeric: true },
+        { key: "lost", label: "Est. lost", numeric: true },
+      ],
+      sorted,
+      (r) => ({
+        item: text(r.itemName),
+        gap: `${dayAxis(text(r.gapStart))} – ${dayAxis(text(r.gapEnd))}`,
+        days: countOf(num(r.gapDays)),
+        lost: money(num(r.estimatedLostRevenue)),
+      }),
+    )
+  },
+
+  getWasteRootCauses(_args, result) {
+    const rows = asRows(result)
+    const sorted = [...rows].sort(
+      (a, b) => num(b.annualizedDollarExposure) - num(a.annualizedDollarExposure),
+    )
+    return tableOf(
+      "Waste exposure",
+      [
+        { key: "ingredient", label: "Ingredient" },
+        { key: "label", label: "Pattern" },
+        { key: "exposure", label: "Annualised", numeric: true },
+      ],
+      sorted,
+      (r) => {
+        const exposure = numOrNull(r.annualizedDollarExposure)
+        return {
+          ingredient: text(r.ingredientName),
+          // The label is a PATTERN, never an accusation. It is printed as the
+          // tool wrote it so the prose and the table cannot diverge on it.
+          label: text(r.label),
+          exposure: exposure === null ? "—" : money(exposure),
+        }
+      },
+    )
+  },
+
+  rankRecipes(_args, result) {
+    const rows = asRows(result)
+    return tableOf(
+      "Recipes",
+      [
+        { key: "item", label: "Item" },
+        { key: "cost", label: "Cost", numeric: true },
+        { key: "price", label: "Price", numeric: true },
+        { key: "margin", label: "Margin", numeric: true },
+      ],
+      rows,
+      (r) => ({
+        item: text(r.itemName),
+        cost: r.recipeCost === null ? "—" : money(num(r.recipeCost)),
+        price: r.avgSellingPrice === null ? "—" : money(num(r.avgSellingPrice)),
+        // Already multiplied by 100 in the tool.
+        margin: pct(numOrNull(r.marginPct), { scaled: true }),
+      }),
+    )
+  },
+
+  getRatings(_args, result) {
+    if (!isRecord(result)) return null
+    if (result.view === "summary") {
+      const summary = isRecord(result.summary) ? result.summary : null
+      if (!summary) return null
+      const dist = Array.isArray(summary.distribution) ? summary.distribution : []
+      if (dist.length !== 5) return null
+      /*
+       * The DISTRIBUTION, not the mean. "4.6 stars" is one number and it
+       * hides the only thing an owner can act on: whether that is everyone
+       * agreeing, or most at five and a tail at one. The tail is the
+       * complaint list.
+       */
+      return {
+        kind: "chart",
+        title: "Star ratings",
+        fmt: "count",
+        spec: {
+          type: "bars",
+          labels: ["1★", "2★", "3★", "4★", "5★"],
+          series: [{ name: "Reviews", color: INK, data: dist.map(num) }],
+          zero: true,
+        },
+      }
+    }
+    const reviews = Array.isArray(result.reviews) ? result.reviews.filter(isRecord) : []
+    return tableOf(
+      "Recent reviews",
+      [
+        { key: "date", label: "Date" },
+        { key: "rating", label: "Stars", numeric: true },
+        { key: "platform", label: "Platform" },
+        { key: "review", label: "Review" },
+      ],
+      reviews,
+      (r) => {
+        const body = text(r.reviewText)
+        return {
+          date: dayAxis(text(r.reviewedAt)),
+          rating: countOf(num(r.rating)),
+          platform: platformLabel(text(r.platform)),
+          // A rating with no words is a rating with no words; say so rather
+          // than printing an empty cell that reads as a load failure.
+          review: body ? (body.length > 140 ? `${body.slice(0, 139)}…` : body) : "(no text)",
+        }
+      },
+    )
+  },
+
+  getAlerts(_args, result) {
+    if (!isRecord(result)) return null
+    const alerts = Array.isArray(result.alerts) ? result.alerts.filter(isRecord) : []
+    return tableOf(
+      "Alerts",
+      [
+        { key: "severity", label: "Severity" },
+        { key: "title", label: "What" },
+        { key: "store", label: "Store" },
+        { key: "date", label: "Date" },
+      ],
+      alerts,
+      (r) => ({
+        severity: text(r.severity),
+        title: text(r.title),
+        store: text(r.storeName),
+        date: dayAxis(text(r.occurredOn)),
+      }),
+    )
+  },
+
+  getForecastQuality(_args, result) {
+    if (!isRecord(result)) return null
+    const rows = Array.isArray(result.evaluations)
+      ? result.evaluations.filter(isRecord)
+      : []
+    return tableOf(
+      "Forecast accuracy",
+      [
+        { key: "store", label: "Store" },
+        { key: "target", label: "Forecast" },
+        { key: "wape", label: "WAPE", numeric: true },
+        { key: "baseline", label: "Baseline", numeric: true },
+        { key: "sample", label: "Days", numeric: true },
+      ],
+      rows,
+      (r) => ({
+        store: text(r.storeName),
+        target: text(r.target),
+        // WAPE is a fraction, so `pct` scales it. The baseline sits beside it
+        // because the number alone means nothing: 12% is good against a 20%
+        // baseline and embarrassing against an 8% one.
+        wape: pct(numOrNull(r.wape)),
+        baseline: pct(numOrNull(r.baselineWape)),
+        sample: countOf(num(r.sampleSize)),
+      }),
     )
   },
 } satisfies Record<ShowableTool, Builder>

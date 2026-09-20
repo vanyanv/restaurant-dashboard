@@ -1,5 +1,6 @@
 import { z } from "zod"
 import { embed, toVectorLiteral } from "@/lib/chat/embeddings"
+import { normalizeVendorName } from "@/lib/vendor-normalize"
 import {
   dateRangeSchema,
   parseDateRange,
@@ -200,14 +201,21 @@ export const getInvoiceSpend: ChatTool<typeof spendParams, InvoiceSpendResult> =
     })
 
     let total = 0
+    // Folded the way the Vendors page folds them. Raw `vendorName` is whatever
+    // the invoice was printed with, so "SYSCO LOS ANGELES", "Sysco Los
+    // Angeles" and "SYSCO CORP" are three suppliers here and one everywhere
+    // else in the product. Asked who the biggest vendor is, an unfolded
+    // rollup splits the real answer across its own spellings and names the
+    // runner-up — and every `share` is computed off those split amounts.
     const vendorMap = new Map<string, { amount: number; invoiceCount: number }>()
     const monthMap = new Map<string, { amount: number; invoiceCount: number }>()
     for (const r of rows) {
       total += r.totalAmount
-      const v = vendorMap.get(r.vendorName) ?? { amount: 0, invoiceCount: 0 }
+      const vendorName = normalizeVendorName(r.vendorName)
+      const v = vendorMap.get(vendorName) ?? { amount: 0, invoiceCount: 0 }
       v.amount += r.totalAmount
       v.invoiceCount += 1
-      vendorMap.set(r.vendorName, v)
+      vendorMap.set(vendorName, v)
       const month = r.invoiceDate
         ? r.invoiceDate.toISOString().slice(0, 7)
         : "unknown"
@@ -372,19 +380,22 @@ export const sumInvoiceLines: ChatTool<typeof sumParams, SumInvoiceLinesResult> 
 
     const unresolved = args.lineIds.length - lines.length
 
+    // Folded, for the same reason the spend summary folds: one supplier, one
+    // row, whatever its invoices were printed with.
     const vendorMap = new Map<string, { amount: number; lineCount: number }>()
     const monthMap = new Map<string, { amount: number; lineCount: number }>()
     let total = 0
 
     for (const l of lines) {
       total += l.extendedPrice
-      const v = vendorMap.get(l.invoice.vendorName) ?? {
+      const vendorName = normalizeVendorName(l.invoice.vendorName)
+      const v = vendorMap.get(vendorName) ?? {
         amount: 0,
         lineCount: 0,
       }
       v.amount += l.extendedPrice
       v.lineCount += 1
-      vendorMap.set(l.invoice.vendorName, v)
+      vendorMap.set(vendorName, v)
 
       const month = l.invoice.invoiceDate
         ? l.invoice.invoiceDate.toISOString().slice(0, 7)

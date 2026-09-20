@@ -147,12 +147,43 @@ async function recomputeDailyCogsForDay(input: {
     }),
     prisma.recipe.findMany({
       where: { accountId },
-      select: { id: true, itemName: true },
+      select: { id: true, itemName: true, category: true },
     }),
   ])
 
   const mappingByName = new Map(mappings.map((m) => [m.otterItemName, m.recipeId]))
-  const recipeByName = new Map(recipes.map((r) => [r.itemName.toLowerCase(), r.id]))
+
+  /*
+   * The name fallback, and why an ambiguous name now maps to NOTHING.
+   *
+   * This was `new Map(recipes.map(r => [r.itemName.toLowerCase(), r.id]))` over
+   * a `findMany` with no `orderBy`. Recipes are unique on
+   * (accountId, itemName, category), so two can share a name across categories
+   * — a "Fries" side and a "Fries" modifier — and the Map kept whichever row
+   * Postgres happened to return last. Which recipe a POS item was costed
+   * against was therefore unspecified, and the same day reprocessed could
+   * switch between them and move the food line with it.
+   *
+   * A name claimed by two recipes maps to null, so the item falls through to
+   * UNMAPPED and shows up in the catalogue's unmapped list where somebody can
+   * map it on purpose. An arbitrary pick is worse than a visible gap: the gap
+   * is a job, the pick is a wrong number nobody is looking for.
+   */
+  const recipeByName = new Map<string, string | null>()
+  for (const r of recipes) {
+    const key = r.itemName.toLowerCase()
+    if (recipeByName.has(key)) {
+      if (recipeByName.get(key) !== null) {
+        console.warn(
+          `[cogs] recipe name "${r.itemName}" is used by more than one category on account ${accountId} — ` +
+            `the name fallback will not guess; map the POS item explicitly.`
+        )
+        recipeByName.set(key, null)
+      }
+      continue
+    }
+    recipeByName.set(key, r.id)
+  }
 
   const recipeCostCache = new Map<string, Promise<RecipeCostResult | null>>()
 
@@ -307,7 +338,8 @@ export async function computeFoodCogsRows(input: {
   date: Date
   menuRows: FoodMenuRow[]
   mappingByName: Map<string, string>
-  recipeByName: Map<string, string>
+  /** null = the name is claimed by more than one recipe, so it resolves to none. */
+  recipeByName: Map<string, string | null>
   modifierUsageByItem: Map<string, ModifierUsage>
   costFor: (recipeId: string) => Promise<RecipeCostResult | null>
 }): Promise<ComputedRow[]> {

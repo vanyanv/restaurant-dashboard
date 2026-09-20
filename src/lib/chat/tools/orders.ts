@@ -307,19 +307,17 @@ export const getOrderItemFrequency: ChatTool<
 
     const byName = new Map<
       string,
-      { orderIds: Set<string>; qty: number; revenue: number; priceTotal: number; priceN: number }
+      { orderIds: Set<string>; qty: number; revenue: number }
     >()
     for (const it of items) {
       let bucket = byName.get(it.name)
       if (!bucket) {
-        bucket = { orderIds: new Set(), qty: 0, revenue: 0, priceTotal: 0, priceN: 0 }
+        bucket = { orderIds: new Set(), qty: 0, revenue: 0 }
         byName.set(it.name, bucket)
       }
       bucket.orderIds.add(it.orderId)
       bucket.qty += it.quantity
       bucket.revenue += it.quantity * it.price
-      bucket.priceTotal += it.price
-      bucket.priceN += 1
     }
 
     const minOrders = args.minOrders ?? 5
@@ -331,7 +329,12 @@ export const getOrderItemFrequency: ChatTool<
         orderCount: b.orderIds.size,
         totalQty: b.qty,
         totalRevenue: b.revenue,
-        avgPrice: b.priceN > 0 ? b.priceTotal / b.priceN : 0,
+        // Revenue over quantity, the same two numbers printed beside it. The
+        // unweighted mean of each line's listed price counted a line of one
+        // as much as a line of six, so `avgPrice` and `totalRevenue /
+        // totalQty` could disagree about the same item in the same answer —
+        // and a model asked to check its own arithmetic will do that division.
+        avgPrice: b.qty > 0 ? b.revenue / b.qty : 0,
       })
     }
     rows.sort((a, b) => b.orderCount - a.orderCount)

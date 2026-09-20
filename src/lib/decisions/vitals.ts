@@ -30,6 +30,16 @@ export interface VitalsDay {
     gapHours: number | null
     status: LaborLaneStatus
     unfilledSlots: number
+    /**
+     * `LaborLane.exact` — the same figures before the per-day rounding. The
+     * week's totals are summed from these and rounded once; optional so a
+     * caller assembling a day by hand need not supply them.
+     */
+    exact?: {
+      scheduledHours: number
+      neededHours: number | null
+      gapHours: number | null
+    }
   }
 }
 
@@ -107,12 +117,28 @@ export function computeVitals(input: {
     total != null && priorTotal != null && priorTotal > 0 ? total / priorTotal - 1 : null
 
   // ---- labor ---------------------------------------------------------------
+  // Summed from `labor.exact`, then rounded once. Summing the per-day rounded
+  // figures is sum-of-rounded where round-of-summed is meant: each day's
+  // rounding error compounds instead of cancelling.
   const judged = days.filter((d) => d.labor.gapHours != null)
   const gapHours =
-    judged.length > 0 ? round1(judged.reduce((s, d) => s + (d.labor.gapHours ?? 0), 0)) : null
+    judged.length > 0
+      ? round1(judged.reduce((s, d) => s + (d.labor.exact?.gapHours ?? d.labor.gapHours ?? 0), 0))
+      : null
 
-  const neededTotal = days.reduce((s, d) => s + (d.labor.neededHours ?? 0), 0)
-  const scheduledTotal = days.reduce((s, d) => s + d.labor.scheduledHours, 0)
+  // `neededHours` is null on a day `computeLaborLane` has no weekday SPLH
+  // target for — independent of whether that day has forecast revenue. So the
+  // days with a needed figure are the only ones that can appear on BOTH sides
+  // of a revenue-over-hours rate; the rest have revenue and no denominator.
+  const needed = days.filter((d) => d.labor.neededHours != null)
+  const neededTotal = needed.reduce(
+    (s, d) => s + (d.labor.exact?.neededHours ?? d.labor.neededHours ?? 0),
+    0,
+  )
+  const scheduledTotal = days.reduce(
+    (s, d) => s + (d.labor.exact?.scheduledHours ?? d.labor.scheduledHours),
+    0,
+  )
 
   // Same tolerance the per-day lane and the SPLH chart use, so all three
   // surfaces flag the same weeks.
@@ -131,7 +157,13 @@ export function computeVitals(input: {
   // it this way keeps the cell and the lane quoting the same target even if
   // weekdayTargets() changes underneath them.
   const actual = total != null && scheduledTotal > 0 ? total / scheduledTotal : null
-  const target = total != null && neededTotal > 0 ? total / neededTotal : null
+  // Over the days that HAVE a needed figure, not the whole week. Dividing the
+  // week's whole revenue by a denominator missing those days put every
+  // unscorable day's revenue into the numerator and nothing into the bottom,
+  // which inflates the recovered target and tips `rateStatus` toward "below"
+  // — the reading that says the week is understaffed.
+  const neededRevenue = needed.reduce((s, d) => s + d.predictedRevenue, 0)
+  const target = neededTotal > 0 ? neededRevenue / neededTotal : null
 
   const rateStatus: RateStatus =
     actual == null || target == null

@@ -1,10 +1,11 @@
 import { Prisma } from "@/generated/prisma/client"
 import { prisma } from "@/lib/prisma"
+import { COST_CANDIDATE_WINDOW, selectNonSpikeCostIndex } from "@/lib/invoice-line-shape"
 import {
-  deriveCostFromLineItem,
-  type LineItemForCost,
-} from "@/lib/ingredient-cost"
-import type { CanonicalIngredientCost } from "@/lib/canonical-ingredients"
+  resolveLineUnitCost,
+  type CanonicalIngredientCost,
+} from "@/lib/canonical-ingredients"
+import { logger } from "@/lib/logger"
 
 type ProvenanceRow = {
   canonicalIngredientId: string
@@ -46,6 +47,7 @@ export async function batchCanonicalCosts(
       costPerRecipeUnit: true,
       costSource: true,
       costUpdatedAt: true,
+      yieldFactor: true,
     },
   })
 
@@ -54,11 +56,18 @@ export async function batchCanonicalCosts(
 
   const ids = canonicals.map((c) => c.id)
 
-  // Latest matched invoice line per canonical. DISTINCT ON lets Postgres pick
-  // the first row per (canonical_ingredient_id) after our ORDER BY, avoiding
-  // an N+1 findFirst.
+  // A short window of recent lines per canonical, newest first — not just the
+  // newest one. `getCanonicalIngredientCost` pulls the same window so the
+  // spike guard has price history to judge the newest line against, and a
+  // batch that pulled a single row had nothing to judge and so ran no guard
+  // at all. That is how the ingredients LIST showed the $47/lb mis-parse that
+  // the ingredient's own DETAIL page rejected, off the same invoice.
   const rows = await prisma.$queryRaw<ProvenanceRow[]>(Prisma.sql`
-    SELECT DISTINCT ON (li."canonicalIngredientId")
+    SELECT * FROM (
+      SELECT
+      ROW_NUMBER() OVER (
+        PARTITION BY li."canonicalIngredientId" ORDER BY i."invoiceDate" DESC
+      ) AS rn,
       li."canonicalIngredientId" AS "canonicalIngredientId",
       li."id"            AS "lineItemId",
       li."invoiceId"     AS "invoiceId",
@@ -79,14 +88,49 @@ export async function batchCanonicalCosts(
       AND li."canonicalIngredientId" = ANY(${ids}::text[])
       AND li."quantity" > 0
       AND i."invoiceDate" IS NOT NULL
-    ORDER BY li."canonicalIngredientId", i."invoiceDate" DESC
+    ) ranked
+    WHERE rn <= ${COST_CANDIDATE_WINDOW}
+    ORDER BY "canonicalIngredientId", rn
   `)
 
-  const provenance = new Map<string, ProvenanceRow>()
-  for (const r of rows) provenance.set(r.canonicalIngredientId, r)
+  // Newest first within each canonical, which is the order the guard expects.
+  const provenanceWindow = new Map<string, ProvenanceRow[]>()
+  for (const r of rows) {
+    const list = provenanceWindow.get(r.canonicalIngredientId) ?? []
+    list.push(r)
+    provenanceWindow.set(r.canonicalIngredientId, list)
+  }
+
+  // The vendor-specific conversion the single-row path applies. Without it a
+  // canonical whose vendor SKU carries its own factor was costed one way on
+  // its detail page and another on every list that showed it.
+  const vendorMatches = await prisma.ingredientSkuMatch.findMany({
+    where: { canonicalIngredientId: { in: ids } },
+    select: {
+      canonicalIngredientId: true,
+      conversionFactor: true,
+      fromUnit: true,
+      toUnit: true,
+    },
+  })
+  const vendorByCanonical = new Map<
+    string,
+    { conversionFactor: number; fromUnit: string; toUnit: string }
+  >()
+  for (const m of vendorMatches) {
+    if (!m.canonicalIngredientId) continue
+    if (!vendorByCanonical.has(m.canonicalIngredientId)) {
+      vendorByCanonical.set(m.canonicalIngredientId, {
+        conversionFactor: m.conversionFactor,
+        fromUnit: m.fromUnit,
+        toUnit: m.toUnit,
+      })
+    }
+  }
 
   for (const c of canonicals) {
-    const prov = provenance.get(c.id)
+    const window = provenanceWindow.get(c.id) ?? []
+    const prov = window[0]
 
     const useCanonical =
       c.costPerRecipeUnit != null && !!c.recipeUnit
@@ -102,53 +146,58 @@ export async function batchCanonicalCosts(
         sourceVendor: prov?.vendorName ?? null,
         sourceSku: prov?.sku ?? null,
         sourceProductName: prov?.productName ?? null,
+        yieldFactor: c.yieldFactor,
       })
       continue
     }
 
     if (!prov) continue
 
-    if (c.recipeUnit) {
-      const line: LineItemForCost = {
-        quantity: prov.quantity,
-        unit: prov.unit,
-        packSize: prov.packSize,
-        unitSize: prov.unitSize,
-        unitSizeUom: prov.unitSizeUom,
-        unitPrice: prov.unitPrice,
-        extendedPrice: prov.extendedPrice,
-      }
-      const derived = deriveCostFromLineItem(line, c.recipeUnit)
-      if (derived != null) {
-        out.set(c.id, {
-          unitCost: derived,
-          unit: c.recipeUnit,
-          source: "invoice",
-          asOfDate: prov.invoiceDate,
-          sourceInvoiceId: prov.invoiceId,
-          sourceLineItemId: prov.lineItemId,
-          sourceVendor: prov.vendorName,
-          sourceSku: prov.sku,
-          sourceProductName: prov.productName,
-        })
-        continue
-      }
+    // One rule for "what does this line cost per recipe unit", shared with
+    // `getCanonicalIngredientCost`: pack-shape derivation first, then the
+    // legacy raw `extendedPrice / quantity` fallback, then the spike guard
+    // over the window. The batch used to inline its own version of the first
+    // two and skip the third.
+    const vendorMatch = c.recipeUnit ? vendorByCanonical.get(c.id) ?? null : null
+    const resolved = window
+      .map((line) => ({ line, cost: resolveLineUnitCost(line, c.recipeUnit, vendorMatch) }))
+      .filter(
+        (r): r is { line: ProvenanceRow; cost: { unitCost: number; unit: string } } =>
+          r.cost !== null,
+      )
+    if (resolved.length === 0) continue
+
+    const { index, rejectedSpike } = selectNonSpikeCostIndex(
+      resolved.map((r) => r.cost.unitCost),
+    )
+    const chosen = resolved[index]
+
+    if (rejectedSpike) {
+      const newest = resolved[0]
+      logger.warn(
+        `[cost-guard] canonical ${c.id}: rejected spiked invoice cost ` +
+          `$${newest.cost.unitCost.toFixed(2)}/${newest.cost.unit} (line ${newest.line.lineItemId}, ` +
+          `invoice ${newest.line.invoiceId}); using $${chosen.cost.unitCost.toFixed(2)}/${chosen.cost.unit} ` +
+          `from ${chosen.line.invoiceDate.toISOString().slice(0, 10)} instead`,
+      )
     }
 
-    // Raw-invoice-unit fallback (no recipeUnit, or derivation failed).
-    if (prov.quantity > 0) {
-      out.set(c.id, {
-        unitCost: prov.extendedPrice / prov.quantity,
-        unit: prov.unit ?? "unit",
-        source: "invoice",
-        asOfDate: prov.invoiceDate,
-        sourceInvoiceId: prov.invoiceId,
-        sourceLineItemId: prov.lineItemId,
-        sourceVendor: prov.vendorName,
-        sourceSku: prov.sku,
-        sourceProductName: prov.productName,
-      })
-    }
+    out.set(c.id, {
+      unitCost: chosen.cost.unitCost,
+      unit: chosen.cost.unit,
+      source: "invoice",
+      asOfDate: chosen.line.invoiceDate,
+      sourceInvoiceId: chosen.line.invoiceId,
+      sourceLineItemId: chosen.line.lineItemId,
+      sourceVendor: chosen.line.vendorName,
+      sourceSku: chosen.line.sku,
+      sourceProductName: chosen.line.productName,
+      // Without this the recipes built on a guarded ingredient never read as
+      // partial: `recipe-cost.ts` branches on it, and the batch path — the
+      // one every list uses — could never set it.
+      costGuardTriggered: rejectedSpike,
+      yieldFactor: c.yieldFactor,
+    })
   }
 
   // Alias fallback for canonicals that still have no cost. Mirrors the
@@ -217,6 +266,7 @@ export async function batchCanonicalCosts(
             sourceVendor: li.invoice.vendorName,
             sourceSku: li.sku,
             sourceProductName: li.productName,
+            yieldFactor: c.yieldFactor,
           })
           break
         }

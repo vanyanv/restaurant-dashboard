@@ -280,6 +280,7 @@ export function AskSurface({
   onSubmit,
   askState,
   onAskBack,
+  onStop,
 }: {
   pathname: string
   params: URLSearchParams
@@ -308,6 +309,16 @@ export function AskSurface({
   askState?: AskState
   /** Throw the answer away and go back to the list. */
   onAskBack?: () => void
+  /**
+   * Cuts the stream behind an in-flight answer.
+   *
+   * Dismissing the palette only hid the portal: `AskMount` stays mounted for
+   * the life of the shell, so the turn the reader walked away from went on
+   * running — and went on billing — with nothing left on screen to show for
+   * it. The pages have had a stop button since they shipped; this is the same
+   * verb, reached by closing rather than by pressing.
+   */
+  onStop?: () => void
 }) {
   const [open, setOpen] = useState(false)
   const [question, setQuestion] = useState("")
@@ -337,7 +348,20 @@ export function AskSurface({
   const answeringRef = useRef(false)
   answeringRef.current = answering
 
+  /*
+   * `onStop` through a ref for the same reason `onAskBack` is: the keydown and
+   * click listeners below are registered once, and a caller that passes an
+   * inline callback would otherwise pin the first render's copy forever.
+   */
+  const stopRef = useRef(onStop)
+  stopRef.current = onStop
+
   const close = useCallback(() => {
+    // Closing ends the turn. A reader who dismisses the palette is done with
+    // the question; leaving the model running costs money for an answer that
+    // has nowhere to land. `stop` on a settled turn is a no-op, so this needs
+    // no status check.
+    stopRef.current?.()
     setOpen(false)
     restoreFocusRef.current?.focus?.()
   }, [])

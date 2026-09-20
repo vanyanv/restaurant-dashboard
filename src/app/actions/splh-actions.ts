@@ -57,6 +57,12 @@ export interface SplhSeries {
   daysCovered: number
   /** Days in the window with sales but no labor hours. */
   daysMissingHours: number
+  /**
+   * Days in the window with labor hours but no sales reading at all — the
+   * sales side of the join missed. These are dropped from `points` rather
+   * than scored, so this is the only place they are visible.
+   */
+  daysMissingSales: number
 }
 
 type JoinedRow = { date: Date; net: number | null; hours: number | null; cost: number | null }
@@ -192,12 +198,29 @@ async function loadSplhSeries(input: {
      ORDER BY h."date" ASC
   `)
 
+  // A day whose sales side of the LEFT JOIN missed has `net` NULL, and NULL is
+  // not zero here. Reading it as $0 of sales on a full roster gives that day
+  // an SPLH of 0, earned hours of 0 and a variance of every hour worked — the
+  // chart's worst possible day, invented out of a sync gap. Worse, the 0 goes
+  // into that weekday's median, so it drags the TARGET every other Tuesday is
+  // scored against down with it.
+  //
+  // So an unknown day is not a day we can score. It is dropped from the
+  // series and counted in `daysMissingSales` instead, which also means a week
+  // containing one falls short of seven days and `dropPartial` withholds that
+  // bar rather than drawing a week short of a day's sales.
   const byStore = new Map<string, SplhInput[]>()
+  const missingSalesByStore = new Map<string, string[]>()
   for (const r of rows) {
+    const day = r.date.toISOString().slice(0, 10)
+    if (r.net === null) {
+      missingSalesByStore.set(r.storeId, [...(missingSalesByStore.get(r.storeId) ?? []), day])
+      continue
+    }
     const list = byStore.get(r.storeId) ?? []
     list.push({
-      date: r.date.toISOString().slice(0, 10),
-      netSales: Number(r.net ?? 0),
+      date: day,
+      netSales: Number(r.net),
       laborHours: Number(r.hours ?? 0),
       laborCost: Number(r.cost ?? 0),
     })
@@ -206,8 +229,16 @@ async function loadSplhSeries(input: {
 
   const out: SplhSeries[] = []
   for (const store of stores) {
-    const all = byStore.get(store.id)
-    if (!all || all.length === 0) continue
+    const all = byStore.get(store.id) ?? []
+    const missingSales = missingSalesByStore.get(store.id) ?? []
+    // A store with NO priced days but days of labour whose sales reading
+    // missed still gets a series, with no points and `daysMissingSales` set.
+    // `daysMissingSales` exists to make exactly that outage visible, and
+    // dropping the store here made the total outage — every day of the window
+    // unpriced, the worst case the field was added for — the one case it
+    // could never report. Only a store the query returned nothing at all for
+    // is skipped.
+    if (all.length === 0 && missingSales.length === 0) continue
 
     const daily = all
 
@@ -257,6 +288,7 @@ async function loadSplhSeries(input: {
       blendedRate: blendedHourlyRate(daily),
       daysCovered: counted.filter((r) => r.laborHours > 0 && r.netSales > 0).length,
       daysMissingHours: counted.filter((r) => r.laborHours <= 0 && r.netSales > 0).length,
+      daysMissingSales: missingSales.filter((d) => inRange(d)).length,
     })
   }
 

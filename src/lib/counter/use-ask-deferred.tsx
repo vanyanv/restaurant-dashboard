@@ -46,11 +46,13 @@ export function useAskDeferred(initialConversationId: string | null): AskEngine 
     state: AskEngine["state"]
     conversationId: string | null
     askedAt: number | null
+    lastTurnId: string | null
   }>({
     turns: [],
     state: { status: "idle" },
     conversationId: initialConversationId,
     askedAt: null,
+    lastTurnId: null,
   })
 
   const onEngine = useCallback((engine: AskEngine) => {
@@ -71,6 +73,7 @@ export function useAskDeferred(initialConversationId: string | null): AskEngine 
       state: engine.state,
       conversationId: engine.conversationId,
       askedAt: engine.askedAt,
+      lastTurnId: engine.lastTurnId,
     })
   }, [])
 
@@ -123,6 +126,8 @@ export function useAskDeferred(initialConversationId: string | null): AskEngine 
     // Null until the engine sends: nothing has been asked, so the turn footer's
     // live seconds have no anchor to count from yet.
     askedAt: snapshot.askedAt,
+    // Null until a turn has actually been sent — there is no turn to rate.
+    lastTurnId: snapshot.lastTurnId,
     reset,
     engineMount,
   }

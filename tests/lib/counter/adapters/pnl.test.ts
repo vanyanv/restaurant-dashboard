@@ -631,17 +631,46 @@ describe("the statement table", () => {
     expect(lineOf(s, "bottom")?.href).toBeUndefined()
   })
 
-  it("divides the four-occurrence weekday window's money before comparing it", async () => {
-    const four = { ...kpis(), grossSales: GROSS * 4, netAfterCommissions: (GROSS - COMMISSIONS) * 4 }
-    vi.mocked(getAllStoresPnL).mockImplementation((async (arg: { startDate: Date; periods?: unknown[] }) =>
-      arg.startDate.getTime() < range.start.getTime() - 7 * 86_400_000
-        ? rollupFor(arg, { combined: four, perStore: [{ ...store("holly", "Hollywood"), ...four }] })
-        : rollup()) as never)
+  it("divides the four-occurrence weekday comparison's money before comparing it", async () => {
+    /*
+     * The comparison asks for FOUR windows, each the same length as the range,
+     * and `loadComparisonStatement` sums them — so a fixture that answers
+     * $152,400 per window is four occurrences of $152,400, which the divisor
+     * turns back into one. Flat, not −75% and not +300%.
+     *
+     * Before `comparisonWindows` existed the comparison loaded the contiguous
+     * HULL of those four — 22 days for a single day, 28 for a week — as one
+     * window and divided THAT by four, which is right at span 7 and nowhere
+     * else. This pins that the divisor divides four occurrences.
+     */
+    vi.mocked(getAllStoresPnL).mockImplementation((async (arg: { startDate: Date; periods?: unknown[] }) => {
+      const isComparison = arg.startDate.getTime() < range.start.getTime() - 7 * 86_400_000
+      return isComparison ? rollupFor(arg) : rollup()
+    }) as never)
 
     const s = await load({ comparisonId: "weekday" })
-    // Four weeks of $152,400 is one week of $152,400 — flat, not −75%.
     expect(lineOf(s, "gross")?.comparison).toBe("$152,400")
     expect(lineOf(s, "gross")?.change).toBe("flat")
+  })
+
+  it("asks the weekday comparison for four windows, not one wide one", async () => {
+    const calls: Array<{ startDate: Date; endDate: Date; periods?: unknown[] }> = []
+    vi.mocked(getAllStoresPnL).mockImplementation((async (arg: {
+      startDate: Date
+      endDate: Date
+      periods?: unknown[]
+    }) => {
+      calls.push(arg)
+      return rollupFor(arg)
+    }) as never)
+
+    await load({ comparisonId: "weekday" })
+    // The comparison's own call: bounded by the hull, but bucketed into the
+    // four occurrences, so nothing between them is ever summed.
+    const cmpCall = calls.find(
+      (c) => c.startDate.getTime() < range.start.getTime() - 7 * 86_400_000 && c.periods?.length === 4,
+    )
+    expect(cmpCall).toBeDefined()
   })
 })
 
@@ -875,5 +904,50 @@ describe("the phone's statement", () => {
     vi.mocked(loadStripTargets).mockResolvedValue(NO_TARGETS as never)
     const s = await load()
     expect(lineOf(s, "food")?.over).toBeUndefined()
+  })
+})
+
+describe("a range whose COGS has not been posted", () => {
+  /**
+   * `primeCost` withholds its percentages only when the DENOMINATOR is
+   * missing. With sales on the books and no COGS yet — the materializer has
+   * not run, or the range reaches into days it has not reached — `cogsValue`
+   * is 0 and `cogsPct` comes back a confident 0.0%.
+   *
+   * The Overview grew a `foodKnown` gate for exactly this. This page had only
+   * the labour half of it, so the identical hole stayed open here: a Food cell
+   * reading 0.0% and a prime cost built on it, both well under their targets.
+   */
+  function noCogs(over: Record<string, unknown> = {}) {
+    const lines = kpis({ cogsValue: 0, cogsPct: 0, ...over })
+    vi.mocked(getAllStoresPnL).mockImplementation((async (arg: { periods?: unknown[] }) =>
+      rollupFor(arg, {
+        combined: lines,
+        perStore: [store("holly", "Hollywood", { cogsValue: 0, cogsPct: 0, ...over })],
+        storeCount: 1,
+      })) as never)
+  }
+
+  it("leaves the Food cell out rather than printing a 0.0% nobody achieved", async () => {
+    noCogs()
+    expect(cellOf(await load(), "Food")).toBeUndefined()
+  })
+
+  it("leaves prime cost out, because half of it is missing", async () => {
+    noCogs()
+    expect(cellOf(await load(), "Prime cost")).toBeUndefined()
+  })
+
+  it("still prints the labour percentage, which is not missing at all", async () => {
+    noCogs()
+    const labor = cellOf(await load(), "Labor")
+    expect(labor).toBeDefined()
+    expect(labor?.value).not.toBe("0.0%")
+  })
+
+  it("prints both again the moment COGS lands", async () => {
+    const s = await load()
+    expect(cellOf(s, "Food")).toBeDefined()
+    expect(cellOf(s, "Prime cost")).toBeDefined()
   })
 })

@@ -5,11 +5,27 @@ import { startOfDayUTC as startOfDayUtc } from "@/lib/date-utils"
 // we infer past promotional days from elevated daily discount share in
 // OtterDailySummary. For each detected promo day:
 //
-//   counterfactual = median net-sales of same-weekday non-promo days in window
+//   counterfactual = MEAN net-sales of same-weekday non-promo days in window
 //   lift           = actual_net_sales − counterfactual
 //   roi            = lift / discount_dollars  (return per dollar discounted)
 //
 // 80% CI on lift is ±1.28 × (baseline std / √n) around the baseline mean.
+//
+// This header said "median" until 2026-09-19 while the code had always used
+// the mean. The mean is the one that belongs here: the interval below is the
+// standard error OF THE MEAN, so a median counterfactual would have been
+// quoted with an interval that does not describe it. The prose was corrected
+// to the code rather than the other way round.
+//
+// A counterfactual needs a baseline to be a counterfactual. With fewer than
+// PROMO_BASELINE_MIN_SAMPLES same-weekday non-promo days, `baselineNetSales`,
+// `lift`, `roi` and the interval are all null and the event is excluded from
+// the blended figures. They used to be 0, 0, `netSales / discount` and ±0:
+// a promo on the only Tuesday in the window reported the WHOLE day's sales as
+// lift and an ROI of ten or twenty times, and one prior Tuesday reported a
+// ±$0 interval — a claim of certainty from a single observation. Both fed
+// `blendedRoi`, which the chat tool reads to the owner as "$X of lift per $1
+// discounted".
 //
 // Caveats baked into the data shape (do NOT silently fix in callers):
 //   - Order-level discount only — per-item promo attribution isn't possible
@@ -19,6 +35,7 @@ import { startOfDayUTC as startOfDayUtc } from "@/lib/date-utils"
 //     them from this signal alone. Operator interpretation required.
 
 import { Prisma } from "@/generated/prisma/client"
+import { median } from "@/lib/counter/median"
 import { prisma } from "@/lib/prisma"
 import { getCachedSession, resolveStoreContext } from "./_shared"
 
@@ -53,6 +70,14 @@ function discountGiven(fp: number | null, tp: number | null): number {
 const DEFAULT_LOOKBACK_DAYS = 90
 const PROMO_DISCOUNT_PCT_MIN_ABSOLUTE = 0.03
 const PROMO_BASELINE_MULTIPLIER = 1.5
+/**
+ * Same-weekday non-promo days needed before a lift is reported at all.
+ *
+ * Two is the floor, not a preference: `stdSample` needs two observations to
+ * return anything but 0, and an interval of ±0 around a lift is a statement
+ * that the counterfactual is known exactly.
+ */
+const PROMO_BASELINE_MIN_SAMPLES = 2
 
 export interface PromoEvent {
   date: Date
@@ -62,13 +87,15 @@ export interface PromoEvent {
   /** Dollars discounted that day, as a POSITIVE amount. See `discountGiven`. */
   discount: number
   discountPct: number
-  baselineNetSales: number
+  /** Null when fewer than `PROMO_BASELINE_MIN_SAMPLES` comparable days exist. */
+  baselineNetSales: number | null
   baselineSampleSize: number
-  baselineStd: number
-  lift: number
+  baselineStd: number | null
+  /** Null whenever `baselineNetSales` is — there is nothing to lift against. */
+  lift: number | null
   roi: number | null
-  liftCI80Low: number
-  liftCI80High: number
+  liftCI80Low: number | null
+  liftCI80High: number | null
 }
 
 export interface PromoRoiData {
@@ -77,8 +104,14 @@ export interface PromoRoiData {
   windowStart: Date
   windowEnd: Date
   events: PromoEvent[]
+  /** Summed over the events that HAVE a baseline; see `measuredDiscount`. */
   totalLift: number
+  /** Discount given on every detected promo day, measurable or not. */
   totalDiscount: number
+  /** Discount on the events `totalLift` covers — `blendedRoi`'s denominator. */
+  measuredDiscount: number
+  /** Detected promo days with too thin a baseline to price. */
+  unmeasuredEvents: number
   blendedRoi: number | null
 }
 
@@ -166,9 +199,11 @@ export async function getPromoRoi(input: {
 
   // Baseline discount % = median of all days (with or without discount).
   // Real campaigns push well above the steady loyalty drag baseline.
-  const allPcts = days.map((d) => d.discountPct).sort((a, b) => a - b)
-  const medianBaseline =
-    allPcts.length > 0 ? allPcts[Math.floor(allPcts.length / 2)] : 0
+  // `median` from @/lib/counter/median — the shared one. The copy that stood
+  // here took `sorted[floor(n / 2)]`, the UPPER of the two middle values on an
+  // even count, which on a 90-day window is every other window and biases the
+  // promo threshold upward: real campaigns just over the line went undetected.
+  const medianBaseline = median(days.map((d) => d.discountPct)) ?? 0
   const promoThreshold = Math.max(
     PROMO_DISCOUNT_PCT_MIN_ABSOLUTE,
     medianBaseline * PROMO_BASELINE_MULTIPLIER,
@@ -193,12 +228,29 @@ export async function getPromoRoi(input: {
 
   const events: PromoEvent[] = promos.map((p) => {
     const samples = baselineByWeekday.get(p.weekday) ?? []
-    const baselineMean = samples.length > 0 ? mean(samples) : 0
-    const baselineStd = samples.length > 1 ? stdSample(samples) : 0
+    const measurable = samples.length >= PROMO_BASELINE_MIN_SAMPLES
+    if (!measurable) {
+      return {
+        date: p.date,
+        weekday: p.weekday,
+        grossSales: p.grossSales,
+        netSales: p.netSales,
+        discount: p.discount,
+        discountPct: p.discountPct,
+        baselineNetSales: null,
+        baselineSampleSize: samples.length,
+        baselineStd: null,
+        lift: null,
+        roi: null,
+        liftCI80Low: null,
+        liftCI80High: null,
+      }
+    }
+    const baselineMean = mean(samples)
+    const baselineStd = stdSample(samples)
     const lift = p.netSales - baselineMean
     const roi = p.discount > 0 ? lift / p.discount : null
-    const ciHalfWidth =
-      samples.length > 0 ? 1.28 * (baselineStd / Math.sqrt(samples.length)) : 0
+    const ciHalfWidth = 1.28 * (baselineStd / Math.sqrt(samples.length))
     return {
       date: p.date,
       weekday: p.weekday,
@@ -218,9 +270,23 @@ export async function getPromoRoi(input: {
 
   events.sort((a, b) => b.date.getTime() - a.date.getTime())
 
-  const totalLift = events.reduce((s, e) => s + e.lift, 0)
+  // The blended rate is a ratio of two sums, so both sums have to cover the
+  // same days. Summing every day's discount under a lift total that skips the
+  // unmeasurable ones would understate the blended ROI; skipping the discount
+  // silently would hide that a promo went unpriced. `totalDiscount` keeps the
+  // full amount given — it is a fact, independent of any baseline — and
+  // `measuredDiscount` is the matched denominator.
+  const measured = events.filter(
+    (e): e is PromoEvent & { lift: number } => e.lift !== null,
+  )
+  const totalLift = measured.reduce((s, e) => s + e.lift, 0)
   const totalDiscount = events.reduce((s, e) => s + e.discount, 0)
-  const blendedRoi = totalDiscount > 0 ? totalLift / totalDiscount : null
+  const measuredDiscount = measured.reduce((s, e) => s + e.discount, 0)
+  const unmeasuredEvents = events.length - measured.length
+  const blendedRoi =
+    measured.length > 0 && measuredDiscount > 0
+      ? totalLift / measuredDiscount
+      : null
 
   return {
     ok: true,
@@ -232,6 +298,8 @@ export async function getPromoRoi(input: {
       events,
       totalLift,
       totalDiscount,
+      measuredDiscount,
+      unmeasuredEvents,
       blendedRoi,
     },
   }

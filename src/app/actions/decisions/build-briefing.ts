@@ -89,9 +89,18 @@ function revenueLine(
 }
 
 function cashLine(cash: CashPositionData | null): BriefingLine | null {
-  if (!cash || cash.days.length === 0) return null
-  let lowDay = cash.days[0]
-  for (const d of cash.days) {
+  if (!cash) return null
+  // A day with no revenue forecast has a null cumulative, and so does every
+  // day after it. Those are not low days; they are days with no figure. Two
+  // stores have no trained forecast at all, and while `cumulativeNet` read 0
+  // minus fixed costs on such a day this line announced a cash crisis at the
+  // top of their briefing, every morning, from a training failure.
+  const known = cash.days.filter(
+    (d): d is typeof d & { cumulativeNet: number } => d.cumulativeNet !== null,
+  )
+  if (known.length === 0) return null
+  let lowDay = known[0]
+  for (const d of known) {
     if (d.cumulativeNet < lowDay.cumulativeNet) lowDay = d
   }
   // Surface only when the floor is actually negative — that's the operator

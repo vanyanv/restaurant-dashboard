@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest"
 import {
-  PRESETS, COMPARISONS, resolvePreset, bucketFor, stepRange, comparisonRange, dayCount,
+  PRESETS, COMPARISONS, resolvePreset, bucketFor, stepRange, comparisonRange,
+  comparisonWindows, dayCount,
   toQueryBounds, isoDay, parseIsoDay, rangeLabel, rangeTitle, rangeSubtitle,
   monthDay, trailingWeeks,
 } from "@/lib/counter/date-range"
@@ -149,6 +150,56 @@ describe("comparisonRange", () => {
   it("same weekdays has no meaning past a week, so it is null for a 30-day range", () => {
     const month = { start: new Date(2026, 6, 26), end: new Date(2026, 7, 24) }
     expect(comparisonRange(month, "weekday")).toBeNull()
+  })
+
+  /*
+   * The hull is a span to SHADE and to bound a query by. It is not a figure to
+   * read, and every caller used to read it: `loadStatement(hull)` summed it and
+   * `ComparisonContext.divisor` divided by four, which is right at span 7 and
+   * nowhere else. These pin the four windows the comparison actually measures.
+   */
+  it("returns four same-length windows on the same weekdays, oldest first", () => {
+    const day = { start: TODAY, end: TODAY }
+    const windows = comparisonWindows(day, "weekday")!
+    expect(windows).toHaveLength(4)
+    for (const w of windows) {
+      expect(dayCount(w)).toBe(dayCount(day))
+      expect(w.start.getDay()).toBe(day.start.getDay())
+    }
+    // Oldest first, one week apart, ending at the week before the range.
+    expect(windows.map((w) => w.start.getTime())).toEqual(
+      [4, 3, 2, 1].map((k) => addDaysFor(day.start, -7 * k).getTime()),
+    )
+  })
+
+  it("covers a quarter of the hull's days for a single day, which is the whole bug", () => {
+    const day = { start: TODAY, end: TODAY }
+    const hull = comparisonRange(day, "weekday")!
+    const windows = comparisonWindows(day, "weekday")!
+    const measured = windows.reduce((n, w) => n + dayCount(w), 0)
+    expect(dayCount(hull)).toBe(22)
+    expect(measured).toBe(4)
+    // 22 days divided by four is 5.5 days read against one. Four is four.
+    expect(measured).toBe(4 * dayCount(day))
+  })
+
+  it("agrees with the hull exactly at seven days, where it always did", () => {
+    const windows = comparisonWindows(week, "weekday")!
+    const hull = comparisonRange(week, "weekday")!
+    expect(windows.reduce((n, w) => n + dayCount(w), 0)).toBe(dayCount(hull))
+    expect(windows[0].start.getTime()).toBe(hull.start.getTime())
+    expect(windows[3].end.getTime()).toBe(hull.end.getTime())
+  })
+
+  it("is one window for the comparisons that are one period", () => {
+    expect(comparisonWindows(week, "prev")).toEqual([comparisonRange(week, "prev")])
+    expect(comparisonWindows(week, "year")).toEqual([comparisonRange(week, "year")])
+  })
+
+  it("is null wherever the hull is null, so the control offers the same set", () => {
+    const month = { start: new Date(2026, 7, 1), end: new Date(2026, 7, 30) }
+    expect(comparisonWindows(month, "weekday")).toBeNull()
+    expect(comparisonWindows(week, "none")).toBeNull()
   })
 
   it("same weekdays is null one day past the boundary, not silently wrong", () => {

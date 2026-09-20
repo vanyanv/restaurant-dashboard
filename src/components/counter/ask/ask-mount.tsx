@@ -34,15 +34,23 @@ import { useAsk } from "@/lib/counter/use-ask"
  */
 export type AskMountProps = Omit<
   ComponentProps<typeof AskSurface>,
-  "onSubmit" | "askState" | "onAskBack"
+  "onSubmit" | "askState" | "onAskBack" | "onStop"
 >
 
 export function AskMount(props: AskMountProps) {
   // Lives here rather than in `AppShell` so the SDK it pulls in is inside this
   // chunk. Its output has never been read by anything but `AskSurface`.
-  const { state: askState, ask, reset: resetAsk } = useAsk()
+  // `stop` was never taken off this hook, so closing the palette left the
+  // turn streaming — see `AskSurface`'s `onStop`.
+  const { state: askState, ask, reset: resetAsk, stop } = useAsk()
 
   return (
-    <AskSurface {...props} onSubmit={ask} askState={askState} onAskBack={resetAsk} />
+    <AskSurface
+      {...props}
+      onSubmit={ask}
+      askState={askState}
+      onAskBack={resetAsk}
+      onStop={stop}
+    />
   )
 }

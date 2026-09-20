@@ -3,6 +3,7 @@
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { parseOrderItems } from "@/lib/ratings/order-items"
 
 /**
  * Reader for `OtterRating`.
@@ -55,27 +56,6 @@ export interface RatingsSummary {
     /** Parsed, de-duplicated item names; empty when the review has none. */
     orderItems: string[]
   }>
-}
-
-/**
- * `orderItemNames` is stored as a JSON array string, and renders as literal
- * `["Cheese Fries","null"]` if passed straight through. Parse it, drop the
- * "null" placeholders Otter emits when the line is unknown, and de-duplicate
- * repeats (the same slider twice in one order tells the reader nothing).
- */
-function parseOrderItems(raw: string | null): string[] {
-  if (!raw) return []
-  let values: unknown
-  try {
-    values = JSON.parse(raw)
-  } catch {
-    values = raw.split(",")
-  }
-  const list = Array.isArray(values) ? values : [values]
-  const cleaned = list
-    .map((v) => String(v ?? "").trim().replace(/^"|"$/g, ""))
-    .filter((v) => v !== "" && v.toLowerCase() !== "null")
-  return [...new Set(cleaned)]
 }
 
 const DEFAULT_WINDOW_DAYS = 30

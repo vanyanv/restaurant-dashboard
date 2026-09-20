@@ -8,6 +8,7 @@ import type { InvoiceKpis } from "@/types/invoice"
 import type { LifecycleStage } from "@/generated/prisma/enums"
 import { isOperational } from "@/lib/store-lifecycle"
 import { foldSplhSeries } from "@/lib/dashboard/splh-fold"
+import { businessQueryDate } from "@/lib/counter/business-date"
 import type { SplhPoint } from "@/lib/splh"
 import { COGS_CODE, LABOR_CODE, TOTAL_SALES_CODE, type PnLRow } from "@/lib/pnl"
 import {
@@ -16,13 +17,18 @@ import {
   type ChannelReading,
 } from "@/lib/counter/channel-mix"
 import { loadStripTargets, type StripTargets, type Target } from "@/lib/counter/targets"
-import { granularityFor, loadStatement, rowValues, type Statement } from "@/lib/counter/statement"
+import {
+  granularityFor,
+  loadComparisonStatement,
+  loadStatement,
+  rowValues,
+  type Statement,
+} from "@/lib/counter/statement"
 import type { Reference } from "@/lib/counter/bullet-state"
 import type { ChartSpec } from "@/lib/counter/chart-geometry"
 import { count, delta, money, pct, plural, points } from "@/lib/counter/format"
 import {
   bucketFor,
-  comparisonRange,
   dayCount,
   toQueryBounds,
   type Bucket,
@@ -319,6 +325,19 @@ export interface OverviewSectionsInput {
    * lookup, the same way `src/app/dashboard/cogs/page.tsx` does.
    */
   accountId: string
+  /**
+   * The page's own clock, from `counterToday()`. Only the alert queue reads
+   * it, and only to say how long an alert has been open.
+   *
+   * It has to come in rather than be taken here. `Alert.occurredOn` is a
+   * `@db.Date` holding the LA BUSINESS date; flooring a raw `new Date()` to
+   * UTC midnight compares that against the UTC day, and between 00:00 and
+   * 08:00 UTC — 4pm to midnight in Los Angeles, dinner service — the UTC day
+   * is one ahead. Every alert aged a day early through every evening. Taking
+   * the clock from the page also means `COUNTER_TODAY` pins this section for a
+   * fidelity run, which it could not before.
+   */
+  today?: Date
 }
 
 export interface OverviewSections {
@@ -467,9 +486,25 @@ function buildStrip(
     }
   }
 
-  // Rounded once, at the figure — the delta beside a printed 28.4 must be
-  // derivable from 28.4, the same rule primeCost() applies to roomPp.
-  const foodPct = p.grossSales > 0 ? Math.round(p.cogsPct * 1000) / 10 : null
+  /*
+   * Zero COGS over a range with sales is not a kitchen that bought nothing.
+   * It is a range whose `DailyCogsItem` rows have not materialised — a state
+   * `getAllStoresPnL` already logs a warning for, on exactly this test
+   * (`rowCountPerPeriod[i] === 0 && totalSales[i] > 0`) — and "0.0%" for it is
+   * the same lie as a $0 Grubhub commission.
+   *
+   * The labour cell below has guarded this since it was written; food never
+   * did. So a range with no COGS posted printed a perfect 0.0% food cost with
+   * a green bullet against the store's plan, and a prime cost of labour alone
+   * — roughly 25% where the truth is nearer 55% — sitting comfortably under
+   * the 60% ceiling with "5.0 pts of room". Both readings are wrong in the
+   * flattering direction, which is the direction nobody investigates.
+   *
+   * Rounded once, at the figure — the delta beside a printed 28.4 must be
+   * derivable from 28.4, the same rule primeCost() applies to roomPp.
+   */
+  const foodKnown = p.grossSales > 0 && p.cogsValue > 0
+  const foodPct = foodKnown ? Math.round(p.cogsPct * 1000) / 10 : null
   if (foodPct !== null) {
     const plan = targets?.foodCost ?? null
     cells.push({
@@ -523,7 +558,10 @@ function buildStrip(
   // statement's own denominator. `laborKnown` is a decision about the CELL —
   // whether this figure is fit to print — not about the statement, which is
   // why the gate stays here and the arithmetic does not.
-  const prime = laborKnown ? p.prime : null
+  // Prime is food PLUS labour, so it needs both halves to be real. It was
+  // gated on labour alone, which let a missing COGS line through as a zero and
+  // printed the sum of one of its two terms as though it were the sum.
+  const prime = laborKnown && foodKnown ? p.prime : null
   if (prime?.primePct != null) {
     const cogsSeries = rowPercents(p.rows, COGS_CODE)
     const laborSeries = rowPercents(p.rows, LABOR_CODE)
@@ -724,7 +762,9 @@ function buildComparison(
     figure: "Net sales",
     now: money(now.grossSales),
     then: money(thenSales),
-    change: thenSales === 0 ? DASH : delta((now.grossSales - thenSales) / thenSales),
+    // `<= 0`: a comparison window below zero inverts the sign, so a rise
+    // prints as a fall. Same guard as `comparisonPhrase` and the P&L's cell.
+    change: thenSales <= 0 ? DASH : delta((now.grossSales - thenSales) / thenSales),
     bad: thenSales > 0 && now.grossSales < thenSales,
   })
 
@@ -797,9 +837,11 @@ function buildQueue(
   today: Date,
 ): QueueEntry[] {
   return alerts.slice(0, QUEUE_LIMIT).map((a) => {
+    // Both sides in the @db.Date encoding: UTC midnight of an LA business
+    // date. `occurredOn` already is one; `today` becomes one here.
     const days = Math.max(
       0,
-      Math.round((startOfDayUtc(today) - startOfDayUtc(a.occurredOn)) / 86_400_000),
+      Math.round((businessQueryDate(today).getTime() - a.occurredOn.getTime()) / 86_400_000),
     )
     return {
       key: a.id,
@@ -818,10 +860,6 @@ function buildQueue(
       actLabel: "Open in the queue",
     }
   })
-}
-
-function startOfDayUtc(d: Date): number {
-  return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate())
 }
 
 /**
@@ -883,6 +921,7 @@ export function getOverviewSectionPromises(
   input: OverviewSectionsInput,
 ): StreamedSections<OverviewSections> {
   const { range, storeId, accountId } = input
+  const today = input.today ?? new Date()
   const comparisonId: ComparisonId = input.comparisonId ?? "none"
   const bounds = toQueryBounds(range)
   const bucket = bucketFor(range)
@@ -891,7 +930,6 @@ export function getOverviewSectionPromises(
   // "weekly" from itself; a weekly series drawn as the dashed reference under
   // daily bars is a chart comparing two different things.
   const granularity = granularityFor(range)
-  const cmpRange = comparisonId === "none" ? null : comparisonRange(range, comparisonId)
 
   /* ── The loads. Every one of them starts here; none is awaited here. ── */
 
@@ -901,9 +939,11 @@ export function getOverviewSectionPromises(
     retryAction: "retrySales",
   })
 
+  // `loadComparisonStatement`, not `loadStatement(comparisonRange(...))`: a
+  // `weekday` comparison is FOUR windows, and loading their contiguous hull as
+  // one window read a single day against five and a half days of trade.
   const cmpStmtP = classify<Statement | null>(
-    () =>
-      cmpRange ? loadStatement({ range: cmpRange, storeId, granularity }) : Promise.resolve(null),
+    () => loadComparisonStatement({ range, mode: comparisonId, storeId, granularity }),
     { retryAction: "retryComparison" },
   )
 
@@ -1084,7 +1124,7 @@ export function getOverviewSectionPromises(
     ),
 
     needsYou: guardSection(
-      queueP.then((queueSd) => mapReady(queueSd, (d) => buildQueue(d.alerts, new Date()))),
+      queueP.then((queueSd) => mapReady(queueSd, (d) => buildQueue(d.alerts, today))),
       "retryNeedsYou",
     ),
 

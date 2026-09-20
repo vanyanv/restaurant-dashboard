@@ -71,6 +71,9 @@ export default async function MobileHomePage({
     comparisonId: counterParams.comparisonId,
     storeId: counterParams.storeId,
     accountId: session.user.accountId,
+    // The alert queue's "days open" is a business-date count. Taking its own
+    // clock would leave it on UTC, and unpinnable by COUNTER_TODAY.
+    today,
   })
 
   const stores = await getOverviewStores()

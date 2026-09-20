@@ -21,7 +21,22 @@ on:
       - 'src/lib/chat/system-prompt.ts'
       - 'src/lib/chat/openai-client.ts'
       - 'src/lib/chat/tools/**'
-      - 'src/app/dashboard/decisions/lib/verdict-copy.ts'
+      # The five that decide what the model is offered and what it is told,
+      # and were not watched. `tool-groups.ts` narrows a turn to as few as
+      # nine of fifty-eight schemas; the classifier picks those groups when
+      # the page establishes no department; the route assembles both and
+      # carries the answer cache and the freshness stamps that key it. Two of
+      # the four correctness defects the 2026-09-19 audit found lived in files
+      # on this list and none of them would have fired this job.
+      - 'src/lib/chat/tool-groups.ts'
+      - 'src/lib/chat/tool-group-classifier.ts'
+      - 'src/lib/chat/answer-cache.ts'
+      - 'src/lib/chat/data-as-of.ts'
+      - 'src/app/api/chat/route.ts'
+      # Was 'src/app/dashboard/decisions/lib/verdict-copy.ts', a path that has
+      # not existed since the decisions lib moved. A trigger on a file that is
+      # not there never fires and never complains.
+      - 'src/lib/decisions/verdict-copy.ts'
       - 'scripts/eval-llm/**'
       - '.github/workflows/llm-eval.yml'
   workflow_dispatch:
@@ -65,6 +80,29 @@ jobs:
           else
             echo "present=true" >> "$GITHUB_OUTPUT"
           fi
+
+      # `pendingReEval` marks a hash refreshed without a live run behind it.
+      # `tests/scripts/eval-llm-fingerprint.test.ts` already forces such a
+      # record to zero its numbers, so it cannot vouch for a pass nobody
+      # measured -- but nothing made it TEMPORARY. With a key configured there
+      # is no excuse for carrying one, and `--record` rebuilds the record
+      # without the flag, so this step fails the PR if that was not done.
+      - name: Carried-forward scorecard
+        if: always()
+        env:
+          HAVE_KEY: ${{ steps.key.outputs.present }}
+        run: |
+          stale=$(node -e "
+            const f = require('./scripts/eval-llm/fingerprints.json');
+            const s = Object.entries(f).filter(([, r]) => r.pendingReEval).map(([k]) => k);
+            process.stdout.write(s.join(' '));
+          ")
+          if [ -z "$stale" ]; then exit 0; fi
+          if [ "$HAVE_KEY" = "true" ]; then
+            echo "::error::$stale carries pendingReEval with an API key configured. Run 'npm run eval:llm -- --record' and commit scripts/eval-llm/fingerprints.json."
+            exit 1
+          fi
+          echo "::warning::$stale carries pendingReEval: its scorecard is zeroed and the prompt is unmeasured. Configure OPENAI_API_KEY, or run 'npm run eval:llm -- --record' locally."
 
       - name: Run the golden set
         if: steps.key.outputs.present == 'true'

@@ -26,6 +26,34 @@ export interface AskTurnMeta {
   cachedAt: string | null
   /** Tools that came back with an error this turn — the sources the answer could not read. */
   failed: string[]
+  /**
+   * Why each of them did not come back, by tool name.
+   *
+   * The route has always persisted `ChatTurn.toolErrors` as
+   * `{ toolName: message }`, and this shape kept only `Object.keys` of it — so
+   * a timeout, a permission error and a bad argument all reached the reader as
+   * the same three words, "did not come back". The message is already on the
+   * row; it was being thrown away one step before the screen.
+   */
+  failedReasons: Record<string, string>
+}
+
+/**
+ * One short clause for why a source is missing.
+ *
+ * Raw provider errors are long and often name internals, so the common shapes
+ * are named in the reader's terms and anything unrecognised is trimmed rather
+ * than hidden — an unfamiliar error the reader can quote to someone beats a
+ * familiar sentence that says nothing.
+ */
+export function failureClause(raw: string | undefined): string {
+  const m = (raw ?? "").trim()
+  if (!m) return "did not come back"
+  if (/timeout|timed out|ETIMEDOUT|AbortError/i.test(m)) return "timed out"
+  if (/not owned|unauthori|forbidden|permission/i.test(m)) return "not available on this account"
+  if (/rate.?limit|429/i.test(m)) return "rate limited"
+  if (/invalid|validation|expected|must be/i.test(m)) return "was called with arguments it rejected"
+  return m.length > 90 ? `${m.slice(0, 89).trimEnd()}…` : m
 }
 
 /** Reads the route's metadata off a UI message; `null` if it never landed. */
@@ -41,5 +69,16 @@ export function readAskTurnMeta(metadata: unknown): AskTurnMeta | null {
     cached: m.cached === true,
     cachedAt: typeof m.cachedAt === "string" ? m.cachedAt : null,
     failed: Array.isArray(m.failed) ? m.failed.filter((t): t is string => typeof t === "string") : [],
+    failedReasons: readFailedReasons(m.failedReasons),
   }
+}
+
+/** `{ toolName: message }` off metadata or a `ChatTurn.toolErrors` row. */
+export function readFailedReasons(raw: unknown): Record<string, string> {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {}
+  const out: Record<string, string> = {}
+  for (const [tool, message] of Object.entries(raw as Record<string, unknown>)) {
+    if (typeof message === "string" && message.trim()) out[tool] = message
+  }
+  return out
 }

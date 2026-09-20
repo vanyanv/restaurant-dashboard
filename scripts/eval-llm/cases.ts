@@ -138,36 +138,44 @@ export const VERDICT_CASES: VerdictCase[] = [
 
 // --- recipe proposals ----------------------------------------------------------
 
+// Every plate here is counted in servings (`yieldUnit: null`), which is what
+// every recipe in the live account is. A batch recipe would carry its unit —
+// `{ itemName: "House Sauce", category: "Sauces", yieldUnit: "fl oz" }` — and
+// the prompt tells the model to measure lines drawing on it in fluid ounces.
 const RECIPE_VOCAB = [
-  { itemName: "Double Slider", category: "Sliders" },
-  { itemName: "Single Slider", category: "Sliders" },
-  { itemName: "Chicken Slider", category: "Sliders" },
-  { itemName: "Fries", category: "Sides" },
-  { itemName: "Cheese Fries", category: "Sides" },
-  { itemName: "Onion Rings", category: "Sides" },
-  { itemName: "Fountain Drink", category: "Drinks" },
-  { itemName: "Milkshake", category: "Drinks" },
+  { itemName: "Double Slider", category: "Sliders", yieldUnit: null },
+  { itemName: "Single Slider", category: "Sliders", yieldUnit: null },
+  { itemName: "Chicken Slider", category: "Sliders", yieldUnit: null },
+  { itemName: "Fries", category: "Sides", yieldUnit: null },
+  { itemName: "Cheese Fries", category: "Sides", yieldUnit: null },
+  { itemName: "Onion Rings", category: "Sides", yieldUnit: null },
+  { itemName: "Fountain Drink", category: "Drinks", yieldUnit: null },
+  { itemName: "Milkshake", category: "Drinks", yieldUnit: null },
 ]
 
+// Each ingredient carries the unit it is PRICED in. The model used to get bare
+// names and had to guess the unit against a cost engine that only converts
+// within a family — a guess of "leaf" or "slice" produced a line that costed
+// $0.00 forever.
 const INGREDIENT_VOCAB = [
-  "Beef Patty",
-  "Slider Bun",
-  "American Cheese",
-  "Grilled Onion",
-  "Pickle Chip",
-  "Russet Potato",
-  "Yellow Onion",
-  "Chicken Breast",
-  "Vanilla Ice Cream",
-  "Whole Milk",
+  { name: "Beef Patty", recipeUnit: "each" },
+  { name: "Slider Bun", recipeUnit: "each" },
+  { name: "American Cheese", recipeUnit: "each" },
+  { name: "Grilled Onion", recipeUnit: "oz" },
+  { name: "Pickle Chip", recipeUnit: "each" },
+  { name: "Russet Potato", recipeUnit: "lb" },
+  { name: "Yellow Onion", recipeUnit: "lb" },
+  { name: "Chicken Breast", recipeUnit: "lb" },
+  { name: "Vanilla Ice Cream", recipeUnit: "gal" },
+  { name: "Whole Milk", recipeUnit: "gal" },
 ]
 
 export interface ProposalCase {
   id: string
   input: {
     items: { itemName: string; category: string; qty30d: number }[]
-    recipeVocab: { itemName: string; category: string }[]
-    ingredientVocab: string[]
+    recipeVocab: { itemName: string; category: string; yieldUnit: string | null }[]
+    ingredientVocab: { name: string; recipeUnit: string | null }[]
     confirmedExamples?: { itemName: string; recipeName: string }[]
   }
   expect: ExpectedProposal[]
@@ -397,6 +405,16 @@ export interface ToolChoiceCase {
   /** Any one of these is an acceptable first move. Empty means: call nothing. */
   expectedTools: string[]
   why: string
+  /**
+   * Added without a live run behind it, so no fixture exists yet.
+   *
+   * `tests/scripts/eval-llm-replay.test.ts` asserts a fixture for every case
+   * on purpose -- a case added and never run replays green because nothing
+   * replays it -- and this is the written-down exception, not a hole. The
+   * replay test also fails if a case carrying this flag DOES have a fixture,
+   * so `--record` forces the flag to be removed rather than leaving it to rot.
+   */
+  awaitingFixture?: true
 }
 
 export const TOOL_CHOICE_CASES: ToolChoiceCase[] = [
@@ -457,8 +475,26 @@ export const TOOL_CHOICE_CASES: ToolChoiceCase[] = [
   {
     id: "anomalies",
     question: "Is anything off right now?",
-    expectedTools: ["getOpenAnomalies", "getStoreBreakdown", "getDailySales"],
+    // `getAlerts` added 2026-09-19. The prompt now routes "anything wrong /
+    // what needs my attention" to the inbox, which is wider than the z-score
+    // detector, so a turn that calls it alone is a PASS rather than the
+    // near-miss it would have been against the old list.
+    expectedTools: ["getAlerts", "getOpenAnomalies", "getStoreBreakdown", "getDailySales"],
     why: "Open-ended. Tests that a vague question still routes rather than producing a shrug.",
+  },
+  {
+    id: "ratings",
+    question: "What are people complaining about in our reviews?",
+    expectedTools: ["getRatings"],
+    awaitingFixture: true,
+    why: "The prompt carried a refusal for this until 2026-09-19 -- 'I don't track sentiment in this dashboard' -- while OtterRating held the review text the whole time. The failure to catch is the model refusing a question it can now answer.",
+  },
+  {
+    id: "forecast-trust",
+    question: "How accurate have the sales forecasts actually been?",
+    expectedTools: ["getForecastQuality"],
+    awaitingFixture: true,
+    why: "Distinct from getRevenueForecast. Asking how good the model is must not be answered with the model's own prediction interval, which is its opinion of itself rather than its record.",
   },
   {
     id: "refunds",

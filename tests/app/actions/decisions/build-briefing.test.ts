@@ -69,10 +69,38 @@ function cash(floor: number): CashPositionData {
     horizonDays: 3,
     blendedCommissionRate: 0.13,
     proRatedFixedDaily: 500,
+    unforecastDays: 0,
     totalScheduledPayables: 0,
     totalEstimatedInflow: 12000,
     endingCumulativeNet: floor,
     days: [mk(0, 1200), mk(1, floor), mk(2, floor + 400)],
+  }
+}
+
+/** A horizon whose forecast runs out partway: the tail carries no figure. */
+function cashPartlyUnforecast(): CashPositionData {
+  const base = cash(1000)
+  return {
+    ...base,
+    unforecastDays: 2,
+    endingCumulativeNet: null,
+    days: [
+      base.days[0],
+      {
+        ...base.days[1],
+        predictedRevenue: null,
+        estimatedNetInflow: null,
+        netCashFlow: null,
+        cumulativeNet: null,
+      },
+      {
+        ...base.days[2],
+        predictedRevenue: null,
+        estimatedNetInflow: null,
+        netCashFlow: null,
+        cumulativeNet: null,
+      },
+    ],
   }
 }
 
@@ -166,6 +194,26 @@ describe("cashLine", () => {
 
   it("stays silent when the floor never goes negative", () => {
     expect(find(buildBriefing({ ...NOTHING, cash: cash(800) }), "cash")).toBeUndefined()
+  })
+
+  it("does not read an unforecast day as a cash floor", () => {
+    // Two stores have no trained revenue forecast. Their horizon used to
+    // price every day as zero inflow minus fixed costs, so this line led
+    // their briefing with a cash crisis that was a training failure.
+    expect(
+      find(buildBriefing({ ...NOTHING, cash: cashPartlyUnforecast() }), "cash"),
+    ).toBeUndefined()
+  })
+
+  it("still warns off the days it does have a figure for", () => {
+    const partial = cashPartlyUnforecast()
+    const withDip: CashPositionData = {
+      ...partial,
+      days: [{ ...partial.days[0], cumulativeNet: -1500, netCashFlow: -1500 }, partial.days[1], partial.days[2]],
+    }
+    const line = find(buildBriefing({ ...NOTHING, cash: withDip }), "cash")
+    expect(line).toBeDefined()
+    expect(text(line!)).toContain("-$1,500")
   })
 
   it("leads the briefing — it outranks every other line", () => {

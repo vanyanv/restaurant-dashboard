@@ -20,7 +20,7 @@ import { rateLimit, RATE_LIMIT_TIERS } from "@/lib/rate-limit"
 import { prisma } from "@/lib/prisma"
 import { computeCostUsd, recordAiUsage } from "@/lib/monitoring/ai-usage"
 import { chatPrisma } from "@/lib/chat/prisma-chat"
-import { chatTools } from "@/lib/chat/tools"
+import { chatTools, type ChatToolContext } from "@/lib/chat/tools"
 import { activeToolsForPage, toolsInGroups } from "@/lib/chat/tool-groups"
 import { classifyToolGroups } from "@/lib/chat/tool-group-classifier"
 import { asOfForTool, maxAsOfForTools, everyToolStamped } from "@/lib/chat/data-as-of"
@@ -31,6 +31,7 @@ import {
   writeCachedAnswer,
 } from "@/lib/chat/answer-cache"
 import type { AskRequestScope } from "@/lib/counter/ask-context"
+import { businessDay } from "@/lib/counter/business-date"
 import {
   appendMessage,
   assertConversationAccess,
@@ -42,6 +43,7 @@ import { buildSystemPrompt } from "@/lib/chat/system-prompt"
 import { CHAT_REASONING_EFFORT, CHAT_ROUTING_MODEL } from "@/lib/chat/openai-client"
 import { logger } from "@/lib/logger"
 import { generateConversationTitle } from "@/lib/chat/auto-title"
+import { checkDailyBudget } from "@/lib/chat/spend-cap"
 
 /*
  * 60 was the old Vercel ceiling. It is now 300 on every plan, and 60 was
@@ -168,6 +170,39 @@ export async function POST(req: Request) {
 
   const ownerId = session.user.id
   const accountId = session.user.accountId
+
+  /*
+   * The limiter counts requests; this counts dollars. See `spend-cap.ts` for
+   * why both are needed.
+   *
+   * READ HERE, REFUSED LATER. The refusal used to sit at this line, ahead of
+   * the answer cache, so an account that reached its cap was turned away from
+   * answers that were already computed and cost nothing to serve. The cap
+   * exists to stop SPEND; a cache hit is not spend. So the verdict is carried
+   * down to `budgetRefusal()` and returned only once the lookup has missed.
+   *
+   * It is still read before anything is billed: an over-budget turn skips the
+   * classifier call below, so the only work it can reach is a Redis get.
+   */
+  const budget = await checkDailyBudget(accountId)
+  const budgetRefusal = () => {
+    logger.warn(
+      `[chat] accountId=${accountId} over daily AI budget ` +
+        `spent=${budget.spentUsd} budget=${budget.budgetUsd}`,
+    )
+    // 429 rather than 402 so a client that already backs off on rate limiting
+    // backs off on this too, and a sentence a reader can act on rather than a
+    // raw failure.
+    return NextResponse.json(
+      {
+        error: "daily_budget_reached",
+        message:
+          `This account has reached its daily AI limit of $${budget.budgetUsd.toFixed(2)}. ` +
+          `Questions work again after midnight, or raise CHAT_DAILY_BUDGET_USD.`,
+      },
+      { status: 429, headers: { "Retry-After": "3600" } },
+    )
+  }
   let body: ChatRequestBody
   try {
     body = (await req.json()) as ChatRequestBody
@@ -248,7 +283,19 @@ export async function POST(req: Request) {
         })
       : Promise.resolve(null)
 
-  const ctx = { ownerId, accountId, prisma: chatPrisma }
+  /*
+   * `activeTools` is filled in below, once the page and the classifier have
+   * had their say — after this object exists, because the tool wrappers close
+   * over it and the narrowing decision needs the question. Every `execute`
+   * runs strictly later than that assignment, so `describeSchema` reads the
+   * settled value rather than the placeholder.
+   */
+  const ctx: ChatToolContext = {
+    ownerId,
+    accountId,
+    prisma: chatPrisma,
+    activeTools: null,
+  }
 
   // Wrap each domain tool in the AI SDK `tool()` shape. The owner-scope
   // helpers inside `execute` enforce auth on every call.
@@ -319,21 +366,36 @@ export async function POST(req: Request) {
    */
   let classifiedGroups: string[] | null = null
   /*
-   * The question WITHOUT the context sentence `use-ask.ts` prepends. Both the
-   * classifier and the cache key want the words the reader actually typed:
-   * the sentence names the store and the window, which the key carries
-   * separately and the classifier would only be biased by.
+   * THE TWO HALVES OF WHAT THE READER SENT.
+   *
+   * `use-ask.ts` sends `${context.sentence}.\n${question}`. The classifier
+   * wants the typed words alone — the sentence names a page and a store and
+   * would only bias a routing decision the page id already makes. The CACHE
+   * wants both, and used to get only the first half: the sentence is where
+   * the store and the date range live, so a key built without it made
+   * Hollywood's answer and Glendale's answer one entry.
+   *
+   * Split once, here, so the two consumers cannot disagree about where the
+   * boundary is.
    */
-  const askedQuestion = userMessageText.includes("\n")
-    ? userMessageText.slice(userMessageText.indexOf("\n") + 1)
-    : userMessageText
-  if (!activeTools && userMessageText) {
+  const newlineAt = userMessageText.indexOf("\n")
+  const askedQuestion =
+    newlineAt >= 0 ? userMessageText.slice(newlineAt + 1) : userMessageText
+  const askedScope = newlineAt >= 0 ? userMessageText.slice(0, newlineAt) : null
+  // An over-budget turn can still reach the cache, but it must not pay the
+  // classifier to get there. No department means the full menu, which is what
+  // this branch degrades to anyway.
+  if (!activeTools && userMessageText && !budget.overBudget) {
     const groups = await classifyToolGroups(askedQuestion)
     if (groups) {
       classifiedGroups = groups
       activeTools = toolsInGroups(groups)
     }
   }
+  // Settled. `describeSchema` answers "what can you reach?" from this, and
+  // the system prompt's routing guide is cut to the same set below, so the
+  // three things that tell the model what exists now agree with each other.
+  ctx.activeTools = activeTools
 
   /*
    * THE TURN'S ID IS DECIDED BEFORE THE TURN RUNS.
@@ -360,10 +422,34 @@ export async function POST(req: Request) {
    * them, `fileReturn` included — without it a cached answer would render as
    * loose prose), then the text, then the metadata.
    */
+  /*
+   * ONLY THE FIRST TURN OF A THREAD IS LOOKED UP.
+   *
+   * Nothing in the key comes from the conversation, so a follow-up's words
+   * are all the key has — and "and last month?" is a phrase two unrelated
+   * threads can both reach on the same page inside one sync window. Hashing
+   * the replayed history would fix the collision and tie the key to how much
+   * history a client happened to send; refusing to look up a turn that has
+   * any history is smaller, and costs a cache hit only where the words alone
+   * were never the whole question.
+   *
+   * `priorMessages` covers the Counter surfaces, which delegate history;
+   * `body.messages.length` covers a caller that posts the thread itself.
+   */
+  const cacheEligible =
+    priorMessages.length === 0 && body.messages.length === 1
   const cacheToolNames = activeTools ?? Object.keys(toolSet)
-  const dataAsOf = await maxAsOfForTools(cacheToolNames)
+  const dataAsOf = cacheEligible ? await maxAsOfForTools(cacheToolNames) : null
   const cacheKey = dataAsOf
-    ? answerCacheKey({ accountId, question: askedQuestion, pageId: body.askScope?.pageId ?? null, dataAsOf })
+    ? answerCacheKey({
+        accountId,
+        question: askedQuestion,
+        scope: askedScope,
+        pageId: body.askScope?.pageId ?? null,
+        effort: body.askScope?.effort ?? null,
+        businessDay: businessDay(new Date()),
+        dataAsOf,
+      })
     : null
   if (cacheKey && askedQuestion && !body.askScope?.fresh) {
     const hit = await readCachedAnswer(cacheKey)
@@ -457,13 +543,28 @@ export async function POST(req: Request) {
       )
       const cachedResponse = createUIMessageStreamResponse({ stream })
       cachedResponse.headers.set("x-conversation-id", conversationId)
+      cachedResponse.headers.set("x-chat-turn-id", chatTurnId)
       return cachedResponse
     }
   }
 
+  // The lookup missed, so answering from here costs money. This is where the
+  // cap bites.
+  if (budget.overBudget) return budgetRefusal()
+
   const requestStartMs = performance.now()
   const systemPromptStartMs = performance.now()
-  const system = await buildSystemPrompt(accountId)
+  /*
+   * The guide is cut to the same set as the schemas. Before this, the prompt
+   * named all 58 tools on a turn that might be carrying nine, and told the
+   * model not to refuse without checking a catalogue that named 55 — so a
+   * question outside the narrowed department had no honest answer available
+   * to it. See `renderToolGuide`.
+   */
+  const system = await buildSystemPrompt(accountId, new Date(), {
+    all: Object.keys(chatTools),
+    active: activeTools,
+  })
   const systemPromptMs = Math.round(performance.now() - systemPromptStartMs)
 
   // First-token latency captured from the first `text-delta` chunk.
@@ -757,8 +858,12 @@ export async function POST(req: Request) {
         chatTurnId,
         durationMs: Date.now() - turnStartMs,
         // The sources that did not come back, by tool name, so the answer can
-        // say which half of the question they took with them.
+        // say which half of the question they took with them — and WHY each
+        // one went. The messages were already being written to
+        // `ChatTurn.toolErrors`; only the names reached the screen, so every
+        // failure read as the same three words.
         failed: Object.keys(capturedToolErrors),
+        failedReasons: capturedToolErrors,
         costUsd: computeCostUsd(
           CHAT_ROUTING_MODEL,
           usage?.inputTokens ?? 0,
@@ -770,6 +875,18 @@ export async function POST(req: Request) {
   })
   // Surface the conversation id so the client can pin it after first turn.
   response.headers.set("x-conversation-id", conversationId)
+  /*
+   * AND THE TURN ID, BEFORE THE TURN CAN FAIL.
+   *
+   * The footer's thumb needs a `ChatTurn` to write to, and it was reading the
+   * id off `message.metadata`, which the SDK only emits on the `finish` part.
+   * So a turn that errored, was stopped, or dropped mid-stream answered a
+   * thumb press with "This turn was not recorded, so it cannot be rated" —
+   * and those are precisely the turns worth rating. The id is minted before
+   * the model runs (see `chatTurnId` above) and the error path writes a row
+   * under it, so the header can carry it from the first byte.
+   */
+  response.headers.set("x-chat-turn-id", chatTurnId)
   return response
 }
 

@@ -238,3 +238,70 @@ describe("accuracySubtitle", () => {
     )
   })
 })
+
+describe("computeVitals — the sales-per-labor-hour target", () => {
+  /**
+   * The target is recovered as revenue ÷ needed hours. `neededHours` is null
+   * on a day `computeLaborLane` has no weekday SPLH target for — a new store,
+   * or a gap in that weekday's history. That day still has forecast revenue.
+   */
+  it("counts revenue only for the days it counts needed hours for", () => {
+    const days = [
+      ...Array.from({ length: 5 }, () => day()), // 8,000 over 100 needed hours
+      day({ predictedRevenue: 20_000, labor: { scheduledHours: 100, neededHours: null, gapHours: null, status: "unknown", unfilledSlots: 0 } }),
+      day({ predictedRevenue: 20_000, labor: { scheduledHours: 100, neededHours: null, gapHours: null, status: "unknown", unfilledSlots: 0 } }),
+    ]
+    const v = computeVitals({ days, scorecard: null })
+
+    // Five scorable days: $40,000 over 500 hours is $80/hr. Putting the two
+    // unscorable days' $40,000 into the numerator and nothing into the
+    // denominator read $160/hr — twice the real target, which tips the status
+    // toward "below" and says the week is understaffed.
+    expect(v.splh.target).toBe(80)
+  })
+
+  it("still reads the whole week when every day is scorable", () => {
+    const v = computeVitals({ days: week(), scorecard: null })
+    expect(v.splh.target).toBe(80)
+  })
+
+  it("has no target at all when no day has one", () => {
+    const days = week({
+      labor: { scheduledHours: 100, neededHours: null, gapHours: null, status: "unknown", unfilledSlots: 0 },
+    })
+    expect(computeVitals({ days, scorecard: null }).splh.target).toBeNull()
+  })
+})
+
+describe("computeVitals — rounding the week, not the days", () => {
+  /**
+   * `computeLaborLane` rounds each day to one decimal for its own ribbon, and
+   * that is right — nobody reads "7.43 hours short". Summing those rounded
+   * figures and rounding again is sum-of-rounded where round-of-summed is
+   * meant: seven days of error compound instead of cancelling.
+   */
+  const exactDay = (scheduled: number, needed: number): VitalsDay =>
+    day({
+      labor: {
+        scheduledHours: Math.round(scheduled * 10) / 10,
+        neededHours: Math.round(needed * 10) / 10,
+        gapHours: Math.round((scheduled - needed) * 10) / 10,
+        status: "level",
+        unfilledSlots: 0,
+        exact: { scheduledHours: scheduled, neededHours: needed, gapHours: scheduled - needed },
+      },
+    })
+
+  it("sums the unrounded gaps and rounds the total once", () => {
+    // Seven days each 0.04 short: −0.28 over the week, which rounds to −0.3.
+    // Each day rounds to −0.0 on its own, so the rounded sum was 0.
+    const days = Array.from({ length: 7 }, () => exactDay(100, 100.04))
+    const v = computeVitals({ days, scorecard: null })
+    expect(v.laborGap.hours).toBe(-0.3)
+  })
+
+  it("still reports the total when a caller supplies no exact figures", () => {
+    const v = computeVitals({ days: week(), scorecard: null })
+    expect(v.laborGap.hours).toBe(0)
+  })
+})

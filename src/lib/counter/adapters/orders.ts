@@ -22,7 +22,7 @@ import {
   type ComparisonContext,
 } from "@/lib/counter/comparison"
 import {
-  comparisonRange,
+  comparisonWindows,
   dayCount,
   isoDay,
   type ComparisonId,
@@ -1345,6 +1345,62 @@ export function buildNeedsYou(
 /* ── The entry points ─────────────────────────────────────────────────── */
 
 /**
+ * The comparison's orders, summed over the windows it actually names.
+ *
+ * One window for `prev` and `year`; FOUR for `weekday`, which is why this is a
+ * loop rather than a call. The four are loaded in parallel and their counters
+ * added, and `ComparisonContext.divisor` still does the dividing — so the
+ * arithmetic downstream is untouched and only the population it runs over is
+ * corrected.
+ *
+ * Every field is a COUNTER over the matched range (`order-actions.ts`'s
+ * `OrderListTotals`), so summing them is the same reduction the action does
+ * within one window. `rows`, `platforms` and `nextCursor` stay empty: the
+ * strip reads `totalCount` and `totals` and nothing else, which is why the
+ * single-window load already asked for `summaryOnly`.
+ */
+async function loadComparisonOrders(
+  filters: Parameters<typeof getOrdersList>[0],
+  windows: DateRange[],
+): Promise<OrderListResponse> {
+  const parts = await Promise.all(
+    windows.map((w) =>
+      getOrdersList({
+        ...filters,
+        startDate: isoDay(w.start),
+        endDate: isoDay(w.end),
+        cursor: null,
+        // One row is enough: every figure the comparison feeds comes off
+        // `totals` and `totalCount`, which cover the whole matched range.
+        limit: 1,
+        // And one QUERY is enough per window, which is what that sentence
+        // implies and what this asks for. `limit: 1` still bought a page of
+        // rows, the pending-details count, the platform list and three
+        // marketplace aggregates — eight round trips to read `totalCount` and
+        // `totals.netSales`. See `OrderListFilters.summaryOnly`.
+        summaryOnly: true,
+      }),
+    ),
+  )
+  const total = (pick: (r: OrderListResponse) => number) =>
+    parts.reduce((acc, r) => acc + pick(r), 0)
+  return {
+    rows: [],
+    nextCursor: null,
+    platforms: [],
+    totalCount: total((r) => r.totalCount),
+    undrainedCount: total((r) => r.undrainedCount),
+    totals: {
+      netSales: total((r) => r.totals.netSales),
+      commission: total((r) => r.totals.commission),
+      thirdPartyNetSales: total((r) => r.totals.thirdPartyNetSales),
+      thirdPartyCount: total((r) => r.totals.thirdPartyCount),
+      thirdPartyWithFees: total((r) => r.totals.thirdPartyWithFees),
+    },
+  }
+}
+
+/**
  * The desk and phone orders lists, as three promises.
  *
  * Task 3. What changed from the awaited version below is only WHEN the awaits
@@ -1365,7 +1421,11 @@ export function getOrdersSectionPromises(
   const channels = input.channels ?? []
   const search = input.search ?? ""
   const comparisonId: ComparisonId = input.comparisonId ?? "none"
-  const cmpRange = comparisonId === "none" ? null : comparisonRange(range, comparisonId)
+  // The windows the comparison MEASURES, which for `weekday` is four of them.
+  // This used to load `comparisonRange(...)` — their contiguous hull, 22 days
+  // wide for a single day — as one window, while `comparisonContext` divided
+  // its orders and its net sales by four. See `comparisonWindows`.
+  const cmpWindows = comparisonId === "none" ? null : comparisonWindows(range, comparisonId)
 
   const filters = {
     storeId,
@@ -1385,24 +1445,7 @@ export function getOrdersSectionPromises(
   // its figures because the PRIOR period would not load would be a worse
   // page than one whose deltas simply read "no comparison set".
   const cmpP = classify<OrderListResponse | null>(
-    () =>
-      cmpRange
-        ? getOrdersList({
-            ...filters,
-            startDate: isoDay(cmpRange.start),
-            endDate: isoDay(cmpRange.end),
-            cursor: null,
-            // One row is enough: every figure the comparison feeds comes off
-            // `totals` and `totalCount`, which cover the whole matched range.
-            limit: 1,
-            // And one QUERY is enough, which is what that sentence implies and
-            // what this asks for. `limit: 1` still bought a page of rows, the
-            // pending-details count, the platform list and three marketplace
-            // aggregates — eight round trips to read `totalCount` and
-            // `totals.netSales`. See `OrderListFilters.summaryOnly`.
-            summaryOnly: true,
-          })
-        : Promise.resolve(null),
+    () => (cmpWindows === null ? Promise.resolve(null) : loadComparisonOrders(filters, cmpWindows)),
     { retryAction: "retryComparison" },
   )
 

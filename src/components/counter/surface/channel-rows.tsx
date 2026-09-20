@@ -106,9 +106,11 @@ export function ChannelRows({
   actions?: ReactNode
 }) {
   // A store whose range contains no sales at all: every share is 0%, and no
-  // width is ever NaN.
+  // width is ever NaN. `<= 0` rather than `=== 0` — a net total that came out
+  // negative would give every bar a negative width, which lays out as 0 but
+  // labels the biggest channel as the smallest share.
   const total = rows.reduce((t, r) => t + r.net, 0)
-  const shareOf = (v: number) => (total === 0 ? 0 : (v / total) * 100)
+  const shareOf = (v: number) => (total <= 0 ? 0 : (v / total) * 100)
 
   return (
     <div className="chan">

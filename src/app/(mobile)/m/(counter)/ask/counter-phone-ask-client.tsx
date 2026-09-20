@@ -151,6 +151,7 @@ export function CounterPhoneAskClient({
     stop,
     askedAt,
     reset,
+    lastTurnId,
     engineMount,
   } = useAskDeferred(urlConversationId)
 
@@ -371,11 +372,23 @@ export function CounterPhoneAskClient({
   }, [newThread])
   const [railCount, setRailCount] = useState<number | null>(null)
 
-  const rate = useCallback(async (chatTurnId: string | null, feedback: AskFeedback | null) => {
-    if (!chatTurnId) return "This turn was not recorded, so it cannot be rated"
-    const r = await rateAskTurn({ chatTurnId, feedback })
-    return r.ok ? null : r.error
-  }, [])
+  const rate = useCallback(
+    async (chatTurnId: string | null, feedback: AskFeedback | null) => {
+      /*
+       * The metadata id is the certain one — it came back on this turn's own
+       * `finish` part. `lastTurnId` is the response header's, which arrives
+       * before the model runs and is therefore the ONLY id a turn that
+       * errored, was stopped, or dropped mid-stream ever has. Those are the
+       * turns most worth rating, and until now they were the only ones that
+       * could not be.
+       */
+      const id = chatTurnId ?? lastTurnId
+      if (!id) return "This turn was not recorded, so it cannot be rated"
+      const r = await rateAskTurn({ chatTurnId: id, feedback })
+      return r.ok ? null : r.error
+    },
+    [lastTurnId],
+  )
   const forkAt = useCallback(
     (threadId: string, messageId: string) => {
       void forkAskThread({ id: threadId, throughMessageId: messageId }).then((r) => {

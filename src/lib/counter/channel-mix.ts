@@ -136,7 +136,7 @@ interface SummaryRow {
   tpOrderCount: number | null
 }
 
-interface StoreRates {
+export interface StoreRates {
   id: string
   uberCommissionRate: number
   doordashCommissionRate: number
@@ -147,9 +147,19 @@ interface StoreRates {
  * schema publishes none. Not a lookup into `channels.ts` — the `commission`
  * field there is the design system's identity constant from the prototype,
  * not this restaurant's contract.
+ *
+ * Exported because the menu-item page prices an item's marketplace cut and
+ * must price it the same way — and because `computeStorePnL` charges the
+ * `COM_UBER` and `COM_DD` lines at these same two columns, so "what does this
+ * marketplace take" has one answer in the product rather than one per page.
+ * A `null` store is an unknown rate, never a free channel.
  */
-function rateFor(channel: ChannelId, store: StoreRates): number | null {
+export function commissionRateFor(
+  channel: ChannelId,
+  store: StoreRates | null,
+): number | null {
   if (channel === "house") return 0
+  if (!store) return null
   if (channel === "ubereats") return store.uberCommissionRate
   if (channel === "doordash") return store.doordashCommissionRate
   return null
@@ -311,7 +321,7 @@ function foldToChannels(
     bucket.net += net
     bucket.orders += orders
 
-    const rate = rateFor(channel, ratesByStore.get(r.storeId) ?? {
+    const rate = commissionRateFor(channel, ratesByStore.get(r.storeId) ?? {
       id: r.storeId,
       uberCommissionRate: 0,
       doordashCommissionRate: 0,
