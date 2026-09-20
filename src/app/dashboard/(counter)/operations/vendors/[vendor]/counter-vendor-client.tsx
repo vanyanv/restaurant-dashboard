@@ -117,7 +117,14 @@ export function CounterVendorClient({
       <Section title="Spend" meta={(s) => s.meta} data={sections.spend} pending={pending}>
         {(s) => (
           <>
-            <Chart {...s.chart} fmt={USD} />
+            {/* No week to draw means every invoice in this range is missing
+                its delivery date, not that the vendor delivered nothing —
+                see `spendOf`. `Chart` would degrade a spec with no labels to
+                a one-cell strip reading "—", which is a figure where there is
+                only an explanation, so the note carries it alone. A single
+                week still draws: that degraded strip is the design's own, and
+                the prototype renders it too. */}
+            {s.chart.labels.length > 0 ? <Chart {...s.chart} fmt={USD} /> : null}
             <Note>
               {s.note}
             </Note>
@@ -154,7 +161,17 @@ export function CounterVendorClient({
         >
           {(b) => (
             <>
-              <Table columns={BASKET_COLUMNS} rows={b.rows} />
+              {/* A vendor that is the sole source for everything it sells has
+                  no comparison to draw, and a header rule over an empty
+                  `<tbody>` is the shape this system already names as a defect
+                  — it looks the same whether the table is empty or broken.
+                  The note says which, so it stands alone. This is not the
+                  `empty` state: no member of `EmptyReason` says "every item
+                  here is single-sourced", and picking the nearest one
+                  would tell the reader to widen a range that does not govern
+                  this table (`priced` is queried over the whole account, with
+                  no date bound at all). */}
+              {b.rows.length > 0 ? <Table columns={BASKET_COLUMNS} rows={b.rows} /> : null}
               <Note flush>
                 {b.note}
               </Note>

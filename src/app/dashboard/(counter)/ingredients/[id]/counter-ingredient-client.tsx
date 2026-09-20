@@ -27,6 +27,14 @@ import { saveIngredientCost } from "@/lib/counter/actions/ingredient"
  *
  *   strip -> price history -> a split of matched SKUs and used-in.
  *
+ * Two sections are OURS and not the prototype's: "Deliveries", between the
+ * price history and the split, and "What this costs" at the foot. Each is
+ * argued where it is built — `deliveriesOf` and `costOf` in the adapter.
+ * `e2e/fidelity/manifest.ts` carries the extra-landmark allowance for the
+ * cost form; "Deliveries" adds one `.sec`, one `.sec__head` and one `.tbl`
+ * on top of that and has no allowance yet, so `npm run fidelity` reports
+ * three unexplained extras on this route until one is measured and written.
+ *
  * The adapter's docblock argues the departures. Two of the five strip cells
  * and one table column describe data this account does not have — there is no
  * on-hand figure for anything, and `IngredientSkuMatch` has no confidence
@@ -147,13 +155,39 @@ function CostForm({ cost }: { cost: IngredientCost }) {
 }
 
 
+/**
+ * `Last seen` sits beside `Last price`, because the two are one fact read
+ * together: a price is only a price while it is still being quoted, and this
+ * column is what says whether it is. See `skusOf` in the adapter for why a
+ * list of part numbers without a date is half a list.
+ */
 const SKU_COLUMNS: Column[] = [
   { key: "vendor", label: "Vendor" },
   { key: "product", label: "Billed as" },
   { key: "pack", label: "Pack" },
   { key: "conversion", label: "Conversion" },
   { key: "price", label: "Last price", numeric: true },
+  { key: "seen", label: "Last seen" },
   { key: "lines", label: "Lines", numeric: true },
+]
+
+/**
+ * The arrivals table. Its fourth column names the ingredient's own recipe unit
+ * — `In lb`, `In each` — because that is the unit the figures under it are
+ * actually in, and a header reading "In recipe unit" would make the reader
+ * look up which one that is on every row.
+ *
+ * `unit` is null when the ingredient has no recipe unit at all, and then
+ * NOTHING in the column converts. The header says so rather than naming a unit
+ * the page does not have; the adapter's note under the table says the rest.
+ */
+const deliveryColumns = (unit: string | null): Column[] => [
+  { key: "date", label: "Date" },
+  { key: "vendor", label: "Vendor" },
+  // What the invoice said, in the invoice's own unit — usually cases.
+  { key: "qty", label: "Billed", numeric: true },
+  { key: "recipeQty", label: unit ? `In ${unit.toLowerCase()}` : "In recipe unit", numeric: true },
+  { key: "value", label: "Value", numeric: true },
 ]
 
 const USED_COLUMNS: Column[] = [
@@ -166,6 +200,7 @@ const USED_COLUMNS: Column[] = [
 
 const ASK_SUGGESTIONS = [
   "How has this ingredient's price moved?",
+  "When did this ingredient last arrive?",
   "Which recipes use this ingredient?",
   "Which vendors bill against it?",
 ]
@@ -248,6 +283,33 @@ export function CounterIngredientClient({
             <Chart {...p.chart} fmt={PRICE} />
             <Note>
               {p.note}
+            </Note>
+          </>
+        )}
+      </Section>
+
+      {/* The arrivals, under the prices. Both are read off the same invoice
+          lines, and "when did it last turn up, and how much" is the question
+          a reader asks straight after "what has it been costing". It sits
+          ABOVE the SKU split rather than below it because the reader who has
+          just seen a delivery is the one who then wants to know which code it
+          was billed under — and because the split is where this page stops
+          being one column. */}
+      <Section
+        title="Deliveries"
+        meta={(x) => x.meta}
+        data={sections.deliveries}
+        pending={pending}
+        pad={false}
+        askAbout="when did this ingredient last arrive"
+      >
+        {(x) => (
+          <>
+            <Table columns={deliveryColumns(x.unit)} rows={x.rows} />
+            {/* No `.sec__body` on a table section, so the note carries the
+                body's own inset — same as the two tables below. */}
+            <Note flush>
+              {x.note}
             </Note>
           </>
         )}

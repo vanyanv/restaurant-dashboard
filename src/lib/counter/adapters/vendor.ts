@@ -6,8 +6,9 @@ import {
   getVendorBasketTrends,
 } from "@/lib/counter/vendor-basket"
 import { isChargeRow, isNonIngredientRow } from "@/lib/invoice-charges"
-import { normalizeVendorName } from "@/lib/vendor-normalize"
-import { count, money, pct, titleCase, unitCost } from "@/lib/counter/format"
+import { normalizeVendorName, vendorMatchKey } from "@/lib/vendor-normalize"
+import { displayName } from "@/lib/counter/adapters/vendors"
+import { count, money, pct, plural, titleCase, unitCost } from "@/lib/counter/format"
 import { rangeLabel, toQueryBounds, type DateRange } from "@/lib/counter/date-range"
 import type { ChartSpec } from "@/lib/counter/chart-geometry"
 import {
@@ -32,11 +33,16 @@ import type { FigureProps, MListRow, Row } from "@/components/counter"
  *
  * There is no `Vendor` table. A vendor exists only as `Invoice.vendorName`, a
  * free-text column carrying ten spellings of six suppliers, so the identity
- * this route addresses is **the normalized display name** —
- * `normalizeVendorName`'s output, URL-encoded. That is stable as long as the
- * alias table is (a rename there changes a URL), and it is the only handle
- * available. A `Vendor` row with an id is the right fix and is not this
- * page's to make.
+ * this route addresses is a NAME. The URL segment is the normalized display
+ * name — `normalizeVendorName`'s output, URL-encoded, which is what the
+ * vendors list writes into every `href` — but what the segment is MATCHED
+ * against is `vendorMatchKey`, the same key the list folds its rows on. The
+ * two differ for a supplier the alias table has never seen, where the display
+ * normalizer keeps whatever casing the invoice used; matching on the key is
+ * what keeps this page's spend equal to the row that linked here. Either is
+ * stable only as long as the alias table is (a rename there changes a URL),
+ * and a name is the only handle available. A `Vendor` row with an id is the
+ * right fix and is not this page's to make.
  *
  * ## Lead time again
  *
@@ -185,7 +191,13 @@ async function loadVendor(input: VendorInput): Promise<Loaded | null> {
     orderBy: { invoiceDate: "desc" },
   })
 
-  const mine = all.filter((i) => normalizeVendorName(i.vendorName) === vendor)
+  // Matched on the IDENTITY key, the same one the vendors list folds its rows
+  // on. `normalizeVendorName` alone would gather only the spellings the alias
+  // table knows, so a row the list merged by casing would open a detail page
+  // holding a subset of its own invoices — and the two pages would print two
+  // spend figures for one supplier.
+  const key = vendorMatchKey(vendor)
+  const mine = all.filter((i) => vendorMatchKey(i.vendorName) === key)
   if (mine.length === 0) return null
 
   const totalSpend = all.reduce((t, i) => t + i.totalAmount, 0)
@@ -253,29 +265,39 @@ async function loadVendor(input: VendorInput): Promise<Loaded | null> {
     WHERE i."accountId" = ${accountId} AND li."unitPrice" > 0
     GROUP BY 1, 2, 3`
 
+  // Keyed on the identity key for the same reason `mine` is, with the display
+  // name carried alongside for the "From" column.
   const byIngredient = new Map<
     string,
-    { name: string; byVendor: Map<string, { px: number; unit: string; n: number }> }
+    {
+      name: string
+      byVendor: Map<string, { display: string; px: number; unit: string; n: number }>
+    }
   >()
   for (const row of priced) {
     // A delivery surcharge is not a basket item. It reaches this query because
     // the extractor filed two of them as canonical ingredients — see
     // `isNonIngredientRow` and the Ingredients page's own reach split.
     if (isNonIngredientRow(row.name)) continue
-    const v = normalizeVendorName(row.vendor)
+    const v = vendorMatchKey(row.vendor)
     const entry = byIngredient.get(row.cid) ?? { name: row.name, byVendor: new Map() }
     const prev = entry.byVendor.get(v)
     if (!prev || row.n > prev.n) {
-      entry.byVendor.set(v, { px: row.px, unit: row.unit ?? "unit", n: row.n })
+      entry.byVendor.set(v, {
+        display: normalizeVendorName(row.vendor),
+        px: row.px,
+        unit: row.unit ?? "unit",
+        n: row.n,
+      })
     }
     byIngredient.set(row.cid, entry)
   }
 
   const basket: BasketRow[] = []
   for (const [cid, entry] of byIngredient) {
-    const ours = entry.byVendor.get(vendor)
+    const ours = entry.byVendor.get(key)
     if (!ours) continue
-    const others = [...entry.byVendor.entries()].filter(([v]) => v !== vendor)
+    const others = [...entry.byVendor.entries()].filter(([v]) => v !== key)
     const cheapest = others.sort((a, b) => a[1].px - b[1].px)[0]
     basket.push({
       ingredient: entry.name,
@@ -283,7 +305,7 @@ async function loadVendor(input: VendorInput): Promise<Loaded | null> {
       mine: ours.px,
       mineUnit: ours.unit,
       best: cheapest
-        ? { vendor: cheapest[0], price: cheapest[1].px, unit: cheapest[1].unit }
+        ? { vendor: cheapest[1].display, price: cheapest[1].px, unit: cheapest[1].unit }
         : null,
       gapPct:
         cheapest && cheapest[1].px > 0 ? ((ours.px - cheapest[1].px) / cheapest[1].px) * 100 : null,
@@ -394,7 +416,16 @@ function headOf(d: Loaded): VendorHead {
   }
 }
 
-/** Spend by week — dollars, because one vendor's own spend shares a unit. */
+/**
+ * Spend by week — dollars, because one vendor's own spend shares a unit.
+ *
+ * There is always at least one invoice here: `loadVendor` returns null when
+ * this vendor has none in the range, and the page 404s on that. So an empty
+ * `weekly` is never "no delivery" — it is invoices whose `invoiceDate` the
+ * extractor never read, which have a spend but no week to sit in. The meta
+ * said "no delivery in the range" for that case, which was the one thing it
+ * could not mean.
+ */
 function spendOf(d: Loaded): VendorSpend {
   return {
     chart: {
@@ -413,14 +444,21 @@ function spendOf(d: Loaded): VendorSpend {
     },
     meta:
       d.weekly.length === 0
-        ? "no delivery in the range"
+        ? "no invoice carries a date"
         : `${count(d.weekly.length)} ${d.weekly.length === 1 ? "week" : "weeks"}`,
     // The Invoices page's own point, and it applies harder to one vendor: a
     // week with no bar is a week they did not deliver in, which for a vendor
     // on a three-day cadence is a real gap rather than a rounding artefact.
     note:
-      `One bar per week a delivery landed in. A missing week is a week this vendor did not ` +
-      `deliver, not a week that cost nothing.`,
+      d.weekly.length === 0
+        ? (d.invoices.length === 1
+            ? `The one invoice from this vendor in this range does not carry `
+            : `None of the ${plural(d.invoices.length, "invoice")} from this vendor in this ` +
+              `range carries `) +
+          `the delivery date the extractor reads off the document, so there is no week to ` +
+          `place the spend in. The figures above still count it.`
+        : `One bar per week a delivery landed in. A missing week is a week this vendor did ` +
+          `not deliver, not a week that cost nothing.`,
   }
 }
 
@@ -515,8 +553,16 @@ function basketOf(d: Loaded): VendorBasket {
         : `${count(d.basket.length)} also bought elsewhere`,
     note:
       d.basket.length === 0
-        ? `Nothing this vendor sells is bought from anyone else, so there is no price to compare ` +
-          `against. Seven of the account's 75 priced ingredients have a second source at all.`
+        ? d.ingredients === 0
+          ? `No priced line from this vendor has been matched to an ingredient yet, so there ` +
+            `is nothing here to compare against another vendor's price.`
+          : `Nothing this vendor sells is bought from anyone else, so there is no price to ` +
+            `compare against: ${
+              d.ingredients === 1
+                ? `the one ingredient they bill for is single-sourced to them`
+                : `all ${count(d.ingredients)} of the ingredients they bill for are ` +
+                  `single-sourced to them`
+            }. A second supplier for any of them fills this in.`
         : `Against whichever vendor is cheapest, not one picked in advance. ` +
           (dearer.length > 0
             ? `${count(dearer.length)} ${dearer.length === 1 ? "item is" : "items are"} dearer here. `
@@ -540,13 +586,30 @@ export async function getVendorName(
   vendor: string,
   accountId: string,
 ): Promise<{ name: string } | null> {
-  const rows = await prisma.invoice.findMany({
+  const distinctRows = await prisma.invoice.findMany({
     where: { accountId },
     select: { vendorName: true },
     distinct: ["vendorName"],
   })
-  const hit = rows.some((r) => normalizeVendorName(r.vendorName) === vendor)
-  return hit ? { name: vendor } : null
+  const key = vendorMatchKey(vendor)
+  const spellings = distinctRows.map((r) => r.vendorName).filter((n) => vendorMatchKey(n) === key)
+  if (spellings.length === 0) return null
+  if (spellings.length === 1) return { name: normalizeVendorName(spellings[0]) }
+
+  // More than one raw casing folds to this vendor — exactly the case the
+  // identity-key switch in `adapters/vendors` exists for. That page's row
+  // picks the spelling on the MOST invoices via `displayName`; this counts
+  // the same way and hands the same function the same shape of input, so a
+  // link written against any casing titles the page the way the list linked
+  // it — rather than an unordered `distinct` read picking an arbitrary one.
+  const counts = await prisma.invoice.groupBy({
+    by: ["vendorName"],
+    where: { accountId, vendorName: { in: spellings } },
+    _count: { vendorName: true },
+  })
+  const bySpelling = new Map(spellings.map((s) => [s, 0]))
+  for (const c of counts) bySpelling.set(c.vendorName, c._count.vendorName)
+  return { name: displayName(bySpelling) }
 }
 
 /* -- assembly --------------------------------------------------------- */

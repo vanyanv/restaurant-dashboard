@@ -60,6 +60,10 @@ const LIST_COLUMNS: Column[] = [
   { key: "invoice", label: "Invoice" },
   { key: "vendor", label: "Vendor" },
   { key: "date", label: "Date" },
+  // Beside the date it was billed, because the two are read together: the
+  // adapter's own `dueNote` under this table says what the column is a claim
+  // about, which is the printed date and never a payment.
+  { key: "due", label: "Due" },
   { key: "total", label: "Total", numeric: true },
   { key: "document", label: "Document" },
   { key: "reconciles", label: "Reconciles" },
@@ -348,6 +352,11 @@ function InvoiceTable({
       invoice: { v: <b>{r.number}</b> },
       vendor: r.vendor,
       date: r.date,
+      // The adapter names the tone and never the class — same rule the price
+      // move on the products table below follows. A row with no tone is plain
+      // text, so the column only draws a mark where there is something to
+      // mark.
+      due: r.dueTone ? { v: <Tag tone={r.dueTone}>{r.due}</Tag> } : r.due,
       total: r.total,
       document: r.hasPdf
         ? { v: <span className="held">{r.lineLabel}</span> }
@@ -378,6 +387,7 @@ function InvoiceTable({
         }
       />
       <Table columns={LIST_COLUMNS} rows={rows} />
+      <Note flush>{list.dueNote}</Note>
     </>
   )
 }

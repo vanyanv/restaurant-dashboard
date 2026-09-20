@@ -142,17 +142,22 @@ export function CounterPhoneInvoiceClient({
         data={sections.document}
         pending={pending}
       >
-        {(d) =>
-          d.href ? (
-            <Link className="mbtn" href={d.href} target="_blank" rel="noreferrer">
-              Open the PDF
-            </Link>
-          ) : (
-            <Note bare>
-              {d.note}
-            </Note>
-          )
-        }
+        {/* The link AND the note, the same pair the desk draws. The note was
+            the `else` branch of the link until now, so the custody check it
+            carries — how many rows the stored extraction holds, how many of
+            them became line items, and what the difference is worth — reached
+            a phone only on an invoice with no file at all. Every invoice on
+            this account has its file, so on this surface it reached nobody. */}
+        {(d) => (
+          <>
+            {d.href ? (
+              <Link className="mbtn" href={d.href} target="_blank" rel="noreferrer">
+                Open the PDF
+              </Link>
+            ) : null}
+            <Note bare={!d.href}>{d.note}</Note>
+          </>
+        )}
       </Section>
 
       <Section

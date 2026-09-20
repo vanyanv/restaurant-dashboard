@@ -55,6 +55,8 @@ const PHONE_ROWS = 4
 const QUEUE_ITEMS = 3
 /** A line reconciles when it lands inside half a cent. */
 const EPSILON = 0.02
+/** How near a printed due date has to be before the row is marked. */
+const DUE_SOON_DAYS = 7
 
 export type InvoiceStatusId = "REVIEW" | "APPROVED" | "MATCHED"
 
@@ -80,6 +82,24 @@ export interface InvoiceListRow {
   lineLabel: string
   /** Null when it reconciles; the signed shortfall when it does not. */
   gap: string | null
+  /**
+   * The due date the VENDOR printed — "Sep 19" — or "not printed".
+   *
+   * `Invoice.dueDate` is written by the sync from the extractor's `dueDate`
+   * and, until this column, was selected by one query in the whole Counter
+   * layer (the detail page's `loadInvoice`) and rendered by nothing.
+   */
+  due: string
+  /**
+   * How that date stands against the reader's today: `bad` past it, `warn`
+   * inside `DUE_SOON_DAYS` of it, null otherwise and null when none is
+   * printed.
+   *
+   * It is a claim about the DATE and nothing else. Nothing in this schema
+   * records a payment, so a `bad` row is past the date the vendor printed —
+   * not unpaid. `dueNote` says so on the page.
+   */
+  dueTone: "bad" | "warn" | null
   /** Lower-cased haystack the client's search box matches against. */
   search: string
 }
@@ -101,6 +121,12 @@ export interface InvoiceList {
   /** How many of those fall outside the window, and so are hidden by default. */
   gapOutsideWindow: number
   windowLabel: string
+  /**
+   * What the Due column means, and what it does not — see `listOf`. Counted
+   * over EVERY invoice on the account, not over this window, because "what is
+   * due when" is not a question the trailing thirty days can answer.
+   */
+  dueNote: string
 }
 
 export interface InvoiceSpend {
@@ -195,6 +221,8 @@ interface LoadedInvoice {
   number: string
   vendor: string
   invoiceDate: Date | null
+  /** The date printed on the document. Null on the invoices that print none. */
+  dueDate: Date | null
   totalAmount: number
   subtotal: number | null
   status: InvoiceStatusId
@@ -220,6 +248,8 @@ interface InvoiceData {
   /** The window before the reader's, same length. Null when there is none. */
   prior: LoadedInvoice[] | null
   rangeLabelText: string
+  /** The reader's today, carried so `listOf` can judge a due date against it. */
+  today: Date
 }
 
 function isStatus(v: string): v is InvoiceStatusId {
@@ -262,6 +292,7 @@ async function loadInvoices(input: InvoicesInput): Promise<InvoiceData> {
           invoiceNumber: true,
           vendorName: true,
           invoiceDate: true,
+          dueDate: true,
           totalAmount: true,
           subtotal: true,
           status: true,
@@ -291,6 +322,7 @@ async function loadInvoices(input: InvoicesInput): Promise<InvoiceData> {
     // never merges at all.
     vendor: normalizeVendorName(r.vendorName),
     invoiceDate: r.invoiceDate,
+    dueDate: r.dueDate,
     totalAmount: r.totalAmount,
     subtotal: r.subtotal,
     status: isStatus(r.status) ? r.status : "MATCHED",
@@ -325,6 +357,7 @@ async function loadInvoices(input: InvoicesInput): Promise<InvoiceData> {
     inRange: within(all, range),
     prior: priorRange ? within(all, priorRange) : null,
     rangeLabelText: rangeLabel(range, "custom"),
+    today,
   }
 }
 
@@ -367,6 +400,35 @@ const sum = (list: LoadedInvoice[]) => list.reduce((t, i) => t + i.totalAmount, 
 
 const D = (d: Date) =>
   d.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" })
+
+/**
+ * Whole days from the reader's today to a printed due date.
+ *
+ * Both sides are reduced to a UTC calendar day before subtracting, which is
+ * the zone `Invoice.dueDate` is stored in (`@db.Date`, so Prisma hands back
+ * UTC midnight) and the zone `D` prints it in. Comparing the raw instants
+ * instead would make a date "overdue" for the last hours of the day it is due,
+ * because `today` carries a time of day and a `@db.Date` does not.
+ */
+function daysUntil(due: Date, today: Date): number {
+  const a = Date.UTC(due.getUTCFullYear(), due.getUTCMonth(), due.getUTCDate())
+  const b = Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate())
+  return Math.round((a - b) / 86_400_000)
+}
+
+/**
+ * How a printed due date stands against today.
+ *
+ * `bad` is past the printed date; `warn` is today or inside `DUE_SOON_DAYS`.
+ * Neither says anything about payment — this product records none — and the
+ * list's note carries that sentence so the colour cannot be read as one.
+ */
+function dueToneOf(due: Date | null, today: Date): "bad" | "warn" | null {
+  if (due === null) return null
+  const days = daysUntil(due, today)
+  if (days < 0) return "bad"
+  return days <= DUE_SOON_DAYS ? "warn" : null
+}
 
 function headlineOf(d: InvoiceData): InvoiceHeadline {
   const received = d.received
@@ -491,6 +553,8 @@ function listOf(d: InvoiceData): InvoiceList {
         gap === null
           ? null
           : `${money(Math.abs(gap), { cents: true })} ${gap < 0 ? "short" : "over"}`,
+      due: i.dueDate ? D(i.dueDate) : "not printed",
+      dueTone: dueToneOf(i.dueDate, d.today),
       search: `${i.number} ${i.vendor} ${i.lines.map((l) => l.productName).join(" ")}`.toLowerCase(),
     }
   })
@@ -517,7 +581,56 @@ function listOf(d: InvoiceData): InvoiceList {
     gapCount: rows.filter((r) => r.gap !== null).length,
     gapOutsideWindow: strays.length,
     windowLabel: `last ${RECEIVED_DAYS} days`,
+    dueNote: dueNoteOf(d),
   }
+}
+
+/**
+ * What the Due column is, counted over every invoice on the account.
+ *
+ * Two things have to be said and only one of them is a number.
+ *
+ * The number is over `d.all`, not over the window the table draws, and says
+ * so: an invoice that went past its printed date two months ago is exactly the
+ * one an owner wants counted, and the trailing thirty days is where it is
+ * least likely to be. That is the same argument the "Does not reconcile" chip
+ * won — a figure that names a problem has to be counted over the population
+ * the problem lives in.
+ *
+ * `d.all` is every invoice THIS PAGE LOADED, which is not the same set as
+ * "every invoice on the account": `loadInvoices` scopes it to the stores in
+ * `getScopedStores(accountId, storeId)`, so a selected store narrows it and an
+ * invoice no store matched is outside it either way. The sentence therefore
+ * says "this page holds" rather than "the account has", because that is the
+ * set the number is actually over.
+ *
+ * The other is that **nothing here records that an invoice was PAID.**
+ * `Invoice.status` is PENDING / MATCHED / REVIEW / APPROVED / REJECTED, which
+ * is how far the EXTRACTION got and whether a human agreed with it; the
+ * invoice carries no paid flag and no settlement date, and no other model in
+ * the schema holds an accounts-payable record. (`OtterDailySummary.paymentMethod`
+ * is how a GUEST paid for an order — the other side of the business entirely.)
+ * So a date in the past means the date is in the past. Left unsaid, a red Due
+ * column reads as an unpaid bill, and this product cannot know that.
+ */
+function dueNoteOf(d: InvoiceData): string {
+  const printed = d.all.filter((i) => i.dueDate !== null)
+  const past = printed.filter((i) => daysUntil(i.dueDate!, d.today) < 0).length
+  const soon = printed.filter((i) => {
+    const days = daysUntil(i.dueDate!, d.today)
+    return days >= 0 && days <= DUE_SOON_DAYS
+  }).length
+  const none = d.all.length - printed.length
+
+  return (
+    `Due is the date the vendor printed on the document. Across all ` +
+    `${plural(d.all.length, "invoice")} this page holds — every date, not just this window — ` +
+    `${count(past)} ${pluralWord(past, "is", "are")} past the date it prints, ` +
+    `${count(soon)} ${pluralWord(soon, "falls", "fall")} inside the next ${DUE_SOON_DAYS} days, ` +
+    `and ${count(none)} ${pluralWord(none, "prints", "print")} no due date at all. ` +
+    `Nothing here records whether an invoice was PAID — the schema holds no payment against an ` +
+    `invoice — so a date in the past means the date has passed and nothing more.`
+  )
 }
 
 function spendOf(d: InvoiceData): InvoiceSpend {
@@ -861,11 +974,22 @@ function phoneQueuesOf(d: InvoiceData): InvoicePhoneQueues {
   const broken = d.all.filter((i) => !reconciles(i))
   const flagged = d.all.filter((i) => i.status === "REVIEW" && reconciles(i))
 
+  // The second line carries the due date the desk's Due column carries, and
+  // for the same reason: this is the only invoice LIST a phone has. `.rt em`
+  // is already spoken for by what the row is in the queue FOR — a gap, or the
+  // reason it is held — so the date goes in the detail beside the vendor,
+  // where "past due" is a statement about the printed date and not about
+  // payment, which nothing here records.
+  const due = (i: LoadedInvoice) =>
+    i.dueDate === null
+      ? ""
+      : ` · ${daysUntil(i.dueDate, d.today) < 0 ? "past due" : "due"} ${D(i.dueDate)}`
+
   const row = (i: LoadedInvoice, note: string, tone: "up" | "down"): MListRow => ({
     key: i.id,
     href: `/dashboard/invoices/${i.id}`,
     title: i.number,
-    detail: `${i.vendor}${i.invoiceDate ? ` · ${D(i.invoiceDate)}` : ""}`,
+    detail: `${i.vendor}${i.invoiceDate ? ` · ${D(i.invoiceDate)}` : ""}${due(i)}`,
     value: money(i.totalAmount, { cents: true }),
     note,
     noteTone: tone,
