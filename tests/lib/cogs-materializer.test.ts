@@ -74,7 +74,8 @@ function costResult(overrides: Partial<RecipeCostResult> = {}): RecipeCostResult
 function compute(input: {
   menuRows: MenuRow[]
   mappingByName?: Map<string, string>
-  recipeByName?: Map<string, string>
+  recipeByNameAndCategory?: Map<string, string>
+  recipeByName?: Map<string, string | null>
   modifierUsageByItem?: Map<string, ModifierUsage>
   costFor?: (recipeId: string) => Promise<RecipeCostResult | null>
 }) {
@@ -83,6 +84,7 @@ function compute(input: {
     date: DATE,
     menuRows: input.menuRows,
     mappingByName: input.mappingByName ?? new Map(),
+    recipeByNameAndCategory: input.recipeByNameAndCategory,
     recipeByName: input.recipeByName ?? new Map(),
     modifierUsageByItem: input.modifierUsageByItem ?? new Map(),
     costFor: input.costFor ?? (async () => costResult()),
@@ -146,6 +148,50 @@ describe("computeFoodCogsRows — status decision", () => {
 
     expect(rows[0].recipeId).toBe("r-by-name")
     expect(rows[0].status).toBe("COSTED")
+  })
+
+  it("resolves a name shared by two recipes using the POS row's own category, instead of refusing", async () => {
+    // "Fries" the side and "Fries" the modifier collide on name alone
+    // (recipeByName is null for "fries"), but each POS row carries its own
+    // category, which is the exact tuple Recipe is unique on.
+    const rows = await compute({
+      menuRows: [
+        menuRow({ itemName: "Fries", category: "Sides", fpQuantitySold: 5 }),
+        menuRow({ itemName: "Fries", category: "Modifiers", fpQuantitySold: 2 }),
+      ],
+      recipeByNameAndCategory: new Map([
+        ["fries::sides", "r-fries-side"],
+        ["fries::modifiers", "r-fries-modifier"],
+      ]),
+      recipeByName: new Map([["fries", null]]),
+    })
+
+    const bySides = rows.find((r) => r.category === "Sides")!
+    const byModifiers = rows.find((r) => r.category === "Modifiers")!
+    expect(bySides.recipeId).toBe("r-fries-side")
+    expect(byModifiers.recipeId).toBe("r-fries-modifier")
+    expect(bySides.status).toBe("COSTED")
+    expect(byModifiers.status).toBe("COSTED")
+  })
+
+  it("still refuses to guess when the name is ambiguous even after trying the POS row's category", async () => {
+    // No recipe shares this POS row's exact (name, category) pair, and the
+    // name alone is ambiguous — neither map has an answer, so it's UNMAPPED
+    // rather than an arbitrary pick.
+    const rows = await compute({
+      menuRows: [menuRow({ itemName: "Fries", category: "Combos", fpQuantitySold: 1 })],
+      recipeByNameAndCategory: new Map([
+        ["fries::sides", "r-fries-side"],
+        ["fries::modifiers", "r-fries-modifier"],
+      ]),
+      recipeByName: new Map([["fries", null]]),
+      costFor: async () => {
+        throw new Error("costFor must not be called for an unresolved item")
+      },
+    })
+
+    expect(rows[0].recipeId).toBeNull()
+    expect(rows[0].status).toBe("UNMAPPED")
   })
 
   it("marks a mapped item COSTED with lineCost = unit cost × qty", async () => {
