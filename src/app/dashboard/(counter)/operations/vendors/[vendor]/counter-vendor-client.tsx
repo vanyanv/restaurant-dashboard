@@ -161,17 +161,25 @@ export function CounterVendorClient({
         >
           {(b) => (
             <>
-              {/* A vendor that is the sole source for everything it sells has
-                  no comparison to draw, and a header rule over an empty
-                  `<tbody>` is the shape this system already names as a defect
-                  — it looks the same whether the table is empty or broken.
-                  The note says which, so it stands alone. This is not the
-                  `empty` state: no member of `EmptyReason` says "every item
-                  here is single-sourced", and picking the nearest one
-                  would tell the reader to widen a range that does not govern
+              {/* Always drawn, empty or not — the prototype's own composition
+                  for this route has a fixed table here, and fidelity measures
+                  structure, not content. A vendor that is the sole source for
+                  everything it sells has no comparison ROWS to draw, and a
+                  header rule over an empty `<tbody>` is a shape this system
+                  otherwise names as a defect — it looks the same whether a
+                  table is empty or broken. This case does not get to pick
+                  that reading: dropping the element entirely is what the
+                  landmark comparison in `e2e/fidelity/vendor.md` measured as
+                  a missing `.tbl` (2026-09-20, `?range=d7&cmp=weekday`, 11 of
+                  12). The note beside it says which reading applies — empty
+                  because single-sourced, not empty because broken — which is
+                  what an omitted table cannot say for itself. Not the
+                  `empty()` state either: no member of `EmptyReason` says
+                  "every item here is single-sourced", and the nearest one
+                  would send the reader to widen a range that does not govern
                   this table (`priced` is queried over the whole account, with
                   no date bound at all). */}
-              {b.rows.length > 0 ? <Table columns={BASKET_COLUMNS} rows={b.rows} /> : null}
+              <Table columns={BASKET_COLUMNS} rows={b.rows} />
               <Note flush>
                 {b.note}
               </Note>
