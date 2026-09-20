@@ -22,7 +22,7 @@ import {
 } from "@/components/counter"
 import { INGREDIENT_TABS } from "@/lib/counter/nav"
 import { readCounterParams, writeCounterParams } from "@/lib/counter/url-state"
-import { stepRange } from "@/lib/counter/date-range"
+import { rangeLabel, stepRange } from "@/lib/counter/date-range"
 import type { SectionSources } from "@/lib/counter/adapters/types"
 import type { InboxCluster, IngredientsSections } from "@/lib/counter/adapters/ingredients"
 import { acceptClusterMatch } from "@/lib/counter/actions/ingredient-match"
@@ -42,11 +42,24 @@ import { acceptClusterMatch } from "@/lib/counter/actions/ingredient-match"
  */
 export type CounterIngredientsSections = SectionSources<IngredientsSections>
 
+/**
+ * The catalogue's five, and the one header on this page that still says
+ * thirty days on purpose.
+ *
+ * `move` is read off the eight weekly medians the price monitor is drawn from
+ * — see `moveOf` in the adapter — so it is bounded by that series and cannot
+ * follow a ninety-day range. It cannot follow a one-day range either, which
+ * is the default on every Counter page: a week-over-week median has nothing
+ * to compare a single day against, and a column that emptied itself to "no
+ * prior" the moment somebody picked Yesterday would be worse than a fixed
+ * one. So it stays thirty days and the header says "30d move" rather than a
+ * bare "30d", which beside a date control reads like a unit the control sets.
+ */
 const CATALOGUE_COLUMNS: Column[] = [
   { key: "item", label: "Ingredient" },
   { key: "vendors", label: "Vendors", numeric: true },
   { key: "price", label: "Last price", numeric: true },
-  { key: "move", label: "30d", numeric: true },
+  { key: "move", label: "30d move", numeric: true },
   { key: "recipes", label: "Recipes", numeric: true },
 ]
 
@@ -58,15 +71,31 @@ const MODIFIER_COLUMNS: Column[] = [
   { key: "state", label: "Cost" },
 ]
 
-const PANTRY_COLUMNS: Column[] = [
+/**
+ * The pantry's four. Its spend column DOES follow the control, so its header
+ * carries whatever the control is set to — `Spend, Last 7 days` — instead of
+ * the "Spend, 30d" it used to print whatever the range was. Four columns
+ * either way: same count, different words.
+ *
+ * `rangeLabel(range, presetId)` and not `"custom"` here: a preset's own name
+ * is short enough for a header, where "Aug 20 – Sep 19" would wrap. A custom
+ * range has no name and falls back to its ends, which is the only case this
+ * prints dates.
+ */
+const pantryColumns = (windowName: string): Column[] => [
   { key: "group", label: "Group" },
   { key: "items", label: "Items", numeric: true },
   { key: "costed", label: "Costed", numeric: true },
-  { key: "spend", label: "Spend, 30d", numeric: true },
+  // `.tbl th` uppercases in CSS, so the label is written in sentence case and
+  // the sheet does the shouting.
+  { key: "spend", label: `Spend, ${windowName}`, numeric: true },
 ]
 
 const ASK_SUGGESTIONS = [
-  "Which ingredient prices moved most this month?",
+  // The monitor is eight weeks, not a month — see `pricesOf`. An Ask
+  // suggestion that names a window the page does not draw sends the reader
+  // back a different answer than the chart above it.
+  "Which ingredient prices moved most over the last 8 weeks?",
   "How much do I buy that is in no recipe?",
   "Which invoice lines still match nothing?",
 ]
@@ -276,10 +305,20 @@ export function CounterIngredientsClient({
   const { range, presetId, comparisonId } = counterParams
   const storeName =
     stores.find((s) => s.id === counterParams.storeId)?.name ?? "All stores"
+  // The head names the window, the way every other Counter masthead does. It
+  // used to say only "All stores · the catalogue and what it costs", which was
+  // the honest sub-line for a page whose control moved nothing.
+  const windowLabel = rangeLabel(range, "custom")
+  // Short enough for a column header — see `pantryColumns`.
+  const windowName = rangeLabel(range, presetId)
+  const pantryCols = useMemo(() => pantryColumns(windowName), [windowName])
 
   return (
     <>
-      <PageHead title="Ingredients" sub={`${storeName} · the catalogue and what it costs`}>
+      <PageHead
+        title="Ingredients"
+        sub={`${storeName} · ${windowLabel} · the catalogue and what it costs`}
+      >
         <DateControl
           presetId={presetId}
           comparisonId={comparisonId}
@@ -305,7 +344,7 @@ export function CounterIngredientsClient({
         meta={(p) => p.meta}
         data={sections.prices}
         pending={pending}
-        askAbout="which ingredient prices moved most this month"
+        askAbout="which ingredient prices moved most over the last 8 weeks"
       >
         {(p) => <Chart {...p.chart} fmt={PRICE} />}
       </Section>
@@ -365,7 +404,7 @@ export function CounterIngredientsClient({
         >
           {(p) => (
             <>
-              <Table columns={PANTRY_COLUMNS} rows={p.rows} />
+              <Table columns={pantryCols} rows={p.rows} />
               {/* No `.sec__body` — a table section emits the table alone, so
                   the note carries the body's own inset via `<Note flush>`. */}
               <Note flush>

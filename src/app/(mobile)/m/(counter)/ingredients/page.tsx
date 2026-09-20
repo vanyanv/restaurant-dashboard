@@ -34,6 +34,7 @@ export default async function MobileIngredientsPage({
   const sections = getIngredientsSectionPromises({
     storeId: counterParams.storeId,
     accountId: session.user.accountId,
+    range: counterParams.range,
     today,
   })
 

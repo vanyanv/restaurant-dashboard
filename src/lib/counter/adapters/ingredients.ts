@@ -4,6 +4,7 @@ import { isNonIngredientRow } from "@/lib/invoice-charges"
 import { splitReach, type ReachSplit } from "@/lib/counter/ingredient-reach"
 import { normalizeVendorName } from "@/lib/vendor-normalize"
 import { count, money, pct, plural, titleCase, unitCost } from "@/lib/counter/format"
+import { rangeLabel, toQueryBounds, type DateRange } from "@/lib/counter/date-range"
 import type { ChartSpec } from "@/lib/counter/chart-geometry"
 import { shortLabels } from "@/lib/counter/short-labels"
 import {
@@ -25,6 +26,34 @@ import type { FigureProps, MListRow, QueueItem, Row } from "@/components/counter
  * Measured before it was written; the queries and the numbers are in
  * `docs/counter/measurements/2026-08-28-ingredients.md`. Three of that
  * document's findings changed what this file computes.
+ *
+ * ## The three windows
+ *
+ * This page draws a full `DateControl`, and for a long time nothing behind it
+ * read the range: every window was a constant derived from `today`, so picking
+ * a range pushed the URL, greyed the page and returned byte-identical numbers.
+ * Note 19 — "a range that only changes the label is a lie" — and this was the
+ * version that did not even change the label.
+ *
+ * What the control governs now is SPEND: the catalogue's spend column and the
+ * order it sorts in, the pantry's spend by group, and the modifier volumes.
+ * Those are the reader's window and they move with it.
+ *
+ * Two windows are deliberately NOT the control's, and each says so where it is
+ * printed rather than borrowing the control's authority:
+ *
+ *   - **The price monitor is a fixed 8 weeks.** See `pricesOf`.
+ *   - **The catalogue's move column is a fixed 30 days**, and its header says
+ *     "30d move". It is read off the same weekly medians the monitor is drawn
+ *     from (see `moveOf`), so it is bounded by that 8-week series; and the
+ *     default range on every Counter page is a single day, which has no
+ *     weekly median to compare against at all. A move column that emptied
+ *     itself to "no prior" whenever somebody picked Yesterday would be worse
+ *     than a fixed one, and dishonest on top of it.
+ *
+ * The catalogue's ROW SET is not range-bound either: it is every ingredient
+ * that has ever been invoiced, so a quiet range empties the spend column
+ * rather than the table.
  *
  * ## The catalogue is frozen, and that is the first cell
  *
@@ -171,6 +200,8 @@ export interface IngredientsSections {
 export interface IngredientsInput {
   storeId: string | null
   accountId: string
+  /** The reader's window — what the masthead's `DateControl` is set to. */
+  range: DateRange
   today: Date
 }
 
@@ -186,7 +217,20 @@ interface CatRow {
   /** Percent change against the newest reading at least 30 days older, same unit. */
   move: number | null
   recipes: number
+  /**
+   * Spend inside the READER'S range. Still called `spend30` because the name
+   * is internal and renaming it reaches into four sections for nothing; every
+   * string printed from it names the range it came from.
+   */
   spend30: number
+  /**
+   * Spend over the price monitor's own fixed 8 weeks — what picks the three
+   * series it draws. Not the reader's window, on purpose: the default range is
+   * a single day, and letting one day choose which lines an 8-week chart draws
+   * would make the chart flicker between ingredients for no reason a reader
+   * could see.
+   */
+  spendChart: number
   costed: boolean
 }
 
@@ -227,15 +271,30 @@ interface IngredientData {
   modifiers: ModRow[]
   orphans: ReachSplit
   categories: Array<{ name: string; items: number; costed: number; spend30: number }>
+  /** The reader's window, written out — "Aug 20 – Sep 19". */
+  rangeLabel: string
   today: Date
 }
 
 async function loadIngredients(input: IngredientsInput): Promise<IngredientData> {
-  const { accountId, storeId, today } = input
+  const { accountId, storeId, range, today } = input
+  // The one place a Counter calendar day becomes a database bound — see
+  // `toQueryBounds`. `endDate` is that day at 23:59:59, so an inclusive
+  // comparison keeps the last day of the range instead of dropping it.
+  const { startDate, endDate } = toQueryBounds(range)
 
   const stores = await getScopedStores(accountId, storeId ?? null)
   const storeIds = stores.map((s) => s.id)
 
+  /*
+   * A FIXED THIRTY DAYS, and the only two things still on it.
+   *
+   * `recent` below ("none added in 30 days" on the strip) asks whether the
+   * catalogue pipeline has stopped, and `moveOf` asks how a price has moved.
+   * Neither is a question the date control can ask — see the module docblock's
+   * "The three windows" — and both print the words "30 days" where the reader
+   * can see them.
+   */
   const d30 = new Date(today)
   d30.setDate(d30.getDate() - 30)
 
@@ -289,6 +348,7 @@ async function loadIngredients(input: IngredientsInput): Promise<IngredientData>
         last_unit: string | null
         recipes: number
         spend30: number | null
+        spend_chart: number | null
         costed: boolean
       }>
     >`
@@ -304,19 +364,32 @@ async function loadIngredients(input: IngredientsInput): Promise<IngredientData>
       ), agg AS (
         SELECT l.cid,
           COUNT(DISTINCT UPPER(REGEXP_REPLACE(l.vendor, '[^A-Za-z]', '', 'g')))::int AS vendors,
-          COALESCE(SUM(l.ep) FILTER (WHERE l.d >= ${d30}), 0)::float AS spend30
+          -- The READER'S window, both ends. Not a 30-day offset from today:
+          -- a range that ends in the past is a range somebody stepped back to,
+          -- and an open upper bound would quietly hand them today's spend.
+          COALESCE(SUM(l.ep) FILTER (WHERE l.d >= ${startDate} AND l.d <= ${endDate}), 0)::float
+            AS spend30,
+          -- The price monitor's own 8 weeks, written with the SAME expression
+          -- the weekly query below uses, so the chart and the thing that picks
+          -- its series cannot disagree about where 8 weeks starts.
+          COALESCE(SUM(l.ep) FILTER (
+            WHERE l.d >= DATE_TRUNC('week', ${today}::date) - MAKE_INTERVAL(weeks => ${WEEKS - 1})
+          ), 0)::float AS spend_chart
         FROM l GROUP BY l.cid
       )
       SELECT ci.id, ci.name, ci.category, a.vendors,
              n.px::float AS last_price, n.u AS last_unit,
              (SELECT COUNT(*)::int FROM "RecipeIngredient" ri
                WHERE ri."canonicalIngredientId" = ci.id) AS recipes,
-             a.spend30,
+             a.spend30, a.spend_chart,
              (ci."costPerRecipeUnit" IS NOT NULL) AS costed
       FROM agg a
       JOIN "CanonicalIngredient" ci ON ci.id = a.cid
       LEFT JOIN newest n ON n.cid = a.cid
-      ORDER BY a.spend30 DESC NULLS LAST`,
+      -- Range spend first. The eight-week figure is the TIE-BREAK, because a
+      -- quiet range (the default is one day) leaves most of this column at
+      -- zero and a table ordered on a field of ties is a table in no order.
+      ORDER BY a.spend30 DESC NULLS LAST, a.spend_chart DESC NULLS LAST`,
     prisma.$queryRaw<Array<{ id: string; wk: Date; px: number }>>`
       SELECT li."canonicalIngredientId" AS id,
              DATE_TRUNC('week', i."invoiceDate")::date AS wk,
@@ -361,7 +434,9 @@ async function loadIngredients(input: IngredientsInput): Promise<IngredientData>
           LEFT JOIN "OtterSubItemMapping" m
             ON m."otterSubItemName" = s."name" AND m."storeId" = o."storeId"
           LEFT JOIN "Recipe" r ON r.id = m."recipeId"
-          WHERE o."storeId" = ANY(${storeIds}) AND o."referenceTimeLocal" >= ${d30}
+          WHERE o."storeId" = ANY(${storeIds})
+            AND o."referenceTimeLocal" >= ${startDate}
+            AND o."referenceTimeLocal" <= ${endDate}
           GROUP BY 1 ORDER BY 2 DESC LIMIT 40`,
     prisma.$queryRaw<
       Array<{ id: string; name: string; category: string | null; spend: number }>
@@ -380,7 +455,9 @@ async function loadIngredients(input: IngredientsInput): Promise<IngredientData>
       SELECT COALESCE(ci.category, 'Uncategorised') AS category,
              COUNT(DISTINCT ci.id)::int AS items,
              COUNT(DISTINCT ci.id) FILTER (WHERE ci."costPerRecipeUnit" IS NOT NULL)::int AS costed,
-             COALESCE(SUM(li."extendedPrice") FILTER (WHERE i."invoiceDate" >= ${d30}), 0)::float AS spend30
+             COALESCE(SUM(li."extendedPrice") FILTER (
+               WHERE i."invoiceDate" >= ${startDate} AND i."invoiceDate" <= ${endDate}
+             ), 0)::float AS spend30
       FROM "CanonicalIngredient" ci
       LEFT JOIN "InvoiceLineItem" li ON li."canonicalIngredientId" = ci.id
       LEFT JOIN "Invoice" i ON i.id = li."invoiceId"
@@ -430,6 +507,7 @@ async function loadIngredients(input: IngredientsInput): Promise<IngredientData>
       move: moveOf(c.id),
       recipes: c.recipes,
       spend30: c.spend30 ?? 0,
+      spendChart: c.spend_chart ?? 0,
       costed: c.costed,
     })),
     weekly: weekly.map((w) => ({
@@ -459,6 +537,10 @@ async function loadIngredients(input: IngredientsInput): Promise<IngredientData>
       costed: c.costed,
       spend30: c.spend30,
     })),
+    // "custom" forces the concrete dates rather than a preset name, the same
+    // call `recipes.ts` makes and for the same reason: a sentence can carry
+    // "over Aug 20 – Sep 19" and cannot carry "over Yesterday".
+    rangeLabel: rangeLabel(range, "custom"),
     today,
   }
 }
@@ -596,9 +678,28 @@ function headlineOf(d: IngredientData): IngredientHeadline {
  * per case — the catalogue beside it answers that, in native units — but which
  * of them is MOVING.
  *
- * The three are the biggest by 30-day spend that carry a reading in at least
- * half the weeks. A series drawn from two points is a straight line between
- * two invoices and reads as a trend.
+ * ## EIGHT WEEKS, FIXED, AND IT SAYS SO
+ *
+ * This section does NOT follow the date control, and the decision is
+ * deliberate. The series are weekly medians (`loadIngredients`'s `weekly`
+ * query), and a median is the whole reason the number is trustworthy: a
+ * single reading either side of a window put fries at −40% where eight weekly
+ * medians put them at −13%, because "CS" covers two case sizes. A weekly
+ * median series needs weeks to mean anything, and the default range on a
+ * Counter page is ONE DAY — which is no weeks at all. Following the control
+ * would mean redrawing this chart with one point, or two, whenever anybody
+ * touched it.
+ *
+ * The alternative to holding it fixed is not "a shorter chart", it is a chart
+ * that lies faster. So it stays eight weeks and the `meta` under the section
+ * head states that in words, rather than letting the control above it take
+ * credit for a window it does not set.
+ *
+ * The three drawn are the biggest by spend OVER THOSE EIGHT WEEKS —
+ * `spendChart`, not the reader's window — that carry a reading in at least
+ * half the weeks. Picking them by the range would let a one-day window choose
+ * which lines an eight-week chart draws. A series drawn from two points is a
+ * straight line between two invoices and reads as a trend.
  */
 function pricesOf(d: IngredientData): IngredientPrices {
   const byId = new Map<string, Map<string, number>>()
@@ -613,6 +714,8 @@ function pricesOf(d: IngredientData): IngredientPrices {
 
   const picked = d.catalogue
     .filter((c) => (byId.get(c.id)?.size ?? 0) >= minWeeks)
+    // By the chart's own eight weeks, not by `d.catalogue`'s range-spend order.
+    .sort((a, b) => b.spendChart - a.spendChart)
     .slice(0, SERIES)
 
   // `--bad`, `--signal`, `--ink-3` — the prototype's own three, in its order.
@@ -656,10 +759,14 @@ function pricesOf(d: IngredientData): IngredientPrices {
   return {
     chart: build(158, true),
     phoneChart: build(116, false),
+    // The window, stated. This chart is the one section on the page that does
+    // not follow the control above it, so its meta says which weeks it is on
+    // instead of leaving the reader to assume the range applies here too.
     meta:
       picked.length === 0
-        ? "no ingredient has enough readings"
-        : `${count(picked.length)} biggest by spend · change from ${D(weeks[0])}`,
+        ? `no ingredient has enough readings · a fixed ${WEEKS} weeks, not the date range`
+        : `${count(picked.length)} biggest over a fixed ${WEEKS} weeks · ` +
+          `change from ${D(weeks[0])} · not the date range`,
   }
 }
 
@@ -684,7 +791,10 @@ function catalogueOf(d: IngredientData): IngredientCatalogue {
         recipes: c.recipes === 0 ? { v: "—", cls: "hot" } : count(c.recipes),
       },
     })),
-    meta: `${count(d.total)} items · ${count(shown.length)} by spend`,
+    // Every ingredient ever invoiced is in the table; what the range governs
+    // is the spend that ORDERS it, so the meta names the window rather than
+    // saying a bare "by spend".
+    meta: `${count(d.total)} items · ${count(shown.length)} by spend over ${d.rangeLabel}`,
   }
 }
 
@@ -784,7 +894,10 @@ function modifiersOf(d: IngredientData): IngredientModifiers {
         state: m.mapsTo === null ? { v: "no recipe", cls: "hot" } : "costed",
       },
     })),
-    meta: `${count(d.modifiers.length)} modifiers · ${count(mapped)} mapped`,
+    // These are the modifiers SOLD inside the reader's window, not every
+    // modifier that exists, so the count is a claim about the range and says
+    // which range it is.
+    meta: `${count(d.modifiers.length)} modifiers over ${d.rangeLabel} · ${count(mapped)} mapped`,
   }
 }
 
@@ -859,7 +972,7 @@ function pantryOf(d: IngredientData): IngredientPantry {
     note: gapped.length === 0
       ? `Every group is fully costed.`
       : `${gapped.map((g) => g.name).join(" and ")} carry ` +
-        `${money(gapped.reduce((t, g) => t + g.spend30, 0))} of the last thirty days between ` +
+        `${money(gapped.reduce((t, g) => t + g.spend30, 0))} of ${d.rangeLabel} between ` +
         `${gapped.length === 1 ? "it" : "them"} and ` +
         `${gapped.reduce((t, g) => t + (g.items - g.costed), 0)} of those items have no cost at ` +
         `all, so that spend reaches no plate.`,
@@ -885,6 +998,9 @@ function movingOf(d: IngredientData): IngredientMoving {
       // A price RISE is the bad one — this is what the restaurant pays.
       noteTone: (c.move ?? 0) > 0 ? "down" : "up",
     })),
+    // The same fixed thirty days the desk's "30d move" column is on — see the
+    // module docblock. It is written out here because the phone has no control
+    // at all, so the window has to come from somewhere.
     meta: "30 days",
   }
 }
