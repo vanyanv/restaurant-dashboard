@@ -208,33 +208,50 @@ export function CounterRecipeClient({
           )}
         </Section>
 
-        <Section title="What it costs" meta={() => "live"} data={sections.cost} pending={pending}>
-          {(c) => (
-            <>
-              <span className="k">Cost per serving</span>
-              <div className="big" style={{ margin: "2px 0 10px" }}>
-                {c.perServing}
-              </div>
-              {/* CostBar draws its own legend — this rendered it twice. */}
-              <CostBar bands={c.bands} />
-              <div
-                style={{
-                  marginTop: 12,
-                  paddingTop: 11,
-                  borderTop: "1px solid var(--line-strong)",
-                }}
-              >
-                <MoneyLines rows={c.money} />
-              </div>
-              <Note>
-                {c.foot}
-              </Note>
-              <Note>
-                {c.note}
-              </Note>
-            </>
-          )}
-        </Section>
+        {/* `.rcost` is the design's cost rail, and the ONLY rule that sizes
+            the `.big` figure below is `.rcost .big` (counter-components.css).
+            Nothing in `src/` emitted `.rcost`, so that rule never matched and
+            the number this whole page exists to show inherited body size —
+            13px where the design specifies `--t-hero`, 30px. The fidelity
+            gate could not see it: its landmark set for this route is
+            `.btn .btnrow .ch .moneyline .sec .sec__body .sec__head .strip`,
+            and `.rcost` is not counted, so a green run said nothing about a
+            figure rendering at 43% of its size.
+
+            This wraps the one Section rather than rebuilding the prototype's
+            full `.rgrid` rail: moving the other two panels into it would
+            reorder landmarks, and reordering is what the fidelity comparison
+            actually checks. The wrapper is a grid item in the same `.split`
+            cell the Section already occupied, so nothing moves. */}
+        <div className="rcost">
+          <Section title="What it costs" meta={() => "live"} data={sections.cost} pending={pending}>
+            {(c) => (
+              <>
+                <span className="k">Cost per serving</span>
+                <div className="big" style={{ margin: "2px 0 10px" }}>
+                  {c.perServing}
+                </div>
+                {/* CostBar draws its own legend — this rendered it twice. */}
+                <CostBar bands={c.bands} />
+                <div
+                  style={{
+                    marginTop: 12,
+                    paddingTop: 11,
+                    borderTop: "1px solid var(--line-strong)",
+                  }}
+                >
+                  <MoneyLines rows={c.money} />
+                </div>
+                <Note>
+                  {c.foot}
+                </Note>
+                <Note>
+                  {c.note}
+                </Note>
+              </>
+            )}
+          </Section>
+        </div>
 
         {/* `P.recipe`'s "One line has no cost", which was a red paragraph at
             the foot of "What it costs". The design gives it a panel, and it

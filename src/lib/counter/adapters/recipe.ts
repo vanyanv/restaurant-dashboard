@@ -220,16 +220,27 @@ async function loadRecipe(input: RecipeInput): Promise<Loaded | null> {
       prisma.$queryRaw<Array<{ name: string; stores: number }>>`
         SELECT "otterSubItemName" AS name, COUNT(DISTINCT "storeId")::int AS stores
         FROM "OtterSubItemMapping" WHERE "recipeId" = ${recipeId} GROUP BY 1 ORDER BY 2 DESC, 1`,
-      prisma.$queryRaw<
-        Array<{ d: Date; unit_cost: number | null; qty: number; partial: boolean }>
-      >`
-        SELECT date AS d, AVG("unitCost")::float AS unit_cost,
-               SUM("qtySold")::int AS qty, BOOL_OR("partialCost") AS partial
-        FROM "DailyCogsItem"
-        WHERE "recipeId" = ${recipeId}
-          AND date >= (${endDate}::date - MAKE_INTERVAL(days => ${TREND_DAYS - 1}))
-          AND date <= ${endDate}::date
-        GROUP BY 1 ORDER BY 1`,
+      // Scoped by store, like `sold` below it. Without the `storeId` clause
+      // this averaged every store's cost for the recipe while the strip above
+      // the chart honoured the switcher — so picking one store moved the
+      // figures and left the chart alone. `getScopedStores` returns every
+      // store on the account when none is picked, so the clause is a no-op at
+      // "All stores" and a real filter otherwise.
+      storeIds.length === 0
+        ? Promise.resolve(
+            [] as Array<{ d: Date; unit_cost: number | null; qty: number; partial: boolean }>,
+          )
+        : prisma.$queryRaw<
+            Array<{ d: Date; unit_cost: number | null; qty: number; partial: boolean }>
+          >`
+            SELECT date AS d, AVG("unitCost")::float AS unit_cost,
+                   SUM("qtySold")::int AS qty, BOOL_OR("partialCost") AS partial
+            FROM "DailyCogsItem"
+            WHERE "recipeId" = ${recipeId}
+              AND "storeId" = ANY(${storeIds})
+              AND date >= (${endDate}::date - MAKE_INTERVAL(days => ${TREND_DAYS - 1}))
+              AND date <= ${endDate}::date
+            GROUP BY 1 ORDER BY 1`,
       storeIds.length === 0
         ? Promise.resolve([] as Array<{ qty: number; revenue: number; price: number | null }>)
         : prisma.$queryRaw<Array<{ qty: number; revenue: number; price: number | null }>>`
