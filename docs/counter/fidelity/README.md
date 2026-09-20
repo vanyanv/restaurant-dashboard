@@ -6,22 +6,20 @@ how an Overview with six bordered cards shipped against a design with sixteen
 structural elements, and how it survived seven plans and a permanently green
 gate. This directory is the record of the thing that can see the difference.
 
-> **A page is not done until `npm run fidelity -- --grep <pageId>` is clean on
-> both projects and both themes, its manifest entry says `"counter"`, and its
-> report is committed.**
+> **For a material rendered-UI change, run
+> `npm run fidelity -- --grep <pageId>` once after the final edit.**
 >
-> Run it twice: once while building, and once more after the last fix, from a
-> cold `npm run build && npm run start` rather than the dev server. Dev-mode
-> rendering has hidden fidelity defects on this project before — the doubled
-> shell and the dead `border-ct-*` utilities both looked fine until a
-> production build.
+> Do not run the full suite by default. Use it only when explicitly requested,
+> for a release check, or in scheduled automation. Backend-only changes,
+> documentation, tests, and mechanical refactors that do not change rendered
+> output do not require fidelity.
 
 ## Running it
 
 ```bash
-npm run dev                            # or build && start for the second run
-npm run fidelity                       # every page, both projects
-npm run fidelity -- --grep overview    # one page
+npm run dev                            # local server used by the targeted check
+npm run fidelity -- --grep overview    # normal case: one page, both projects
+npm run fidelity                       # explicit full/release sweep only
 npm run fidelity:report                # renders docs/counter/fidelity/<pageId>.md
 npm run e2e:report                     # the HTML report, with both screenshots attached
 ```

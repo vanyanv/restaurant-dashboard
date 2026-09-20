@@ -4,14 +4,21 @@ Multi-store restaurant analytics dashboard. Next.js 16 (App Router, Turbopack), 
 
 Note: `next lint` was removed in Next 16 and this repo has no ESLint installed. The whole-project gate is `npm test && npm run tokens && npx tsc --noEmit && npm run typecheck:scripts && npm run build`. The `typecheck:scripts` step matters: `scripts/` is outside the main tsconfig, and on 2026-09-06 a monitoring module was deleted while two cron reporter scripts still imported it. `tsc --noEmit` stayed green, CI caught it and nobody looked (CI on `main` was already red), and every scheduled cron failed for three days.
 
-**That gate cannot see a page that renders the wrong thing** — run
-`npm run fidelity` as well whenever you change what a Counter page RENDERS.
-`scripts/counter-lint.ts`'s own note says why: tokens "checks colour literals
-and status branching. It has no opinion about whether a page matches its
-design, which is how a Counter Overview shipped with six bordered cards where
-the prototype has sixteen structural elements, and how that survived seven
-plans against a permanently green gate." The fidelity suite is the thing that
-can see it, and it needs the dev server on :3000 and a working database.
+**That gate cannot see a page that renders the wrong thing.** When a change
+materially changes a Counter page's rendered UI, run one targeted fidelity
+check after the final edit:
+
+```bash
+npm run fidelity -- --grep <pageId>
+```
+
+Do not run the full `npm run fidelity` suite after routine changes. The full
+desktop-and-mobile sweep is reserved for an explicit request, a release check,
+or a scheduled run. Skip fidelity entirely for backend-only work, tests,
+mechanical refactors with no rendered output change, and documentation. The
+targeted check needs the dev server and a working database; if fixture data is
+missing, report that precondition instead of treating empty-state landmark
+differences as a product regression.
 
 ---
 

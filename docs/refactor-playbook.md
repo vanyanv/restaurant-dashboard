@@ -213,20 +213,18 @@ are back in Batch A's shape and owe a shim.
 
 ### The gate that replaces manual smoking
 
-Step 8 ends with "manually smoke the routes the consumer map flagged." For a
-surface with a **fidelity gate** (`npm run fidelity`, `e2e/fidelity/`), run the
-gate for that page instead, *before and after*, and diff the numbers — it
-compares the rendered DOM landmark by landmark against the prototype, on both a
-desktop and a phone viewport, which is strictly more than a human confirming a
-page looks right. Batch B: desk 76 matched / 0 extra / 0 rendering differences
-and phone 44 / 0 / 0, identical across the refactor.
+Step 8 ends with "manually smoke the routes the consumer map flagged." If the
+refactor materially changes rendered UI on a surface with a fidelity gate, run
+one targeted check after the final edit (`npm run fidelity -- --grep
+<pageId>`). Do not run the full suite for a page-local refactor. If rendered
+output is not meant to change, the focused unit/integration tests and consumer
+checks are sufficient.
 
 Two rules that come with it:
 
-- **Capture the "before" run before the first line moves.** A gate you first
-  run after the change tells you the page passes, not that it did not move.
-  The numbers live in the gitignored `.fidelity/*.json`, which is where the
-  matched/extra/style counts come from — the console only prints pass/fail.
+- **Capture a "before" run only when measuring an intentional visual change.**
+  Routine refactors do not owe two fidelity runs. The numbers live in the
+  gitignored `.fidelity/*.json`; the console only prints pass/fail.
 - **If a number moves, the extraction changed behaviour.** Find out why. Never
   adjust the baseline (`PAGES[].baseline` in `e2e/fidelity/manifest.ts`) to
   make a refactor green — that is the permanently-green gate this suite was
