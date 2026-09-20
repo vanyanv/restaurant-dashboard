@@ -14,6 +14,7 @@
     "drift": "tsx scripts/drift-watch.ts",
     "db:seed": "tsx prisma/seed.ts",
     "db:drift": "prisma migrate diff --from-config-datasource --to-schema prisma/schema.prisma --exit-code",
+    "audit:sales-composition": "tsx scripts/audit-gross-sales-composition.ts",
     "db:reset": "prisma db push --force-reset && npm run db:seed",
     "shots:auth": "tsx scripts/mobile-auth.ts",
     "shots": "tsx scripts/mobile-shots.ts",
