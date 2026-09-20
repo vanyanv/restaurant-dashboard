@@ -241,3 +241,78 @@ describe("loadCountEntry · tenancy", () => {
     expect(asMock(loadStoreInventoryContext)).not.toHaveBeenCalled()
   })
 })
+
+/**
+ * The three ways a walk comes back unusable.
+ *
+ * `baseAt === null` was guarded from the start. The other two were not, and
+ * they matter more than they look: an expectation here is not only drawn, it
+ * is saved onto the line and read back by `applyCalibrationUpdatesForCount`
+ * as a TRAINING SAMPLE — and `saveStockCountLine` now writes the column once,
+ * so nothing in the app can clear a bad value afterwards.
+ *
+ * `partial` is the one that fires in production. `sumDeliveries` in
+ * `@/lib/inventory/usage-math` sets it and SILENTLY DROPS the delivery line
+ * whenever its unit will not convert to the recipe unit; `convertDelivered`'s
+ * docblock there measures the damage on this very account — 31 of 76
+ * ingredients holding a negative on-hand, Coke Mexican Glass at −1,694,000 ml
+ * — and records that the pack columns are populated on only 61 of 76. So
+ * adding those columns to the adapter's `select` fixes the ingredients that
+ * have a pack row and leaves the rest understated, with no way to say by how
+ * much.
+ */
+describe("loadCountEntry · walks that must not be recorded", () => {
+  const anchored = (over: Record<string, unknown>) => {
+    mockCountRow({ anchored: true })
+    asMock(runningOnHandFromContext).mockReturnValue({
+      baseQty: 40,
+      baseAt: CLOSED_AT,
+      deliveriesQty: 0,
+      depletionQty: 1_200,
+      adjustmentsQty: 0,
+      onHand: 12,
+      partial: false,
+      ...over,
+    })
+  }
+
+  it("records nothing when deliveries did not all convert, however plausible the number", async () => {
+    // Deliberately a believable figure: the point is that `partial` alone
+    // disqualifies it, with no help from a sign or a range check.
+    anchored({ partial: true, onHand: 12 })
+
+    const entry = await entrySection()
+
+    expect(entry.rows[0].estimate).toBeNull()
+  })
+
+  it("records nothing for a negative on-hand — a shelf cannot hold less than nothing", async () => {
+    anchored({ onHand: -1_160 })
+
+    const entry = await entrySection()
+
+    expect(entry.rows[0].estimate).toBeNull()
+  })
+
+  it("DOES record a zero, because 'we think you are out' is a real thing to check", async () => {
+    // The distinction from `run-out.ts`, which skips `onHand <= 0`: a cover
+    // figure from zero is meaningless, but an expectation of zero is exactly
+    // the prediction a counter finding one crate left should contradict.
+    anchored({ onHand: 0 })
+
+    const entry = await entrySection()
+
+    expect(entry.rows[0].estimate).toBe(0)
+  })
+
+  it("names the conversion gap in the copy, not just the missing anchor", async () => {
+    anchored({ partial: true })
+
+    const entry = await entrySection()
+
+    expect(entry.note).toContain("not for want of a closed count")
+    expect(entry.note).toContain("do not all convert to the unit on the shelf")
+    // The no-anchor sentence would be a false statement about this store.
+    expect(entry.note).not.toContain("and there is none")
+  })
+})

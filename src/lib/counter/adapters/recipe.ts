@@ -223,9 +223,17 @@ async function loadRecipe(input: RecipeInput): Promise<Loaded | null> {
       // Scoped by store, like `sold` below it. Without the `storeId` clause
       // this averaged every store's cost for the recipe while the strip above
       // the chart honoured the switcher — so picking one store moved the
-      // figures and left the chart alone. `getScopedStores` returns every
-      // store on the account when none is picked, so the clause is a no-op at
-      // "All stores" and a real filter otherwise.
+      // figures and left the chart alone.
+      //
+      // At "All stores" the clause is NOT a no-op, and it is worth being exact
+      // about why: `getScopedStores` -> `getAccountStores` ends in
+      // `rows.filter((s) => s.isActive)`, which that function's own docblock
+      // calls its contract. So a CLOSED location's days drop out of this
+      // average. That is the same set `sold` beside it has always used, so the
+      // chart and the strip now agree — which is the whole point of the fix —
+      // but an account that shut a store will see this trend move, with no
+      // control on the page to explain it. An account whose stores are all
+      // inactive gets the empty guard below and no chart at all.
       storeIds.length === 0
         ? Promise.resolve(
             [] as Array<{ d: Date; unit_cost: number | null; qty: number; partial: boolean }>,

@@ -45,10 +45,34 @@ describe("count session tenancy", () => {
     expect(asMock(prisma.stockCount.findUnique)).not.toHaveBeenCalled()
     const where = asMock(prisma.stockCount.findFirst).mock.calls[0][0].where
     expect(where).toMatchObject({ id: "count_theirs", store: { accountId: "acct_ours" } })
+    // A null count row stops everything: no anchor probe, no catalogue read.
+    expect(asMock(prisma.stockCount.findFirst)).toHaveBeenCalledTimes(1)
   })
 
   it("loads the entry section for our own countId", async () => {
-    asMock(prisma.stockCount.findFirst).mockResolvedValue({ id: "count_ours", status: "IN_PROGRESS" })
+    // `storeId` and `startedAt` are NOT NULL in the schema, and since
+    // 2026-09-20 `loadCountEntry` reads both: the count row supplies the store
+    // the expectation walk runs against and the as-of moment it is anchored
+    // to. The fixture carries them so this test exercises the real shape.
+    //
+    // The same `findFirst` mock answers two different calls here — the count
+    // row and the "has this store ever closed a count" anchor probe. The
+    // probe is told apart by `where.status` and answered NULL, which keeps
+    // this test about the account boundary: with no anchor there is no
+    // expectation prefetch, so `loadStoreInventoryContext` is never reached
+    // and its six models need no mocks of their own. See
+    // `stock-counts-estimate.test.ts` for the anchored path.
+    asMock(prisma.stockCount.findFirst).mockImplementation(
+      async (args: { where: Record<string, unknown> }) =>
+        args.where.status === "COMPLETED"
+          ? null
+          : {
+              id: "count_ours",
+              status: "IN_PROGRESS",
+              storeId: "store_ours",
+              startedAt: new Date("2026-09-18T21:04:00.000Z"),
+            },
+    )
     asMock(prisma.canonicalIngredient.findMany).mockResolvedValue([
       { id: "ci_flour", name: "flour", category: "Dry Goods", recipeUnit: "lb" },
     ])

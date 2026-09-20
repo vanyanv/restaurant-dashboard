@@ -44,10 +44,14 @@ const LINE_COLUMNS: Column[] = [
 const ENTRY_COLUMNS: Column[] = [
   { key: "ingredient", label: "Ingredient" },
   { key: "category", label: "Where" },
-  // NO "Expected" column. `loadCountEntry`'s docblock has the measurement:
-  // computing the model's expectation for all 76 ingredients took the page
-  // over three minutes to load, and a count page nobody can open is not a
-  // trade worth making for a column.
+  // STILL no "Expected" column — but no longer for the reason this comment
+  // used to give. The 180-second measurement was of the PER-INGREDIENT walk;
+  // since 2026-09-20 `loadCountEntry` computes every expectation in six
+  // store-wide queries and `row.estimate` arrives here populated. Adding the
+  // column is a render change, and `npm run fidelity` — the only gate that
+  // can see one — needs a dev server and a database. So it waits for a run,
+  // not for a measurement. Until then the number is carried down with each
+  // save and shown to nobody.
   { key: "counted", label: "On the shelf", numeric: true },
 ]
 
@@ -71,14 +75,28 @@ const ENTRY_COLUMNS: Column[] = [
  * page reloaded before they reached a Save button at the bottom of seventy-six
  * ingredients.
  *
- * ## NO EXPECTED COLUMN, AND THAT IS A MEASURED CHOICE
+ * ## NO EXPECTED COLUMN YET — AND THE OLD REASON NO LONGER HOLDS
  *
  * The model's expected on-hand belongs beside the box — it catches a 4 typed
  * where 40 belongs, and the gap between the two is the training signal for
- * the on-hand model. It is not here because computing it costs the page more
- * than three minutes to open. `loadCountEntry`'s docblock carries the
- * measurement and the real fix, which is to freeze the estimates once when
- * the count is OPENED rather than recompute all 76 on every render.
+ * the on-hand model. This docblock used to say it was absent because
+ * computing it cost the page three minutes to open. That was true of the
+ * per-ingredient walk and is no longer true of anything: `loadCountEntry`
+ * takes every expectation at `StockCount.startedAt` through
+ * `loadStoreInventoryContext`, six store-wide queries however many
+ * ingredients there are, and `row.estimate` is populated by the time this
+ * component renders. It travels back down on every save and feeds the
+ * calibration.
+ *
+ * What is left is that adding a column changes what this page RENDERS, and
+ * the only gate that can see a render change is `npm run fidelity`, which
+ * needs a dev server on :3000 and a live database. So the column is a
+ * deliberate omission pending that run, not a performance trade — and until
+ * it lands, the entry note's "N of M ingredients also record what was
+ * expected" is telling the counter about a number this page does not show
+ * them. The phone twin
+ * (`src/app/(mobile)/m/(counter)/operations/inventory/counts/[id]/`) is in
+ * exactly the same position and should gain it in the same change.
  *
  * ## CLOSING IS WHAT MAKES IT COUNT
  *

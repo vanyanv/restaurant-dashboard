@@ -173,3 +173,85 @@ describe("ingredients adapter · the date control drives the queries", () => {
     ).toBe(true)
   })
 })
+
+/**
+ * The note that told the reader the opposite of the table above it.
+ *
+ * Making `spend30` the reader's range was the fix; it also quietly broke a
+ * sentence built on the old fixed window. `pantryOf` picked the groups worth
+ * naming with `costed < c.items && c.spend30 > 0`, which was safe while
+ * `spend30` was a trailing thirty days — some group always had spend in it.
+ * It is the reader's range now, and `DEFAULT_PRESET` is `yesterday`, so on
+ * any day a restaurant took no delivery every group fell out of that filter
+ * and the note printed "Every group is fully costed." directly beneath a
+ * table painting its uncosted counts red.
+ *
+ * What is uncosted is a fact about the catalogue. Only the RANKING is the
+ * range's business.
+ */
+describe("ingredients adapter · the pantry note and the range", () => {
+  const CATEGORIES = [
+    { category: "Produce", items: 9, costed: 4, spend30: 0 },
+    { category: "Dairy", items: 6, costed: 6, spend30: 0 },
+  ]
+
+  /**
+   * The category query returns rows, and the catalogue counts return a
+   * non-zero `total` so the section does not classify as empty — `isEmpty` is
+   * `(d) => d.total === 0`, which would swallow the note under test.
+   */
+  const mockCategories = (rows: typeof CATEGORIES) => {
+    asMock(prisma.$queryRaw).mockImplementation(async (...call: unknown[]) => {
+      const sql = (call[0] as TemplateStringsArray).join(" ")
+      if (sql.includes("Uncategorised")) return rows
+      if (sql.includes("AS recent")) {
+        const items = rows.reduce((t, c) => t + c.items, 0)
+        return [{ total: items, recent: 0, costed: rows.reduce((t, c) => t + c.costed, 0) }]
+      }
+      return []
+    })
+  }
+
+  const pantryNote = async (range: DateRange) => {
+    const sections = getIngredientsSectionPromises({
+      storeId: null,
+      accountId: ACCOUNT,
+      range,
+      today: TODAY,
+    })
+    const pantry = await sections.pantry
+    if (pantry.status !== "ready") throw new Error(`pantry ${pantry.status}`)
+    return pantry.data.note
+  }
+
+  it("does not claim every group is costed just because nothing was bought in the range", async () => {
+    mockCategories(CATEGORIES)
+
+    // A one-day range with no invoice on it — the default preset's shape.
+    const note = await pantryNote({ start: new Date(2026, 8, 19), end: new Date(2026, 8, 19) })
+
+    expect(note).not.toContain("Every group is fully costed")
+    expect(note).toContain("Produce")
+    // And it says WHY there is no money beside the gap, rather than printing
+    // "$0.00 of Sep 19" as though that were the size of the problem.
+    expect(note).toContain("was bought in")
+  })
+
+  it("still says every group is costed when that is actually true", async () => {
+    mockCategories([{ category: "Dairy", items: 6, costed: 6, spend30: 0 }])
+
+    const note = await pantryNote({ start: new Date(2026, 8, 19), end: new Date(2026, 8, 19) })
+
+    expect(note).toBe("Every group is fully costed.")
+  })
+
+  it("prices the gap when the range does contain the spend", async () => {
+    mockCategories([{ category: "Produce", items: 9, costed: 4, spend30: 4_160 }])
+
+    const note = await pantryNote(RANGE)
+
+    expect(note).toContain("Produce")
+    expect(note).toContain("$4,160")
+    expect(note).toContain("reaches no plate")
+  })
+})

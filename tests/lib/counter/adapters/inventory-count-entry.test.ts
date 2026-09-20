@@ -32,7 +32,17 @@ describe("inventory scope and count units", () => {
     }))
   })
   it("loads converted recipe quantities for the recipe-unit entry field", async () => {
-    db.stockCount.findFirst.mockResolvedValue({ id: "count", status: "IN_PROGRESS" })
+    // Two `stockCount.findFirst` calls reach this mock: the count row, and
+    // the "has this store ever closed a count" anchor probe that gates the
+    // expectation prefetch. Answering the probe NULL keeps this test on its
+    // subject (recipe-unit conversion) without mocking the six models
+    // `loadStoreInventoryContext` would then read. `storeId` and `startedAt`
+    // are NOT NULL in the schema and `loadCountEntry` reads both.
+    db.stockCount.findFirst.mockImplementation(async (args: { where: Record<string, unknown> }) =>
+      args.where.status === "COMPLETED"
+        ? null
+        : { id: "count", status: "IN_PROGRESS", storeId: "glendale", startedAt: new Date() },
+    )
     db.canonicalIngredient.findMany.mockResolvedValue([{ id: "beef", name: "beef", category: "Food", recipeUnit: "oz" }])
     db.stockCountLine.findMany.mockResolvedValue([{ canonicalIngredientId: "beef", nativeQty: 2, nativeUnit: "lb", qtyInRecipeUnit: 32 }])
     const section = await getCountSessionSectionPromises({ accountId: "account", countId: "count" }).entry

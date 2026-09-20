@@ -792,9 +792,15 @@ function catalogueOf(d: IngredientData): IngredientCatalogue {
       },
     })),
     // Every ingredient ever invoiced is in the table; what the range governs
-    // is the spend that ORDERS it, so the meta names the window rather than
-    // saying a bare "by spend".
-    meta: `${count(d.total)} items · ${count(shown.length)} by spend over ${d.rangeLabel}`,
+    // is the spend that ORDERS it. The ORDER BY falls back to the 8-week
+    // `spend_chart` wherever the range's own spend ties — and on the default
+    // one-day preset it ties at zero for nearly every row, so the visible
+    // order is the 8-week one. Claiming "by spend over Sep 19" for twelve rows
+    // that each spent nothing on Sep 19 would be false, so the meta says which
+    // of the two it actually ranked on.
+    meta:
+      `${count(d.total)} items · ${count(shown.length)} by spend over ` +
+      (shown.some((c) => c.spend30 > 0) ? d.rangeLabel : `the last 8 weeks`),
   }
 }
 
@@ -948,12 +954,25 @@ function workOf(d: IngredientData): IngredientWork {
 }
 
 function pantryOf(d: IngredientData): IngredientPantry {
-  // Groups where money is concentrated AND something is uncosted — the two
-  // together, because an uncosted item in a $416 group is not worth a sentence.
-  const gapped = d.categories
-    .filter((c) => c.costed < c.items && c.spend30 > 0)
-    .sort((a, b) => b.spend30 - a.spend30)
-    .slice(0, 2)
+  // Groups with something uncosted, ranked by the money in the reader's range.
+  //
+  // The `costed < c.items` test and the RANKING are deliberately separate, and
+  // that separation is the fix for a bug this file shipped: the filter used to
+  // be `costed < c.items && c.spend30 > 0`, which was safe only while
+  // `spend30` was a fixed trailing 30 days. It is the reader's range now, and
+  // the default preset on every Counter page is `yesterday` — so on any day a
+  // restaurant took no delivery, EVERY group fell out of `gapped` and the note
+  // printed "Every group is fully costed." directly beneath a table painting
+  // its uncosted counts red. A window quietly changing what a sentence means
+  // is the exact defect this range work exists to remove; it must not be
+  // reintroduced by the ranking.
+  //
+  // So: what is uncosted is a fact about the catalogue and never about the
+  // range. The range only decides which two are worth naming.
+  const uncosted = d.categories.filter((c) => c.costed < c.items)
+  const gapped = [...uncosted].sort((a, b) => b.spend30 - a.spend30).slice(0, 2)
+  const gappedSpend = gapped.reduce((t, g) => t + g.spend30, 0)
+  const gappedItems = gapped.reduce((t, g) => t + (g.items - g.costed), 0)
 
   return {
     rows: d.categories.map((c) => ({
@@ -969,13 +988,23 @@ function pantryOf(d: IngredientData): IngredientPantry {
     // The two groups holding the most money are the two smallest, and each has
     // half its items costed. It is not a rounding gap — it is the two largest
     // single ingredients in the account sitting beside an uncosted twin.
-    note: gapped.length === 0
-      ? `Every group is fully costed.`
-      : `${gapped.map((g) => g.name).join(" and ")} carry ` +
-        `${money(gapped.reduce((t, g) => t + g.spend30, 0))} of ${d.rangeLabel} between ` +
-        `${gapped.length === 1 ? "it" : "them"} and ` +
-        `${gapped.reduce((t, g) => t + (g.items - g.costed), 0)} of those items have no cost at ` +
-        `all, so that spend reaches no plate.`,
+    note:
+      gapped.length === 0
+        ? `Every group is fully costed.`
+        : gappedSpend > 0
+          ? `${gapped.map((g) => g.name).join(" and ")} carry ` +
+            `${money(gappedSpend)} of ${d.rangeLabel} between ` +
+            `${gapped.length === 1 ? "it" : "them"} and ` +
+            `${count(gappedItems)} of those items have no cost at all, so that spend reaches ` +
+            `no plate.`
+          : // Nothing bought in this window, which says nothing about whether
+            // the items are costed. State the gap without dressing it in a
+            // spend figure of zero.
+            `${count(uncosted.length)} ${uncosted.length === 1 ? "group has" : "groups have"} ` +
+            `items with no cost at all — ${gapped.map((g) => g.name).join(" and ")} ` +
+            `${gapped.length === 1 ? "is" : "are"} the largest by spend. Nothing in ` +
+            `${gapped.length === 1 ? "it" : "them"} was bought in ${d.rangeLabel}, so widen ` +
+            `the range to see what the gap costs.`,
   }
 }
 
