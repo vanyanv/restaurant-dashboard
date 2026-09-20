@@ -405,6 +405,16 @@ export interface ToolChoiceCase {
   /** Any one of these is an acceptable first move. Empty means: call nothing. */
   expectedTools: string[]
   why: string
+  /**
+   * Added without a live run behind it, so no fixture exists yet.
+   *
+   * `tests/scripts/eval-llm-replay.test.ts` asserts a fixture for every case
+   * on purpose -- a case added and never run replays green because nothing
+   * replays it -- and this is the written-down exception, not a hole. The
+   * replay test also fails if a case carrying this flag DOES have a fixture,
+   * so `--record` forces the flag to be removed rather than leaving it to rot.
+   */
+  awaitingFixture?: true
 }
 
 export const TOOL_CHOICE_CASES: ToolChoiceCase[] = [
@@ -465,8 +475,26 @@ export const TOOL_CHOICE_CASES: ToolChoiceCase[] = [
   {
     id: "anomalies",
     question: "Is anything off right now?",
-    expectedTools: ["getOpenAnomalies", "getStoreBreakdown", "getDailySales"],
+    // `getAlerts` added 2026-09-19. The prompt now routes "anything wrong /
+    // what needs my attention" to the inbox, which is wider than the z-score
+    // detector, so a turn that calls it alone is a PASS rather than the
+    // near-miss it would have been against the old list.
+    expectedTools: ["getAlerts", "getOpenAnomalies", "getStoreBreakdown", "getDailySales"],
     why: "Open-ended. Tests that a vague question still routes rather than producing a shrug.",
+  },
+  {
+    id: "ratings",
+    question: "What are people complaining about in our reviews?",
+    expectedTools: ["getRatings"],
+    awaitingFixture: true,
+    why: "The prompt carried a refusal for this until 2026-09-19 -- 'I don't track sentiment in this dashboard' -- while OtterRating held the review text the whole time. The failure to catch is the model refusing a question it can now answer.",
+  },
+  {
+    id: "forecast-trust",
+    question: "How accurate have the sales forecasts actually been?",
+    expectedTools: ["getForecastQuality"],
+    awaitingFixture: true,
+    why: "Distinct from getRevenueForecast. Asking how good the model is must not be answered with the model's own prediction interval, which is its opinion of itself rather than its record.",
   },
   {
     id: "refunds",

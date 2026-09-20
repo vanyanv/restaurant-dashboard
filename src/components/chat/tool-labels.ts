@@ -304,6 +304,21 @@ export const TOOL_LABELS: Record<
     done: "Read refunds",
     short: "refunds",
   },
+  getRatings: {
+    running: "Reading guest reviews",
+    done: "Read guest reviews",
+    short: "guest reviews",
+  },
+  getAlerts: {
+    running: "Checking the alert inbox",
+    done: "Read the alert inbox",
+    short: "alerts",
+  },
+  getForecastQuality: {
+    running: "Checking forecast accuracy",
+    done: "Read forecast accuracy",
+    short: "forecast accuracy",
+  },
   compareSales: {
     running: "Comparing periods",
     done: "Compared periods",

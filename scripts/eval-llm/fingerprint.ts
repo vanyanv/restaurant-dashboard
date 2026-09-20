@@ -20,8 +20,18 @@ import { join } from "node:path"
 import { VERDICT_MODEL, buildVerdictPrompt } from "@/lib/decision-verdict-llm"
 import { PROPOSAL_MODEL, buildProposalPrompt } from "@/lib/proposal-llm"
 import { ADJUDICATOR_MODEL, buildAdjudicatorPrompt } from "@/lib/ingredient-match-llm"
-import { CHAT_ROUTING_MODEL } from "@/lib/chat/openai-client"
-import { composeSystemPrompt } from "@/lib/chat/system-prompt"
+import {
+  CHAT_CLASSIFIER_MODEL,
+  CHAT_REASONING_EFFORT,
+  CHAT_ROUTING_MODEL,
+} from "@/lib/chat/openai-client"
+import {
+  GROUP_HINTS,
+  NAV_TOOL_GROUPS,
+  TOOL_GROUPS,
+  activeToolsForPage,
+} from "@/lib/chat/tool-groups"
+import { composeSystemPrompt, renderToolGuide } from "@/lib/chat/system-prompt"
 import { chatTools } from "@/lib/chat/tools"
 
 import {
@@ -70,6 +80,51 @@ export function evalSystemPrompt(): string {
   return composeSystemPrompt(CHAT_CONTEXT)
 }
 
+/**
+ * THE PROMPT PRODUCTION ACTUALLY SENDS, PER PAGE.
+ *
+ * `evalSystemPrompt()` renders the UNNARROWED guide, which is what a turn
+ * gets only when no department was established. Every question asked from a
+ * Counter page is narrowed, so the live golden set grades a prompt most
+ * readers never receive, and the largest behavioural change in the chat --
+ * cutting the guide and the offered schemas to the page's department -- was
+ * outside the free gate entirely.
+ *
+ * Hashing the guide each nav id renders closes that. It does not make the
+ * live run cover narrowed turns (that needs cases carrying a pageId), but it
+ * does mean a change to `renderToolGuide`, to `TOOL_GROUPS`, or to a guide
+ * block's tool names moves the fingerprint and demands a re-run, which is the
+ * thing the free gate is for.
+ *
+ * Sorted by page id so the map's declaration order cannot move the hash.
+ */
+export function narrowedGuides(): string {
+  const all = Object.keys(chatTools)
+  return Object.keys(NAV_TOOL_GROUPS)
+    .sort()
+    .map((page) => {
+      const active = activeToolsForPage(page)
+      const { guide } = renderToolGuide(all, active)
+      return `## ${page} [${[...(active ?? [])].sort().join(",")}]\n${guide}`
+    })
+    .join("\n")
+}
+
+/**
+ * The department list and hints the tool-group classifier is given.
+ *
+ * Not the classifier's full prompt template — that lives in
+ * `tool-group-classifier.ts` and is built around exactly this list. What
+ * changes in practice is the list and its hints, and a change to either moves
+ * which tools a turn carries.
+ */
+export function classifierCatalogue(): string {
+  return (Object.keys(TOOL_GROUPS) as Array<keyof typeof TOOL_GROUPS>)
+    .map((g) => `${g}: ${GROUP_HINTS[g]}`)
+    .sort()
+    .join("\n")
+}
+
 export function promptFingerprints(): Record<FingerprintedFeature, string> {
   return {
     // The first case, not all of them: the fingerprint tracks the *template*,
@@ -81,9 +136,24 @@ export function promptFingerprints(): Record<FingerprintedFeature, string> {
       ADJUDICATOR_MODEL,
       buildAdjudicatorPrompt({ cases: ADJUDICATOR_CASES[0].cases }),
     ),
+    /*
+     * Model, EFFORT, the system prompt, the tool catalogue and the classifier's
+     * own prompt.
+     *
+     * Effort and the classifier were both outside this hash, and both decide
+     * what the model does with the prompt that is inside it. `/api/chat`'s own
+     * note records `minimal` degrading tool routing — the exact behaviour this
+     * feature grades — so the setting could have moved from `low` to `minimal`
+     * with the recorded scorecard going on describing a run that no longer
+     * happened. The classifier is the same argument: `GROUP_HINTS` decides
+     * which schemas a turn carries when the page establishes no department, so
+     * editing one of those lines changes what the model is offered without
+     * touching a single character of the prompt.
+     */
     "chat-tool-choice": sha(
-      CHAT_ROUTING_MODEL,
-      `${evalSystemPrompt()}\n\n# Tools\n${toolCatalogue()}`,
+      `${CHAT_ROUTING_MODEL}:${CHAT_REASONING_EFFORT}:${CHAT_CLASSIFIER_MODEL}`,
+      `${evalSystemPrompt()}\n\n# Tools\n${toolCatalogue()}\n\n# Classifier\n${classifierCatalogue()}` +
+        `\n\n# Narrowed\n${narrowedGuides()}`,
     ),
   }
 }

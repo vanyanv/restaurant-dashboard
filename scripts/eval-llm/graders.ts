@@ -52,12 +52,36 @@ const bad = (...failures: string[]): Grade => ({ pass: false, failures })
  *
  * `expected` is a set of acceptable tools, not a required sequence: several
  * questions have more than one defensible route, and chaining an extra lookup
- * alongside the right one is usually better behaviour rather than worse. Only
- * the *absence* of an acceptable tool is a regression.
+ * alongside the right one is often better behaviour rather than worse.
+ *
+ * But "any acceptable tool was called" is not enough on its own, and grading
+ * on recall alone is why this feature reads 12/12 and cannot tell you the
+ * prompt got better. A turn that called the right tool AND four wrong ones
+ * scored exactly like a clean turn — while costing four extra round trips, and
+ * `low` reasoning effort was chosen over `minimal` precisely because minimal
+ * called `compareSales` and `getDailySales` for one question. The failure the
+ * effort setting exists to prevent was invisible to the gate that is supposed
+ * to protect it.
+ *
+ * So precision counts too: more than `EXTRA_CALL_BUDGET` data calls beyond
+ * what the question needs is a failure. Orientation tools are already stripped
+ * by the caller (`NON_ROUTING_TOOLS`), so everything counted here is a real
+ * read against the warehouse.
  *
  * An empty `expected` inverts the test: the question is outside the warehouse
  * and the agent must say so rather than fish for an answer.
  */
+
+/**
+ * How many unnecessary data calls a turn may make before it fails.
+ *
+ * One, not zero. A question like "has the price of beef patties gone up?"
+ * legitimately resolves the canonical ingredient and then reads its history,
+ * and several cases list alternative routes rather than a single right answer,
+ * so a budget of zero would fail turns that behaved well. Two spare calls is
+ * the shape that was slipping through.
+ */
+export const EXTRA_CALL_BUDGET = 1
 export function gradeToolChoice(actual: string[], expected: string[]): Grade {
   const used = [...new Set(actual)]
 
@@ -69,11 +93,18 @@ export function gradeToolChoice(actual: string[], expected: string[]): Grade {
   if (used.length === 0) {
     return bad(`answered without calling a tool; expected one of ${expected.join(", ")}`)
   }
-  if (used.some((t) => expected.includes(t))) return ok()
+  if (!used.some((t) => expected.includes(t))) {
+    return bad(`called ${used.join(", ")}; expected one of ${expected.join(", ")}`)
+  }
 
-  return bad(
-    `called ${used.join(", ")}; expected one of ${expected.join(", ")}`,
-  )
+  const extra = used.filter((t) => !expected.includes(t))
+  if (extra.length > EXTRA_CALL_BUDGET) {
+    return bad(
+      `reached the right tool but also called ${extra.join(", ")} — ` +
+        `${extra.length} unnecessary data calls, budget is ${EXTRA_CALL_BUDGET}`,
+    )
+  }
+  return ok()
 }
 
 // --- narrated verdict ----------------------------------------------------------

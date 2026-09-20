@@ -32,13 +32,15 @@
     "floor": 0.75
   },
   "chat-tool-choice": {
-    "sha256": "5cb7b567e0e35588",
+    "sha256": "c30c43e59c70be2d",
     "model": "gpt-5-mini",
     "evaluatedAt": "2026-09-19",
-    "cases": 12,
-    "passed": 11,
-    "passRate": 0.9167,
-    "costUsd": 0.02365,
-    "floor": 0.75
+    "cases": 14,
+    "passed": 0,
+    "passRate": 0,
+    "costUsd": 0,
+    "floor": 0.75,
+    "pendingReEval": true,
+    "pendingReason": "The chat prompt and the tool catalogue changed on 2026-09-19 and the live eval needs an OPENAI_API_KEY this session did not have. Numbers are zeroed rather than carried over, because the 2026-09-19 run on main graded a prompt that no longer ships. What moved: three new tools (getRatings, getAlerts, getForecastQuality) widen the catalogue and the routing guide; listStores returns lifecycleStage, openedAt and targetCogsPct; the guide now narrows per BLOCK rather than per section, so a page-scoped turn gets 21-47% of it and names no tool the turn cannot call; the tool-choice grader fails a case that calls more than EXTRA_CALL_BUDGET unnecessary tools; runToolChoice sends the production reasoningEffort; and three golden-set cases changed (anomalies now accepts getAlerts, plus new ratings and forecast-trust cases). Run `npm run eval:llm -- --feature chat-tool-choice --record`."
   }
 }

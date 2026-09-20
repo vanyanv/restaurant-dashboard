@@ -29,7 +29,7 @@ import { openai as openaiProvider } from "@ai-sdk/openai"
 import { VERDICT_MODEL, buildVerdictPrompt } from "@/lib/decision-verdict-llm"
 import { PROPOSAL_MODEL, buildProposalPrompt } from "@/lib/proposal-llm"
 import { ADJUDICATOR_MODEL, buildAdjudicatorPrompt } from "@/lib/ingredient-match-llm"
-import { CHAT_ROUTING_MODEL } from "@/lib/chat/openai-client"
+import { CHAT_REASONING_EFFORT, CHAT_ROUTING_MODEL } from "@/lib/chat/openai-client"
 import { chatTools } from "@/lib/chat/tools"
 import { PRICING_PER_MTOK } from "@/lib/monitoring/ai-usage"
 
@@ -332,6 +332,21 @@ async function runToolChoice(only: string | undefined, record: boolean): Promise
       system,
       messages: [{ role: "user", content: c.question }],
       tools,
+      /*
+       * THE EFFORT PRODUCTION ACTUALLY SHIPS.
+       *
+       * `/api/chat` sets `reasoningEffort` from `CHAT_REASONING_EFFORT`
+       * ("low" unless the env says otherwise) and calls it the largest single
+       * lever on the route — its own note records `minimal` degrading tool
+       * routing on exactly the behaviour this feature grades. This call set
+       * nothing, so the provider default (`medium`) is what was being graded,
+       * and the setting could have been moved to `minimal` without the gate
+       * having anything to say. Reading the same constant the route reads is
+       * what makes this an eval of what ships.
+       */
+      providerOptions: {
+        openai: { reasoningEffort: CHAT_REASONING_EFFORT },
+      },
       // Two rounds, not one: an orientation call must not consume the agent's
       // only chance to reach a data tool. Not fifteen either — past the first
       // real call every later step is reasoning about stubbed data, which is

@@ -39,7 +39,17 @@ export function AskEngineHost({
     // would loop through the parent's setState. `askedAt` joins them because
     // the turn footer counts live seconds from it; it moves once per question,
     // not per tick, so it costs one extra publish per send.
-  }, [engine.turns, engine.state, engine.conversationId, engine.askedAt, onEngine])
+    // `lastTurnId` joins them so a turn that FAILED still publishes an id the
+    // footer can rate: it arrives on the response header rather than on
+    // `finish`, so nothing else in this list is guaranteed to move with it.
+  }, [
+    engine.turns,
+    engine.state,
+    engine.conversationId,
+    engine.askedAt,
+    engine.lastTurnId,
+    onEngine,
+  ])
 
   return null
 }

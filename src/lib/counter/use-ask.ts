@@ -90,6 +90,16 @@ export function useAsk(
   stop: () => void
   /** When the turn in flight was sent, for the seconds the footer counts. */
   askedAt: number | null
+  /**
+   * The newest turn's `ChatTurn` id, read off the response header.
+   *
+   * The footer prefers the id on the message metadata — that one certainly
+   * belongs to the turn it is under. This is the fallback, and the only id a
+   * turn that FAILED or was STOPPED ever has, because metadata rides the
+   * `finish` part and those turns never reach it. Rating the answers that went
+   * wrong was impossible until this existed.
+   */
+  lastTurnId: string | null
   reset: () => void
 } {
   /*
@@ -145,6 +155,12 @@ export function useAsk(
    */
   const askScopeRef = useRef<AskRequestScope | null>(null)
 
+  /**
+   * The `ChatTurn` id of the turn currently in flight, read off the response
+   * header rather than waited for on `finish`. See the `fetch` wrapper.
+   */
+  const lastTurnIdRef = useRef<string | null>(null)
+
   const transport = useMemo(
     () =>
       new DefaultChatTransport({
@@ -160,16 +176,36 @@ export function useAsk(
         fetch: (input, init) =>
           fetch(input as RequestInfo, init).then((res) => {
             /*
-             * A thread that is gone — deleted, or on another account. Dropping
-             * the id here means the NEXT send takes the route's create branch
-             * and starts a fresh thread, rather than 404ing forever against an
-             * id the reader cannot see or clear.
+             * THE TURN'S ID, OFF THE HEADER, BEFORE ANYTHING CAN GO WRONG.
+             *
+             * The footer used to learn it from `message.metadata`, which the
+             * SDK emits only on `finish` — so an errored or stopped turn had
+             * no id and could not be rated, which is backwards: those are the
+             * turns worth rating. The route mints the id before the model
+             * runs and writes a `ChatTurn` row on the error path too, so
+             * reading it here makes every turn rateable.
              */
-            if (res.status === 404 || res.status === 403) {
+            const turnId = res.headers.get("x-chat-turn-id")
+            if (turnId) lastTurnIdRef.current = turnId
+
+            /*
+             * A thread that is gone — deleted, or on another account.
+             * Dropping the id here means the NEXT send takes the route's
+             * create branch and starts a fresh thread, rather than 404ing
+             * forever against an id the reader cannot see or clear.
+             *
+             * 403 is NOT that. `/api/chat` answers 403 for a role without
+             * owner access, and neither Ask page gates on the role, so a
+             * manager reaching the composer used to have their perfectly good
+             * thread id thrown away on every send — orphaning another thread
+             * each time against a refusal that was never about the thread.
+             */
+            if (res.status === 404) {
               conversationIdRef.current = null
               setTimeout(() => setConversationId(null), 0)
               return res
             }
+            if (res.status === 403) return res
             const id = res.headers.get("x-conversation-id")
             if (id && id !== conversationIdRef.current) {
               conversationIdRef.current = id
@@ -345,7 +381,23 @@ export function useAsk(
 
   const state = turns.length > 0 ? turns[turns.length - 1].state : { status: "idle" as const }
 
-  return { turns, state, conversationId, ask, follow, stop, askedAt, reset }
+  return {
+    turns,
+    state,
+    conversationId,
+    ask,
+    follow,
+    stop,
+    askedAt,
+    reset,
+    /**
+     * The newest turn's `ChatTurn` id, off the response header. The footer
+     * prefers the id on the message metadata — that one is certainly the
+     * right turn — and falls back to this when there is no metadata, which
+     * is every turn that failed or was stopped before `finish`.
+     */
+    lastTurnId: lastTurnIdRef.current,
+  }
 }
 
 function sinceAsked(askedAt: number | null): number {

@@ -24,10 +24,15 @@ export {
   getErrorsByHour,
 } from "./queries/errors"
 
+// Every one of these takes an `accountId` as its first argument — see the
+// header of `queries/ai-chat.ts` for why that is required rather than
+// optional.
 export {
   getAiCostByDay,
   getAiByFeature,
   getChatStats,
+  getChatFeedback,
+  getDownvotedChatTurns,
   getRecentNonOkChatTurns,
   getAiCostByHour,
 } from "./queries/ai-chat"

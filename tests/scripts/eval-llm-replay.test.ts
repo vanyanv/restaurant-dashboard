@@ -61,17 +61,34 @@ const regrade = (
   feature: string,
   ids: string[],
   grader: (fx: Fixture, id: string) => { pass: boolean; failures: string[] },
+  /**
+   * Cases added without a live run, so no fixture exists yet. Written down on
+   * the case itself (`awaitingFixture`) rather than tolerated silently: the
+   * assertion below still fires for every case that is NOT on this list, and
+   * a second assertion fires if a case on it turns out to have a fixture, so
+   * `--record` forces the flag off instead of letting it rot.
+   */
+  awaiting: string[] = [],
 ) => {
   describe(feature, () => {
     const fixtures = load(feature)
+    const expected = ids.filter((id) => !awaiting.includes(id))
 
     it("has a recorded response for every case in the golden set", () => {
       // Catches the quiet version of this going stale: a case added to
       // cases.ts, never run live, replaying green because nothing replays it.
-      expect([...fixtures.keys()].sort()).toEqual([...ids].sort())
+      expect([...fixtures.keys()].sort()).toEqual([...expected].sort())
     })
 
-    for (const id of ids) {
+    it("carries no stale awaitingFixture flag", () => {
+      const recorded = awaiting.filter((id) => fixtures.has(id))
+      expect(
+        recorded,
+        `these have been recorded; drop awaitingFixture from them in cases.ts: ${recorded.join(", ")}`,
+      ).toEqual([])
+    })
+
+    for (const id of expected) {
       it(`${id} — grades the same as when it was recorded`, () => {
         const fx = fixtures.get(id)
         expect(fx, `no fixture for ${id}; run npm run eval:llm -- --record`).toBeTruthy()
@@ -99,10 +116,15 @@ describe("replaying what the models actually said", () => {
     return gradeAdjudicatorDrafts(fx.raw ?? "", c.cases, c.expect)
   })
 
-  regrade("chat-tool-choice", TOOL_CHOICE_CASES.map((c) => c.id), (fx, id) => {
-    const c = TOOL_CHOICE_CASES.find((x) => x.id === id)!
-    return gradeToolChoice(fx.called ?? [], c.expectedTools)
-  })
+  regrade(
+    "chat-tool-choice",
+    TOOL_CHOICE_CASES.map((c) => c.id),
+    (fx, id) => {
+      const c = TOOL_CHOICE_CASES.find((x) => x.id === id)!
+      return gradeToolChoice(fx.called ?? [], c.expectedTools)
+    },
+    TOOL_CHOICE_CASES.filter((c) => c.awaitingFixture).map((c) => c.id),
+  )
 
   // The negative half, and the reason it exists.
   //

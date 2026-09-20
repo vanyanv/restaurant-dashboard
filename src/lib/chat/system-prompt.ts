@@ -179,11 +179,20 @@ Labor figures come from Harri actuals when available. Read the labor row's \`lab
 
 - "How much did we refund last week?" / "which platform had the most refunds?": \`getRefunds\` (3P only — first-party cash/card refunds aren't in the daily summary; if the user asks about FP refunds, say so).
 
+## Guest ratings and reviews
+
+- **"How are our reviews?" / "what's our rating?" / "are guests happy?"**: \`getRatings\` with view='summary'. Quote the mean, the count behind it, and the 1-2 star share. If the per-platform split disagrees (a 4.1 on one platform against a 4.9 on another), lead with that: it points at fulfilment, not food.
+- **"What are people complaining about?" / "read me the bad reviews" / "why did someone give us one star?"**: \`getRatings\` with view='reviews' and maxRating=2. Quote the review text; do not paraphrase a guest. The \`orderItems\` on each review is what that guest actually ordered, which is the only link from a complaint to a menu item.
+- Reviews exist for third-party platforms only. There is no first-party review feed, so say so rather than implying the sample covers every guest.
+- A range with no reviews does not mean guests are quiet. Read \`latestReviewOnRecord\`, which ignores the range: if it is recent, nobody reviewed in that window; if it is months old, the review sync has stopped and the right answer says so rather than reporting all clear. The sync has in fact been dead for three months before.
+- Never attribute a review to a named staff member, and never infer one.
+
 ## Forecasts and anomalies (precomputed by the nightly ML pipeline)
 
 - **"What will sales be next week / next 14 days / Saturday?"**: \`getRevenueForecast\`. Empty array means the pipeline hasn't run yet — say "no forecast yet" instead of estimating.
 - **"How many burgers / shakes / [item] should we expect to sell?"**: \`getMenuItemForecast\` (returns top-N items per store with daily breakdown + p10/p90).
 - **"What's looking off / anything weird this week / what changed?"**: \`getOpenAnomalies\` (z-score detector, |z| ≥ 3 against trailing 28-day distribution). Negative residual = below expected; positive = above.
+- **"What needs my attention? / anything wrong? / what's critical?"**: \`getAlerts\`. This is the whole inbox, not just the z-score detector: it also carries ingredient price deltas, labour variance against Harri, quantity spikes and new products on an invoice. Lead with the CRITICAL count. If \`mutedByPreference\` is true and the inbox looks empty, say the account has that alert muted rather than reporting all clear.
 - **"What will food cost % be next week / where's COGS heading?"**: \`getFoodCostForecast\` (per-store; joins revenue × menu-item × recipe cost). Quote blendedFoodCostPct and the worst-case (pctP90 average) bound. If unmappedItemCount > 0 on any day, mention "X items in the demand forecast are not yet mapped to recipes — actual food cost may be higher" once.
 - **"How many people should I schedule next Saturday?" / "staffing for tomorrow?" / "labor budget for the week?"**: \`getLaborStaffingForecast\`. Quote totalLaborHours per day and the heaviest hours. Always say once: "this is budgeted staff-hours, not actual time-clock data". Earlier refusal-example for "How many hours did we pay our staff last week?" still stands — only forward-looking budgets are answerable here, not actuals.
 - **"What are my best / worst items? / which items are stars vs dogs?" / "menu engineering / where are my puzzles?"**: \`getMenuEngineering\`. Cite the four quadrant counts and the top items in each by total contribution. Stars = high margin + high volume (front of menu); plowhorses = high volume but low margin (recipe or price work); puzzles = high margin but low volume (reposition); dogs = drop. The classifier ONLY sees items with costed recipes — say so once if the result feels short.
@@ -194,6 +203,10 @@ Labor figures come from Harri actuals when available. Read the labor row's \`lab
 - **"How is the new [item] doing? / what did we sell of [item] since launch / will the new item make 90 days?"**: \`getLaunchTrajectory\`. Returns items whose first sale was in the recent window with no prior sales in the 90 days before. Quote daysSinceLaunch, totalQty, projectedQty90d and the 80% CI. The projection extends the 7-day trailing mean — say "this assumes the current pace continues; ramp-up and seasonality are not modelled" once. Items < 7 days old return null projection — call them "too early to project".
 - **"Which platform is best / how much is DoorDash costing me / channel mix?"**: \`getChannelMix\`. Returns per-platform gross / fees / net rate, plus a shift simulation. Quote each platform's netRatePct and the blended figure; if the simulation is non-null, mention the incrementalNet figure as "would add $X to operator if X% shifted from the worst to the best channel — directional only, not a demand model". Never recommend dropping a channel.
 - **"What's driving our waste / where is the leakage / why is COGS off?"**: \`getWasteRootCauses\`. Returns each (store, ingredient) cluster from the count-residual history with a rule-based label and a per-row rationale. Quote the label and the annualizedDollarExposure for the top exposures. CRITICAL: 'theft_or_unrecorded' is a pattern label — say "the system can't distinguish theft from unrecorded prep waste; investigate before accusing anyone". Recommend logging an InventoryAdjustment for explained losses, and reviewing the recipe for systematic overuse. Never name a staff member.
+- **"How accurate are the forecasts? / can I trust this number? / is the model any good? / did the model train?"**: \`getForecastQuality\`. Quote \`wape\` against \`baselineWape\` — the baseline is "same day last week", and a model that does not beat it is not worth quoting. Say the sample size. \`beatsBaseline: false\` is the answer to "can I trust it", and it is a no. An empty \`evaluations\` array means no backtest has been computed, which is "we don't know", not "it's fine".
+- A forecast row with \`forecastSource: 'transfer'\` is a borrowed prior from a comparable store, used while a store is warming up. Say that when you quote one; it is a real forecast but a weaker one.
+- An empty forecast is not automatically a fault. A store that has not opened yet is never forecast at all, and one that opened recently is only transfer-forecast. Read the store's lifecycleStage (see Meta) before calling a forecast missing, and say which case it is.
+- To answer WHY a forecast looks the way it does, call \`getRevenueForecast\` with includeDrivers=true and quote the two or three largest \`drivers.groups\` entries against \`drivers.base\`. Null drivers means the model declined to attribute that day, not that nothing is driving it.
 - When citing a forecast, always say "expected" or "predicted", never "will be". Mention the prediction interval ("between $4.2k and $5.0k") when the spread is informative.
 - When citing an anomaly, mention the z-score and the date — that's the proof of significance. Do NOT speculate on the cause; that's recommendation territory and out of scope.
 
@@ -225,6 +238,7 @@ Use these for ticket-grain questions; for trend questions stay on the daily/hour
 
 - Use \`listStores\` whenever the user asks about store identity, all stores, or a location that is not in the per-request context block. If a named location is not found, call \`listStores\`; then either call the relevant data tool with an empty/all-store scope only if the user asked for "all", or explain the missing location.
 - Use \`describeSchema\` when (a) the user asks "what can you do?", "what data do you have?", "how do you know X?"; OR (b) you're not sure whether a tool exists for a question before refusing. Never refuse with "I don't have a tool for that" without first checking describeSchema.
+- \`listStores\` also returns each store's \`lifecycleStage\`, \`openedAt\` and \`targetCogsPct\`. \`pre_open\` means the store has not opened and has no history, no forecast and no P&L worth quoting; \`warming_up\` means it opened recently and its forecasts are borrowed from a comparable store; \`ready\` is a normal store. When a result is empty for one store and not another, check this before reporting an outage.
 
 # Self-check before sending
 
@@ -264,7 +278,11 @@ From getMenuItemDetails · Hollywood · last 30 days"
 # Refusal examples
 
 User: "How are customers feeling about our service this month?"
-You: "I don't track sentiment in this dashboard. The closest I can answer is order volume or platform ratings. Want either of those?"
+Tools: \`getRatings({ view: "summary", dateRange: <this month> })\` → \`getRatings({ view: "reviews", maxRating: 2, dateRange: <this month> })\`
+You: "4.6 across 213 reviews this month, with 11 at one or two stars. UberEats sits at 4.2 against DoorDash at 4.8, and most of the low ones mention a cold or missing item rather than the food itself.
+From getRatings · 2 stores · 2026-05-01 to 2026-05-31"
+
+(This used to be a refusal — "I don't track sentiment in this dashboard" — and it was wrong. There is no general sentiment model here, but the platform reviews and their text are readable. Refuse only what is genuinely absent.)
 
 User: "What will sales be next week?"
 Tools: \`getRevenueForecast({ horizonDays: 7 })\`
@@ -289,6 +307,200 @@ Plainspoken. Numbers are tabular. No filler ("Sure!", "I'd be happy to"). No res
 No em dashes. Use a period, comma, semicolon, colon, or parentheses instead. Never " — ", never "--". Two short sentences beat one sentence broken with a dash.`
 
 /**
+ * THE GUIDE IS NARROWED WITH THE TOOLS, OR IT LIES TO THE MODEL.
+ *
+ * `tool-groups.ts` narrows what a turn is OFFERED — as few as nine schemas on
+ * the Labor page against fifty-eight in the registry. This block was not
+ * narrowed with it. It names every tool in the product, on every turn, and
+ * `describeSchema` (always offered) repeats the claim, while "# Meta" below
+ * forbids refusing with "I don't have a tool for that" before checking that
+ * catalogue. So a question that reached for a tool this turn did not carry
+ * had two exits and both were wrong: refuse against three sources saying the
+ * tool exists, or answer without it.
+ *
+ * ## Why the unit is a BLOCK and not a `##` section
+ *
+ * It was a section, on the reasoning that a section is the unit a reader of
+ * this file thinks in. That reasoning was wrong in a way a review measured:
+ * a section survives if ANY tool in it is active, and one line of `## Sales`
+ * reads "Cash vs card split: `getDailySales` ... Do not use `getPnlSummary`
+ * for this". On the Labor page `getPnlSummary` is active and `getDailySales`
+ * is not, so a PROHIBITION pinned the whole 3KB section on, and the model was
+ * then told to answer sales totals with a tool it had not been given. The
+ * rendered guide was 67% of the full text and named 29 unreachable tools,
+ * while `describeSchema` on the same turn correctly reported them absent.
+ * That is a sharper contradiction than the one narrowing was added to fix.
+ *
+ * So the unit is a block -- a bullet with its indented continuations, or a
+ * paragraph -- and the rule is strict: a block survives only if EVERY tool it
+ * names is active. A block naming a tool the turn cannot call is worse than
+ * no block, because it is an instruction that cannot be followed; and a
+ * prohibition against an unreachable tool is moot, since the model has no
+ * schema for it. A block naming no tool at all (prose about sign conventions,
+ * the guide's preamble) is always kept: it is context, not routing.
+ *
+ * A section whose surviving blocks name no active tool is dropped whole,
+ * heading included, rather than left as a heading over caveats about nothing.
+ *
+ * The text is sliced, never rewritten, so narrowing cannot change what an
+ * included rule says, and the unnarrowed render is byte-identical to the
+ * source. `tests/lib/chat/system-prompt.test.ts` asserts both, and asserts
+ * that a narrowed guide names NO inactive tool -- the property this comment
+ * used to claim and the code did not have.
+ */
+const GUIDE_HEADING = "# Tool selection guide"
+const GUIDE_END_HEADING = "# Self-check before sending"
+
+/** A bullet with its continuations, or a paragraph. Sliced, never rewritten. */
+interface GuideBlock {
+  /** The block's exact source text, trailing newlines included. */
+  text: string
+  /** Backticked identifiers in this block that are real tool names. */
+  tools: string[]
+}
+
+interface GuideSection {
+  /** The `## ...` line and the blank line under it, exactly as written. */
+  heading: string
+  blocks: GuideBlock[]
+}
+
+interface ParsedPrompt {
+  head: string
+  preamble: string
+  sections: GuideSection[]
+  tail: string
+}
+
+/** Every `` `identifier` `` in a chunk of the guide. */
+function backticked(text: string): string[] {
+  return [...text.matchAll(/`([A-Za-z][A-Za-z0-9]*)`/g)].map((m) => m[1])
+}
+
+/**
+ * A section into its heading and its blocks, losslessly.
+ *
+ * `heading` is the `## ...` line plus the blank line under it. Each block
+ * keeps its own trailing newlines, so `heading + blocks.join("")` is the
+ * section's source text character for character. That is what lets the
+ * unnarrowed render be byte-identical, which the golden set's fingerprint
+ * depends on.
+ *
+ * A block ends at a blank line, or at the next line starting `- `. An
+ * indented continuation line therefore stays with the bullet above it rather
+ * than becoming an orphan when that bullet is dropped.
+ */
+function splitSection(text: string, known: ReadonlySet<string>): GuideSection {
+  const lines = text.split("\n")
+  // The heading line, plus the blank line under it when there is one.
+  let headEnd = 1
+  if (lines[headEnd] === "") headEnd += 1
+  const heading = lines.slice(0, headEnd).join("\n") + (headEnd < lines.length ? "\n" : "")
+
+  const blocks: GuideBlock[] = []
+  let current: string[] = []
+  const flush = () => {
+    if (current.length === 0) return
+    const body = current.join("")
+    blocks.push({
+      text: body,
+      tools: [...new Set(backticked(body))].filter((n) => known.has(n)),
+    })
+    current = []
+  }
+  const rest = lines.slice(headEnd)
+  for (let i = 0; i < rest.length; i += 1) {
+    const line = rest[i]
+    const startsBlock = line.startsWith("- ")
+    // A blank line closes the block it follows and rides with it, so the
+    // separator is never lost and never duplicated.
+    if (startsBlock && current.length > 0) flush()
+    current.push(i === rest.length - 1 ? line : `${line}\n`)
+    if (line === "") flush()
+  }
+  flush()
+  return { heading, blocks }
+}
+
+/**
+ * Split once per tool list, not once per request. The parse is pure text
+ * work, but it runs on a 36KB string and every turn would pay for it.
+ */
+const parseCache = new Map<string, ParsedPrompt>()
+
+function parsePrompt(allTools: readonly string[]): ParsedPrompt {
+  const cacheKey = [...allTools].sort().join(",")
+  const hit = parseCache.get(cacheKey)
+  if (hit) return hit
+
+  const known = new Set(allTools)
+  const start = STATIC_PROMPT.indexOf(`\n${GUIDE_HEADING}`)
+  const end = STATIC_PROMPT.indexOf(`\n${GUIDE_END_HEADING}`)
+  // A prompt that no longer has the guide is not a crash: the whole thing
+  // becomes the head and narrowing is a no-op, which is what it was before.
+  if (start === -1 || end === -1 || end < start) {
+    const whole: ParsedPrompt = {
+      head: STATIC_PROMPT,
+      preamble: "",
+      sections: [],
+      tail: "",
+    }
+    parseCache.set(cacheKey, whole)
+    return whole
+  }
+
+  const head = STATIC_PROMPT.slice(0, start + 1)
+  const guide = STATIC_PROMPT.slice(start + 1, end + 1)
+  const tail = STATIC_PROMPT.slice(end + 1)
+
+  const parts = guide.split(/\n(?=## )/)
+  const parsed: ParsedPrompt = {
+    head,
+    preamble: parts[0],
+    sections: parts.slice(1).map((text) => splitSection(text, known)),
+    tail,
+  }
+  parseCache.set(cacheKey, parsed)
+  return parsed
+}
+
+/**
+ * The guide as this turn should read it.
+ *
+ * `active === null` means "no department was established", which is the full
+ * menu — and this must return the guide BYTE FOR BYTE as it was written, so
+ * the golden set's prompt fingerprint does not move when nothing narrowed.
+ * `tests/lib/chat/system-prompt.test.ts` asserts exactly that.
+ */
+export function renderToolGuide(
+  allTools: readonly string[],
+  active: readonly string[] | null,
+): { head: string; guide: string; tail: string } {
+  const { head, preamble, sections, tail } = parsePrompt(allTools)
+  const whole = (s: GuideSection) => s.heading + s.blocks.map((b) => b.text).join("")
+  if (!active) {
+    return { head, guide: preamble + sections.map((s) => `\n${whole(s)}`).join(""), tail }
+  }
+  const on = new Set(active)
+  const rendered: string[] = []
+  for (const section of sections) {
+    // Strict: every tool a block names must be callable this turn.
+    const kept = section.blocks.filter((b) => b.tools.every((t) => on.has(t)))
+    /*
+     * A heading over caveats about tools that are all gone is noise, so a
+     * ROUTING section only survives if something in it still routes. A
+     * section that routes nowhere to begin with (prose about sign
+     * conventions) is context and is always kept -- "names no tool" and
+     * "named tools that are all unreachable" are different things.
+     */
+    const routes = section.blocks.some((b) => b.tools.length > 0)
+    if (routes && !kept.some((b) => b.tools.length > 0)) continue
+    rendered.push(`\n${section.heading}${kept.map((b) => b.text).join("")}`)
+  }
+  return { head, guide: preamble + rendered.join(""), tail }
+}
+
+/**
  * Builds the system prompt for the owner-analytics chat.
  *
  * The static rules/tool-guide/voice block is a module-level constant so
@@ -302,12 +514,22 @@ No em dashes. Use a period, comma, semicolon, colon, or parentheses instead. Nev
 export async function buildSystemPrompt(
   accountId: string,
   now: Date = new Date(),
+  /**
+   * Every tool in the registry, and the subset this turn is offering. The
+   * route has both; passing them rather than importing `chatTools` here keeps
+   * the prompt module free of the tool layer (and of Prisma behind it), which
+   * is what lets the golden set render it from frozen inputs.
+   *
+   * Omit both and nothing narrows — the behaviour before narrowing existed.
+   */
+  tools?: { all: readonly string[]; active: readonly string[] | null },
 ): Promise<string> {
   const [stores, snapshot] = await Promise.all([
     listOwnerStores(accountId),
     buildSituationSnapshot(accountId, now),
   ])
   return composeSystemPrompt({
+    tools,
     // THE LA BUSINESS DAY, not a UTC slice. `toISOString().slice(0, 10)` was
     // here and returns TOMORROW for the last seven hours of every LA day —
     // measured at 17:34 PDT on 2026-08-27, it said `2026-08-28`. The model
@@ -333,9 +555,20 @@ export function composeSystemPrompt(ctx: {
   today: string
   storeBlock: string
   snapshot: string
+  /**
+   * Narrows the tool-selection guide to what this turn can actually call.
+   * Absent, or `active: null`, renders the guide byte for byte as written —
+   * which is the shape the golden set fingerprints.
+   */
+  tools?: { all: readonly string[]; active: readonly string[] | null }
 }): string {
-  const { today, storeBlock, snapshot } = ctx
-  return `${STATIC_PROMPT}
+  const { today, storeBlock, snapshot, tools } = ctx
+  const { head, guide, tail } = renderToolGuide(
+    tools?.all ?? [],
+    tools?.active ?? null,
+  )
+  const staticPrompt = `${head}${guide}${tail}`
+  return `${staticPrompt}
 
 # Per-request context
 

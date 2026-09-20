@@ -28,6 +28,7 @@ import {
 } from "@/lib/decisions/deadline"
 import {
   combineEvaluations,
+  latestPerStore,
   type Scorecard,
 } from "@/lib/decisions/scorecard"
 import { computeVitals, type Vitals } from "@/lib/decisions/vitals"
@@ -501,12 +502,7 @@ export async function getDecisionsView(input: {
     menuEngResultRaw && menuEngResultRaw.ok ? menuEngResultRaw.data : null
   const targetCogsPct = storeTargets?.targetCogsPct ?? null
 
-  // Newest evaluation per store; the rest are older model versions.
-  const latestPerStore = new Map<string, (typeof evaluationRows)[number]>()
-  for (const row of evaluationRows) {
-    if (!latestPerStore.has(row.storeId)) latestPerStore.set(row.storeId, row)
-  }
-  const scorecard = combineEvaluations([...latestPerStore.values()])
+  const scorecard = combineEvaluations(latestPerStore(evaluationRows))
   const trailing7Mean = revenueData ? trailingMean(revenueData.days) : 0
 
   // Published hours and unfilled slots per day.

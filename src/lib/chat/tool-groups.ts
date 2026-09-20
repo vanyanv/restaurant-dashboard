@@ -107,7 +107,14 @@ export const TOOL_GROUPS = {
   vendors: ["listVendorLeadTimes", "getVendorReliability", "compareVendorPrices"],
   orders: ["getOrderById", "listOrdersByDay", "getOrderItemFrequency"],
   labor: ["getLaborStaffingForecast", "getOperationalCosts"],
-  anomalies: ["getOpenAnomalies", "getLostSales"],
+  anomalies: ["getOpenAnomalies", "getAlerts", "getLostSales"],
+  /**
+   * Guest ratings. Its own group rather than a member of `sales`, because
+   * "what are people saying about us" is a different question from "what did
+   * we sell", and folding it into sales would put a review reader in every
+   * revenue turn.
+   */
+  ratings: ["getRatings"],
   /**
    * The 13 ML tools. Deliberately NOT unioned into every page: a question
    * about last week does not need the forecast menu, and this group is the
@@ -127,6 +134,7 @@ export const TOOL_GROUPS = {
     "getMenuEngineering",
     "getVendorReliability",
     "getWasteRootCauses",
+    "getForecastQuality",
   ],
 } as const satisfies Record<string, readonly ChatToolName[]>
 
@@ -144,19 +152,19 @@ export type ToolGroupName = keyof typeof TOOL_GROUPS
  * labels, so renaming "P&L" in the rail does not silently unroute it.
  */
 export const NAV_TOOL_GROUPS: Record<string, readonly ToolGroupName[]> = {
-  overview: ["sales", "anomalies", "pnl"],
-  analytics: ["sales", "orders", "menu"],
+  overview: ["sales", "anomalies", "pnl", "ratings"],
+  analytics: ["sales", "orders", "menu", "ratings"],
   pnl: ["pnl", "costs", "invoices"],
   cogs: ["costs", "recipes", "invoices"],
   labor: ["labor", "pnl"],
-  menu: ["menu", "recipes", "elasticity"],
+  menu: ["menu", "recipes", "elasticity", "ratings"],
   recipes: ["recipes", "costs", "menu"],
   invoices: ["invoices", "costs", "vendors"],
   inventory: ["inventory", "costs", "vendors"],
   ingredients: ["costs", "vendors", "inventory"],
   vendors: ["vendors", "invoices", "costs"],
   orders: ["orders", "sales"],
-  "needs-you": ["anomalies", "sales", "forecasts"],
+  "needs-you": ["anomalies", "sales", "forecasts", "ratings"],
   stores: ["sales", "pnl"],
 }
 
@@ -182,7 +190,10 @@ export const GROUP_HINTS: Record<ToolGroupName, string> = {
   vendors: "vendor reliability and delivery lead times",
   orders: "individual orders and order-level drilldown",
   labor: "staffing and labour cost",
-  anomalies: "open alerts, things that need attention, lost sales",
+  anomalies:
+    "open alerts and the alert inbox, things that need attention, price/labour/quantity warnings, lost sales",
+  ratings:
+    "guest star ratings and review TEXT from the delivery platforms -- what customers said, complaints, what a bad review mentioned",
   forecasts: "anything FORWARD-LOOKING — what will happen next week/Saturday, predicted revenue, demand, promos",
 }
 
