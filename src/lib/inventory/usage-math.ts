@@ -135,9 +135,9 @@ export interface SoldItem {
 /**
  * The one function units sold comes from.
  *
- * An `OtterMenuItem`/`OtterOrderSubItem` row splits a day's volume for one
- * item into `fp` (first-party) and `tp` (third-party marketplace) quantity
- * columns — two channels, one item at one price. Six call sites across
+ * An `OtterMenuItem` row splits a day's volume for one item into `fp`
+ * (first-party) and `tp` (third-party marketplace) quantity columns — two
+ * channels, one item at one price. Six call sites across
  * `src/lib/inventory/**` and `src/lib/counter/adapters/menu-*.ts` added
  * `(fpQuantitySold ?? 0) + (tpQuantitySold ?? 0)` inline, independently, which
  * is the shape CLAUDE.md's shared-figure rule exists to prevent: the same
