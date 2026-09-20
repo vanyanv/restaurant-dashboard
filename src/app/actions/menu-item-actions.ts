@@ -109,7 +109,7 @@ export async function getMenuItemsForCatalog(
   // place that resolves a POS item to a recipe by name and it must not
   // disagree with the first.
   const recipeByNameAndCategory = new Map(
-    recipes.map((r) => [`${r.itemName.toLowerCase()}::${r.category.toLowerCase()}`, r])
+    recipes.map((r) => [`${r.itemName.toLowerCase()}:::${r.category.toLowerCase()}`, r])
   )
   const recipeByName = new Map<string, (typeof recipes)[number] | null>()
   for (const r of recipes) {
@@ -133,7 +133,7 @@ export async function getMenuItemsForCatalog(
     const nameKey = itemName.toLowerCase()
     const fallbackRecipe = explicitMapping
       ? null
-      : (recipeByNameAndCategory.get(`${nameKey}::${category.toLowerCase()}`) ??
+      : (recipeByNameAndCategory.get(`${nameKey}:::${category.toLowerCase()}`) ??
         recipeByName.get(nameKey) ??
         null)
     rows.push({

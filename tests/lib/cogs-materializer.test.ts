@@ -160,8 +160,8 @@ describe("computeFoodCogsRows — status decision", () => {
         menuRow({ itemName: "Fries", category: "Modifiers", fpQuantitySold: 2 }),
       ],
       recipeByNameAndCategory: new Map([
-        ["fries::sides", "r-fries-side"],
-        ["fries::modifiers", "r-fries-modifier"],
+        ["fries:::sides", "r-fries-side"],
+        ["fries:::modifiers", "r-fries-modifier"],
       ]),
       recipeByName: new Map([["fries", null]]),
     })
@@ -181,8 +181,8 @@ describe("computeFoodCogsRows — status decision", () => {
     const rows = await compute({
       menuRows: [menuRow({ itemName: "Fries", category: "Combos", fpQuantitySold: 1 })],
       recipeByNameAndCategory: new Map([
-        ["fries::sides", "r-fries-side"],
-        ["fries::modifiers", "r-fries-modifier"],
+        ["fries:::sides", "r-fries-side"],
+        ["fries:::modifiers", "r-fries-modifier"],
       ]),
       recipeByName: new Map([["fries", null]]),
       costFor: async () => {

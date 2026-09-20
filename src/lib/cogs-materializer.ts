@@ -180,7 +180,7 @@ async function recomputeDailyCogsForDay(input: {
   const recipeByName = new Map<string, string | null>()
   for (const r of recipes) {
     const key = r.itemName.toLowerCase()
-    recipeByNameAndCategory.set(`${key}::${r.category.toLowerCase()}`, r.id)
+    recipeByNameAndCategory.set(`${key}:::${r.category.toLowerCase()}`, r.id)
     if (recipeByName.has(key)) {
       if (recipeByName.get(key) !== null) {
         console.warn(
@@ -348,7 +348,7 @@ export async function computeFoodCogsRows(input: {
   date: Date
   menuRows: FoodMenuRow[]
   mappingByName: Map<string, string>
-  /** `${itemName.toLowerCase()}::${category.toLowerCase()}` → recipe id — the exact tuple `Recipe` is unique on. Tried before the name-only fallback. */
+  /** `${itemName.toLowerCase()}:::${category.toLowerCase()}` → recipe id — the exact tuple `Recipe` is unique on. Tried before the name-only fallback. */
   recipeByNameAndCategory?: Map<string, string>
   /** null = the name is claimed by more than one recipe (even after trying category), so it resolves to none. */
   recipeByName: Map<string, string | null>
@@ -383,7 +383,7 @@ export async function computeFoodCogsRows(input: {
       const nameKey = row.itemName.toLowerCase()
       const recipeId =
         mappingByName.get(row.itemName) ??
-        recipeByNameAndCategory?.get(`${nameKey}::${row.category.toLowerCase()}`) ??
+        recipeByNameAndCategory?.get(`${nameKey}:::${row.category.toLowerCase()}`) ??
         recipeByName.get(nameKey) ??
         null
 
