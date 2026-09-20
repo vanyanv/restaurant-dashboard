@@ -133,6 +133,23 @@ export interface SoldItem {
 }
 
 /**
+ * The one function units sold comes from.
+ *
+ * An `OtterMenuItem`/`OtterOrderSubItem` row splits a day's volume for one
+ * item into `fp` (first-party) and `tp` (third-party marketplace) quantity
+ * columns — two channels, one item at one price. Six call sites across
+ * `src/lib/inventory/**` and `src/lib/counter/adapters/menu-*.ts` added
+ * `(fpQuantitySold ?? 0) + (tpQuantitySold ?? 0)` inline, independently, which
+ * is the shape CLAUDE.md's shared-figure rule exists to prevent: the same
+ * question answered six times is six chances for one of them to drift (a
+ * `Number()` wrapper added defensively in one, a fallback forgotten in
+ * another). This is the one.
+ */
+export function unitsSold(row: { fpQuantitySold: number | null; tpQuantitySold: number | null }): number {
+  return (row.fpQuantitySold ?? 0) + (row.tpQuantitySold ?? 0)
+}
+
+/**
  * Σ theoretical depletion for one ingredient across sold menu items.
  *
  * `perServing` is looked up per recipe and memoised by the caller, matching the
@@ -154,8 +171,7 @@ export function sumDepletion(
       per = perServing(recipeId)
       memo.set(recipeId, per)
     }
-    const sold = (s.fpQuantitySold ?? 0) + (s.tpQuantitySold ?? 0)
-    depletionQty += per * sold
+    depletionQty += per * unitsSold(s)
   }
   return depletionQty
 }

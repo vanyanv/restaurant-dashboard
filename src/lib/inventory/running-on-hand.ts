@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma"
 import { walkRecipeForIngredient } from "./recipe-walk"
-import { sumDeliveries } from "./usage-math"
+import { sumDeliveries, unitsSold } from "./usage-math"
 
 export interface RunningOnHandResult {
   asOf: Date
@@ -109,8 +109,7 @@ export async function computeRunningOnHand(input: {
       perServing = await walkRecipeForIngredient(recipeId, input.ingredientId, recipeUnit)
       perServingByRecipe.set(recipeId, perServing)
     }
-    const sold = (s.fpQuantitySold ?? 0) + (s.tpQuantitySold ?? 0)
-    depletionQty += perServing * sold
+    depletionQty += perServing * unitsSold(s)
   }
 
   const adjustments = await prisma.inventoryAdjustment.findMany({

@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma"
 import { walkRecipeForIngredient } from "./recipe-walk"
-import { depletionWindow } from "./usage-math"
+import { depletionWindow, unitsSold } from "./usage-math"
 
 const DEFAULT_LOOKBACK_DAYS = 14
 
@@ -79,8 +79,7 @@ export async function computeDailyDepletionRate(input: {
       perServing = await walkRecipeForIngredient(recipeId, input.ingredientId, recipeUnit)
       perServingByRecipe.set(recipeId, perServing)
     }
-    const sold = (s.fpQuantitySold ?? 0) + (s.tpQuantitySold ?? 0)
-    depletionQty += perServing * sold
+    depletionQty += perServing * unitsSold(s)
   }
 
   return {

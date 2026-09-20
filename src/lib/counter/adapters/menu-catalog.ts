@@ -1,6 +1,7 @@
 import { listMappingProposals } from "@/app/actions/mapping-proposal-actions"
 import { prisma } from "@/lib/prisma"
 import { getScopedStores } from "@/lib/account-stores"
+import { unitsSold } from "@/lib/inventory/usage-math"
 import { count, money, pct } from "@/lib/counter/format"
 import { toQueryBounds, type DateRange } from "@/lib/counter/date-range"
 import {
@@ -249,10 +250,10 @@ async function loadCatalog(input: MenuCatalogInput): Promise<CatalogData> {
   const categoryRevenue = new Map<string, number>()
   const categoryItems = new Map<string, Set<string>>()
   for (const r of rawItems) {
-    // Both channels, added. An item sold in-house and on a marketplace is one
-    // item at one price, not two rows — `fp` and `tp` are the two halves of
-    // the same sale everywhere else in this codebase.
-    const qty = Number(r.fpQuantitySold ?? 0) + Number(r.tpQuantitySold ?? 0)
+    // Both channels, added — the one function, `unitsSold` in
+    // `@/lib/inventory/usage-math`: an item sold in-house and on a
+    // marketplace is one item at one price, not two rows.
+    const qty = unitsSold(r)
     const revenue = Number(r.fpTotalSales ?? 0) + Number(r.tpTotalSales ?? 0)
     const category = categoryOf(r.category)
 
@@ -271,7 +272,7 @@ async function loadCatalog(input: MenuCatalogInput): Promise<CatalogData> {
   const modifiers = new Map<string, Agg>()
   for (const r of rawMods) {
     const agg = modifiers.get(r.itemName) ?? { categories: new Set<string>(), qty: 0, revenue: 0 }
-    agg.qty += Number(r.fpQuantitySold ?? 0) + Number(r.tpQuantitySold ?? 0)
+    agg.qty += unitsSold(r)
     agg.revenue += Number(r.fpTotalSales ?? 0) + Number(r.tpTotalSales ?? 0)
     modifiers.set(r.itemName, agg)
   }
