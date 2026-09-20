@@ -98,11 +98,28 @@ export async function getMenuItemsForCatalog(
 
   const recipes = await prisma.recipe.findMany({
     where: { accountId },
-    select: { id: true, itemName: true },
+    select: { id: true, itemName: true, category: true },
   })
-  const recipeByName = new Map(
-    recipes.map((r) => [r.itemName.toLowerCase(), r])
+  // Recipes are unique on (accountId, itemName, category), so a name alone
+  // can be ambiguous — a "Fries" side and a "Fries" modifier. Try the POS
+  // row's own category first (the exact tuple the recipe is unique on)
+  // before falling back to a name-only match, and never guess when a name
+  // is still ambiguous with category ignored. Same rule as the COGS
+  // materializer's fallback (`cogs-materializer.ts`) — this is the second
+  // place that resolves a POS item to a recipe by name and it must not
+  // disagree with the first.
+  const recipeByNameAndCategory = new Map(
+    recipes.map((r) => [`${r.itemName.toLowerCase()}:::${r.category.toLowerCase()}`, r])
   )
+  const recipeByName = new Map<string, (typeof recipes)[number] | null>()
+  for (const r of recipes) {
+    const key = r.itemName.toLowerCase()
+    if (recipeByName.has(key)) {
+      if (recipeByName.get(key) !== null) recipeByName.set(key, null)
+      continue
+    }
+    recipeByName.set(key, r)
+  }
 
   const rows: MenuItemForCatalog[] = []
   for (const row of aggRows) {
@@ -113,9 +130,12 @@ export async function getMenuItemsForCatalog(
     const lastSeen = row._max.date
     if (!firstSeen || !lastSeen) continue
     const explicitMapping = mappingByItemName.get(itemName)
+    const nameKey = itemName.toLowerCase()
     const fallbackRecipe = explicitMapping
       ? null
-      : recipeByName.get(itemName.toLowerCase()) ?? null
+      : (recipeByNameAndCategory.get(`${nameKey}:::${category.toLowerCase()}`) ??
+        recipeByName.get(nameKey) ??
+        null)
     rows.push({
       otterItemName: itemName,
       category,
