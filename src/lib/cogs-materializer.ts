@@ -154,7 +154,8 @@ async function recomputeDailyCogsForDay(input: {
   const mappingByName = new Map(mappings.map((m) => [m.otterItemName, m.recipeId]))
 
   /*
-   * The name fallback, and why an ambiguous name now maps to NOTHING.
+   * The name fallback, and why an ambiguous name now maps to NOTHING —
+   * unless the POS row's own category breaks the tie.
    *
    * This was `new Map(recipes.map(r => [r.itemName.toLowerCase(), r.id]))` over
    * a `findMany` with no `orderBy`. Recipes are unique on
@@ -164,19 +165,27 @@ async function recomputeDailyCogsForDay(input: {
    * against was therefore unspecified, and the same day reprocessed could
    * switch between them and move the food line with it.
    *
-   * A name claimed by two recipes maps to null, so the item falls through to
-   * UNMAPPED and shows up in the catalogue's unmapped list where somebody can
-   * map it on purpose. An arbitrary pick is worse than a visible gap: the gap
-   * is a job, the pick is a wrong number nobody is looking for.
+   * The first fix (2026-09-19) made an ambiguous name refuse to guess at all,
+   * which is correct when the POS item's own category doesn't help. But this
+   * account is exactly the shape the docblock uses as its example — several
+   * recipes really do share a name across categories — and refusing on name
+   * alone turned every one of them from "arbitrarily maybe right" into
+   * "always UNMAPPED", which is a bigger loss than the bug it replaced: the
+   * POS row already carries its own category (`OtterMenuItem.category`), and
+   * a name+category pair is exactly the tuple `Recipe` is unique on. Try that
+   * exact pair first; only fall back to the name-only map — null when it is
+   * still ambiguous even ignoring category — when no recipe shares both.
    */
+  const recipeByNameAndCategory = new Map<string, string>()
   const recipeByName = new Map<string, string | null>()
   for (const r of recipes) {
     const key = r.itemName.toLowerCase()
+    recipeByNameAndCategory.set(`${key}:::${r.category.toLowerCase()}`, r.id)
     if (recipeByName.has(key)) {
       if (recipeByName.get(key) !== null) {
         console.warn(
           `[cogs] recipe name "${r.itemName}" is used by more than one category on account ${accountId} — ` +
-            `the name fallback will not guess; map the POS item explicitly.`
+            `the name-only fallback will not guess; matching by category where possible.`
         )
         recipeByName.set(key, null)
       }
@@ -235,6 +244,7 @@ async function recomputeDailyCogsForDay(input: {
     date,
     menuRows,
     mappingByName,
+    recipeByNameAndCategory,
     recipeByName,
     modifierUsageByItem,
     costFor,
@@ -338,7 +348,9 @@ export async function computeFoodCogsRows(input: {
   date: Date
   menuRows: FoodMenuRow[]
   mappingByName: Map<string, string>
-  /** null = the name is claimed by more than one recipe, so it resolves to none. */
+  /** `${itemName.toLowerCase()}:::${category.toLowerCase()}` → recipe id — the exact tuple `Recipe` is unique on. Tried before the name-only fallback. */
+  recipeByNameAndCategory?: Map<string, string>
+  /** null = the name is claimed by more than one recipe (even after trying category), so it resolves to none. */
   recipeByName: Map<string, string | null>
   modifierUsageByItem: Map<string, ModifierUsage>
   costFor: (recipeId: string) => Promise<RecipeCostResult | null>
@@ -348,6 +360,7 @@ export async function computeFoodCogsRows(input: {
     date,
     menuRows,
     mappingByName,
+    recipeByNameAndCategory,
     recipeByName,
     modifierUsageByItem,
     costFor,
@@ -367,9 +380,11 @@ export async function computeFoodCogsRows(input: {
       const qty = (row.fpQuantitySold ?? 0) + (row.tpQuantitySold ?? 0)
       const revenue = (row.fpTotalSales ?? 0) + (row.tpTotalSales ?? 0)
 
+      const nameKey = row.itemName.toLowerCase()
       const recipeId =
         mappingByName.get(row.itemName) ??
-        recipeByName.get(row.itemName.toLowerCase()) ??
+        recipeByNameAndCategory?.get(`${nameKey}:::${row.category.toLowerCase()}`) ??
+        recipeByName.get(nameKey) ??
         null
 
       const mod = modifierUsageByItem.get(row.itemName)
