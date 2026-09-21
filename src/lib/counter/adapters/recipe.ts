@@ -312,16 +312,35 @@ async function loadRecipe(input: RecipeInput): Promise<Loaded | null> {
       prisma.$queryRaw<Array<{ name: string; stores: number }>>`
         SELECT "otterSubItemName" AS name, COUNT(DISTINCT "storeId")::int AS stores
         FROM "OtterSubItemMapping" WHERE "recipeId" = ${recipeId} GROUP BY 1 ORDER BY 2 DESC, 1`,
-      prisma.$queryRaw<
-        Array<{ d: Date; unit_cost: number | null; qty: number; partial: boolean }>
-      >`
-        SELECT date AS d, AVG("unitCost")::float AS unit_cost,
-               SUM("qtySold")::int AS qty, BOOL_OR("partialCost") AS partial
-        FROM "DailyCogsItem"
-        WHERE "recipeId" = ${recipeId}
-          AND date >= (${endDate}::date - MAKE_INTERVAL(days => ${TREND_DAYS - 1}))
-          AND date <= ${endDate}::date
-        GROUP BY 1 ORDER BY 1`,
+      // Scoped by store, like `sold` below it. Without the `storeId` clause
+      // this averaged every store's cost for the recipe while the strip above
+      // the chart honoured the switcher — so picking one store moved the
+      // figures and left the chart alone.
+      //
+      // At "All stores" the clause is NOT a no-op, and it is worth being exact
+      // about why: `getScopedStores` -> `getAccountStores` ends in
+      // `rows.filter((s) => s.isActive)`, which that function's own docblock
+      // calls its contract. So a CLOSED location's days drop out of this
+      // average. That is the same set `sold` beside it has always used, so the
+      // chart and the strip now agree — which is the whole point of the fix —
+      // but an account that shut a store will see this trend move, with no
+      // control on the page to explain it. An account whose stores are all
+      // inactive gets the empty guard below and no chart at all.
+      storeIds.length === 0
+        ? Promise.resolve(
+            [] as Array<{ d: Date; unit_cost: number | null; qty: number; partial: boolean }>,
+          )
+        : prisma.$queryRaw<
+            Array<{ d: Date; unit_cost: number | null; qty: number; partial: boolean }>
+          >`
+            SELECT date AS d, AVG("unitCost")::float AS unit_cost,
+                   SUM("qtySold")::int AS qty, BOOL_OR("partialCost") AS partial
+            FROM "DailyCogsItem"
+            WHERE "recipeId" = ${recipeId}
+              AND "storeId" = ANY(${storeIds})
+              AND date >= (${endDate}::date - MAKE_INTERVAL(days => ${TREND_DAYS - 1}))
+              AND date <= ${endDate}::date
+            GROUP BY 1 ORDER BY 1`,
       storeIds.length === 0
         ? Promise.resolve([] as Array<{ qty: number; revenue: number; price: number | null }>)
         : prisma.$queryRaw<Array<{ qty: number; revenue: number; price: number | null }>>`

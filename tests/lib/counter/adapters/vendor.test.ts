@@ -15,7 +15,14 @@ vi.mock("@/lib/prisma", () => ({
   prisma: { invoice: { findMany: vi.fn() }, $queryRaw: vi.fn() },
 }))
 vi.mock("@/lib/account-stores", () => ({ getScopedStores: vi.fn() }))
-vi.mock("@/lib/counter/vendor-basket", () => ({ getVendorBasketTrends: vi.fn() }))
+// `vendor.ts` imports `displayName` from `adapters/vendors.ts` (the list-page
+// adapter), which reads `BASKET_FLAT_PCT`/`BASKET_WEEKS` at module scope —
+// so the mock has to carry those alongside the mocked function, not just the
+// one export this file calls directly.
+vi.mock("@/lib/counter/vendor-basket", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/counter/vendor-basket")>()),
+  getVendorBasketTrends: vi.fn(),
+}))
 
 import { prisma } from "@/lib/prisma"
 import { getScopedStores } from "@/lib/account-stores"

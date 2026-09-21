@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/prisma"
 import { goodsSum, isChargeRow } from "@/lib/invoice-charges"
 import { normalizeVendorName } from "@/lib/vendor-normalize"
-import { count, money, pct, plural, pluralWord, titleCase, unitCost } from "@/lib/counter/format"
+import { bytes, count, money, pct, plural, pluralWord, titleCase, unitCost } from "@/lib/counter/format"
 import {
   awaitSections,
   classify,
@@ -47,11 +47,61 @@ export interface InvoiceHead {
   alert: { label: string; value: string; body: string } | null
 }
 
+/**
+ * The custody check: the stored extraction against the stored line items.
+ *
+ * `Invoice.rawExtractionJson` is `JSON.stringify(extraction)` and
+ * `InvoiceLineItem` is written from `extraction.lineItems` in the same call,
+ * carrying `lineNumber` across verbatim. All three writers do it that way —
+ * `src/app/api/invoices/sync/route.ts`, `scripts/reprocess-invoices.ts` and
+ * `scripts/fix-bad-invoices.ts` — and the second of them additionally DROPS
+ * any row whose `lineNumber` is null. So the two collections are the same rows
+ * before and after persistence, keyed the same way, and a difference between
+ * them is a row that was read and not stored (or stored and not read back).
+ *
+ * **This is not a second reading of the document.** Nothing in this schema
+ * records how many rows the printed page had, so this check sees only what
+ * happened BETWEEN the extractor and the table. The other half of the
+ * question — whether the extractor itself missed a row — has no witness but
+ * the printed subtotal (`headOf`) and the vendor's own subject line
+ * (`subjectLineCount`).
+ */
+export interface InvoiceCustody {
+  /**
+   * Rows in the stored raw extraction. Null when none is stored, or when the
+   * stored string will not parse into a `lineItems` array — in which case
+   * nothing below it means anything and every other field reads 0.
+   */
+  rawRows: number | null
+  /** `InvoiceLineItem` rows on this invoice. */
+  storedRows: number
+  /** Raw rows whose line number has fewer line items behind it than raw rows. */
+  missing: number
+  /** Those rows' `extendedPrice`, summed. 0 when there are none. */
+  missingValue: number
+  /**
+   * True when at least one missing row carried no finite `extendedPrice`, so
+   * `missingValue` is a floor rather than the amount.
+   */
+  missingValueIsFloor: boolean
+  /** Line items at a line number the raw extraction does not account for. */
+  surplus: number
+  /** Their `extendedPrice`, summed. */
+  surplusValue: number
+}
+
 export interface InvoiceDocument {
   /** The route that streams the stored PDF, or null when there is no file. */
   href: string | null
   meta: string
-  rows: KvRow[]
+  /**
+   * The row-for-row reconciliation behind `note`.
+   *
+   * Carried on the section rather than kept inside `countsNote` so the figure
+   * has one owner: the note is prose ABOUT this object, and a second place
+   * counting the same rows is how one screen comes to disagree with another.
+   */
+  custody: InvoiceCustody
   note: string
 }
 
@@ -152,11 +202,140 @@ interface Loaded {
   storeName: string | null
   email: { from: string | null; subject: string | null; at: Date | null; attachment: string | null }
   pdfPath: string | null
+  /** `Invoice.pdfSize` — the stored object's byte count. Null when none is held. */
+  pdfBytes: number | null
   model: string | null
-  /** Lines the RAW extraction produced. */
-  rawLines: number | null
+  /** The stored extraction's rows against the stored line items. */
+  custody: InvoiceCustody
   /** Lines the VENDOR states in the email subject, when it states one. */
   subjectLines: number | null
+}
+
+/** One row of `rawExtractionJson.lineItems`, read defensively. */
+interface RawExtractionRow {
+  lineNumber: number | null
+  extendedPrice: number | null
+}
+
+/**
+ * Reads `rawExtractionJson` as ROWS rather than as a count.
+ *
+ * Everything is optional on the way in: the column is a `String?` written by
+ * three different callers over the life of this account, and a shape that does
+ * not parse is a reason to say the check cannot run, never a reason to throw
+ * on a page.
+ */
+function rawExtractionRows(json: string | null): RawExtractionRow[] | null {
+  if (!json) return null
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(json)
+  } catch {
+    return null
+  }
+  if (!parsed || typeof parsed !== "object") return null
+  const lineItems = (parsed as { lineItems?: unknown }).lineItems
+  if (!Array.isArray(lineItems)) return null
+  return lineItems.map((row) => {
+    const r = (row ?? {}) as { lineNumber?: unknown; extendedPrice?: unknown }
+    return {
+      lineNumber: typeof r.lineNumber === "number" && Number.isFinite(r.lineNumber)
+        ? r.lineNumber
+        : null,
+      extendedPrice: typeof r.extendedPrice === "number" && Number.isFinite(r.extendedPrice)
+        ? r.extendedPrice
+        : null,
+    }
+  })
+}
+
+/**
+ * Pairs the extraction's rows to the stored line items by line number.
+ *
+ * A line number can legitimately repeat (a document that bills the same code
+ * twice), so the pairing is a MULTISET comparison rather than a set one:
+ * within each line number, the raw rows beyond the stored count are missing
+ * and the stored rows beyond the raw count are surplus. A raw row with no
+ * usable line number can never have been stored under one — every writer
+ * copies `lineNumber` straight across, and the reprocess script discards such
+ * a row outright — so it is counted missing.
+ *
+ * Where several rows share a line number and only some survived, WHICH of them
+ * is the missing one is not recoverable; the excess is taken in the order the
+ * extraction lists them. The COUNT is exact either way, and the value is exact
+ * whenever the rows sharing a line number carry the same price, which is the
+ * only case this has been seen in.
+ */
+function custodyOf(
+  json: string | null,
+  stored: ReadonlyArray<{ lineNumber: number; extendedPrice: number }>,
+): InvoiceCustody {
+  const empty: InvoiceCustody = {
+    rawRows: null,
+    storedRows: stored.length,
+    missing: 0,
+    missingValue: 0,
+    missingValueIsFloor: false,
+    surplus: 0,
+    surplusValue: 0,
+  }
+
+  const raw = rawExtractionRows(json)
+  if (raw === null) return empty
+
+  const NO_NUMBER = "no line number"
+  const key = (n: number | null) => (n === null ? NO_NUMBER : String(n))
+
+  const rawBy = new Map<string, RawExtractionRow[]>()
+  for (const r of raw) {
+    const k = key(r.lineNumber)
+    const list = rawBy.get(k)
+    if (list) list.push(r)
+    else rawBy.set(k, [r])
+  }
+
+  const storedBy = new Map<string, number[]>()
+  for (const l of stored) {
+    const k = key(l.lineNumber)
+    const list = storedBy.get(k)
+    if (list) list.push(l.extendedPrice)
+    else storedBy.set(k, [l.extendedPrice])
+  }
+
+  let missing = 0
+  let missingValue = 0
+  let missingValueIsFloor = false
+  for (const [k, rows] of rawBy) {
+    // A raw row with no line number was never storable under one, so it is
+    // compared against nothing rather than against the stored rows that also
+    // lack one — the writers never produce those.
+    const held = k === NO_NUMBER ? 0 : (storedBy.get(k)?.length ?? 0)
+    for (const row of rows.slice(held)) {
+      missing += 1
+      if (row.extendedPrice === null) missingValueIsFloor = true
+      else missingValue += row.extendedPrice
+    }
+  }
+
+  let surplus = 0
+  let surplusValue = 0
+  for (const [k, prices] of storedBy) {
+    const read = k === NO_NUMBER ? 0 : (rawBy.get(k)?.length ?? 0)
+    for (const price of prices.slice(read)) {
+      surplus += 1
+      surplusValue += price
+    }
+  }
+
+  return {
+    rawRows: raw.length,
+    storedRows: stored.length,
+    missing,
+    missingValue,
+    missingValueIsFloor,
+    surplus,
+    surplusValue,
+  }
 }
 
 async function loadInvoice(input: InvoiceInput): Promise<Loaded | null> {
@@ -181,6 +360,7 @@ async function loadInvoice(input: InvoiceInput): Promise<Loaded | null> {
       emailReceivedAt: true,
       attachmentName: true,
       pdfBlobPathname: true,
+      pdfSize: true,
       extractionModel: true,
       rawExtractionJson: true,
       store: { select: { name: true } },
@@ -209,17 +389,9 @@ async function loadInvoice(input: InvoiceInput): Promise<Loaded | null> {
   const reference = inv.subtotal ?? inv.totalAmount
   const delta = goods - reference
 
-  // The raw extraction is the MODEL'S OUTPUT, not the document. Its line count
-  // is what we stored, near enough always — see `headOf` for why that matters.
-  let rawLines: number | null = null
-  if (inv.rawExtractionJson) {
-    try {
-      const parsed = JSON.parse(inv.rawExtractionJson) as { lineItems?: unknown[] }
-      rawLines = Array.isArray(parsed.lineItems) ? parsed.lineItems.length : null
-    } catch {
-      rawLines = null
-    }
-  }
+  // The raw extraction is the MODEL'S OUTPUT, not the document — see `headOf`
+  // for what that rules out and `custodyOf` for what it does prove.
+  const custody = custodyOf(inv.rawExtractionJson, inv.lineItems)
 
   const reasons = Array.isArray(inv.reviewReasons) ? (inv.reviewReasons as unknown as Reason[]) : []
 
@@ -262,8 +434,9 @@ async function loadInvoice(input: InvoiceInput): Promise<Loaded | null> {
       attachment: inv.attachmentName,
     },
     pdfPath: inv.pdfBlobPathname,
+    pdfBytes: inv.pdfSize,
     model: inv.extractionModel,
-    rawLines,
+    custody,
     subjectLines: subjectLineCount(inv.emailSubject),
   }
 }
@@ -341,11 +514,18 @@ const REASON_LABEL: Record<string, string> = {
  * not extracted) / Flagged / Posts to`, and its own note says the failure that
  * matters is "a line the table never got".
  *
- * **Nothing in this schema records how many lines the document had.**
- * `rawExtractionJson` is the MODEL'S OUTPUT — its `lineItems` array is what we
- * then stored, so its count equals the stored count on every invoice checked.
- * There is no second reading of the page to compare against. "18 of 19" is a
- * denominator nobody has.
+ * **Nothing in this schema records how many lines the DOCUMENT had.**
+ * `rawExtractionJson` is the MODEL'S OUTPUT, not a second reading of the page,
+ * so "18 of 19" is a denominator nobody has and this strip does not print one.
+ *
+ * That output is still worth comparing against — just for a different
+ * question. `custodyOf` pairs its rows to the stored line items and finds the
+ * ones that were read and never persisted; it answers "did we KEEP what was
+ * read", where this strip answers "does what we kept agree with what the
+ * document prints". The document pane carries that half. (An earlier draft of
+ * this paragraph claimed the raw count "equals the stored count on every
+ * invoice checked", which `countsNote` below had already disproved on nine of
+ * them — G95788-00 returned 21 rows and stored none.)
  *
  * What survives is better than a guess and is the same check the Invoices page
  * and the sync now run: **the printed subtotal is the document's own claim
@@ -384,8 +564,16 @@ function headOf(d: Loaded): InvoiceHead {
 
   return {
     title: d.number,
+    // `dueDate` is stored by the sync from the extractor's own reading of the
+    // document and was rendered nowhere in this product. It goes on the
+    // record's own facts line, beside the date it was billed. No "overdue"
+    // here: this route takes no clock (`InvoiceInput` is an id and an account,
+    // because `P.invoice` is `nodate: true`), and the list — which does take
+    // the reader's today — is where the date is judged against it.
     sub:
-      `${d.vendor} · ${D(d.date)} · ${count(d.lines.length)} ` +
+      `${d.vendor} · ${D(d.date)} · ` +
+      `${d.dueDate ? `due ${D(d.dueDate)}` : "no due date printed"} · ` +
+      `${count(d.lines.length)} ` +
       `${d.lines.length === 1 ? "line" : "lines"} extracted` +
       (d.storeName ? ` · ${d.storeName}` : ""),
     cells: [
@@ -433,10 +621,16 @@ function headOf(d: Loaded): InvoiceHead {
  * The document pane.
  *
  * The prototype renders the PDF beside the extraction and labels it "as
- * received · 2 pages". **Page count and file size are not stored** —
- * `pdfBlobPathname` and `pdfBlobUrl` are all the row carries — so the meta
- * says what we do know: that the file is held, privately, and is the only copy
- * that proves what a line said.
+ * received · 2 pages". **Page count is not stored** — no column holds one and
+ * nothing writes one — so the meta says what we do know: that the file is
+ * held, privately, and is the only copy that proves what a line said.
+ *
+ * This paragraph read "Page count and file size are not stored —
+ * `pdfBlobPathname` and `pdfBlobUrl` are all the row carries" and was wrong
+ * about the size: `Invoice.pdfSize` and `Invoice.pdfUploadedAt` are on the row
+ * too, and the sync and both PDF backfill scripts all write the size. The
+ * storage panel printed "not recorded" about a column that records it. See
+ * `panelsOf`.
  *
  * The pane links rather than embeds. The object is private and served through
  * `/api/invoices/{id}/pdf`, which checks the session and the account before it
@@ -444,41 +638,30 @@ function headOf(d: Loaded): InvoiceHead {
  * every page load fetches a PDF nobody asked to see.
  */
 function documentOf(d: Loaded): InvoiceDocument {
+  // NO `.kv` OF COUNTS. This section used to carry one — Attachment, Read by,
+  // Lines stored, The model returned, The vendor says — and it was a landmark
+  // the fixture does not draw here: `P.invoice`'s `docPane()` is the DOCUMENT,
+  // and the counts are the paragraph under it. The `.kv` was removed when the
+  // PDF was embedded, and the field that fed it was left behind, built on
+  // every request and rendered by neither surface. The counts live in `note`,
+  // and the reconciliation they describe lives in `custody`, where a caller
+  // can read the figures rather than the sentence.
   return {
     href: d.pdfPath ? `/api/invoices/${d.id}/pdf` : null,
     meta: d.pdfPath ? "held, private" : "no file",
-    rows: [
-      { label: "Attachment", value: d.email.attachment ?? "—" },
-      { label: "Read by", value: d.model ?? "—" },
-      { label: "Lines stored", value: count(d.lines.length) },
-      {
-        label: "The model returned",
-        value: d.rawLines === null ? "not recorded" : count(d.rawLines),
-        // `tone` is Kv's own way to mark a row — a Table `CellObject` is a
-        // different component's shape and does not belong here.
-        ...(d.rawLines !== null && d.rawLines !== d.lines.length
-          ? { tone: "bad" as const }
-          : {}),
-      },
-      {
-        label: "The vendor says",
-        value: d.subjectLines === null ? "does not say" : count(d.subjectLines),
-        ...(d.subjectLines !== null && d.subjectLines !== d.lines.length
-          ? { tone: "bad" as const }
-          : {}),
-      },
-    ],
+    custody: d.custody,
     note: countsNote(d),
   }
 }
 
 /**
- * Three counts of the same thing, and what it means when they disagree.
+ * Three counts of the same thing, what it means when they disagree, and what
+ * the disagreement is worth.
  *
- * `Lines stored` is ours. `The model returned` is `rawExtractionJson.lineItems`
- * — what the extractor read before anything persisted it. `The vendor says` is
- * the count IFS and Vitco put in their own email subject, present on 79 of the
- * account's 226 invoices.
+ * Ours is the `InvoiceLineItem` rows. The model's is
+ * `rawExtractionJson.lineItems` — what the extractor read before anything
+ * persisted it. The vendor's is the count IFS and Vitco put in their own email
+ * subject, present on 79 of the account's 226 invoices.
  *
  * They agree on 217. The nine that disagree are all IFS, and the direction
  * matters: **stored one MORE than the vendor says** is this page counting the
@@ -493,19 +676,75 @@ function documentOf(d: Loaded): InvoiceDocument {
  * ("extraction produced no line items at all"), and a different fix: the lines
  * are still sitting in `rawExtractionJson` and can be replayed without going
  * near the PDF or the model again.
+ *
+ * ## The money, which the counts alone do not carry
+ *
+ * "One line short" is a different problem on a $40 case of lettuce than on a
+ * $2,600 meat order, and the count cannot tell them apart. `custodyOf` pairs
+ * the extraction's rows to the stored ones by line number, so the rows with
+ * nothing behind them are identified individually and their own
+ * `extendedPrice` can be summed — that sum is what this note states. It is the
+ * value of what was READ AND NOT STORED, which is not the same figure as the
+ * strip's Gap: the Gap is the goods lines against the printed subtotal, and it
+ * is the only evidence available about a row the extractor never read in the
+ * first place.
  */
 function countsNote(d: Loaded): string {
   const stored = d.lines.length
+  const c = d.custody
   const parts: string[] = []
 
-  if (d.rawLines !== null && d.rawLines !== stored) {
+  if (c.rawRows === null) {
     parts.push(
-      `The model returned ${count(d.rawLines)} ${d.rawLines === 1 ? "line" : "lines"} and ` +
-        `${stored === 0 ? "none" : count(stored)} ${stored === 1 ? "was" : "were"} stored — the ` +
-        `extraction worked and persisting it did not, so the lines are still in the stored raw ` +
-        `output and can be replayed without reading the PDF again.`,
+      `No raw extraction is stored for this invoice, so there is nothing to check the ` +
+        `${plural(stored, "stored line")} against — whether the extractor read more rows than ` +
+        `these cannot be answered from here.`,
     )
+  } else {
+    // The two directions are stated INDEPENDENTLY, not as a chain: an invoice
+    // can drop one row and store another twice, and an `else if` would print
+    // the first and silently swallow the second.
+    const kept = c.rawRows - c.missing
+    if (c.missing > 0) {
+      // A floor of exactly zero is not a figure, it is the absence of one —
+      // every row that went missing carried no extended price, so "at least
+      // $0.00" would be a number standing in for "we cannot say".
+      const unpriced = c.missingValueIsFloor && c.missingValue === 0
+      const worth = unpriced
+        ? `, worth an amount the stored extraction does not state,`
+        : ` worth ${c.missingValueIsFloor ? "at least " : ""}${money(c.missingValue, { cents: true })}`
+      parts.push(
+        `The extraction holds ${plural(c.rawRows, "row")} and ${count(kept)} of them ` +
+          `${pluralWord(kept, "is", "are")} in the table: ` +
+          `${plural(c.missing, "row")}${worth} ` +
+          `${pluralWord(c.missing, "was", "were")} read and never stored.` +
+          (c.missingValueIsFloor && !unpriced
+            ? ` "At least", because one of the rows that went missing carries no extended ` +
+              `price of its own, so that figure is a floor and not the amount.`
+            : ``) +
+          ` The extraction worked and persisting it did not, so those rows are still in the ` +
+          `stored raw output and can be replayed without reading the PDF again.`,
+      )
+    }
+    if (c.surplus > 0) {
+      parts.push(
+        `${plural(c.surplus, "line")} in the table ${pluralWord(c.surplus, "is", "are")} at a ` +
+          `line number the extraction's ${plural(c.rawRows, "row")} does not account for, worth ` +
+          `${money(c.surplusValue, { cents: true })} — a row stored twice, or stored after the ` +
+          `raw output was last written. Anything reading lines rather than the printed total ` +
+          `counts it twice.`,
+      )
+    }
+    if (c.missing === 0 && c.surplus === 0) {
+      parts.push(
+        c.rawRows === 1
+          ? `The extraction's one row is in the table.`
+          : `Every one of the extraction's ${plural(c.rawRows, "row")} is in the table, row for ` +
+            `row.`,
+      )
+    }
   }
+
   if (d.subjectLines !== null && d.subjectLines !== stored) {
     const short = d.subjectLines > stored
     parts.push(
@@ -520,15 +759,15 @@ function countsNote(d: Loaded): string {
             `surcharge rows as lines and the vendor does not, which is a definition rather than ` +
             `a defect.`),
     )
-  }
-  if (parts.length === 0) {
+  } else if (d.subjectLines !== null) {
+    parts.push(`The vendor's own subject line says ${count(d.subjectLines)} too.`)
+  } else {
     parts.push(
-      d.subjectLines !== null
-        ? `Our count, the model's and the vendor's own all agree.`
-        : `This vendor does not state a line count, so the printed subtotal is the only check ` +
-          `on whether anything is missing.`,
+      `This vendor does not state a line count, so nothing outside this system says how many ` +
+        `rows the page had.`,
     )
   }
+
   if (!d.pdfPath) {
     return `No file is held for this invoice, so nothing here can be checked against the ` +
       `document it came from. ${parts.join(" ")}`
@@ -691,10 +930,18 @@ function panelsOf(d: Loaded): InvoicePanels {
         // the row prints the part that identifies the OBJECT.
         { label: "Object", value: shortKey(d.pdfPath) },
         { label: "Served by", value: d.pdfPath ? `/api/invoices/${d.id}/pdf` : "—" },
-        // Size and page count are NOT stored. The prototype prints both, and a
-        // blank would read as "we have not looked" rather than "we never kept
-        // it".
-        { label: "Size", value: "not recorded" },
+        // SIZE IS STORED, and this row said "not recorded" about it.
+        // `Invoice.pdfSize` is written by the sync
+        // (`src/app/api/invoices/sync/route.ts`) and by both PDF backfill
+        // scripts; the loader simply never selected the column. Where it is
+        // null — nothing uploaded, or a row written before the column carried
+        // anything — `bytes()` returns the em-dash, which is the system's own
+        // "no value" and not a claim that nothing is recorded.
+        //
+        // PAGE COUNT genuinely is not stored — no column holds one and nothing
+        // writes one — and a blank there would read as "we have not looked"
+        // rather than "we never kept it", so that row keeps its words.
+        { label: "Size", value: bytes(d.pdfBytes) },
         { label: "Pages", value: "not recorded" },
       ],
     },

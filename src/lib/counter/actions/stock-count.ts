@@ -46,18 +46,30 @@ export async function beginStockCount(input: { storeId: string }): Promise<
  * number corrects it rather than doubling it, and the page can save on every
  * blur without inventing a dirty-tracking layer.
  *
- * `estimatedQtyAtCount` and the calibration factor are FROZEN at the moment
- * the count was opened — `getCountEntryData` hands them over per ingredient
- * and they travel back down with the line, because they are the training
- * target the model is later scored against. Recomputing them at save time
- * would score the model on a number it produced after seeing the answer.
+ * `estimatedQtyAtCount` is the expectation taken at `StockCount.startedAt` —
+ * one as-of moment for every line on the session — and it travels back down
+ * with the line here, because it is the training target the model is later
+ * scored against. Recomputing it at save time would both score the model on a
+ * number it produced after seeing the answer and put a recipe walk in front of
+ * a write that happens in a walk-in on one bar of signal.
+ *
+ * The page's copy of it comes from `loadCountEntry` in
+ * `@/lib/counter/adapters/stock-counts` (six store-wide queries via
+ * `loadStoreInventoryContext`), NOT from `getCountEntryData` below, which
+ * computes the same figure one ingredient at a time and was measured at 180s
+ * for a 76-ingredient catalogue. It is null for an ingredient with no CLOSED
+ * count behind it to be expected from; `saveStockCountLine` leaves the column
+ * alone in that case rather than nulling what is already there.
  */
 export interface CountEntryLine {
   ingredientId: string
   name: string
   category: string
   unit: string
-  /** The model's estimate when the count opened. Null when it had no signal. */
+  /**
+   * What the model expected on the shelf when the count opened. Null when the
+   * ingredient has no closed count behind it to be expected from.
+   */
   estimate: number | null
   /** What has already been entered for this ingredient on this count. */
   entered: number | null

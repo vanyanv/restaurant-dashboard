@@ -7,7 +7,7 @@ import {
   loadVendorBasketWeeks,
 } from "@/lib/counter/vendor-basket"
 import { isChargeRow } from "@/lib/invoice-charges"
-import { normalizeVendorName } from "@/lib/vendor-normalize"
+import { normalizeVendorName, vendorMatchKey } from "@/lib/vendor-normalize"
 import { count, money, pct, plural } from "@/lib/counter/format"
 import { rangeLabel, toQueryBounds, type DateRange } from "@/lib/counter/date-range"
 import type { ChartSpec } from "@/lib/counter/chart-geometry"
@@ -18,7 +18,7 @@ import {
   guardSection,
   type StreamedSections,
 } from "@/lib/counter/adapters/types"
-import { mapReady, type SectionData } from "@/lib/counter/section-data"
+import { empty, mapReady, mapReadyTo, ready, type SectionData } from "@/lib/counter/section-data"
 import type { FigureProps, MListRow, QueueItem, Row } from "@/components/counter"
 
 /**
@@ -147,12 +147,22 @@ async function loadVendors(input: VendorsInput): Promise<VendorData> {
     loadVendorBasketWeeks({ accountId, today }),
   ])
 
-  // Fold on the normalized name FIRST. Every figure below — the count, the
-  // spend, the cadence, the reconcile tally — is wrong by four rows otherwise.
+  // Fold on the vendor's IDENTITY key FIRST. Every figure below — the count,
+  // the spend, the cadence, the reconcile tally — is wrong by four rows
+  // otherwise on this account's ten invoice spellings.
+  //
+  // The key is `vendorMatchKey`, not `normalizeVendorName`. That module calls
+  // the second one a DISPLAY normalizer and says why it is unsafe as an
+  // identity: a supplier the alias table has never seen falls through with its
+  // raw casing intact, so "BEAR STATE KITCHEN" and "Bear State Kitchen" are
+  // two identities and split one supplier's spend across two rows. Case,
+  // punctuation and spacing are noise in a vendor name; the alias table
+  // carries the rest. `displayName` picks what the folded row is called.
   const folded = new Map<
     string,
     {
-      spellings: Set<string>
+      /** Every raw `vendorName` that folded in, and how many invoices wore it. */
+      spellings: Map<string, number>
       dates: Date[]
       spend: number
       invoices: number
@@ -162,11 +172,11 @@ async function loadVendors(input: VendorsInput): Promise<VendorData> {
   >()
 
   for (const inv of invoices) {
-    const name = normalizeVendorName(inv.vendorName)
+    const key = vendorMatchKey(inv.vendorName)
     const acc =
-      folded.get(name) ??
-      { spellings: new Set<string>(), dates: [], spend: 0, invoices: 0, broken: 0, inReview: 0 }
-    acc.spellings.add(inv.vendorName)
+      folded.get(key) ??
+      { spellings: new Map<string, number>(), dates: [], spend: 0, invoices: 0, broken: 0, inReview: 0 }
+    acc.spellings.set(inv.vendorName, (acc.spellings.get(inv.vendorName) ?? 0) + 1)
     acc.invoices += 1
     acc.spend += inv.totalAmount
     if (inv.invoiceDate) acc.dates.push(inv.invoiceDate)
@@ -182,7 +192,7 @@ async function loadVendors(input: VendorsInput): Promise<VendorData> {
     const reference = inv.subtotal ?? inv.totalAmount
     if (Math.abs(goods - reference) > EPSILON) acc.broken += 1
 
-    folded.set(name, acc)
+    folded.set(key, acc)
   }
 
   // Weekly basket medians, indexed to each vendor's own first week — see
@@ -203,19 +213,27 @@ async function loadVendors(input: VendorsInput): Promise<VendorData> {
     return gaps.length % 2 === 0 ? (gaps[mid - 1] + gaps[mid]) / 2 : gaps[mid]
   }
 
-  const vendors: VendorRow[] = [...folded.entries()]
-    .map(([name, a]) => ({
-      name,
-      spellings: [...a.spellings],
-      invoices: a.invoices,
-      spend: a.spend,
-      broken: a.broken,
-      inReview: a.inReview,
-      cadence: medianGap(a.dates),
-      trend: trendOfVendor.get(name) ?? null,
-      firstSeen: a.dates.length > 0 ? a.dates[0] : null,
-      lastSeen: a.dates.length > 0 ? a.dates[a.dates.length - 1] : null,
-    }))
+  const vendors: VendorRow[] = [...folded.values()]
+    .map((a) => {
+      const name = displayName(a.spellings)
+      return {
+        name,
+        spellings: [...a.spellings.keys()],
+        invoices: a.invoices,
+        spend: a.spend,
+        broken: a.broken,
+        inReview: a.inReview,
+        cadence: medianGap(a.dates),
+        // `vendor-basket.ts` folds its weeks on the DISPLAY normalizer, so
+        // this reads by display name. A vendor merged here only by casing can
+        // therefore carry its basket weeks under its other casing and read as
+        // "no prior" — the spend, cadence and reconcile columns are merged
+        // either way, and this one is the honest "we do not know".
+        trend: trendOfVendor.get(name) ?? null,
+        firstSeen: a.dates.length > 0 ? a.dates[0] : null,
+        lastSeen: a.dates.length > 0 ? a.dates[a.dates.length - 1] : null,
+      }
+    })
     .sort((a, b) => b.spend - a.spend)
 
   return {
@@ -228,6 +246,52 @@ async function loadVendors(input: VendorsInput): Promise<VendorData> {
 }
 
 /* -- helpers ---------------------------------------------------------- */
+
+/**
+ * The name a folded row wears: the normalized form of whichever raw spelling
+ * appears on the most invoices, ties going to the one seen first.
+ *
+ * Every spelling the alias table knows normalizes to the same canonical, so on
+ * this account's ten strings this decides nothing — "Sysco" and "Sysco Los
+ * Angeles, Inc." both come back "Sysco" whichever wins. It decides the name
+ * only for a supplier the alias table has never seen and whose invoices carry
+ * more than one casing, where the majority casing is the closest thing to a
+ * house style the documents offer.
+ */
+/**
+ * The spelling a folded vendor is CALLED: whichever raw `vendorName` appears
+ * on the most invoices, ties to whichever this account saw first. Exported so
+ * `getVendorName` in `@/lib/counter/adapters/vendor` picks the SAME name for
+ * the detail page's title and breadcrumb — sharing the function rather than
+ * reimplementing the rule is what keeps the two pages agreeing on what a
+ * multi-spelling vendor is called (CLAUDE.md's one-function-per-figure rule
+ * applies to a name here as much as to a number).
+ */
+export function displayName(spellings: Map<string, number>): string {
+  let best = ""
+  let bestCount = -1
+  for (const [raw, n] of spellings) {
+    if (n > bestCount) {
+      best = raw
+      bestCount = n
+    }
+  }
+  return normalizeVendorName(best)
+}
+
+/**
+ * The vendors the price trend can actually draw: on this page's range AND in
+ * the basket window, biggest by spend first.
+ *
+ * The two sets are not the same. `d.vendors` comes from the reader's range;
+ * `d.weekly` comes from `vendor-basket.ts`'s own trailing `BASKET_WEEKS`,
+ * which no control on this page moves. A range of last January against a
+ * window ending today can overlap in nothing at all — which is a section with
+ * no data, not a chart with no lines.
+ */
+function trendVendors(d: VendorData): VendorRow[] {
+  return d.vendors.filter((v) => d.weekly.some((p) => p.vendor === v.name)).slice(0, SERIES)
+}
 
 const D = (iso: string) =>
   new Date(`${iso}T00:00:00Z`).toLocaleDateString("en-US", {
@@ -363,7 +427,11 @@ function tableOf(d: VendorData): VendorTable {
     note:
       (merged.length > 0
         ? `${merged.map((v) => `${v.name} bills under ${count(v.spellings.length)} names`).join("; ")} — ` +
-          `folded here, so the spend column is the supplier's and not the spelling's. `
+          `folded onto one row each, so the spend column is the supplier's and not the ` +
+          `spelling's. Casing, punctuation and spacing never separate two suppliers; beyond ` +
+          `those, the fold follows a hand-kept list of the spellings this account's invoice ` +
+          `templates use, which is a judgement and not a registry lookup. A supplier the list ` +
+          `has not seen keeps its own row. `
         : "") +
       (broken === 0
         ? `Every invoice in the range ties out.`
@@ -391,9 +459,9 @@ function tableOf(d: VendorData): VendorTable {
  */
 function trendOf(d: VendorData): VendorTrend {
   const weeks = [...new Set(d.weekly.map((p) => p.week))].sort()
-  const picked = d.vendors
-    .filter((v) => d.weekly.some((p) => p.vendor === v.name))
-    .slice(0, SERIES)
+  // Never empty: the section resolves `empty` rather than calling this when
+  // `trendVendors` finds no overlap — see `getVendorsSectionPromises`.
+  const picked = trendVendors(d)
 
   const COLOURS = ["var(--bad)", "var(--signal)", "var(--good)", "var(--ink-3)"]
   const names = shortLabels(
@@ -420,10 +488,7 @@ function trendOf(d: VendorData): VendorTrend {
   return {
     chart: build(142, true),
     phoneChart: build(112, false),
-    meta:
-      picked.length === 0
-        ? "no priced delivery in the window"
-        : `${count(picked.length)} biggest · change from ${weeks.length > 0 ? D(weeks[0]) : "—"}`,
+    meta: `${count(picked.length)} biggest · change from ${D(weeks[0])}`,
     note:
       `Each vendor is indexed to its own first week, because they do not bill in the same ` +
       `unit: Premier Meats prices by the pound and Vitco by the case, and on a shared dollar ` +
@@ -511,11 +576,39 @@ export function getVendorsSectionPromises(
   const s = <T,>(f: (d: VendorData) => T) =>
     guardSection(dataP.then((sd) => mapReady(sd, f)), "retryVendors")
 
+  /**
+   * A section that can be empty while the LOAD is full.
+   *
+   * `classify` above answers one question — did any invoice fall in the range
+   * — and every section is mapped off that one answer. Two of them have a
+   * second, narrower emptiness of their own, and before this they rendered it
+   * as a ready section with nothing in it.
+   */
+  const sTo = <T,>(f: (d: VendorData) => SectionData<T>) =>
+    guardSection(dataP.then((sd) => mapReadyTo(sd, f)), "retryVendors")
+
   return {
     headline: s(headlineOf),
     table: s(tableOf),
-    trend: s(trendOf),
-    work: s(workOf),
+    trend: sTo<VendorTrend>((d) =>
+      trendVendors(d).length > 0
+        ? ready(trendOf(d))
+        : // Which empty, because the next step differs. With no weeks at all,
+          // nothing priced has reached the window this chart watches and no
+          // control on the page can change that — `nothing_received` states
+          // the window's result and instructs nothing. With weeks that belong
+          // to other vendors, the range is what decided which vendors are on
+          // this page, and widening it (or the store scope) genuinely changes
+          // the answer — which is what `no_match` tells the reader to do.
+          empty<VendorTrend>(d.weekly.length === 0 ? "nothing_received" : "no_match"),
+    ),
+    work: sTo<VendorWork>((d) => {
+      const w = workOf(d)
+      // Nothing rising and nothing short is not a worklist with no rows; it is
+      // an empty worklist, which is good news and has to read as good news
+      // (note 23). The COGS, labour and orders adapters resolve it the same way.
+      return w.items.length === 0 ? empty<VendorWork>("all_clear") : ready(w)
+    }),
     list: s(listOf),
   }
 }

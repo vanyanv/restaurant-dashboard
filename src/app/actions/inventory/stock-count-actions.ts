@@ -133,6 +133,20 @@ export async function saveStockCountLine(input: {
     }
   }
 
+  // The expectation is the calibration's training target, so it is taken only
+  // as a finite number — NaN or Infinity from a hand-rolled caller would be
+  // filtered out again by `applyCalibrationUpdatesForCount` and is not worth
+  // storing in the meantime.
+  const estimate =
+    typeof input.estimatedQtyAtCount === "number" && Number.isFinite(input.estimatedQtyAtCount)
+      ? input.estimatedQtyAtCount
+      : null
+  const calibrationFactor =
+    typeof input.calibrationFactorAtCount === "number" &&
+    Number.isFinite(input.calibrationFactorAtCount)
+      ? input.calibrationFactorAtCount
+      : null
+
   const upserted = await prisma.stockCountLine.upsert({
     where: {
       stockCountId_canonicalIngredientId: {
@@ -147,16 +161,22 @@ export async function saveStockCountLine(input: {
       nativeQty: input.nativeQty,
       nativeUnit: input.nativeUnit,
       note: input.note ?? null,
-      estimatedQtyAtCount: input.estimatedQtyAtCount ?? null,
-      calibrationFactorAtCount: input.calibrationFactorAtCount ?? null,
+      estimatedQtyAtCount: estimate,
+      calibrationFactorAtCount: calibrationFactor,
     },
+    // A correction re-saves the SAME line, and it must not be able to erase an
+    // expectation already recorded against it. The expectation is anchored to
+    // the moment the session opened, so it is write-once per line: a caller
+    // that has one sets it, a caller that has none leaves the column alone
+    // rather than nulling it. Without this, one stale tab blurring a box
+    // silently removes the count's only training signal.
     update: {
       qtyInRecipeUnit: conversion.qtyInRecipeUnit,
       nativeQty: input.nativeQty,
       nativeUnit: input.nativeUnit,
       note: input.note ?? null,
-      estimatedQtyAtCount: input.estimatedQtyAtCount ?? null,
-      calibrationFactorAtCount: input.calibrationFactorAtCount ?? null,
+      ...(estimate === null ? {} : { estimatedQtyAtCount: estimate }),
+      ...(calibrationFactor === null ? {} : { calibrationFactorAtCount: calibrationFactor }),
     },
     select: { id: true },
   })

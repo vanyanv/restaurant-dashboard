@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma"
 import { getScopedStores } from "@/lib/account-stores"
+import { unitsSold } from "@/lib/inventory/usage-math"
 import { count, money, pct, plural } from "@/lib/counter/format"
 import { toQueryBounds, type DateRange } from "@/lib/counter/date-range"
 import {
@@ -243,7 +244,7 @@ async function loadItem(input: MenuItemInput): Promise<ItemData | null> {
   let qty = 0
   let revenue = 0
   for (const r of mine) {
-    const q = Number(r.fpQuantitySold ?? 0) + Number(r.tpQuantitySold ?? 0)
+    const q = unitsSold(r)
     qty += q
     revenue += Number(r.fpTotalSales ?? 0) + Number(r.tpTotalSales ?? 0)
     categories.add(r.category?.trim() ? r.category.trim() : "Uncategorized")

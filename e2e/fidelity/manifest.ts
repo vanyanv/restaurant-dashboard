@@ -2057,49 +2057,27 @@ export const PAGES: FidelityPage[] = [
     route: "/dashboard/operations/vendors",
     mobileRoute: "/m/operations/vendors",
     report: true,
-    // MEASURED: the phone is 5 of 5, complete. The desk is 14 of 15 and every
-    // tally matches but one — `qitem`, 1 against 2.
+    // MEASURED 2026-09-20 on 47c467c5: 15 of 15, both viewports, structure
+    // exact. The `qitem` allowance this entry used to carry is gone — see
+    // below for why it closed rather than being re-argued.
     //
-    // DECLARED, having previously been argued the other way on a mistaken
-    // reading of the mechanism. The old note said an allowance here "would go
-    // stale and start absorbing a real regression"; `applyAbsenceAllowances`
-    // does neither. It never forgives an EXTRA, and an allowance with budget
-    // left over is REPORTED as stale — so the day a second item appears, this
-    // line turns the gate red and asks to be deleted. That is the prompt this
-    // page wants, not the risk the old note feared.
-    //
-    // And the entry can now say something truer than "one fewer than the
-    // fixture happened to have". `P.vendors`'s "Worth a call" holds two items
-    // and both are about time and price: a basket drifting, and "the slowest
-    // and the dearest". The second is a CAPABILITY GAP, not a quiet window —
-    // `VendorLeadTime` holds 0 rows, so no vendor on this account has a lead
-    // time and "slowest" has nothing to rank. The adapter's `headlineOf`
-    // docblock argues the same gap for the strip's third cell, and names what
-    // is computable instead (cadence, which is delivery-to-delivery rather
-    // than order-to-delivery). A worklist item ranking vendors by a number
-    // that does not exist would be the same lie one column over.
-    //
-    // The item that IS built — "rising basket" — is conditional on a vendor
-    // trending past `BASKET_FLAT_PCT`, and does not fire this window. When it
-    // does, the stale report fires with it.
+    // The allowance's own history is worth keeping. It was declared once
+    // ("MEASURED: the phone is 5 of 5... the desk is 14 of 15... qitem, 1
+    // against 2"), reasoning that the second of `P.vendors`'s two "Worth a
+    // call" item TYPES — "the slowest and the dearest" — is a capability gap
+    // (`VendorLeadTime` holds 0 rows) rather than a quiet window, and that the
+    // one item type this account DOES build, "rising basket", was simply not
+    // firing in that measurement. That reasoning still holds: nothing in this
+    // wave's build touched `workOf`, `VendorLeadTime`, or `BASKET_FLAT_PCT`.
+    // What changed is the data underneath it — a vendor is trending past the
+    // threshold now that was not on 2026-08-28 — so the one item type this
+    // account can produce is now producing two items (one per vendor rising),
+    // closing the count to 2 without the missing type ever being built. The
+    // allowance's own comment predicted this exact outcome: "the day a second
+    // item appears, this line turns the gate red and asks to be deleted."
+    // This is that day.
     status: "counter",
-    baseline: { desktop: 14, mobile: 5 },
-    absentLandmarks: [
-      {
-        landmark: "qitem",
-        desktop: 1,
-        mobile: 0,
-        reason:
-          "The second of the design's two \"Worth a call\" items is \"the " +
-          "slowest and the dearest\", and this account has no lead time to " +
-          "rank slowness by: `VendorLeadTime` holds 0 rows, the cron that " +
-          "fills it has never written one, and the adapter's `headlineOf` " +
-          "declines the strip's \"Median lead time\" cell for exactly the " +
-          "same reason rather than printing cadence under the wrong word. " +
-          "The phone's composition has no queue at all, which is why this is " +
-          "declared on the desk alone.",
-      },
-    ],
+    baseline: { desktop: 15, mobile: 5 },
   },
   {
     protoId: "vendor",

@@ -3,7 +3,7 @@
 import { Section } from "@/components/counter"
 import { loading } from "@/lib/counter/section-data"
 
-/** The phone ingredient's loading boundary — the four entries the client renders. */
+/** The phone ingredient's loading boundary — the five entries the client renders. */
 export default function MobileIngredientLoading() {
   return (
     <>
@@ -14,6 +14,9 @@ export default function MobileIngredientLoading() {
         {() => null}
       </Section>
       <Section title="Price history" data={loading()}>
+        {() => null}
+      </Section>
+      <Section title="Deliveries" data={loading()}>
         {() => null}
       </Section>
       <Section title="Used in" data={loading()}>

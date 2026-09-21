@@ -8,6 +8,11 @@ import {
   type StreamedSections,
 } from "@/lib/counter/adapters/types"
 import { mapReady, type SectionData } from "@/lib/counter/section-data"
+import {
+  loadStoreInventoryContext,
+  runningOnHandFromContext,
+  type ContextIngredient,
+} from "@/lib/inventory/store-inventory-context"
 import type { FigureProps, KvRow, MListRow, QueueItem, Row } from "@/components/counter"
 
 /**
@@ -16,23 +21,42 @@ import type { FigureProps, KvRow, MListRow, QueueItem, Row } from "@/components/
  *
  * "Every count session, who did it, and what it found."
  *
- * ## Variance cannot be computed, and that is the page
+ * ## Variance, and what an expectation is actually anchored to
  *
  * `P.counts` is built on variance: its strip ends in `Shrink · 1.2% · ▲ 0.3
  * pts`, its table carries `Short`, `Over` and `$ variance`, and its second
- * section is a variance-by-session chart. **None of it has a source.**
+ * section is a variance-by-session chart.
  *
  * A variance needs an EXPECTED quantity to subtract the counted one from.
- * `StockCountLine.estimatedQtyAtCount` is the column for it and it is **null
- * on all 10 lines in the account**; `IngredientModelState`, the calibration
- * table that would produce an expectation, holds **0 rows**. So there is no
- * expected figure, no short, no over, no shrink — not "zero variance", but no
- * basis on which to state one.
+ * `StockCountLine.estimatedQtyAtCount` is the column for it, and until
+ * 2026-09-20 it was null on every line in the account because `loadCountEntry`
+ * hard-coded `estimate: null` on every row it handed the entry form — the
+ * expectation was never computed, so it was never carried down with the save,
+ * so `applyCalibrationUpdatesForCount` early-returned on close and
+ * `IngredientModelState` stayed at 0 rows. A closed loop with four links and
+ * no way in.
  *
- * What CAN be stated is what was counted and what it is worth: 9 of the 10
- * lines carry a `costPerRecipeUnit` and price out. So the page reports the
- * count, values it, and says plainly why the columns it cannot fill are
- * absent rather than showing them at zero.
+ * It is open now, and the thing that opens it is worth naming precisely,
+ * because it is NOT `IngredientModelState`. An expectation here is
+ * `runningOnHandFromContext` — the most recent **CLOSED** count for a (store,
+ * ingredient), plus deliveries since, minus the recipe-walk depletion of what
+ * was sold since, minus adjustments. No calibration row is needed to produce
+ * it; `calibrationFactor` only refines it later. What IS needed is the anchor:
+ * a count that has reached COMPLETED. With none, `baseAt` is null, the walk
+ * silently re-bases on the epoch and "expected on hand" degenerates into
+ * "every delivery ever recorded minus every sale ever modelled" — a number
+ * that is not an expectation and would poison the first calibration sample it
+ * touched. So an estimate is recorded **only where `baseAt` is non-null**, and
+ * the copy on the page says so rather than implying that finishing a count is
+ * the missing step.
+ *
+ * On this account that still means zero expectations today: nothing has ever
+ * closed. The first count to close becomes the baseline; the next one taken
+ * against it carries an expectation per ingredient, and this page stops being
+ * a list of absences.
+ *
+ * What CAN always be stated is what was counted and what it is worth: 9 of the
+ * 10 lines carry a `costPerRecipeUnit` and price out.
  *
  * ## Four sessions, none finished, all the developer's
  *
@@ -179,6 +203,12 @@ interface CountedLine {
   nativeUnit: string | null
   unitCost: number | null
   value: number | null
+  /**
+   * What the model expected on the shelf when the line was saved, in the same
+   * recipe unit as `qty`. Null where the ingredient had no CLOSED count behind
+   * it to expect from — see the file docblock.
+   */
+  estimate: number | null
   countedAt: Date
 }
 
@@ -198,11 +228,23 @@ interface Session {
 
 interface Data {
   sessions: Session[]
-  /** Every line in the account, for the "what was counted" figures. */
+  /** Every line in SCOPE, for the "what was counted" figures — see `scope`. */
   lines: CountedLine[]
   linesWithEstimate: number
   modelStateRows: number
   rangeLabel: string
+  /**
+   * What "here" means in this page's copy: "this store" when the switcher has
+   * one picked, "this account" otherwise.
+   *
+   * Every figure on this page is scoped by `loadCounts`'s store filter, and
+   * the sentences that explain a missing variance are factual claims an owner
+   * would act on. Saying "no count on this account has ever closed" while
+   * Hollywood is picked and Culver City closed three last month is not a
+   * loose phrasing — it is a false statement about the other store, in the
+   * one sentence whose job is to say why there is nothing to show.
+   */
+  scope: "this store" | "this account"
 }
 
 async function loadCounts(input: StockCountsInput): Promise<Data> {
@@ -271,6 +313,10 @@ async function loadCounts(input: StockCountsInput): Promise<Data> {
         nativeUnit: l.nativeUnit,
         unitCost: cost,
         value: lineValue,
+        estimate:
+          l.estimatedQtyAtCount !== null && Number.isFinite(l.estimatedQtyAtCount)
+            ? l.estimatedQtyAtCount
+            : null,
         countedAt: l.createdAt,
       })
     }
@@ -291,12 +337,21 @@ async function loadCounts(input: StockCountsInput): Promise<Data> {
   return {
     sessions,
     lines,
+    // Same test `CountedLine.estimate` applies below, so the Variance
+    // section's count and the session strip's cell cannot give two answers to
+    // one question. `double precision` accepts 'NaN', and a row holding one is
+    // not a line carrying an expected quantity.
     linesWithEstimate: counts.reduce(
-      (t, c) => t + c.lines.filter((l) => l.estimatedQtyAtCount !== null).length,
+      (t, c) =>
+        t +
+        c.lines.filter(
+          (l) => l.estimatedQtyAtCount !== null && Number.isFinite(l.estimatedQtyAtCount),
+        ).length,
       0,
     ),
     modelStateRows,
     rangeLabel: rangeLabel(range, "custom"),
+    scope: storeId === null ? "this account" : "this store",
   }
 }
 
@@ -436,9 +491,13 @@ function sessionsOf(d: Data): CountsSessions {
         : `${count(d.sessions.length)} · all time`,
     note:
       d.sessions.length === 0
-        ? `No stock count has ever been started on this account.`
+        ? `No stock count has ever been started on ${d.scope}.`
         : `No Short, Over or variance column: those subtract a counted quantity from an expected ` +
-          `one, and no expected quantity was ever recorded — see below. ` +
+          `one, and ` +
+          (d.linesWithEstimate === 0
+            ? `no line has an expected quantity on it yet`
+            : `only ${count(d.linesWithEstimate)} of ${count(d.lines.length)} lines have one`) +
+          ` — see below. ` +
           (byDeveloper === d.sessions.length
             ? `Every session here was run from the developer account, on ` +
               `${days.length === 1 ? "one day" : `${count(days.length)} days`} in May. ` +
@@ -450,25 +509,46 @@ function sessionsOf(d: Data): CountsSessions {
 }
 
 /**
- * Variance — owed, named, and explained rather than drawn.
+ * Variance — stated when there is one, and precisely accounted for when not.
  *
  * The prototype's second section is a variance-by-session bar chart. Drawing
- * it would mean inventing the series. This states what the section needs, what
- * is actually there, and what would make it appear.
+ * it would mean inventing the series while no line carries an expectation.
+ *
+ * ## The copy here has to be true about WHICH step is missing
+ *
+ * It used to read as though finishing a count were the missing step ("A count
+ * that closes with an expectation attached is what turns this section into a
+ * number"), which put the reader one button away from a variance. It is not
+ * one button away, and it never was. An expectation is measured from the last
+ * CLOSED count on that store — deliveries since, minus what the recipes say
+ * the sales consumed, minus adjustments. Closing THIS count records no
+ * expectation for it; it creates the baseline the NEXT count is measured
+ * against. Two counts, not one, and the page now says that.
  */
 function varianceOf(d: Data): CountsVariance {
+  const completed = d.sessions.filter((x) => x.status === "COMPLETED").length
+  const has = d.linesWithEstimate > 0
   return {
-    lead:
-      `A variance is a counted quantity minus an expected one. This account records the first ` +
-      `and has never recorded the second, so there is no shrink figure, no short and no over — ` +
-      `not zero variance, but no basis for stating one.`,
+    lead: has
+      ? `A variance is a counted quantity minus an expected one. ` +
+        `${count(d.linesWithEstimate)} of ${count(d.lines.length)} counted lines carry an ` +
+        `expected quantity, recorded when the line was saved and anchored to the moment its ` +
+        `session was opened: the last closed count on that store, plus deliveries since, minus ` +
+        `what the recipes say the sales consumed, minus adjustments.`
+      : `A variance is a counted quantity minus an expected one. No line here carries the ` +
+        `second yet, and the reason is not that a count was left unfinished. An expected ` +
+        `quantity is measured FROM the last closed count on the store, and ` +
+        `${completed === 0 ? `no count on ${d.scope} has ever closed` : "no closed count precedes these"} ` +
+        `— so there is nothing to measure from. Closing a count does not give that count an ` +
+        `expectation; it becomes the baseline the next one is measured against.`,
     absences:
       `${count(d.lines.length)} lines have been counted and ` +
       `${count(d.linesWithEstimate)} of them carry an expected quantity. ` +
-      `IngredientModelState, the table that would produce one from the recipe walk, holds ` +
-      `${count(d.modelStateRows)} rows, and ` +
-      `${count(d.sessions.filter((x) => x.status === "COMPLETED").length)} of ` +
-      `${count(d.sessions.length)} sessions have ever reached COMPLETED.`,
+      `${count(completed)} of ${count(d.sessions.length)} sessions on ${d.scope} have reached ` +
+      `COMPLETED, ` +
+      `which is what an expectation is measured from, and IngredientModelState — the table that ` +
+      `refines the expectation once closed counts start scoring it — holds ` +
+      `${count(d.modelStateRows)} rows.`,
     rows: [
       { label: "Lines counted", value: count(d.lines.length) },
       {
@@ -483,19 +563,21 @@ function varianceOf(d: Data): CountsVariance {
       },
       {
         label: "Sessions ever completed",
-        value: count(d.sessions.filter((x) => x.status === "COMPLETED").length),
-        ...(d.sessions.every((x) => x.status !== "COMPLETED") && d.sessions.length > 0
-          ? { tone: "bad" as const }
-          : {}),
+        value: count(completed),
+        ...(completed === 0 && d.sessions.length > 0 ? { tone: "bad" as const } : {}),
       },
     ],
-    meta: "what it would need",
-    note:
-      `StockCountLine.estimatedQtyAtCount is the column an expectation goes in, and ` +
-      `IngredientModelState is the table that would produce one from the recipe walk. ` +
-      `Both are empty. A count that closes with an expectation attached is what turns this ` +
-      `section from a list of absences into a number — and into the chart the design draws ` +
-      `here.`,
+    meta: has ? "expected against counted" : "what it would need",
+    note: has
+      ? `StockCountLine.estimatedQtyAtCount is the column the expectation is written to, on the ` +
+        `save. It is only written where that ingredient has a closed count behind it to be ` +
+        `measured from; an ingredient counted here for the first time still has none, which is ` +
+        `why the two figures above differ.`
+      : `StockCountLine.estimatedQtyAtCount is the column an expectation is written to, on the ` +
+        `save. It is left empty on purpose while a store has no closed count: with no anchor the ` +
+        `walk would re-base on the epoch and return every delivery ever recorded minus every ` +
+        `sale ever modelled, which is not an expectation and would be worse than an empty ` +
+        `column. Close a count and the next one taken against it fills this in.`,
   }
 }
 
@@ -554,6 +636,64 @@ function durationCell(session: Session): FigureProps {
   }
 }
 
+/**
+ * `P.countsession`'s "Variance" cell.
+ *
+ * `value` is Σ (expected − counted) × unit cost over the lines that have BOTH
+ * an expectation and a cost. `delta` has to say how many lines that is,
+ * because "$0.00" over two of forty lines and over forty of forty are
+ * different claims — a line carrying an expectation with no cost on the
+ * ingredient contributes exactly nothing to the money while still being a
+ * real gap on the shelf.
+ *
+ * ## It is NOT a floor, and this cell must not borrow that word
+ *
+ * The counted-stock cell beside it says "at least — N unpriced" and is right
+ * to: every line it omits would have added `qty × cost`, which cannot be
+ * negative, so the total it shows is a genuine lower bound. **Variance is
+ * signed.** An omitted line can be short (positive) or over (negative), so
+ * leaving it out bounds the figure in neither direction and can flip it: three
+ * priced lines netting +$40 beside two unpriced ones that would have come to
+ * −$900 make "at least $40.00" a false statement about a −$860 gap. So the
+ * delta names the unpriced lines as an unknown rather than as a margin, and
+ * the tone stays cautious while any remain — not because the money says so,
+ * but because the money is not yet the answer.
+ */
+function varianceCell(lines: CountedLine[]): FigureProps {
+  const withEstimate = lines.filter((l) => l.estimate !== null)
+  if (withEstimate.length === 0) {
+    return {
+      label: "Variance",
+      value: "—",
+      delta: "no closed count to expect from",
+      deltaTone: "is-down",
+    }
+  }
+  const priced = withEstimate.filter((l) => l.unitCost !== null)
+  if (priced.length === 0) {
+    return {
+      label: "Variance",
+      value: "—",
+      delta: `${count(withEstimate.length)} expected, none priced`,
+      deltaTone: "is-down",
+    }
+  }
+  const unpriced = withEstimate.length - priced.length
+  const gap = priced.reduce((t, l) => t + ((l.estimate as number) - l.qty) * (l.unitCost ?? 0), 0)
+  return {
+    label: "Variance",
+    value: money(gap),
+    delta:
+      unpriced > 0
+        ? `${count(priced.length)} of ${count(lines.length)} ` +
+          `${lines.length === 1 ? "line" : "lines"} expected and priced · ` +
+          `${count(unpriced)} unpriced, either way`
+        : `${count(priced.length)} of ${count(lines.length)} ` +
+          `${lines.length === 1 ? "line" : "lines"} expected`,
+    deltaTone: gap > 0 || unpriced > 0 ? "is-down" : "is-flat",
+  }
+}
+
 /** See `CountSessionWork`. */
 function sessionWorkOf(session: Session, lines: CountedLine[]): CountSessionWork {
   const items: QueueItem[] = []
@@ -572,8 +712,8 @@ function sessionWorkOf(session: Session, lines: CountedLine[]): CountSessionWork
         `Opened ${start === null ? "at an unrecorded time" : `on ${D(start)}`} and still ` +
         `IN_PROGRESS, with ${count(lines.length)} ` +
         `${lines.length === 1 ? "line" : "lines"} entered. A count only becomes a reading ` +
-        `when it closes: until then there is no completed session for the next one to be ` +
-        `measured against, which is why no variance exists anywhere in this account.`,
+        `when it closes, and closing it is what gives the NEXT count something to expect ` +
+        `from — this one is measured against whatever closed before it, which is nothing.`,
       act: "See every count",
       href: "/dashboard/operations/inventory/counts",
     })
@@ -643,12 +783,17 @@ export interface CountSessionWork {
  * counts, so every count ever taken on this account has been invisible to the
  * thing it exists to feed.
  *
- * `estimate` is the model's frozen guess from the moment the count opened,
- * and it is shown beside the box on purpose: a counter who can see what the
- * system expected catches their own miskey, and the gap between the two is
- * the training signal. It is FROZEN rather than recomputed at save time —
- * scoring the model against a number it produced after seeing the answer
- * would not be scoring it at all.
+ * `estimate` is what the model expected on the shelf at `StockCount.startedAt`
+ * — one as-of moment for every line on the session, whichever order they were
+ * typed in. It travels down with the save into
+ * `StockCountLine.estimatedQtyAtCount`, which is the training target the
+ * calibration is later scored against, and it is deliberately taken BEFORE
+ * any counting rather than recomputed per box: scoring the model against a
+ * number it produced after seeing the answer would not be scoring it at all.
+ *
+ * It is null for an ingredient with no closed count behind it to be expected
+ * from — see `loadCountEntry` for why that null is the honest value and not a
+ * missing feature.
  */
 export interface CountSessionEntryRow {
   ingredientId: string
@@ -754,12 +899,13 @@ export function getCountSessionSectionPromises(
           { label: "Lines", value: count(lines.length), delta: lines.length === 0 ? "nothing counted" : "counted", deltaTone: lines.length === 0 ? "is-down" : "is-flat" },
           valueCell,
           statusCell,
-          {
-            label: "Variance",
-            value: "—",
-            delta: "no expected quantity recorded",
-            deltaTone: "is-down",
-          },
+          // The prototype's fourth cell. It stays an em-dash while no line on
+          // the session carries an expectation — and it is filled the moment
+          // one does, in money, because the lines are in different units and
+          // only the priced-out gap adds up across them. Positive = short:
+          // less on the shelf than the last closed count plus deliveries minus
+          // modelled usage says there should be.
+          varianceCell(lines),
           // `P.countsession`'s fifth cell is "Duration · 18 min · ▼ 4 min",
           // which a closed count has and an open one does not. This session
           // has no end, so the honest fifth figure is how long it has been
@@ -842,60 +988,119 @@ export function getCountSessionSectionPromises(
  * to load.** Measured against the running production build, twice:
  * `180.0s`, `180.0s` — both hitting curl's timeout rather than finishing.
  *
- * The cost is one line of it. `getCountEntryData` recomputes
+ * The cost is one line of it. `getCountEntryData` calls
  * `computeRunningOnHand` for EVERY canonical ingredient on the account — 76
- * here — on every single render, inside a `Promise.all` that fires all 76 at
- * a connection pool sized for a handful. It does this to "freeze the model's
- * estimate at session-open time", but nothing about that value is actually
- * frozen: it is recomputed from scratch each time anyone opens the page, and
- * only becomes fixed once a line is written and carries
- * `estimatedQtyAtCount` with it.
+ * here — inside a `Promise.all` that fires all 76 at a connection pool sized
+ * for a handful, and each of those calls re-issues the SAME store-wide sales,
+ * mapping and recipe queries the other 75 just issued, then walks the recipe
+ * tree with a `findUnique` per node.
  *
- * So the entry form reads the catalogue, the lines already on this count, and
- * nothing else — four cheap indexed queries.
+ * ## WHY THE ESTIMATE IS BACK ANYWAY
  *
- * ## WHAT THAT COSTS, SAID PLAINLY
+ * That measurement rules out the per-ingredient reader. It does not rule out
+ * the expectation, because the per-ingredient reader is not the only way to
+ * compute one. `loadStoreInventoryContext` +`runningOnHandFromContext` are the
+ * batched twins of exactly that maths — **six queries for the whole store, no
+ * matter how many ingredients**, sharing the pure helpers in `usage-math.ts`
+ * so the two paths cannot drift. The inventory dashboard already runs on them;
+ * they were written for this same 76-ingredient loop. So the choice was never
+ * "a usable clipboard with no estimate, or neither": it is one store-wide
+ * prefetch.
  *
- * The expected-on-hand column is not shown, and `estimatedQtyAtCount` is
- * therefore not written on lines entered from this page. That is a real loss:
- * the (estimate, actual) pair is the training signal for the on-hand model,
- * and seeing the expectation beside the box is what catches a 4 typed where
- * 40 belongs.
+ * Three properties of doing it HERE, on the read, rather than on the save:
  *
- * It is the right trade anyway, and not a close call. A count page that takes
- * three minutes to open is a count page nobody counts on — this account's
- * three abandoned attempts are the evidence — so the choice was never
- * "estimate or no estimate", it was "a usable clipboard with no estimate, or
- * neither". The signal is only worth collecting from a form people can use.
+ *  1. **The save path does not move.** A count is typed in a walk-in on a
+ *     phone with one bar. Every box saves on blur, and a failed write shows a
+ *     small grey "not saved — try again". Putting a recipe walk in front of
+ *     that write would trade a missing column for lost lines, which is the
+ *     worse defect. The number is already in the browser when the box is
+ *     blurred; the save carries it and costs nothing extra.
+ *  2. **One as-of moment for the whole session.** The context is anchored to
+ *     `StockCount.startedAt`, so the thirtieth line typed at 9:40pm is scored
+ *     against the same shelf state as the first at 9:04pm. It is the last
+ *     instant before anyone started counting, which is the only honest moment
+ *     to take a prediction from.
+ *  3. **It is skipped entirely when it cannot mean anything.** See below.
  *
- * The real fix is to write the estimates ONCE, when
- * `startOrResumeStockCount` opens the count, and read them back here as a
- * column. That is a change to the open path and to `StockCount`, it wants its
- * own migration, and it does not belong inside a UI restoration.
+ * ## THE NO-ANCHOR CASE, WHICH IS THIS ACCOUNT'S CASE
+ *
+ * `runningOnHandFromContext` returns `baseAt: null` for an ingredient with no
+ * COMPLETED count behind it, and then `onHand` is NOT an expectation. With no
+ * anchor the walk re-bases on `new Date(0)`: `baseQty` is 0, and the figure
+ * becomes every delivery ever recorded minus every sale the recipes could
+ * model, over the entire history of the account, with no opening inventory.
+ * That number is large, arbitrary, and would land in
+ * `IngredientModelState.calibrationFactor` as the model's first ever sample.
+ *
+ * So the estimate is recorded **only where `baseAt` is non-null**, per
+ * ingredient, and a store with no closed count at all skips the prefetch on a
+ * single indexed probe. No count on this account has ever closed, so today
+ * that means the note below says plainly that no expectation is recorded and
+ * why — not "finish the count and you will get one". The first count to close
+ * becomes the anchor; the next one carries expectations.
  */
 async function loadCountEntry(
   countId: string,
   accountId: string,
 ): Promise<CountSessionEntry | null> {
   // The boundary is the caller's account, never the fetched row's: deriving
-  // accountId from the record makes any countId "valid".
+  // accountId from the record makes any countId "valid". Everything below
+  // this point is scoped by the `accountId` argument or by a storeId that
+  // came back through this filter.
   const countRow = await prisma.stockCount.findFirst({
     where: { id: countId, store: { accountId } },
-    select: { id: true, status: true },
+    select: { id: true, status: true, storeId: true, startedAt: true },
   })
   if (!countRow) return null
 
-  const [ingredients, lines] = await Promise.all([
+  // Both are NOT NULL in the schema (`StockCount.storeId String`,
+  // `startedAt DateTime @default(now())`), so there is no absent-start case to
+  // branch on here. `Session.startedAt` further down IS nullable, which is a
+  // different shape and a different query; don't copy its guard back into this
+  // one and reintroduce a branch that can never be taken.
+  const { storeId, startedAt } = countRow
+
+  const [ingredients, lines, anchor] = await Promise.all([
     prisma.canonicalIngredient.findMany({
       where: { accountId },
       orderBy: [{ category: "asc" }, { name: "asc" }],
-      select: { id: true, name: true, category: true, recipeUnit: true },
+      select: {
+        id: true,
+        name: true,
+        category: true,
+        recipeUnit: true,
+        // The pack is the CS -> recipe-unit factor. Omitting it drops every
+        // case-priced delivery from the expectation and the figure goes
+        // negative — see `convertDelivered` in `usage-math.ts`.
+        caseUnit: true,
+        recipeUnitsPerCase: true,
+        innerPackUnit: true,
+        innerPacksPerCase: true,
+      },
     }),
     prisma.stockCountLine.findMany({
       where: { stockCountId: countId },
       select: { canonicalIngredientId: true, qtyInRecipeUnit: true },
     }),
+    // One probe, served by `@@index([storeId, status])`. If the store has
+    // never closed a count, no ingredient can have an anchor, every
+    // expectation would be the epoch-based nonsense the docblock describes,
+    // and the six-query prefetch below is skipped entirely.
+    prisma.stockCount.findFirst({
+      where: {
+        storeId,
+        status: "COMPLETED",
+        countedAt: { lte: startedAt },
+        store: { accountId },
+      },
+      select: { id: true },
+    }),
   ])
+
+  const estimateById =
+    anchor === null
+      ? new Map<string, number>()
+      : await loadEntryEstimates({ storeId, accountId, asOf: startedAt, ingredients })
 
   const enteredById = new Map(lines.map((l) => [l.canonicalIngredientId, l.qtyInRecipeUnit]))
 
@@ -907,24 +1112,127 @@ async function loadCountEntry(
     // in whatever "each" means for it, which the box says rather than leaving
     // the reader to guess.
     unit: i.recipeUnit ?? "each",
-    estimate: null,
+    estimate: estimateById.get(i.id) ?? null,
     entered: enteredById.get(i.id) ?? null,
   }))
 
   const done = rows.filter((r) => r.entered !== null).length
+  const expected = rows.filter((r) => r.estimate !== null).length
   const open = countRow.status === "IN_PROGRESS"
+  const saving =
+    `Enter what is on the shelf, in the unit the shelf uses. Each box saves when you ` +
+    `leave it, and re-entering a number corrects it rather than adding to it. `
   return {
     countId,
     open,
     rows,
     meta: `${count(done)} of ${count(rows.length)}`,
-    note: open
-      ? `Enter what is on the shelf, in the unit the shelf uses. Each box saves when you ` +
-        `leave it, and re-entering a number corrects it rather than adding to it. ` +
-        `Closing the count is what makes it count: the on-hand model calibrates on ` +
-        `completed counts, and no count on this account has ever been closed.`
-      : `This count is closed, so its lines can no longer be edited.`,
+    note: !open
+      ? `This count is closed, so its lines can no longer be edited.`
+      : expected > 0
+        ? saving +
+          // "carries", not "records": the expectation is attached to a line AS
+          // IT SAVES, so a row nobody has typed into yet has nothing stored
+          // against it. Saying "N of M record" would also be wrong for a line
+          // saved in an earlier session render, before this store had a closed
+          // count — `useCountEntry` skips a write when the number is unchanged,
+          // so that line keeps its null until someone corrects the figure.
+          `${count(expected)} of ${count(rows.length)} ingredients also carry what was ` +
+          `expected on the shelf when this session opened on ${DT(startedAt)}, and each one ` +
+          `is attached to its line as that line saves: the last closed count on this store, ` +
+          `plus deliveries since, minus what the recipes say the sales consumed. The rest ` +
+          `have no closed count behind them to be expected from, or their deliveries do not ` +
+          `all convert to the unit on the shelf, so nothing is attached rather than a guess.`
+        : // There are TWO ways to arrive at nothing, and they call for
+          // different sentences. No anchor means no closed count to measure
+          // from, and closing this one is the fix. An anchor with nothing
+          // computable means the walk ran and every ingredient was
+          // disqualified — usually because its deliveries do not convert to
+          // the unit on the shelf — and closing another count fixes none of
+          // that. Telling the second reader "there is none" would be a false
+          // statement about their own data in the one sentence explaining why
+          // the column is empty.
+          anchor === null
+          ? saving +
+            `Nothing here records an expected quantity, and finishing this count will not ` +
+            `change that: an expectation is measured FROM the last closed count on this ` +
+            `store, and there is none. Closing this one is what creates that baseline — the ` +
+            `next count taken against it carries an expected quantity, and a variance.`
+          : saving +
+            `Nothing here carries an expected quantity, and it is not for want of a closed ` +
+            `count — this store has one. Every ingredient was disqualified: either its ` +
+            `deliveries do not all convert to the unit on the shelf, so the figure would be ` +
+            `an undercount of unknown size, or it was not on the last closed count and has ` +
+            `nothing of its own to be measured from. Setting case sizes on the ingredients ` +
+            `you buy by the case is what fills this in.`,
   }
+}
+
+/**
+ * Every expectation for the session, in six store-wide queries.
+ *
+ * Wrapped whole in a `try`: an expectation is a column this form can do
+ * without, and a catalogue that loads is worth more than one that 500s because
+ * a sales query hiccupped. A failure degrades to "no expectation recorded",
+ * which the note above already has honest copy for.
+ *
+ * ## Three ways a walk comes back unusable, and all three are skipped
+ *
+ * An expectation written here is not just drawn — it is saved onto the line
+ * and then read back by `applyCalibrationUpdatesForCount` as a TRAINING
+ * SAMPLE. A wrong one is therefore worse than none twice over, and worse
+ * again because `saveStockCountLine` now writes the column once: nothing in
+ * the app can clear a bad value afterwards.
+ *
+ *  1. **No anchor** (`baseAt === null`). No closed count behind this
+ *     ingredient, so the walk re-bases on the epoch and `onHand` is every
+ *     delivery ever recorded minus every sale ever modelled. Not an
+ *     expectation.
+ *  2. **Partial** (`partial === true`). `sumDeliveries` in
+ *     `@/lib/inventory/usage-math` sets this and SILENTLY DROPS the line
+ *     whenever a delivery's unit will not convert to the recipe unit — which
+ *     is why `convertDelivered`'s docblock there records 31 of 76 ingredients
+ *     holding a negative on-hand, Coke Mexican Glass at −1,694,000 ml. Adding
+ *     the pack columns to this adapter's `select` fixes the ingredients whose
+ *     pack row is POPULATED; that same docblock measures the coverage at 61
+ *     of 76 for `recipeUnitsPerCase` and 59 for `caseUnit`, so the rest still
+ *     come back partial and still come back understated. A partial walk is an
+ *     under-count with no way to say by how much.
+ *  3. **Negative.** A shelf cannot hold less than nothing, so a negative
+ *     `onHand` is arithmetic, not a prediction. `run-out.ts` skips on the same
+ *     grounds (`if (onHand <= 0) continue`) — the difference here is that zero
+ *     IS a legitimate expectation: "we think you are out" is a real thing to
+ *     check against a shelf, and the counter finding one left is exactly the
+ *     variance this feature exists to catch.
+ */
+async function loadEntryEstimates(input: {
+  storeId: string
+  accountId: string
+  asOf: Date
+  ingredients: ContextIngredient[]
+}): Promise<Map<string, number>> {
+  const out = new Map<string, number>()
+  try {
+    const ctx = await loadStoreInventoryContext({
+      storeId: input.storeId,
+      accountId: input.accountId,
+      asOf: input.asOf,
+    })
+    for (const ingredient of input.ingredients) {
+      const walk = runningOnHandFromContext(ctx, ingredient)
+      // The three skips are argued in the docblock above. Each one leaves the
+      // ingredient at `null`, which the copy already accounts for, rather than
+      // recording a number the calibration would then be scored against.
+      if (walk.baseAt === null) continue
+      if (walk.partial) continue
+      if (!Number.isFinite(walk.onHand)) continue
+      if (walk.onHand < 0) continue
+      out.set(ingredient.id, walk.onHand)
+    }
+  } catch {
+    return new Map()
+  }
+  return out
 }
 
 export async function getCountSessionSections(
