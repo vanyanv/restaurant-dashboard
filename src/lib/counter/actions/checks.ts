@@ -67,6 +67,10 @@ export async function saveChecklist(raw: z.input<typeof ChecklistInput>): Promis
   try {
     const input = ChecklistInput.parse(raw)
     if (input.dueAtMin <= input.opensAtMin) return { ok: false, error: "The due time has to be after the open time" }
+    // One day's window, grace included, must close before the next day's opens.
+    if (input.dueAtMin + input.graceMin - input.opensAtMin >= 1440) {
+      return { ok: false, error: "The check window, with its late time, has to be shorter than a day" }
+    }
     await requireOwnerStore(input.storeId)
     const tpl = await prisma.checkTemplate.findUnique({
       where: { storeId_kind: { storeId: input.storeId, kind: input.kind } },
@@ -157,7 +161,9 @@ export async function copyChecklistToOtherStores(input: { storeId: string; kind:
 
 export async function setStoreClosed(input: { storeId: string; day: string; closed: boolean }): Promise<ActionResult> {
   try {
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(input.day)) return { ok: false, error: "Bad date" }
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(input.day) || Number.isNaN(dayToDb(input.day).getTime())) {
+      return { ok: false, error: "Bad date" }
+    }
     await requireOwnerStore(input.storeId)
     const businessDate = dayToDb(input.day)
     if (input.closed) {

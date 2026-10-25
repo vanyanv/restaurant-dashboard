@@ -118,8 +118,12 @@ export async function refreshHarriEmployees(
       }
 
       addRows(upserted)
-      // Store checks: new people get a PIN, people who left lose theirs.
-      await syncCrewFromHarri(storeId)
+      // Store checks: new people get a PIN, people who left lose theirs. The
+      // roster above is already written; a crew-sync failure must not mark
+      // this job failed, and the next run (or the owner's Sync) retries it.
+      await syncCrewFromHarri(storeId).catch((err) => {
+        console.error("[harri-employee-sync] crew sync failed", storeId, err)
+      })
       return { requested: userIds.length, fetched, upserted }
     }
   )

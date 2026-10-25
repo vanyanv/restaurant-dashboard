@@ -149,45 +149,57 @@ export async function syncCrewFromHarri(storeId: string): Promise<CrewSyncResult
 
   for (const e of employees) {
     seen.add(e.userId)
+    try {
+      await syncOne(e)
+    } catch (err) {
+      // One bad row (or a sync racing another) skips that person, not the store.
+      if (!isUniqueViolation(err)) console.error("[checks.crew-sync]", storeId, e.userId, err)
+    }
+  }
+
+  async function syncOne(e: (typeof employees)[number]) {
     const name = (e.firstName ?? "").trim()
-    if (!name) continue
+    if (!name) return
     const active = harriIsActive(e.status)
     const existing = byHarri.get(e.userId)
     const lastName = e.lastName?.trim() || null
     const email = e.email?.trim() || null
 
     if (!existing) {
-      if (!active) continue
+      if (!active) return
       const pin = pickPin(taken)
       taken.add(pin)
       await prisma.crewMember.create({
         data: { storeId, source: "HARRI", harriUserId: e.userId, firstName: name, lastName, email, pin },
       })
       result.added += 1
-      continue
+      return
     }
+
+    // Harri with no email never erases one the owner typed in.
+    const keptEmail = email ?? existing.email
 
     if (active && !existing.active && existing.inactiveReason !== OWNER_OFF) {
       const pin = pickPin(taken)
       taken.add(pin)
       await prisma.crewMember.update({
         where: { id: existing.id },
-        data: { active: true, inactiveReason: null, pin, firstName: name, lastName, email },
+        data: { active: true, inactiveReason: null, pin, firstName: name, lastName, email: keptEmail },
       })
       result.reactivated += 1
-      continue
+      return
     }
-    if (!existing.active) continue
+    if (!existing.active) return
     if (!active) {
       await deactivate(existing.id, "Inactive in Harri")
       if (existing.pin) taken.delete(existing.pin)
       result.deactivated += 1
-      continue
+      return
     }
-    if (existing.firstName !== name || existing.lastName !== lastName || existing.email !== email) {
+    if (existing.firstName !== name || existing.lastName !== lastName || existing.email !== keptEmail) {
       await prisma.crewMember.update({
         where: { id: existing.id },
-        data: { firstName: name, lastName, email },
+        data: { firstName: name, lastName, email: keptEmail },
       })
       result.updated += 1
     }

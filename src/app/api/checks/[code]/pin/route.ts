@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
-import { rateLimit } from "@/lib/rate-limit"
+import { rateLimit, rateLimitKey } from "@/lib/rate-limit"
 import { findStoreByCode, loadCrewView } from "@/lib/checks/crew"
 import { issueCrewPass } from "@/lib/checks/crew-session"
 import { shortName } from "@/lib/checks/data"
@@ -12,9 +12,13 @@ import { dayToDb } from "@/lib/checks/time"
  * names the store, and only that store's PINs work here.
  *
  * Rate-limited per IP rather than locked out per person (the owner chose no
- * lockouts): a store's crew share one Wi-Fi, so the limit is generous.
+ * lockouts): a store's crew share one Wi-Fi, so the limit is generous. A
+ * second limit counts every attempt at one store from any address, so
+ * rotating addresses does not make guessing PINs fast. A real shift enters a
+ * PIN a handful of times an hour; thirty in ten minutes is an attack.
  */
 const PIN_LIMIT = { limit: 20, windowMs: 60_000, identifyBy: "ip" as const }
+const STORE_PIN_LIMIT = { limit: 30, windowMs: 10 * 60_000 }
 
 export async function POST(request: NextRequest, { params }: { params: Promise<{ code: string }> }) {
   const limited = await rateLimit(request, PIN_LIMIT)
@@ -23,6 +27,10 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   const { code } = await params
   const store = await findStoreByCode(code)
   if (!store) return NextResponse.json({ error: "This QR code is no longer in use." }, { status: 404 })
+  const storeLimited = await rateLimitKey(`checks-pin:${store.id}`, STORE_PIN_LIMIT)
+  if (storeLimited) {
+    return NextResponse.json({ error: "Too many PIN tries at this store. Wait a few minutes." }, { status: 429 })
+  }
 
   const body = (await request.json().catch(() => null)) as { pin?: unknown } | null
   const pin = typeof body?.pin === "string" ? body.pin : ""

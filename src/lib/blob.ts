@@ -145,7 +145,7 @@ export type ProductPhotoFetch = {
 }
 
 export function isProductPhotoContentType(value: string): value is ProductPhotoContentType {
-  return value in PRODUCT_PHOTO_CONTENT_TYPES
+  return Object.hasOwn(PRODUCT_PHOTO_CONTENT_TYPES, value)
 }
 
 export async function putProductPhoto(
@@ -252,6 +252,17 @@ export async function putCheckPhoto(
     new PutObjectCommand({ Bucket: bucket, Key: key, Body: photoBytes, ContentType: contentType }),
   )
   return { pathname: key, size: photoBytes.byteLength, uploadedAt: new Date() }
+}
+
+/** Best-effort removal, for photos of a submission that did not go through. */
+export async function deleteCheckPhoto(pathname: string): Promise<void> {
+  const localDir = localCheckPhotoDir()
+  if (localDir) {
+    const { rm } = await import("node:fs/promises")
+    await rm(`${localDir}/${pathname}`, { force: true })
+    return
+  }
+  await deleteProductPhoto(pathname)
 }
 
 export async function getCheckPhotoStream(pathname: string): Promise<ProductPhotoFetch> {

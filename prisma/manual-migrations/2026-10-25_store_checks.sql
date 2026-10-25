@@ -12,7 +12,6 @@
 -- `ALTER TYPE ... ADD VALUE` cannot run inside a transaction block on older
 -- Postgres; run this file statement by statement (or via `prisma db push`).
 
-◇ injected env (0) from .env.local // tip: ⌘ custom filepath { path: '/custom/path/.env' }
 -- CreateEnum
 CREATE TYPE "CheckKind" AS ENUM ('MORNING', 'TRANSITION', 'EVENING');
 
