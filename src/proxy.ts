@@ -314,7 +314,11 @@ export default withAuth(
       path === "/login" ||
       path === "/m/login" ||
       path === "/register" ||
-      path.startsWith("/signup/")
+      path.startsWith("/signup/") ||
+      // Store checks: crew sign in with a PIN on the store's own page, not a
+      // dashboard account. The logo is printed on that page and the poster.
+      path.startsWith("/checks/") ||
+      path === "/checks-logo.png"
     ) {
       return NextResponse.next()
     }
