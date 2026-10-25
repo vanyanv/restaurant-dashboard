@@ -18,6 +18,7 @@ export type AlertSource =
   | "HARRI_VARIANCE"
   | "QUANTITY_SPIKE"
   | "NEW_PRODUCT"
+  | "STORE_CHECK"
 export type AlertTarget =
   | "REVENUE"
   | "MENU_ITEM"
@@ -26,6 +27,7 @@ export type AlertTarget =
   | "REFUNDS"
   | "PRICE"
   | "PRODUCT"
+  | "STORE_CHECK"
 export type AlertSeverity = "INFO" | "WATCH" | "CRITICAL"
 
 interface IngestResult {

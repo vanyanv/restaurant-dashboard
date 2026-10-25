@@ -106,6 +106,7 @@ const ALL_SOURCES: AlertSource[] = [
   "HARRI_VARIANCE",
   "QUANTITY_SPIKE",
   "NEW_PRODUCT",
+  "STORE_CHECK",
 ]
 
 /** Every source at zero — the shape `bySource` always has, so a source with no
