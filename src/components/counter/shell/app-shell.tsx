@@ -11,7 +11,7 @@ import type { SyncState } from "./sync-chip"
 import type { SwitchableStore } from "./store-switcher"
 import { useEntry } from "@/components/counter/motion/use-entry"
 import dynamic from "next/dynamic"
-import { readCounterParams, writeCounterParams } from "@/lib/counter/url-state"
+import { readCounterParams, scopeQuery, writeCounterParams } from "@/lib/counter/url-state"
 import { hasWindow, storeScopeHref } from "@/lib/counter/route-shape"
 import type { PresetId } from "@/lib/counter/date-range"
 
@@ -152,6 +152,9 @@ export function AppShell({
     () => readCounterParams(params, resolvedToday),
     [params, resolvedToday],
   )
+  // What the rail carries from section to section: the window and the store,
+  // never a page's own filters. See `scopeQuery`.
+  const scope = useMemo(() => scopeQuery(params), [params])
 
   const push = useCallback(
     (next: Parameters<typeof writeCounterParams>[1], href = pathname) => {
@@ -252,6 +255,7 @@ export function AppShell({
 
       <Rail
         pathname={pathname}
+        scope={scope}
         stores={stores}
         selectedStoreId={selectedStoreId}
         onSelectStore={onSelectStore}
@@ -262,6 +266,7 @@ export function AppShell({
       <div className="app">
         <Topbar
           pathname={pathname}
+          scope={scope}
           // `crumbs()` always opens with a store, and the prototype's own store
           // list carries an "All stores" pseudo-store for exactly this. A page
           // with no store list at all (`stores` omitted) starts its trail at

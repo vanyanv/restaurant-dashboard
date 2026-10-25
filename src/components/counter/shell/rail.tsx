@@ -88,12 +88,15 @@ function RailLink({
   item,
   active,
   badge,
+  scope,
   onChoose,
   onSettle,
 }: {
   item: NavItem
   active: boolean
   badge?: number
+  /** `scopeQuery(...)` of the current URL — see `Rail`'s `scope`. */
+  scope: string
   onChoose: (id: NavItem["id"]) => void
   onSettle: (id: NavItem["id"]) => void
 }) {
@@ -101,7 +104,7 @@ function RailLink({
   const settleThis = useCallback(() => onSettle(item.id), [onSettle, item.id])
   return (
     <Link
-      href={item.href}
+      href={scope ? `${item.href}?${scope}` : item.href}
       aria-current={active ? "page" : undefined}
       className="navbtn"
       data-nav={item.id}
@@ -181,6 +184,7 @@ export function Rail({
   onSelectStore,
   user,
   needsYou,
+  scope = "",
 }: {
   pathname: string
   stores?: SwitchableStore[]
@@ -189,6 +193,14 @@ export function Rail({
   user?: RailUser
   /** Open alerts, from the layout. Undefined renders no badge at all. */
   needsYou?: number
+  /**
+   * The reader's current window and store as a query string
+   * (`scopeQuery(params)` in `url-state.ts`), appended to every destination so
+   * moving between sections keeps the selection. The phone's `MTabs` has done
+   * this since it was written; the rail did not, and a store picked on one
+   * page reset to "all stores" on the next click.
+   */
+  scope?: string
 }) {
   const [picking, setPicking] = useState(false)
   const settings = NAV_GROUPS.flatMap((g) => g.items).find((i) => i.id === "settings")
@@ -289,6 +301,7 @@ export function Rail({
               {group.items.map((item) => (
                 <RailLink
                   key={item.id}
+                  scope={scope}
                   item={item}
                   active={item.id === currentId}
                   badge={item.id === "needs-you" ? needsYou : undefined}
@@ -303,7 +316,7 @@ export function Rail({
 
       {user && settings ? (
         <>
-          <Link className="rail__foot" href={settings.href}>
+          <Link className="rail__foot" href={scope ? `${settings.href}?${scope}` : settings.href}>
             <span className="avatar" aria-hidden="true">
               {user.name.trim().charAt(0).toUpperCase()}
             </span>

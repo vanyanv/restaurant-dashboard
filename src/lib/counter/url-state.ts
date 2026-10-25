@@ -231,6 +231,30 @@ export function readCounterParams(params: URLSearchParams, today: Date): Counter
 }
 
 /**
+ * The part of the query that is the reader's SCOPE — which window, which
+ * comparison, which store — and nothing else.
+ *
+ * This is what a navigation between sections carries. The phone's `MTabs`
+ * has carried the whole query string since it was written, and the desk rail
+ * carried nothing: pick Van Nuys on Sales, click Labor, and the page opened
+ * on all stores and the default window — the selection silently undone by
+ * the act of moving, which is note 42's defect one level up. Reported by the
+ * owner on 2026-10-25.
+ *
+ * Only these five keys travel. A page's own filters (`q`, `day`, `channels`,
+ * the alerts inbox's `seg`/`sev`/`src`/`alert`) describe THAT page's table and
+ * would be noise or an error on the next one, so they stay behind.
+ */
+export function scopeQuery(params: URLSearchParams): string {
+  const out = new URLSearchParams()
+  for (const key of ["range", "from", "to", "cmp", "store"] as const) {
+    const v = params.get(key)
+    if (v !== null && v !== "") out.set(key, v)
+  }
+  return out.toString()
+}
+
+/**
  * Writes only what changed, and DROPS anything at its default so a shared URL
  * stays short and readable. `?range=d30` beats
  * `?range=d30&cmp=prev&store=` for a link someone pastes into a message.
