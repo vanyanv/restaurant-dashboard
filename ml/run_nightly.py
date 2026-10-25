@@ -1115,6 +1115,14 @@ def main() -> int:
         if revenue_result.get("ok"):
             promo = maybe_promote_to_ready(store_id, revenue_result)
             print({"phase": "LIFECYCLE", **promo})
+        elif revenue_result.get("reason") == "insufficient_history":
+            # A warming-up store that cannot yet train natively is the state
+            # `warming_up` exists to describe, not a failed night: the transfer
+            # forecast above is what serves it until the gate promotes it.
+            # Counting it as a failure turned every nightly red from the day
+            # Van Nuys was promoted (2026-10-25) until it had 60 days of sales.
+            print({"phase": "LIFECYCLE", "store_id": store_id, "stage": "warming_up",
+                   "action": "waiting_for_history"})
         else:
             failures += 1
 

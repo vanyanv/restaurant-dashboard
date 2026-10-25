@@ -52,6 +52,11 @@ function normalizeAddress(address: string): string {
     // Strip standalone # with following number
     if (word.startsWith("#")) continue
 
+    // A lone letter right after the street number is a unit designator the
+    // vendor wrote without "Suite" ("14523 A Sherman Way"). It is not part of
+    // the street name, so it is dropped the way "Suite A" is.
+    if (result.length === 1 && /^\d+$/.test(result[0]) && /^[a-z]$/.test(word)) continue
+
     // Expand abbreviations
     const expanded = ABBREVIATIONS[word]
     result.push(expanded ?? word)
@@ -103,10 +108,17 @@ export function addressSimilarity(a: string, b: string): number {
 
   if (normA === normB) return 1.0
 
-  // Street numbers must match exactly for any meaningful score
+  // Street numbers must match exactly for any meaningful score — with one
+  // documented exception, decided further down: a vendor that dropped or
+  // added a single trailing character ("1452 A Sherman Way" for 14523) on
+  // an otherwise identical street in the same ZIP. Any other mismatch is 0.
   const numA = extractStreetNumber(normA)
   const numB = extractStreetNumber(normB)
-  if (numA && numB && numA !== numB) return 0
+  const truncatedNumber =
+    !!numA && !!numB && numA !== numB &&
+    Math.abs(numA.length - numB.length) === 1 &&
+    (numA.startsWith(numB) || numB.startsWith(numA))
+  if (numA && numB && numA !== numB && !truncatedNumber) return 0
 
   // US addresses are uniquely identified by street number + 5-digit ZIP.
   // If both match, cosmetic differences (city spelling, directional abbrev,
@@ -124,6 +136,16 @@ export function addressSimilarity(a: string, b: string): number {
   const maxLen = Math.max(restA.length, restB.length)
   const dist = levenshtein(restA, restB)
   const stringSimilarity = 1 - dist / maxLen
+
+  // The truncated-number exception: same ZIP, same street (the rest of the
+  // address agrees), and a number one character short or long. Scored just
+  // over the match threshold and well under 1.0, so a store whose number
+  // matches exactly always wins, and the row still reads as a fuzzy match.
+  // Seen live on 2026-10-25: six Van Nuys invoices addressed to
+  // "1452 A SHERMAN WAY, VAN NUYS, CA 91405" for 14523 Sherman Way.
+  if (truncatedNumber) {
+    return zipA && zipA === zipB && stringSimilarity >= 0.6 ? 0.75 : 0
+  }
 
   // Bonus if both have a matching number, extra bonus if ZIPs match
   const numberBonus = numA && numA === numB ? 0.1 : 0

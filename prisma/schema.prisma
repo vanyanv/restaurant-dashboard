@@ -912,7 +912,7 @@ model OtterOrder {
 model OtterOrderItem {
   id       String @id @default(cuid())
   orderId  String
-  skuId    String
+  skuId    String?
   name     String
   quantity Float
   price    Float  @default(0)
@@ -927,7 +927,7 @@ model OtterOrderItem {
 model OtterOrderSubItem {
   id          String  @id @default(cuid())
   orderItemId String
-  skuId       String
+  skuId       String?
   name        String
   quantity    Float
   price       Float   @default(0)

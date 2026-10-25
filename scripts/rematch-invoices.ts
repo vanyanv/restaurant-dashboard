@@ -35,7 +35,7 @@ async function main() {
   const rows = await prisma.invoice.findMany({
     where: { status: { in: ["PENDING", "REVIEW"] } },
     select: {
-      id: true, ownerId: true, vendorName: true, invoiceNumber: true,
+      id: true, accountId: true, vendorName: true, invoiceNumber: true,
       deliveryAddress: true, storeId: true, status: true,
       matchConfidence: true, invoiceDate: true,
     },
@@ -43,22 +43,34 @@ async function main() {
   console.log(`Considering ${rows.length} PENDING/REVIEW invoice(s).\n`)
   if (rows.length === 0) return await prisma.$disconnect()
 
-  const ownerIds = Array.from(new Set(rows.map((r) => r.ownerId)))
+  // Stores are scoped by ACCOUNT, the tenancy boundary (src/lib/auth-scope.ts),
+  // not by the user who happened to create the row. Scoping by `ownerId` here
+  // found no stores for cron-written invoices and would have downgraded every
+  // correctly matched Hollywood row to PENDING (seen in a dry run, 2026-10-25).
+  const accountIds = Array.from(new Set(rows.map((r) => r.accountId)))
   const allStores = await prisma.store.findMany({
-    where: { ownerId: { in: ownerIds }, isActive: true },
-    select: { id: true, address: true, name: true, ownerId: true },
+    where: { accountId: { in: accountIds }, isActive: true },
+    select: { id: true, address: true, name: true, accountId: true },
   })
-  const storesByOwner = new Map<string, typeof allStores>()
+  const storesByAccount = new Map<string, typeof allStores>()
   for (const s of allStores) {
-    const arr = storesByOwner.get(s.ownerId) ?? []
+    const arr = storesByAccount.get(s.accountId) ?? []
     arr.push(s)
-    storesByOwner.set(s.ownerId, arr)
+    storesByAccount.set(s.accountId, arr)
   }
 
   let changed = 0
   for (const r of rows) {
-    const ownerStores = storesByOwner.get(r.ownerId) ?? []
-    const match = r.deliveryAddress ? matchInvoiceToStore(r.deliveryAddress, ownerStores) : null
+    const accountStores = storesByAccount.get(r.accountId) ?? []
+    const match = r.deliveryAddress ? matchInvoiceToStore(r.deliveryAddress, accountStores) : null
+
+    // This script re-decides WHICH STORE an invoice belongs to, nothing else.
+    // A row already attributed to the store the matcher picks is left as it
+    // is: its REVIEW may be `reviewReasons` from invoice-sanity (a header
+    // total that does not reconcile, a pack-shape anomaly), which an address
+    // pass has no standing to clear. Seen 2026-10-25: a dry run would have
+    // promoted 22 Hollywood rows to MATCHED on address alone.
+    if ((match?.storeId ?? null) === r.storeId) continue
 
     // Preserve current REVIEW if the *reason* for review was a date-sanity flag
     // (i.e. invoiceDate is null). We only promote rows whose REVIEW was match-confidence-driven.
@@ -69,7 +81,7 @@ async function main() {
     else if (match) nextStatus = match.confidence >= 0.85 ? "MATCHED" : "REVIEW"
     else nextStatus = "PENDING"
 
-    const matchedStore = match ? ownerStores.find((s) => s.id === match.storeId) : null
+    const matchedStore = match ? accountStores.find((s) => s.id === match.storeId) : null
     const changedSomething =
       nextStatus !== r.status ||
       (match?.storeId ?? null) !== r.storeId ||
