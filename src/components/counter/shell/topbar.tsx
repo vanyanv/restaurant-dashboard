@@ -55,8 +55,11 @@ export function Topbar({
   storeName,
   leaf,
   sync,
+  scope = "",
 }: {
   pathname: string
+  /** The window and store the crumb carries back to its section — see `Rail`'s `scope`. */
+  scope?: string
   /** The store the page is scoped to; the crumb trail starts there. */
   storeName?: string
   /**
@@ -118,7 +121,7 @@ export function Topbar({
         ) : null}
         {crumb ? (
           <>
-            <Link className="crumb" href={crumb.href}>
+            <Link className="crumb" href={scope ? `${crumb.href}?${scope}` : crumb.href}>
               {crumb.label}
             </Link>
             <span className="sep" aria-hidden="true">
