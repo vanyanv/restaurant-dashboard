@@ -943,7 +943,7 @@ async function main() {
     distinct: ["skuId"],
   })
   const drinkBySkuName = new Map<string, string>()
-  for (const s of drinkSubItems) drinkBySkuName.set(s.skuId, s.name)
+  for (const s of drinkSubItems) if (s.skuId) drinkBySkuName.set(s.skuId, s.name)
 
   // Normalize "+ X" sub-item names to the matching recipe name.
   const drinkMap: Array<{ subName: string; recipeName: string }> = [
@@ -960,7 +960,10 @@ async function main() {
       select: { id: true, itemName: true },
     })
     if (!recipe) continue
-    const skus = drinkSubItems.filter((s) => s.name === m.subName).map((s) => s.skuId)
+    const skus = drinkSubItems
+      .filter((s) => s.name === m.subName)
+      .map((s) => s.skuId)
+      .filter((s): s is string => s !== null)
     if (skus.length === 0) continue
     await mapOtterSubItemsToRecipe(ctx, {
       skuIds: skus,

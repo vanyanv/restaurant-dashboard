@@ -16,7 +16,8 @@ export interface LineCostInput {
     name: string
     /** A sub-item — the prototype's `l.mod`. */
     modifier: boolean
-    skuId: string
+    /** NULL for a POS "Open item" — a typed price with no catalogue entry. */
+    skuId: string | null
     quantity: number
     /** What the channel charged for this line. */
     price: number
@@ -106,6 +107,17 @@ export interface LineCost {
   uncostedReason: "unmapped" | "partial" | null
 }
 
+/**
+ * The identity a line is keyed by in memory. A POS "Open item" carries no
+ * SKU (`OtterOrderItem.skuId` is nullable since 2026-10-25 for exactly that
+ * line), so it is keyed by its own line key — a value that cannot collide
+ * with a SKU and is never written anywhere. Every `Map` in this file and in
+ * `adapters/orders.ts` that is keyed "by sku" is keyed by this.
+ */
+export function lineSku(line: { key: string; skuId: string | null }): string {
+  return line.skuId ?? `open:${line.key}`
+}
+
 export function resolveLineCosts(input: LineCostInput): LineCost[] {
   const { lines, recipeBySku, costByRecipe, commissionRate, ticket } = input
 
@@ -118,7 +130,7 @@ export function resolveLineCosts(input: LineCostInput): LineCost[] {
     const charged = line.price * scale
     const keep = charged * (1 - commissionRate)
 
-    const recipeId = recipeBySku.get(line.skuId)
+    const recipeId = recipeBySku.get(lineSku(line))
     if (!recipeId) {
       return {
         key: line.key,

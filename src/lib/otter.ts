@@ -554,12 +554,12 @@ export type OrderDetailsPayload = {
     customerName: string | null
   }
   items: Array<{
-    skuId: string
+    skuId: string | null
     name: string
     quantity: number
     price: number
     subItems: Array<{
-      skuId: string
+      skuId: string | null
       name: string
       quantity: number
       subHeader: string | null
@@ -651,12 +651,12 @@ export async function fetchOrderDetails(
         customerName: string | null
       }
       items: Array<{
-        skuId: string
+        skuId: string | null
         name: string
         quantity: number
         price: { units: number; nanos: number } | null
         subItems: Array<{
-          skuId: string
+          skuId: string | null
           name: string
           quantity: number
           subHeader: string | null

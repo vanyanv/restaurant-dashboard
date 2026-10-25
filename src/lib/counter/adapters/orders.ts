@@ -4,7 +4,7 @@ import { batchRecipeCosts } from "@/lib/recipe-cost-batch"
 import { prisma } from "@/lib/prisma"
 import type { Prisma } from "@/generated/prisma/client"
 import type { HourlyOrderPoint, OrderPatternsHourlyComparison } from "@/types/analytics"
-import { resolveLineCosts, type LineCost } from "@/lib/counter/order-costs"
+import { lineSku, resolveLineCosts, type LineCost } from "@/lib/counter/order-costs"
 import { CHANNEL_FOR_PLATFORM } from "@/lib/counter/channel-mix"
 import {
   CHANNELS,
@@ -240,11 +240,15 @@ export interface OrdersSections {
  * — and the "Needs you" queue is keyed on the sku, so the flattened array is
  * kept beside the costed one rather than reconstructed from it.
  */
+/** Narrow a nullable SKU for a Prisma `in:` list — NULL is not a SKU to query. */
+const isSku = (s: string | null): s is string => s !== null
+
 export interface OrderLine {
   key: string
   name: string
   modifier: boolean
-  skuId: string
+  /** NULL for a POS "Open item" line — a typed price with no catalogue entry. */
+  skuId: string | null
   quantity: number
   price: number
 }
@@ -854,10 +858,11 @@ export function buildRecipeBySku(
 
   const out = new Map<string, string>()
   for (const line of lines) {
+    // An open item has no SKU to look up; it can still resolve by name.
     const recipeId = line.modifier
-      ? bySubSku.get(line.skuId)
-      : (bySku.get(line.skuId) ?? byName.get(line.name))
-    if (recipeId) out.set(line.skuId, recipeId)
+      ? (line.skuId === null ? undefined : bySubSku.get(line.skuId))
+      : ((line.skuId === null ? undefined : bySku.get(line.skuId)) ?? byName.get(line.name))
+    if (recipeId) out.set(lineSku(line), recipeId)
   }
   return out
 }
@@ -1302,8 +1307,8 @@ export function buildNeedsYou(
     if (c.cost !== null) continue
     const line = skuByKey.get(c.key)
     if (!line) continue
-    if (seen.has(line.skuId)) continue
-    seen.set(line.skuId, {
+    if (seen.has(lineSku(line))) continue
+    seen.set(lineSku(line), {
       name: c.name,
       modifier: c.modifier,
       reason:
@@ -1560,7 +1565,7 @@ export async function getOrderSections(input: OrderSectionsInput): Promise<Order
             where: {
               storeId,
               OR: [
-                { skuId: { in: itemLines.map((l) => l.skuId) } },
+                { skuId: { in: itemLines.map((l) => l.skuId).filter(isSku) } },
                 { otterItemName: { in: itemLines.map((l) => l.name) } },
               ],
             },
@@ -1569,7 +1574,7 @@ export async function getOrderSections(input: OrderSectionsInput): Promise<Order
       storeId === null
         ? Promise.resolve([] as SubItemMappingRow[])
         : prisma.otterSubItemMapping.findMany({
-            where: { storeId, skuId: { in: subLines.map((l) => l.skuId) } },
+            where: { storeId, skuId: { in: subLines.map((l) => l.skuId).filter(isSku) } },
             select: { skuId: true, recipeId: true },
           }),
       batchRecipeCosts(accountId),
@@ -1637,8 +1642,9 @@ async function countCarried(
 
   const byKey = new Map(lines.map((l) => [l.key, l]))
   const wanted = uncostedKeys.map((k) => byKey.get(k)).filter((l): l is OrderLine => l != null)
-  const itemSkus = [...new Set(wanted.filter((l) => !l.modifier).map((l) => l.skuId))]
-  const subSkus = [...new Set(wanted.filter((l) => l.modifier).map((l) => l.skuId))]
+  // Open items have no SKU and so no carried count to look up.
+  const itemSkus = [...new Set(wanted.filter((l) => !l.modifier).map((l) => l.skuId).filter(isSku))]
+  const subSkus = [...new Set(wanted.filter((l) => l.modifier).map((l) => l.skuId).filter(isSku))]
 
   const since = new Date(ctx.today)
   since.setUTCDate(since.getUTCDate() - CARRIED_LOOKBACK_DAYS)
@@ -1703,6 +1709,6 @@ async function countCarried(
         }),
   ])
 
-  for (const r of [...items, ...subs]) out.set(r.skuId, r._count._all)
+  for (const r of [...items, ...subs]) if (r.skuId !== null) out.set(r.skuId, r._count._all)
   return out
 }

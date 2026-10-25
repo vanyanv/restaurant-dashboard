@@ -376,13 +376,13 @@ export type OrderDetail = {
   syncedAt: Date
   items: Array<{
     id: string
-    skuId: string
+    skuId: string | null
     name: string
     quantity: number
     price: number
     subItems: Array<{
       id: string
-      skuId: string
+      skuId: string | null
       name: string
       quantity: number
       price: number
