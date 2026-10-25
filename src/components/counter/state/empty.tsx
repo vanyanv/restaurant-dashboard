@@ -94,6 +94,25 @@ const COPY: Record<EmptyReason, { head: string; body: string }> = {
       "None have been built yet — they start from the menu.",
   },
   /*
+   * The thirteenth, and the only one whose next step is OURS rather than the
+   * reader's.
+   *
+   * Sales and hours come from two different syncs. When the sales half has run
+   * and the labour half has not, every figure with hours underneath it — sales
+   * per labor hour, labour percent, prime cost — is not missing because the
+   * restaurant did nothing; it is missing because the rows have not been
+   * pulled. `no_match` would tell an owner to widen a date range that is
+   * already right, which is the same unfollowable advice `no_delivery` was
+   * split off to stop.
+   */
+  no_labor_synced: {
+    head: "Labor has not synced",
+    body:
+      "Sales are here, but the hours to divide them by come from the scheduling system " +
+      "and have not been pulled into this database yet. The figure returns with the next " +
+      "labor sync — nothing is lost in the meantime.",
+  },
+  /*
    * One of the few whose next step is partly OURS rather than the reader's.
    *
    * "What you will run out of" projects an ANCHORED quantity forward: the last

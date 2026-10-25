@@ -10,7 +10,6 @@ import {
   Dispatch,
   DateControl,
   Drill,
-  FloorMeter,
   HeadBlock,
   LeadFigure,
   MoneyLines,
@@ -22,12 +21,14 @@ import {
   Stars,
   StoreCards,
   Strip,
+  syncAgo,
   Table,
   useCounterTransition,
   type DispatchItem,
   type QueueItem,
   type StoreCard,
   type SwitchableStore,
+  type SyncState,
 } from "@/components/counter"
 import {
   AskBar,
@@ -116,38 +117,69 @@ import type {
 export type OverviewClientSections = SectionSources<OverviewSections>
 
 /**
- * The dispatch line's facts, and nowhere else to get them.
+ * The dispatch line's three facts, and nowhere else to get them.
  *
- * The prototype's three are "3 need you · 1,284 orders trading · synced 12 min
- * ago". We have none of those three at page level: the needs-you count and the
- * order count both live inside a `SectionData` this page may not open (a page
- * never branches on `.status`), and this application has no last-sync reading
- * at all. What it DOES have, at page level and with no status to inspect, is
- * the store lifecycle — which is exactly the third thing the design's own note
- * asks this line for: "whether the figures can be trusted". A pre-open store is
- * why a page below is empty, and saying so here is the difference between an
- * empty dashboard and a broken one.
+ * The design's own note on `.dispatch`: "needs-you, trading, and whether the
+ * figures can be trusted, in one line." This page used to be able to answer
+ * only the middle one. The other two are page-level facts with no
+ * `SectionData` to open — the count of what needs the reader and the age of
+ * the sales sync — and they now arrive as props from `page.tsx`, off the same
+ * `getShellStatus` call the layout already makes for the topbar's chip and the
+ * rail's badge. So the chip and this line cannot disagree about the sync, and
+ * the badge and this line cannot disagree about the count: one query, one
+ * `syncAgo`, three readings.
+ *
+ * The order is the design's, not the loader's. Whether the figures can be
+ * trusted comes FIRST, because everything to its right is only worth reading
+ * if it is true — a page whose sales stopped syncing eleven hours ago is a
+ * page whose "3 need you" is eleven hours old too.
  *
  * Everything printed is derived. Nothing is invented, and the line goes short
- * rather than padded.
+ * rather than padded: `hot` is reserved for the count of things wanting a
+ * person and for a sync that has actually gone wrong, because a line of
+ * all-`hot` items says nothing.
  */
 function dispatchItems(
   stores: SwitchableStore[],
   selected: SwitchableStore | null,
+  sync: { state: SyncState; at: string | null } | null,
+  needsYou: number,
+  now: Date,
 ): DispatchItem[] {
+  const items: DispatchItem[] = []
+
+  if (sync) {
+    const when = sync.at ? syncAgo(new Date(sync.at), now) : null
+    // `failed` and `stale` are the two states that change what the figures
+    // below are worth, so they are the two that take the accent.
+    if (sync.state === "failed") {
+      items.push({ tone: "hot", text: `sales sync failed${when ? ` ${when}` : ""}` })
+    } else if (sync.state === "stale") {
+      items.push({ tone: "hot", text: `sales last synced ${when ?? "some time ago"}` })
+    } else if (sync.state === "syncing") {
+      items.push({ tone: "quiet", text: "sales syncing now" })
+    } else if (when) {
+      items.push({ tone: "quiet", text: `sales synced ${when}` })
+    }
+  }
+
+  if (needsYou > 0) {
+    items.push({ tone: "hot", text: plural(needsYou, "thing") + " need you" })
+  }
+
   if (selected) {
     if (selected.stage === "pre_open") {
-      return [{ tone: "hot", text: `${selected.name} is not trading yet — nothing below counts it` }]
+      items.push({ tone: "hot", text: `${selected.name} is not trading yet — nothing below counts it` })
+    } else if (selected.stage === "warming_up") {
+      items.push({ tone: "quiet", text: `${selected.name} is warming up — its figures are still settling` })
+    } else {
+      items.push({ tone: "quiet", text: `${selected.name} is trading` })
     }
-    if (selected.stage === "warming_up") {
-      return [{ tone: "quiet", text: `${selected.name} is warming up — its figures are still settling` }]
-    }
-    return [{ tone: "quiet", text: `${selected.name} is trading` }]
+    return items
   }
+
   const trading = stores.filter((s) => s.stage === "trading").length
-  const items: DispatchItem[] = [
-    { tone: "quiet", text: `${trading} of ${stores.length} stores trading` },
-  ]
+  items.push({ tone: "quiet", text: `${trading} of ${stores.length} stores trading` })
   const rest = stores.length - trading
   if (rest > 0) {
     items.push({ tone: "quiet", text: `${rest} not trading yet, and nothing below counts them` })
@@ -173,6 +205,8 @@ export function CounterOverviewClient({
   stores,
   today,
   sections,
+  sync,
+  needsYou,
 }: {
   /**
    * The query string Overview was rendered for, as PLAIN TEXT — not a
@@ -190,6 +224,16 @@ export function CounterOverviewClient({
   stores: SwitchableStore[]
   today: Date
   sections: OverviewClientSections
+  /**
+   * The sales sync, as the topbar's chip already has it — a state and an ISO
+   * string, because a `Date` is the one thing that does not survive the RSC
+   * boundary intact in every runtime and this island only ever prints an age.
+   * `null` when no run has been recorded at all, which is a fact the line
+   * omits rather than guesses at.
+   */
+  sync: { state: SyncState; at: string | null } | null
+  /** Open alerts across the account — the same count the rail badges. */
+  needsYou: number
 }) {
   const router = useRouter()
   const pathname = usePathname()
@@ -341,11 +385,17 @@ export function CounterOverviewClient({
       </PageHead>
 
       {/* `.dispatch` is the first thing inside the screen, above everything.
-          No `.go` action: the prototype's points at its alerts queue and ours
-          would point at `/dashboard/needs-you`, which `nav.ts` declares and
-          this application does not serve yet. A link to a 404 is worse than no
-          link. */}
-      <Dispatch items={dispatchItems(stores, selectedStore)} scope={scope} />
+          The `.go` action points at `/dashboard/alerts`, which is the queue
+          this application actually serves and the same destination every
+          derived queue item below uses — NOT `/dashboard/needs-you`, which
+          `nav.ts` declares and nothing renders. It is mounted only when there
+          is something in the queue to open: a button onto an empty page is
+          the same defect as a button onto a missing one. */}
+      <Dispatch
+        items={dispatchItems(stores, selectedStore, sync, needsYou, today)}
+        action={needsYou > 0 ? { label: "Open the queue", href: "/dashboard/alerts" } : undefined}
+        scope={scope}
+      />
 
       {/* Note 30, as two figures and a verdict: net sales says whether the day
           happened, sales per labor hour says whether it was worth having.
@@ -364,12 +414,22 @@ export function CounterOverviewClient({
                 // a figure that needs the reader — see the motion block in
                 // `counter-repairs.css` for the hierarchy.
                 value={<CountUp value={d.grossSales} format={(v) => money(v)} />}
+                // The shape behind the number, in the slot the prototype gives
+                // a figure's sparkline. It is the same array the chart below
+                // is drawn from, so a reader who sees a cliff here finds the
+                // same cliff there.
+                series={d.series}
                 detail={d.comparison}
                 // The adapter decides this, not the arrow in the string: net
                 // sales is a figure whose direction and sentiment agree, and
                 // until the sheet was corrected a 37.2% FALL printed here in
                 // the colour of a rise.
                 detailTone={d.comparisonTone}
+                // "337 orders · $21.22 ticket" — the two numbers this one is
+                // made of, written by the adapter off the rows they both come
+                // from. Absent rather than half-written when the channel
+                // rollup did not answer.
+                caption={d.note ?? undefined}
               />
             )}
           </Section>,
@@ -378,17 +438,30 @@ export function CounterOverviewClient({
               <LeadFigure
                 label="Sales per labor hour"
                 value={<CountUp value={d.value} format={(v) => money(v, { cents: true })} />}
-                // "1 daily readings" was on the first screen at this page's own
-                // default range. `plural` agrees the noun with the number.
-                detail={`${plural(d.series.length, `${buckets} reading`)} with labor posted`}
-                // A statement of fact about the window, not a movement. Left
-                // unclassed it paints `var(--good)`, which says "good news"
-                // about a reading count.
-                detailTone="is-flat"
-                // Only when a floor is published. Nothing in this schema
-                // publishes one, so nothing is drawn against one — a meter
-                // against a number nobody set is the prototype's own 68.00.
-                meter={d.floor === null ? null : <FloorMeter value={d.value} floor={d.floor} />}
+                series={d.series}
+                // "▼ $20.30 vs a usual $124.00" — how far this range sits from
+                // what these same weekdays return, in the money the figure is
+                // measured in rather than as a percentage of itself.
+                detail={d.detail}
+                detailTone={d.detailTone}
+                /*
+                 * The USUAL, drawn as a band — not a floor.
+                 *
+                 * Nothing in this schema publishes an SPLH floor: the
+                 * prototype's `SPLH_FLOOR = 68.00` is its own number, and a
+                 * meter against a figure nobody set is worse than no meter.
+                 * What a band CAN honestly say is where this weekday normally
+                 * lands, which is history rather than intent — and the word
+                 * over it is always "usual". `src/lib/counter/splh-lead.ts`
+                 * carries the long form of the distinction; the verdict beside
+                 * this figure is what reads the published schedule.
+                 */
+                reference={d.reference ?? undefined}
+                // "74.0 h worked · 4.0 h over the 70.0 h published · $82 of
+                // labor" — the Labor page's own verdict, distilled to one line
+                // and built from the same `scheduleHeld` predicate, so the two
+                // pages cannot call one week different things.
+                caption={d.caption}
               />
             )}
           </Section>,
@@ -483,13 +556,19 @@ export function CounterOverviewClient({
           {(spec) => (
             <>
               <Chart {...spec} fmt={(v) => money(v, { cents: true })} />
-              {/* The prototype draws a floor rule here and writes a sentence
+              {/* The prototype draws a FLOOR rule here and writes a sentence
                   about it. No store file publishes a floor, so there is no
-                  rule — and this says so, rather than leaving a reader to
-                  wonder whether the line simply failed to draw. */}
+                  rule. The dashed line is a different claim and the sentence
+                  says which: the median of this store's own history for each
+                  weekday, which describes the past rather than setting a
+                  target for the future. Absent from the chart, and from this
+                  sentence, when too few days in the range have history behind
+                  them to draw one honestly. */}
               <p className="mono">
-                Every hour of labor posted in this range returned this much in sales. No floor is
-                published for {storeName}, so nothing is drawn against one.
+                Every hour of labor posted in this range returned this much in sales.{" "}
+                {spec.legend
+                  ? "The dashed line is what these same weekdays usually return — the store's own history, not a target."
+                  : `No floor is published for ${storeName}, and there is not enough weekday history yet to draw a usual.`}
               </p>
             </>
           )}
@@ -562,13 +641,38 @@ export function CounterOverviewClient({
         )}
       </Section>
 
-      <div className="tri tri--2">
+      {/* THREE tiles, not two: `.tri` is a three-track grid and `tri--2`
+          narrows it. What was missing was the block that says whether any of
+          the figures above can be trusted, which on a page whose every number
+          is a quotient of two syncs on different schedules is not a footnote.
+          See `adapters/feed-health.ts`. */}
+      <div className="tri">
         {/* Four figures became money lines: what arrived, what is held up, and
             what actually reached COGS. `MoneyLines` is the prototype's own
             element for a short reconciliation, and the adapter writes the
             lines because a page never formats a number a second way. */}
         <Section title="Invoices" data={sections.invoices} pending={pending} askAbout>
           {(rows) => <MoneyLines rows={rows} />}
+        </Section>
+
+        {/* Deliberately NOT range-scoped, and it says so in its own meta: a
+            sync that ran an hour ago is a fact about the pipeline, not about
+            the window the reader is looking at. */}
+        <Section
+          title="What feeds these figures"
+          meta="and how fresh each one is"
+          data={sections.feeds}
+          pending={pending}
+        >
+          {(rows) => (
+            <>
+              <MoneyLines rows={rows} />
+              <p className="mono">
+                Every figure above is a quotient of two of these. When one stops, the page goes
+                quietly short of an answer rather than blank.
+              </p>
+            </>
+          )}
         </Section>
 
         <Section title="Guest ratings" data={sections.ratings} pending={pending} askAbout>

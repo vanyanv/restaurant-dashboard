@@ -315,9 +315,12 @@ export const PAGES: FidelityPage[] = [
           "(PRIME_CEILING_PCT, ruling C-R1). Orders, avg ticket, labour and " +
           "marketplace fees are judged against nothing at all — the " +
           "prototype's bands for them are its own invention (`ords * 0.92`, " +
-          "`$25.10-$26.40`), which is the figure judging itself. The desk " +
-          "also loses the SPLH lead figure's meter for the same reason; the " +
-          "phone does not draw that figure. Ruling Scan-R1.",
+          "`$25.10-$26.40`), which is the figure judging itself. The SPLH " +
+          "lead figure is no longer among them: it draws a `blt--lead` " +
+          "against its USUAL range whenever labour has synced — see the " +
+          "`hfloor` entry below for why a descriptive band is allowed where a " +
+          "target is not. The phone does not draw that figure. Ruling " +
+          "Scan-R1.",
       },
       {
         landmark: "band",
@@ -337,13 +340,18 @@ export const PAGES: FidelityPage[] = [
         desktop: 1,
         mobile: 0,
         reason:
-          "The floor meter under sales per labour hour. Nothing in this " +
-          "schema publishes an SPLH floor: the prototype's `SPLH_FLOOR = " +
-          "68.00` is its own number, and `SplhPoint.targetSplh` is the " +
-          "median of the store's own weekday history — the figure judging " +
-          "itself. `FloorMeter` mounts only when a floor is published, so " +
-          "today it does not mount. The phone's head block carries one figure " +
-          "and it is net sales, so this landmark is not on that surface at all.",
+          "The caption under sales per labour hour. Still no FLOOR — the " +
+          "prototype's `SPLH_FLOOR = 68.00` is its own number and nothing in " +
+          "this schema publishes one — but the figure is no longer bare: " +
+          "`LeadFigure` now draws the USUAL range (the weekday medians " +
+          "`splh-lead.ts` folds, widened by the published `SPLH_TOLERANCE`) " +
+          "as a band, and captions it with hours worked against hours " +
+          "published. A band describes history; a floor would claim somebody " +
+          "set one. So this landmark IS emitted whenever labour has synced " +
+          "and the range has weekday history behind it, and the budget is " +
+          "what remains for a database where it has not. The phone's head " +
+          "block carries one figure and it is net sales, so this landmark is " +
+          "not on that surface at all.",
       },
       {
         landmark: "sp",
@@ -351,11 +359,15 @@ export const PAGES: FidelityPage[] = [
         mobile: 0,
         reason:
           "The sparkline. `Figure` draws it from `reference.series`, so a " +
-          "figure with no reference has no series to draw — downstream of the " +
-          "same missing target as `blt`. The phone draws no sparklines at " +
-          "all, by the prototype's own decision (`mstrip()`: the two charts " +
-          "are directly beneath and vertical space is the scarce thing), so " +
-          "neither side has one there and nothing is missing.",
+          "strip cell with no reference has no series to draw — downstream of " +
+          "the same missing target as `blt`. BOTH LEAD FIGURES now draw one " +
+          "unconditionally (`LeadFigure` takes `series` directly rather than " +
+          "through a reference), off the same arrays the two charts below " +
+          "them are drawn from, so a reader sees the shape without scrolling. " +
+          "The phone draws no sparklines at all, by the prototype's own " +
+          "decision (`mstrip()`: the two charts are directly beneath and " +
+          "vertical space is the scarce thing), so neither side has one there " +
+          "and nothing is missing.",
       },
       {
         landmark: "moneyline",

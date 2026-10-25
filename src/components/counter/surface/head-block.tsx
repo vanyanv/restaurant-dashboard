@@ -1,5 +1,8 @@
 import type { ReactNode } from "react"
 import type { DeltaTone } from "./figure"
+import { Bullet } from "./bullet"
+import { Spark } from "./spark"
+import { bstat, bwords, isJudged, type Reference } from "@/lib/counter/bullet-state"
 
 /**
  * The lead block: the one or two figures an owner checks before anything else,
@@ -77,7 +80,35 @@ export interface HeadFigure {
    * decides; a figure whose fall is a win never gets it. Unclassed is a rise.
    */
   detailTone?: DeltaTone
-  /** Emitted after `.d`, inside the same `.fig`. `FloorMeter` on Overview's co-lead. */
+  /**
+   * The trajectory behind the figure, drawn between `.v` and `.d` exactly
+   * where `strip()` draws a cell's — the prototype's `.fig` order is `k`, `v`,
+   * `sp`, `d`, `blt`, `hfloor`, and a lead figure is the same six spans at
+   * headline scale. Fewer than two points draws nothing.
+   */
+  series?: number[]
+  /**
+   * What this figure is read against, drawn as a `blt--lead` meter.
+   *
+   * A BAND is a range the figure usually sits in; a TARGET is a line somebody
+   * published. `Figure` derives the same meter from the same type for a strip
+   * cell — this is that shape at lead scale, without the `.fig` wrapper, which
+   * `HeadBlock` owns.
+   */
+  reference?: Reference
+  /**
+   * `.hfloor` — the words under the meter, the lead-scale twin of a strip
+   * cell's `.band`. The flag ("over" / "under" / "at the edge") is PREPENDED
+   * from the reference's own verdict rather than written by the caller, so a
+   * caption cannot say "of room" over a meter drawn in breach.
+   */
+  caption?: string
+  /**
+   * Emitted after `.d`, inside the same `.fig` — for a meter whose caption is
+   * a judgement it has to make itself, which is `FloorMeter` and nothing else.
+   * Mutually exclusive with `reference` in practice; both would draw two
+   * meters under one figure.
+   */
   meter?: ReactNode
 }
 
@@ -94,15 +125,48 @@ export interface HeadFigure {
  * wraps in its own `<Section bare>`, so each figure carries its own state and
  * `HeadBlock` still owns the element, the modifier and the count.
  */
-export function LeadFigure({ label, value, detail, detailTone, meter }: HeadFigure) {
+export function LeadFigure({
+  label,
+  value,
+  detail,
+  detailTone,
+  series,
+  reference,
+  caption,
+  meter,
+}: HeadFigure) {
+  const judged = reference != null && isJudged(reference)
+  // `quiet` draws the meter but says nothing about it — no flag words, and no
+  // breach tint on the sparkline above it.
+  const spoken = judged && !reference.quiet
+  const flag = spoken ? bwords(reference) : null
+  const breach = spoken && bstat(reference) === "breach"
+
   return (
     <>
       <span className="k">{label}</span>
       <span data-figure-value className="v">
         {value}
       </span>
+      {series ? <Spark series={series} breach={breach} /> : null}
       {detail ? (
         <span className={detailTone ? `d ${detailTone}` : "d"}>{detail}</span>
+      ) : null}
+      {judged ? <Bullet reference={reference} className="blt--lead" /> : null}
+      {/* The prototype's `c[4] || r`: a reference alone is enough to open the
+          band, even a quiet one that puts nothing in it. */}
+      {caption || reference ? (
+        <span className="hfloor">
+          {flag ? (
+            <>
+              <span className={`flag is-${flag.status}`}>
+                <i />
+                {flag.word}
+              </span>{" "}
+            </>
+          ) : null}
+          {caption}
+        </span>
       ) : null}
       {meter}
     </>

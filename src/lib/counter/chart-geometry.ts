@@ -120,6 +120,20 @@ export interface ChartSpec {
   /** Index of the series every other one is read against, for the tooltip's last line. */
   vs?: number | null
   vsLabel?: string
+  /**
+   * The COMPARISON window's own axis labels, when it has any.
+   *
+   * `labels` describes the selected range and nothing else, and at a
+   * single-bucket range `Chart` degrades to two read-out cells and captions
+   * each with `labels[0]`. That captioned the comparison cell with the
+   * SELECTED day's date: "Net sales $7,150 · Sun Sep 6" beside "Prior $6,642 ·
+   * Sun Sep 6" — two different figures dated the same day, on the range this
+   * page opens at by default.
+   *
+   * Optional. A chart with no comparison has none, and a multi-bucket chart
+   * never reads it — its dashed series is drawn against the same axis.
+   */
+  vsLabels?: string[]
   /** The accessible name. Defaults to the first series' name. */
   alt?: string
 }

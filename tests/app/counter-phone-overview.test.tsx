@@ -35,7 +35,13 @@ const STORES = [
 ]
 
 const sections: OverviewSections = {
-  sales: ready({ grossSales: 7468, comparison: "▼ 37.2% vs the prior period", comparisonTone: "is-down" }),
+  sales: ready({
+    grossSales: 7468,
+    series: [11895, 7468],
+    note: "291 orders · $25.66 ticket",
+    comparison: "▼ 37.2% vs the prior period",
+    comparisonTone: "is-down",
+  }),
   splh: notComputed("sales per labor hour"),
   strip: ready([
     { label: "Orders", value: "1,024" },
@@ -63,6 +69,7 @@ const sections: OverviewSections = {
       orders: 291,
       ticket: 25.66,
       salesPerHour: 71.4,
+      kept: 3800,
       channels: [{ id: "house", net: 4000, orders: 160, commission: 0, ticket: 25 }],
     },
     { kind: "pre_open", id: "glendale", name: "Glendale", opensOn: null, missingFromFile: ["Rent"] },
@@ -71,6 +78,8 @@ const sections: OverviewSections = {
   channels: notComputed("the channel mix"),
   invoices: notComputed("invoices"),
   ratings: notComputed("guest ratings"),
+  // Not on the phone — the desk's third tile. Present so the shape is whole.
+  feeds: notComputed("feed health"),
 }
 
 /** The sheet `.mdate` controls — `.mtop` holds two. */

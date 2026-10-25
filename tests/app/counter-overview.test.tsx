@@ -58,11 +58,31 @@ const base = {
   params: "",
   stores: [{ id: "hollywood", name: "Hollywood", stage: "trading" as const }],
   today: new Date("2026-08-25T00:00:00-07:00"),
+  /*
+   * The dispatch line's other two facts, which are page-level and arrive as
+   * props off the layout's own `getShellStatus` call — see the island's doc
+   * comment. `at` is an ISO string, not a `Date`, because that is what crosses
+   * the RSC boundary.
+   */
+  sync: { state: "synced" as const, at: "2026-08-25T06:45:00.000Z" },
+  needsYou: 3,
 }
 
 const sections: OverviewSections = {
-  sales: ready({ grossSales: 7468, comparison: "▲ 4.1% vs the prior period" }),
-  splh: ready({ value: 71.4, floor: null, series: [68, 70, 71.4] }),
+  sales: ready({
+    grossSales: 7468,
+    series: [7100, 7300, 7468],
+    note: "291 orders · $25.66 ticket",
+    comparison: "▲ 4.1% vs the prior period",
+  }),
+  splh: ready({
+    value: 71.4,
+    detail: "▼ $2.60 vs a usual $74.00",
+    detailTone: "is-down",
+    reference: null,
+    caption: "48.0 h worked · 2.0 h over the 46.0 h published · $41 of labor",
+    series: [68, 70, 71.4],
+  }),
   strip: ready([
     { label: "Orders", value: "1,024" },
     { label: "Avg ticket", value: "$25.66" },
@@ -100,6 +120,7 @@ const sections: OverviewSections = {
       orders: 291,
       ticket: 25.66,
       salesPerHour: 71.4,
+      kept: 3800,
       channels: [{ id: "house", net: 4000, orders: 160, commission: 0, ticket: 25 }],
     },
     {
@@ -121,6 +142,10 @@ const sections: OverviewSections = {
     { label: "Posted to COGS", value: "28 · $61,063", total: true },
   ]),
   ratings: ready({ average: "4.6", averageValue: 4.6, count: 142, windowDays: 30, lowCount: 1 }),
+  feeds: ready([
+    { label: "Sales, orders and channels", value: "synced 12 min ago · every 4 hours" },
+    { label: "Hours worked and the schedule", value: "last run failed", tone: "warn" as const },
+  ]),
 }
 
 /** Every landmark class the fidelity gate reads, in DOM order. */
@@ -222,24 +247,48 @@ describe("Counter Overview", () => {
     expect(head.querySelector(".say .state")!.textContent).toBe("One figure is over")
   })
 
-  it("draws NO floor meter, because no store file publishes a floor", () => {
-    // `SPLH_FLOOR = 68.00` is the prototype's own invention and
-    // `SplhPoint.targetSplh` is the figure judging itself. A meter against a
-    // number nobody set is worse than no meter.
+  it("draws NO meter under sales per labor hour when there is no usual to draw", () => {
+    /*
+     * `SPLH_FLOOR = 68.00` is the prototype's own invention, so nothing is
+     * ever drawn as a floor. What CAN be drawn is the range the same weekdays
+     * usually land in — and a range needs weekday history behind it, which a
+     * store in its first fortnight does not have. `reference: null` is that
+     * case, and it must draw no meter rather than a meter around nothing.
+     *
+     * The caption survives: "48.0 h worked · …" is a fact about the hours, not
+     * a judgement about a band, so `.hfloor` is present and `.blt--lead` is
+     * not.
+     */
     const { container } = render(<CounterOverviewClient {...base} sections={sections} />)
-    expect(container.querySelector(".hfloor")).toBeNull()
-    expect(container.querySelector(".blt--lead")).toBeNull()
+    expect(container.querySelector(".fig--co .blt--lead")).toBeNull()
+    expect(container.querySelector(".fig--co .hfloor")!.textContent).toContain("48.0 h worked")
   })
 
-  it("draws the floor meter the moment a floor IS published", () => {
+  it("draws the usual band the moment there IS weekday history behind it", () => {
     const { container } = render(
       <CounterOverviewClient
         {...base}
-        sections={{ ...sections, splh: ready({ value: 71.4, floor: 68, series: [70, 71.4] }) }}
+        sections={{
+          ...sections,
+          splh: ready({
+            ...(sections.splh as { status: "ready"; data: { value: number } }).data,
+            value: 71.4,
+            detail: "▼ $2.60 vs a usual $74.00",
+            detailTone: "is-down",
+            // The published `SPLH_TOLERANCE` around the weekday median, and
+            // `better: "high"` because a low sales-per-hour is the bad one.
+            reference: { v: 71.4, lo: 66.6, hi: 81.4, better: "high", label: "usual" },
+            caption: "48.0 h worked · 2.0 h over the 46.0 h published · $41 of labor",
+            series: [70, 71.4],
+          }),
+        }}
       />,
     )
     expect(container.querySelector(".fig--co .blt--lead")).toBeTruthy()
-    expect(container.querySelector(".fig--co .hfloor")!.textContent).toContain("Floor $68.00")
+    // Inside the band, so no flag word is prepended — the caption stands alone.
+    expect(container.querySelector(".fig--co .hfloor")!.textContent).toContain(
+      "2.0 h over the 46.0 h published",
+    )
   })
 
   it("each head figure carries its OWN state — one rollup failing does not blank the other", () => {
@@ -300,12 +349,22 @@ describe("Counter Overview", () => {
     ])
   })
 
-  it("writes the invoices as money lines and the ratings beside them, two to a row", () => {
+  it("closes the page with three tiles: what was bought, what guests said, and what fed it all", () => {
+    /*
+     * `.tri` is a THREE-track grid and `tri--2` narrows it to two. It carried
+     * the modifier while the row held invoices and ratings; the third tile is
+     * the feed block, and it is not decoration on this page — every figure
+     * above it is a quotient of two syncs on different schedules, and when one
+     * stops the page does not go blank, it goes quietly short of an answer.
+     */
     const { container } = render(<CounterOverviewClient {...base} sections={sections} />)
     const tri = container.querySelector(".tri") as HTMLElement
-    expect(tri.className).toBe("tri tri--2")
-    expect(tri.querySelectorAll(".moneyline")).toHaveLength(3)
+    expect(tri.className).toBe("tri")
+    // Three invoice lines and two feed lines, all `.moneyline` — the same
+    // element, because a feed reading is a label and a value on one rule.
+    expect(tri.querySelectorAll(".moneyline")).toHaveLength(5)
     expect(tri.querySelector(".stars .n")!.textContent).toBe("4.6")
+    expect(tri.textContent).toContain("Hours worked and the schedule")
   })
 
   it("says which stores are trading, because that is why a figure below may be empty", () => {
@@ -328,9 +387,39 @@ describe("Counter Overview", () => {
     expect(screen.getAllByText(/Glendale is not trading yet/).length).toBeGreaterThan(0)
   })
 
-  it("does not offer the queue link the prototype does — /dashboard/needs-you is not served yet", () => {
+  it("offers the queue link the prototype does, at the route this app actually serves", () => {
+    /*
+     * It used to render none. The prototype's `.go` points at its own alerts
+     * queue and ours would have pointed at `/dashboard/needs-you`, which
+     * `nav.ts` declares and nothing renders — a link to a 404 is worse than no
+     * link. `/dashboard/alerts` IS served, and it is the same destination
+     * every ingested queue item below already uses.
+     */
     const { container } = render(<CounterOverviewClient {...base} sections={sections} />)
+    expect(container.querySelector(".dispatch .go")).toHaveAttribute("href", "/dashboard/alerts")
+  })
+
+  it("offers no queue link when the queue is empty — a button onto nothing is the same defect", () => {
+    const { container } = render(
+      <CounterOverviewClient {...base} needsYou={0} sections={sections} />,
+    )
     expect(container.querySelector(".dispatch .go")).toBeNull()
+  })
+
+  it("leads the dispatch line with whether the figures can be trusted", () => {
+    /*
+     * The design's own note on `.dispatch`: "needs-you, trading, and whether
+     * the figures can be trusted, in one line." The sync comes FIRST because
+     * everything to its right is only worth reading if it is true — and it is
+     * worded by `syncAgo`, the same function the topbar's chip uses, so a
+     * reader seeing both at once cannot be told two different ages.
+     */
+    const { container } = render(<CounterOverviewClient {...base} sections={sections} />)
+    const line = container.querySelector(".dispatch") as HTMLElement
+    const facts = [...line.querySelectorAll(".hot, .quiet")].map((n) => n.textContent)
+    expect(facts[0]).toMatch(/^sales synced /)
+    expect(facts[1]).toBe("3 things need you")
+    expect(facts[2]).toBe("1 of 1 stores trading")
   })
 
   it("names owed sections instead of showing a zero", () => {

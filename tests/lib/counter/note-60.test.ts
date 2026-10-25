@@ -38,6 +38,11 @@ vi.mock("@/app/actions/forecasts/revenue-forecast-actions", () => ({
 vi.mock("@/app/actions/ratings/ratings-actions", () => ({ getRatingsSummary: vi.fn() }))
 vi.mock("@/lib/counter/channel-mix", () => ({ loadChannelMix: vi.fn() }))
 vi.mock("@/lib/counter/targets", () => ({ loadStripTargets: vi.fn() }))
+// Both reach Prisma at MODULE LOAD (`@/lib/prisma` throws without
+// `DATABASE_URL`), so an unmocked import here fails the file's import rather
+// than one assertion.
+vi.mock("@/lib/counter/labor-week", () => ({ loadLaborWeek: vi.fn() }))
+vi.mock("@/lib/counter/adapters/feed-health", () => ({ getFeedHealth: vi.fn() }))
 
 import { getStores } from "@/app/actions/store/crud-actions"
 import { getAllStoresPnL } from "@/app/actions/store/pnl-actions"
@@ -48,6 +53,8 @@ import { getRevenueForecast } from "@/app/actions/forecasts/revenue-forecast-act
 import { getRatingsSummary } from "@/app/actions/ratings/ratings-actions"
 import { loadChannelMix } from "@/lib/counter/channel-mix"
 import { loadStripTargets } from "@/lib/counter/targets"
+import { loadLaborWeek } from "@/lib/counter/labor-week"
+import { getFeedHealth } from "@/lib/counter/adapters/feed-health"
 import { hasData, type SectionData } from "@/lib/counter/section-data"
 import { getOverviewSections, type StripCell } from "@/lib/counter/adapters/overview"
 import { getPnlSections } from "@/lib/counter/adapters/pnl"
@@ -160,6 +167,8 @@ beforeEach(() => {
     data: { storeId: null, storeName: "All", generatedAt: new Date(), recentMape: null, days: [], openedAt: null },
   } as never)
   vi.mocked(getRatingsSummary).mockResolvedValue(null as never)
+  vi.mocked(loadLaborWeek).mockResolvedValue({ days: [], roles: [], overtimeCost: 0 } as never)
+  vi.mocked(getFeedHealth).mockResolvedValue([] as never)
 })
 
 function must<T>(sd: SectionData<T>, what: string): T {
