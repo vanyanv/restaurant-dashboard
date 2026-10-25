@@ -2913,6 +2913,34 @@ html[data-theme-switching] .ct-root *::after {
   .dock__in .hints,.ans .drill>.ldrawer,.manswer .drill>.ldrawer,.sig .q svg{transition-duration:.01ms!important}
 }
 
+/* ─────────────────────────────────────────────────────────────────────────
+ * A store card carrying FOUR small figures, not three.
+ *
+ * `.stfig` is `grid-template-columns:repeat(3,minmax(0,1fr))` in the generated
+ * sheet (counter-components.css:1125), because the prototype's card carries
+ * orders, ticket and sales per hour. Ours now carries what the store KEPT
+ * after marketplace commission as well — the figure the ledger drawer under
+ * the card is entirely about, promoted to the card so a reader does not have
+ * to open three drawers to compare three stores on it.
+ *
+ * At three tracks a fourth `<div>` wraps under the first and the row reads as
+ * two rows of unequal length. `StoreCards` sets `data-n` from whether the
+ * fourth figure exists at all, so a store with no published fee rate keeps the
+ * prototype's own three tracks and this rule never applies to it — which is
+ * why the selector is an attribute and not a blanket override.
+ *
+ * `counter-components.css` is GENERATED from the prototype and byte-asserted
+ * by `tests/styles/counter-components.test.ts`; a hand edit there fails
+ * `npm test` and is erased by the next `npm run css:extract`. Structural
+ * additions of ours belong here.
+ * ───────────────────────────────────────────────────────────────────────── */
+.ct-root .stfig[data-n="4"] {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  /* The fourth figure is the narrowest track on the card. `.stfig dt` already
+   * ellipsises; the tighter gutter is what gives four labels room to do it. */
+  gap: 0 8px;
+}
+
 /* ═══════════════════════════════════════════════════════════════════════════
  * THE WEEK AHEAD — four things the prototype's sheet has no rule for
  *

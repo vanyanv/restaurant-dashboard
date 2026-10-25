@@ -178,12 +178,29 @@ export function Chart(props: ChartProps) {
   if (spec.labels.length < 2) {
     return (
       <div className="strip strip--fit">
-        {spec.series.map((s) => (
+        {spec.series.map((s, i) => (
           <Figure
             key={s.name}
             label={s.name}
             value={s.data[0] == null ? "—" : fmt(s.data[0])}
-            delta={spec.labels[0]}
+            /*
+             * The COMPARISON cell is captioned with the comparison's own date,
+             * not the selected range's.
+             *
+             * Every cell used to take `spec.labels[0]`, and `labels` describes
+             * the selected range only. On the default one-day view that put
+             * "Sun Sep 6" under both figures — $7,150 and $6,642, two
+             * different days, dated identically, on the first screen an owner
+             * lands on. `vsLabels` is the comparison window's own axis labels;
+             * `vsLabel` ("against the prior period") is the fallback for a
+             * comparison that has a name but no dates, and a cell with neither
+             * goes uncaptioned rather than borrowing a date that is not its.
+             */
+            delta={
+              i === spec.vs
+                ? (spec.vsLabels?.[0] ?? spec.vsLabel)
+                : spec.labels[0]
+            }
             deltaTone="is-flat"
             size="cell"
           />

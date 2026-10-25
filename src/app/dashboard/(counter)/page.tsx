@@ -3,6 +3,7 @@ import { redirect } from "next/navigation"
 import { authOptions, hasOwnerAccess } from "@/lib/auth"
 import { readCounterParams } from "@/lib/counter/url-state"
 import { getOverviewSectionPromises, getOverviewStores } from "@/lib/counter/adapters/overview"
+import { getShellStatus } from "@/lib/counter/adapters/shell-status"
 import { CounterOverviewClient } from "./counter-overview-client"
 import { counterToday } from "@/lib/counter/today"
 
@@ -73,12 +74,38 @@ export default async function DashboardPage({
   // `cache()`d, so the layout's call and this one are one query per request.
   const stores = await getOverviewStores()
 
+  /*
+   * The dispatch line's other two facts.
+   *
+   * `getShellStatus` is the same call the layout above this page already makes
+   * for the topbar's sync chip and the rail's "Needs you" badge, and it is
+   * `cached` for a minute under the account's own key — so this is a Redis
+   * read, not a second pair of queries. It is an adapter, not an action and not
+   * Prisma, which is what `npm run tokens`' page rules are actually about.
+   *
+   * The line needs it because the two things it is for — whether the figures
+   * can be trusted, and whether anything wants a person — are page-level facts
+   * with no `SectionData` to open. Before this it could only say how many
+   * stores were trading, which is the one of the three the design does not
+   * lead with.
+   */
+  const status = await getShellStatus({
+    accountId: session.user.accountId,
+    storeIds: stores.map((s) => s.id),
+  })
+
   return (
     <CounterOverviewClient
       params={params.toString()}
       stores={stores}
       today={today}
       sections={sections}
+      // Serialisable across the RSC boundary: a state, an ISO string and a
+      // count. A `Date` survives it, but the client only ever prints an age
+      // and the shell already resolved "now" on the server — passing the
+      // computed age keeps the two from disagreeing after a minute on screen.
+      sync={status.sync ? { state: status.sync.state, at: status.sync.at?.toISOString() ?? null } : null}
+      needsYou={status.needsYou}
     />
   )
 }

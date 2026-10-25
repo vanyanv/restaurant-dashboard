@@ -22,6 +22,14 @@ vi.mock("@/lib/counter/channel-mix", () => ({
   loadChannelMixByStore: vi.fn(),
 }))
 vi.mock("@/lib/counter/targets", () => ({ loadStripTargets: vi.fn() }))
+/*
+ * Both reach Prisma at MODULE LOAD (`@/lib/prisma` throws without
+ * `DATABASE_URL`), which is why they are mocked at the module boundary rather
+ * than stubbed per test: an unmocked import here does not fail one assertion,
+ * it fails the whole file's import and reports "no tests".
+ */
+vi.mock("@/lib/counter/labor-week", () => ({ loadLaborWeek: vi.fn() }))
+vi.mock("@/lib/counter/adapters/feed-health", () => ({ getFeedHealth: vi.fn() }))
 
 import { getStores } from "@/app/actions/store/crud-actions"
 import { getAllStoresPnL } from "@/app/actions/store/pnl-actions"
@@ -32,6 +40,8 @@ import { getRevenueForecast } from "@/app/actions/forecasts/revenue-forecast-act
 import { getRatingsSummary } from "@/app/actions/ratings/ratings-actions"
 import { loadChannelMix, loadChannelMixByStore } from "@/lib/counter/channel-mix"
 import { loadStripTargets } from "@/lib/counter/targets"
+import { loadLaborWeek } from "@/lib/counter/labor-week"
+import { getFeedHealth } from "@/lib/counter/adapters/feed-health"
 import { toQueryBounds } from "@/lib/counter/date-range"
 import { PRIME_CEILING_PCT } from "@/lib/counter/prime-cost"
 import { dataOf, hasData } from "@/lib/counter/section-data"
@@ -215,6 +225,11 @@ function happyPath() {
     ]) as never,
   )
   vi.mocked(loadStripTargets).mockResolvedValue(NO_TARGETS as never)
+  // No Harri rows is this database's actual state, and the state the SPLH
+  // lead's `no_labor_synced` branch is for. A test that wants the schedule
+  // half overrides it.
+  vi.mocked(loadLaborWeek).mockResolvedValue({ days: [], roles: [], overtimeCost: 0 } as never)
+  vi.mocked(getFeedHealth).mockResolvedValue([] as never)
 }
 
 const load = (over: Partial<Parameters<typeof getOverviewSections>[0]> = {}) =>
@@ -260,9 +275,17 @@ describe("getOverviewSections", () => {
     // (4000 + 3468) / (56 + 50) — total net over total hours, never the mean
     // of the daily ratios.
     expect(s.splh.data.value).toBeCloseTo(7468 / 106, 6)
-    // The prototype's SPLH_FLOOR = 68.00 exists nowhere in the schema.
-    expect(s.splh.data.floor).toBeNull()
+    /*
+     * The prototype's SPLH_FLOOR = 68.00 exists nowhere in the schema, so the
+     * figure is never drawn against a target — `reference` is either null or a
+     * BAND, and a band carries `lo`/`hi` and no `target`. That is the whole
+     * distinction: a usual range describes the past, a floor would claim
+     * somebody set one.
+     */
+    expect(s.splh.data.reference?.target).toBeUndefined()
     expect(s.splh.data.series).toEqual([71.4, 69.4])
+    // The caption always opens with the hours the quotient was taken on.
+    expect(s.splh.data.caption).toMatch(/^106\.0 h worked/)
   })
 
   it("never marks needsYou owed — getAlertInbox has been in the tree since F21", async () => {
@@ -347,7 +370,7 @@ describe("getOverviewSections", () => {
     const s = await load()
     // Five of six publish nothing (Task 1 Step 4). A bullet asserts somebody
     // set this benchmark; nobody did.
-    for (const label of ["Orders", "Avg ticket", "Labor", "Marketplace fees"]) {
+    for (const label of ["Orders", "Avg ticket", "Labor", "Kept after fees"]) {
       const c = cell(s, label)
       expect(c, label).toBeDefined()
       expect(c?.reference?.target, label).toBeUndefined()
@@ -413,11 +436,19 @@ describe("getOverviewSections", () => {
     expect(vi.mocked(loadStripTargets).mock.results.length).toBeGreaterThan(0)
   })
 
-  it("names what the marketplace-fee figure excludes rather than counting it at zero", async () => {
+  it("names what the kept-after-fees figure excludes rather than counting it at zero", async () => {
     const s = await load()
-    const fees = cell(s, "Marketplace fees")
-    // $500 from DoorDash and nothing from Grubhub, which publishes no rate.
-    expect(fees?.value).toBe("$500")
+    const fees = cell(s, "Kept after fees")
+    /*
+     * The share KEPT, over the channels that publish a rate and no others —
+     * $500 of commission on DoorDash's own net. Grubhub publishes no rate, so
+     * it is out of BOTH sides of the quotient rather than folded in at a
+     * commission of zero, which would be the claim that it works for free.
+     *
+     * The dollars are still printed; they moved into the delta slot, where a
+     * ratio's denominator belongs.
+     */
+    expect(fees?.delta).toBe("$500 to marketplaces")
     expect(fees?.caption).toBe("excludes grubhub")
     // `.strip .band` is a 9px mono line with `white-space:nowrap` and a
     // six-track strip cell holds about 31 characters. A caption that
@@ -577,7 +608,18 @@ describe("getOverviewSections", () => {
     const s = await load()
     expect(s.verdict.status).toBe("ready")
     if (!hasData(s.verdict)) throw new Error("verdict")
-    expect(s.verdict.data.tone).toBe("good")
+    /*
+     * "No published schedule", not "everything is inside its plan".
+     *
+     * `loadLaborWeek` is mocked to no days, so hours are posted (the SPLH
+     * series has them) and no shift is published for the range. That is the
+     * verdict reading the SCHEDULE first, which is the point of it: a
+     * published schedule is a promise somebody made and therefore the only
+     * thing on this page that can be broken. The same three-way answer the
+     * Labor page gives, from the same `scheduleHeld` predicate.
+     */
+    expect(s.verdict.data.tone).toBe("warn")
+    expect(s.verdict.data.headline).toBe("No published schedule")
 
     // Push food cost over a published plan and the sentence names THAT figure.
     vi.mocked(loadStripTargets).mockResolvedValue({
@@ -590,17 +632,41 @@ describe("getOverviewSections", () => {
     expect(breached.verdict.data.body).toContain("Food cost")
     expect(breached.verdict.data.action?.href).toBe("/dashboard/cogs")
 
-    // With no sales there is no prime cost and nothing publishes anything
-    // else: no verdict to write, so it says what is missing instead of
-    // printing a cheerful sentence with no evidence behind it.
+    /*
+     * With no sales there is no prime cost, nothing publishes anything else,
+     * AND no hours are posted — so there is not even a schedule to report on.
+     * That is the only state with no verdict to write, and it says what is
+     * missing instead of printing a cheerful sentence with no evidence.
+     *
+     * The SPLH series has to be cleared too, and that is not test bookkeeping:
+     * hours posted against no published shift IS a verdict ("no published
+     * schedule"), so leaving them in would be asserting that the page owes a
+     * sentence it can in fact write.
+     */
     vi.mocked(loadStripTargets).mockResolvedValue(NO_TARGETS as never)
+    vi.mocked(getSplhSeries).mockResolvedValue([] as never)
     vi.mocked(getAllStoresPnL).mockResolvedValue(
       pnl({ combined: { ...pnl().combined, grossSales: 0, laborValue: 0 } }) as never,
     )
+    /*
+     * A SALES verdict, not an owed one and not an empty one.
+     *
+     * Nothing is judged and no hours are posted, but sales still happened and
+     * the comparison still says whether they were good — so there is a real
+     * sentence to write, and it closes by naming the half that is missing.
+     *
+     * `not_computed` would claim the verdict is "designed, not yet built",
+     * which is false: it is built and unfed. `empty("no_labor_synced")` was
+     * the other attempt, and it printed the identical paragraph the SPLH lead
+     * figure two columns away was already printing — one head block saying one
+     * thing twice.
+     */
     const owed = await load()
-    expect(owed.verdict.status).toBe("not_computed")
-    if (owed.verdict.status !== "not_computed") throw new Error("owed")
-    expect(owed.verdict.owed).toContain("targetCogsPct")
+    expect(owed.verdict.status).toBe("ready")
+    if (!hasData(owed.verdict)) throw new Error("owed")
+    expect(owed.verdict.data.body).toContain("labor one has not run")
+    // No labour means no schedule to be over, so nothing claims a breach.
+    expect(owed.verdict.data.headline).not.toContain("published schedule")
   })
 
   it("writes invoices as money lines, and does not guess the line the schema cannot answer", async () => {

@@ -49,6 +49,22 @@ export interface MovingCell {
 }
 
 export function Moving({ cells }: { cells: MovingCell[] }) {
+  /*
+   * NOTHING MOVING, NO BAND.
+   *
+   * `.moving` is a signal-coloured bar spanning the page, and its whole job is
+   * to name what is not in the figures above it. Rendering it empty draws the
+   * loudest element on the screen around no content at all — and an adapter
+   * that has nothing to put in it has to be able to say so without the page
+   * branching on a status. Returning null is how: `Section bare` hands over an
+   * empty array and this draws nothing, rather than the page deciding.
+   *
+   * NOT an `empty` section either. `Empty` is a 46px-padded block with a
+   * headline, which is a bigger thing than the band it replaces — a state that
+   * announces the absence of an announcement.
+   */
+  if (cells.length === 0) return null
+
   return (
     <div className="moving">
       {cells.map((c) => (

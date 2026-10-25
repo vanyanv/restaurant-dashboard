@@ -35,7 +35,16 @@ import { useReducedMotion } from "@/components/counter/motion/use-reduced-motion
 
 export type SyncState = "synced" | "syncing" | "failed" | "stale"
 
-function relative(at: Date, now: Date): string {
+/**
+ * "just now", "12 min ago", "3h ago", "2d ago".
+ *
+ * EXPORTED since the Overview's dispatch line started printing the same age.
+ * The chip in the topbar and the first line of the page are two readings of
+ * one `JobRun`, and a reader can see both at once — one saying "3h ago" while
+ * the other rounds to "4h" is the smallest possible version of note 60, and it
+ * is avoided the same way: one function.
+ */
+export function syncAgo(at: Date, now: Date): string {
   const mins = Math.max(0, Math.round((now.getTime() - at.getTime()) / 60000))
   if (mins < 1) return "just now"
   if (mins < 60) return `${mins} min ago`
@@ -70,7 +79,7 @@ export function SyncChip({
   now: Date
 }) {
   const landed = useLanded(state)
-  const when = at ? ` ${relative(at, now)}` : ""
+  const when = at ? ` ${syncAgo(at, now)}` : ""
 
   const text =
     state === "syncing"
@@ -78,7 +87,7 @@ export function SyncChip({
       : state === "failed"
         ? `Last sync failed${when}`
         : state === "stale"
-          ? `Figures${at ? ` ${relative(at, now).replace(/ ago$/, " old")}` : " are old"}`
+          ? `Figures${at ? ` ${syncAgo(at, now).replace(/ ago$/, " old")}` : " are old"}`
           : `Synced${when}`
 
   const cls = [

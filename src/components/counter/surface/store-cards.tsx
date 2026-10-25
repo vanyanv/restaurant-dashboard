@@ -109,6 +109,15 @@ export interface TradingStore {
   ticket: number | null
   /** `null` when no labour hours were posted for the range. Same rule as `ticket`. */
   salesPerHour: number | null
+  /**
+   * What the store kept after marketplace commission.
+   *
+   * `null` when no channel on it publishes a rate — unknown fees, not fees of
+   * zero — and in that case the fourth figure is ABSENT rather than dashed:
+   * three figures is a complete row, and a fourth reading "—" beside three
+   * real ones is the shape note 33 is about.
+   */
+  kept?: number | null
   /** What opens underneath — the channel breakdown for this store. */
   panel: ReactNode
 }
@@ -241,7 +250,10 @@ function TradingBody({ store }: { store: TradingStore }) {
       <span className="v">{money(store.grossSales)}</span>
       <Spark series={store.series} />
       <span className="d">{store.comparison}</span>
-      <dl className="stfig">
+      {/* `data-n` because the sheet's `.stfig` is a fixed three tracks and a
+          fourth figure would wrap under the first — see the rule in
+          `counter-repairs.css`. */}
+      <dl className="stfig" data-n={store.kept == null ? 3 : 4}>
         <div>
           <dt>Orders</dt>
           <dd>{count(store.orders)}</dd>
@@ -254,6 +266,12 @@ function TradingBody({ store }: { store: TradingStore }) {
           <dt>Sales/hr</dt>
           <dd>{money(store.salesPerHour, { cents: true })}</dd>
         </div>
+        {store.kept == null ? null : (
+          <div>
+            <dt>Kept</dt>
+            <dd>{money(store.kept)}</dd>
+          </div>
+        )}
       </dl>
     </>
   )

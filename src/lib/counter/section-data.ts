@@ -58,6 +58,7 @@ export type EmptyReason =
   | "no_recipes"
   | "no_reviews"
   | "verdict_carried_it"
+  | "no_labor_synced"
   | "no_counts"
 
 /*

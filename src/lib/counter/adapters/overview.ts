@@ -24,6 +24,10 @@ import {
   rowValues,
   type Statement,
 } from "@/lib/counter/statement"
+import { loadLaborWeek, type LaborDay } from "@/lib/counter/labor-week"
+import { splhLead, type SplhLead } from "@/lib/counter/splh-lead"
+import { hoursText } from "@/lib/counter/schedule-hold"
+import { getFeedHealth } from "@/lib/counter/adapters/feed-health"
 import type { Reference } from "@/lib/counter/bullet-state"
 import type { ChartSpec } from "@/lib/counter/chart-geometry"
 import { count, delta, money, pct, plural, points } from "@/lib/counter/format"
@@ -42,7 +46,7 @@ import {
   type StreamedSections,
 } from "@/lib/counter/adapters/types"
 import {
-  dataOf, empty, mapReady, mapReadyTo, notComputed, ready, type SectionData,
+  dataOf, empty, mapReady, mapReadyTo, ready, type SectionData,
 } from "@/lib/counter/section-data"
 import {
   comparisonContext,
@@ -140,6 +144,23 @@ import type {
 
 /* ── The shapes the page's primitives render ──────────────────────────── */
 
+/**
+ * The head figure's reading, built once and read by two sections.
+ *
+ * `sales` renders it and `verdict` writes a sentence about it, and both used
+ * to be free to call `comparisonPhrase` themselves — which is the mechanism
+ * behind note 60, in miniature: two callers, one figure, two chances to word
+ * a comparison differently. It is derived once in
+ * `getOverviewSectionPromises` and handed to both.
+ */
+export interface SalesReading {
+  grossSales: number
+  series: number[]
+  note: string | null
+  comparison: string
+  comparisonTone?: DeltaTone
+}
+
 /** One strip cell, exactly `Figure`'s props. `Strip` wraps these. */
 export type StripCell = FigureProps
 
@@ -221,6 +242,15 @@ export interface TradingStoreCard {
   ticket: number | null
   /** `null` when no labour hours were posted for the range. */
   salesPerHour: number | null
+  /**
+   * What this store kept after marketplace commission, in dollars.
+   *
+   * Over the channels that publish a rate and NO OTHERS — the same subset the
+   * strip's "Kept after fees" cell is taken on, so the card and the strip
+   * cannot disagree. `null` when no channel on this store publishes one, which
+   * is a store whose fees are unknown rather than a store that paid none.
+   */
+  kept: number | null
   /**
    * Where this store's money came from — one row per channel, for the panel
    * that opens under the card. `loadChannelMix` scoped to this store alone,
@@ -342,17 +372,13 @@ export interface OverviewSectionsInput {
 
 export interface OverviewSections {
   /** Note 30: net sales says whether the day happened. */
-  sales: SectionData<{
-    /** See `TradingStoreCard.grossSales` — same figure, same reason for the name. */
-    grossSales: number
-    comparison: string
-    /**
-     * How `comparison` should read. Both surfaces put this string in a `.d`
-     * that paints `var(--good)` unless it is classed, so an unclassed fall is
-     * a fall painted as good news — see `comparisonPhrase`.
-     */
-    comparisonTone?: DeltaTone
-  }>
+  /**
+   * Note 30: net sales says whether the day happened.
+   *
+   * `SalesReading` above carries the shape, because the verdict is written
+   * from the same object — see its doc comment.
+   */
+  sales: SectionData<SalesReading>
   /**
    * Note 30's second number — sales per labour hour, which says whether the
    * day was worth having.
@@ -366,7 +392,26 @@ export interface OverviewSections {
    * `floor` is `null` until a store file carries one, and `FloorMeter` draws
    * nothing rather than a meter against a number nobody set.
    */
-  splh: SectionData<{ value: number; floor: number | null; series: number[] }>
+  splh: SectionData<{
+    /** Net sales over hours worked, for the range. */
+    value: number
+    /** "▼ $20.30 vs a usual Sunday", or what to say when there is no usual. */
+    detail: string
+    detailTone?: DeltaTone
+    /**
+     * The usual range, drawn as a band at lead scale.
+     *
+     * A BAND, never a target, and the word over it is always "usual" — see the
+     * two-references note in `src/lib/counter/splh-lead.ts`. `null` when no day
+     * in the range has enough weekday history behind it, in which case the
+     * figure is printed with nothing drawn against it rather than against a
+     * number nobody set.
+     */
+    reference: Reference | null
+    /** "74.0 h worked · 4.0 h over the 70.0 h published · $82 of labor". */
+    caption: string
+    series: number[]
+  }>
   /** Six cells. Five of them carry no reference at all — see the module note. */
   strip: SectionData<StripCell[]>
   /** The one thing that is wrong, named, with somewhere to go. Derived, never hardcoded. */
@@ -391,6 +436,14 @@ export interface OverviewSections {
   invoices: SectionData<MoneyLine[]>
   /** The prototype's second tile beside Invoices, from `getRatingsSummary`. */
   ratings: SectionData<RatingsTile>
+  /**
+   * What feeds the figures above, and how fresh each one is.
+   *
+   * Every number on this page is a quotient of two syncs on different
+   * schedules, and when one stops the page does not go blank — it goes subtly
+   * wrong. See `adapters/feed-health.ts` for why an Overview carries this.
+   */
+  feeds: SectionData<MoneyLine[]>
 }
 
 /**
@@ -447,6 +500,26 @@ function rowPercents(rows: PnLRow[], code: string): number[] | null {
  * rather than printed as an em-dash inside a bordered box that looks like a
  * reading — `Strip` sizes itself from `cells.length`, so a five-cell strip is a
  * strip, while a sixth cell reading "—" is note 33 in miniature.
+ *
+ * ## The order is the owner's, not the ledger's
+ *
+ * Orders, ticket, LABOR, food, prime, kept. Labour sits third rather than
+ * fourth because the second lead figure above it is sales per labor hour, and
+ * the two figures a reader is being asked to hold together should not have the
+ * food cost between them.
+ *
+ * ## Why the last cell is what is KEPT and not what was PAID
+ *
+ * It used to print "Marketplace fees · $1,600", which is a number an owner can
+ * do nothing with on its own — $1,600 of fees is fine on $40,000 and ruinous
+ * on $6,000. The share kept is the same fact with its denominator attached,
+ * and the dollars are still printed, in the delta slot, where they now qualify
+ * a ratio instead of standing alone.
+ *
+ * It is computed over the channels that publish a rate and NO OTHERS, so the
+ * percentage is exact for what it covers rather than approximately right for
+ * everything. The caption names what was left out — a `$0` commission for
+ * Grubhub would be the claim that it works for free.
  */
 function buildStrip(
   p: Statement,
@@ -484,6 +557,27 @@ function buildStrip(
         ),
       })
     }
+  }
+
+  // Zero labour over a range with sales is not something a restaurant
+  // produces; it is a store whose labour is neither posted nor configured, and
+  // "0.0%" would be the same lie as a $0 Grubhub commission.
+  const laborKnown = p.grossSales > 0 && p.laborValue > 0
+  const laborPct = laborKnown ? p.laborPct * 100 : null
+  if (laborPct !== null) {
+    cells.push({
+      label: "Labor",
+      value: pct(laborPct, { scaled: true }),
+      arrive: { value: laborPct, as: "pct" },
+      caption: money(p.laborValue),
+      reference: {
+        ...(referenceFor(laborPct, targets?.labor ?? null, "low", `Labor ${pct(laborPct, { scaled: true })}`) ?? {
+          v: laborPct,
+          better: "low" as const,
+        }),
+        series: rowPercents(p.rows, LABOR_CODE) ?? undefined,
+      },
+    })
   }
 
   /*
@@ -530,27 +624,6 @@ function buildStrip(
     })
   }
 
-  // Zero labour over a range with sales is not something a restaurant
-  // produces; it is a store whose labour is neither posted nor configured, and
-  // "0.0%" would be the same lie as a $0 Grubhub commission.
-  const laborKnown = p.grossSales > 0 && p.laborValue > 0
-  const laborPct = laborKnown ? p.laborPct * 100 : null
-  if (laborPct !== null) {
-    cells.push({
-      label: "Labor",
-      value: pct(laborPct, { scaled: true }),
-      arrive: { value: laborPct, as: "pct" },
-      caption: money(p.laborValue),
-      reference: {
-        ...(referenceFor(laborPct, targets?.labor ?? null, "low", `Labor ${pct(laborPct, { scaled: true })}`) ?? {
-          v: laborPct,
-          better: "low" as const,
-        }),
-        series: rowPercents(p.rows, LABOR_CODE) ?? undefined,
-      },
-    })
-  }
-
   // The one figure judged against a threshold that is NOT in `targets.ts`.
   // See the module note — do not move `PRIME_CEILING_PCT` here or restate it.
   //
@@ -589,33 +662,40 @@ function buildStrip(
   if (channels) {
     const withRate = channels.filter((c) => c.commission !== null)
     const withoutRate = channels.filter((c) => c.commission === null)
-    if (withRate.length > 0) {
+    const rated = withRate.reduce((t, c) => t + c.net, 0)
+    if (withRate.length > 0 && rated > 0) {
       const fees = withRate.reduce((t, c) => t + (c.commission ?? 0), 0)
+      const keptPct = ((rated - fees) / rated) * 100
       cells.push({
-        label: "Marketplace fees",
-        value: money(fees),
-        arrive: { value: fees, as: "money" },
-        // Naming what the figure excludes is the honest alternative to
-        // folding a channel with no published rate in at zero.
-        //
+        label: "Kept after fees",
+        value: pct(keptPct, { scaled: true }),
+        arrive: { value: keptPct, as: "pct" },
+        // The dollars, in the slot that qualifies the ratio. `is-flat`
+        // because it is a denominator, not a movement — `.strip .d` with no
+        // tone class paints `var(--good)`, which would report the money
+        // leaving as good news.
+        delta: `${money(fees)} to marketplaces`,
+        deltaTone: "is-flat",
         // SHORT ON PURPOSE. `.strip .band` is a 9px mono line with
-        // `white-space:nowrap` (counter-components.css:375), and a strip cell
+        // `white-space:nowrap` (counter-components.css:382), and a strip cell
         // at six tracks is ~168px of content — about 31 characters. The
-        // longer form this used to carry, "excludes grubhub — no published
-        // rate", is 36 and overflowed the cell's right border. The reason a
-        // channel is excluded is on that channel's own row in the store
-        // panel ("no commission · keeps $X"); what this figure needs to say
-        // is WHAT it left out.
+        // reason a channel is excluded is on that channel's own row in the
+        // store panel ("no commission · keeps $X"); what this figure needs to
+        // say is WHAT it left out.
         caption:
           withoutRate.length > 0
             ? `excludes ${withoutRate.map((c) => c.channel).join(", ")}`
             : undefined,
-        reference: referenceFor(
-          fees,
-          targets?.marketplaceFees ?? null,
-          "low",
-          `Marketplace fees ${money(fees)}`,
-        ),
+        /*
+         * NO REFERENCE, deliberately, and `targets.marketplaceFees` is not
+         * quietly reused here.
+         *
+         * That target — which `targets.ts` publishes as `null` anyway — would
+         * be a ceiling on DOLLARS PAID, carrying `better: "low"`. This cell is
+         * a share KEPT, where low is the bad direction. Handing one to the
+         * other would draw a meter that calls a good week a breach, which is
+         * worse than drawing none.
+         */
       })
     }
   }
@@ -638,32 +718,193 @@ function referenceFor(
 }
 
 /**
- * The verdict, derived.
+ * The verdict, derived — and it reads the SCHEDULE first.
  *
- * It compares every figure that HAS a published reference against it, takes the
- * worst breach, and writes the sentence around that one figure. It never
- * hardcodes the prototype's "Ahead, with one problem" — that sentence asserts
- * both that sales are ahead and that exactly one thing is wrong, and neither is
- * knowable in advance.
+ * ## Why the schedule leads
  *
- * When nothing on the page has a published reference there is no verdict to
- * write, and this returns `not_computed` naming what is missing rather than a
- * cheerful sentence with no evidence behind it.
+ * This page has two kinds of reference and they are not equal. A published
+ * schedule (`HarriShift`) is a PLAN: the store wrote down, before the week
+ * happened, how many hours it intended to buy. Everything else on the page is
+ * either a trade benchmark (prime cost's ceiling), a store setting
+ * (`Store.targetCogsPct`) or a description of the store's own history. Only
+ * the first is a promise somebody made, so only the first can be broken — and
+ * "over the published schedule" is the sentence an owner can act on this
+ * afternoon, which is the whole job of a verdict.
+ *
+ * So the order is: the schedule if there is one, then the worst breach among
+ * the figures that carry a published reference, then nothing.
+ *
+ * It never hardcodes the prototype's "Ahead, with one problem" — that sentence
+ * asserts both that sales are ahead and that exactly one thing is wrong, and
+ * neither is knowable in advance.
+ *
+ * When there is neither a schedule nor a published reference there is no
+ * verdict to write, and this returns `not_computed` naming what is missing
+ * rather than a cheerful sentence with no evidence behind it.
  */
-function buildVerdict(cells: StripCell[]): SectionData<Verdict> {
+function buildVerdict(
+  cells: StripCell[],
+  lead: SplhLead | null,
+  /**
+   * The head figure's own reading, so that a range with no labour and no
+   * published target still has a sentence to write. Same object the `sales`
+   * section is built from — not a second `comparisonPhrase` call, so the
+   * verdict and the figure above it cannot word one comparison two ways.
+   */
+  sales: SalesReading,
+): SectionData<Verdict> {
   const judged = cells.filter(
     (c): c is StripCell & { reference: Reference } =>
       c.reference != null && (c.reference.lo != null || c.reference.target != null),
   )
-
-  if (judged.length === 0) {
-    return notComputed(
-      "a published target for any headline figure — the schema publishes only Store.targetCogsPct",
-    )
-  }
-
   const scored = judged.map((c) => ({ cell: c, over: breachAmount(c.reference) }))
   const breached = scored.filter((s) => s.over > 0).sort((a, b) => b.over - a.over)
+
+  /*
+   * The second sentence, and it is the same one whichever headline is above
+   * it: what the hours returned, against what these weekdays usually return.
+   * Absent when there is no usual to compare with, rather than padded.
+   */
+  const returned =
+    lead === null
+      ? ""
+      : lead.usual === null
+        ? ` An hour of labor returned ${money(lead.value, { cents: true })}.`
+        : ` An hour of labor returned ${money(lead.value, { cents: true })}, where these ` +
+          `weekdays usually return ${money(lead.usual, { cents: true })}.`
+
+  /* The worst breach, worded once and appended to whichever headline won. */
+  const worstSentence = (() => {
+    if (breached.length === 0) return ""
+    const worst = breached[0].cell
+    return (
+      ` ${worst.label} is ${worst.value}` +
+      (worst.caption ? ` against ${worst.caption.toLowerCase()}` : "") +
+      (breached.length === 1
+        ? "."
+        : `, and ${breached.length - 1} more ${breached.length === 2 ? "figure is" : "figures are"} over too.`)
+    )
+  })()
+
+  const toLabor = { label: "Open the week in Labor", href: "/dashboard/labor" }
+  const toCogs = { label: "Show me which items", href: "/dashboard/cogs" }
+  const worstIsFood = breached.length > 0 && breached[0].cell.label === "Food cost"
+
+  /*
+   * The schedule's own reading, computed whether or not it ends up leading.
+   *
+   * The tones are the LABOR PAGE's tones, taken deliberately: an overrun
+   * schedule is `warn` and an unpublished one is `warn` there, and two pages
+   * painting one fact different colours is note 60 in the palette. What this
+   * page decides for itself is only which sentence goes FIRST.
+   */
+  const schedule: { tone: Tone; headline: string; sentence: string } | null = (() => {
+    if (lead === null) return null
+    if (lead.scheduled === null || lead.gap === null) {
+      return {
+        tone: "warn",
+        headline: "No published schedule",
+        sentence:
+          `${hoursText(lead.hours)} were worked over this range and no shift is published for ` +
+          `it, so the hours are not read against a plan — the only plan there is to read them ` +
+          `against is the schedule the store publishes for itself.`,
+      }
+    }
+    if (lead.held) {
+      return {
+        tone: "good",
+        headline: "On the published schedule",
+        sentence:
+          `${hoursText(lead.hours)} worked against ${hoursText(lead.scheduled)} published — ` +
+          `the schedule held.`,
+      }
+    }
+    const over = lead.gap > 0
+    const priced = lead.gapCost === null ? "" : `, about ${money(lead.gapCost)} of labor`
+    return {
+      tone: over ? "warn" : "good",
+      headline: over ? "Over the published schedule" : "Under the published schedule",
+      sentence:
+        `${hoursText(lead.hours)} worked against ${hoursText(lead.scheduled)} published — ` +
+        `${hoursText(Math.abs(lead.gap))} ${over ? "over" : "under"}${priced}.`,
+    }
+  })()
+
+  const breachHeadline =
+    breached.length === 1 ? "One figure is over" : `${breached.length} figures are over`
+
+  /*
+   * WHICH SENTENCE LEADS.
+   *
+   * A breached figure is `bad` — it is over a number somebody published, and
+   * `Say` paints the headline in the tone. A schedule that ran over is `warn`.
+   * So the breach takes the headline when there is one, and the schedule takes
+   * it otherwise; the body carries BOTH either way, in the order the reader
+   * would ask about them. A `warn` headline over a `bad` tone would be `Say`
+   * saying two things at once, which is the one thing a verdict may not do.
+   */
+  if (schedule !== null) {
+    const led = breached.length > 0
+    return ready({
+      tone: led ? "bad" : schedule.tone,
+      headline: led ? breachHeadline : schedule.headline,
+      body: led
+        ? `${worstSentence.trimStart()} ${schedule.sentence}${returned}`
+        : `${schedule.sentence}${returned}${worstSentence}`,
+      // A food breach has a page of its own that answers "which items"; the
+      // schedule's destination is the week it was published for.
+      action: led && worstIsFood ? toCogs : toLabor,
+    })
+  }
+
+  /*
+   * Past the schedule block, `lead` is null — no hours are posted for this
+   * range — because `schedule` is built whenever `lead` is not. So everything
+   * below answers one question: what can be said about a range whose labour
+   * half has not arrived?
+   */
+  if (judged.length === 0) {
+    /*
+     * Nothing to judge: no hours, so no schedule to read them against, and no
+     * figure carrying a published reference either.
+     *
+     * TWO THINGS THIS IS NOT, and both were tried.
+     *
+     * It is not `notComputed("a published target for any headline figure —
+     * the schema publishes only Store.targetCogsPct…")`. `Owed` renders
+     * "designed, not yet built", and this verdict IS built — it is unfed; and
+     * the sentence named a Prisma column to a restaurant owner.
+     *
+     * It is not `empty("no_labor_synced")` either, and that one is worth
+     * recording because it LOOKED right. The sales-per-labor-hour figure two
+     * columns to the left is already in that state, and `Empty` writes one
+     * paragraph per reason — so the head block printed the identical
+     * "Labor has not synced. Sales are here, but the hours to divide them
+     * by…" twice, side by side, in a block whose whole job is to say ONE
+     * thing.
+     *
+     * What is left when the labour half is missing is still a real verdict:
+     * sales happened, and the comparison says whether they were good. So the
+     * sentence is about sales, and it closes by naming the half that is
+     * absent — once.
+     */
+    const down = sales.comparisonTone === "is-down"
+    const noComparison = sales.comparisonTone === "is-flat"
+    const missing =
+      lead === null
+        ? " No hours are posted for this range, so nothing here is read against a plan — " +
+          "sales and labor arrive on separate syncs, and the labor one has not run."
+        : ""
+    return ready({
+      tone: down ? "warn" : noComparison ? "warn" : "good",
+      headline: noComparison
+        ? "Sales, with nothing to read them against"
+        : down
+          ? "Sales are down on the comparison"
+          : "Sales are up on the comparison",
+      body: `${money(sales.grossSales)}, ${sales.comparison}.${missing}`,
+    })
+  }
 
   if (breached.length === 0) {
     return ready({
@@ -673,18 +914,11 @@ function buildVerdict(cells: StripCell[]): SectionData<Verdict> {
     })
   }
 
-  const worst = breached[0].cell
-  const isFood = worst.label === "Food cost"
   return ready({
     tone: "bad",
-    headline: breached.length === 1 ? "One figure is over" : `${breached.length} figures are over`,
-    body:
-      `${worst.label} is ${worst.value}` +
-      (worst.caption ? ` against ${worst.caption.toLowerCase()}` : "") +
-      (breached.length === 1
-        ? ". Nothing else with a published number is outside it."
-        : `, and ${breached.length - 1} more ${breached.length === 2 ? "figure is" : "figures are"} over too.`),
-    action: isFood ? { label: "Show me which items", href: "/dashboard/cogs" } : undefined,
+    headline: breachHeadline,
+    body: worstSentence.trimStart(),
+    action: worstIsFood ? toCogs : undefined,
   })
 }
 
@@ -704,25 +938,27 @@ function buildMoving(
   invoices: InvoiceKpis | null,
   hours: number | null,
 ): MovingCell[] {
-  const cells: MovingCell[] = [
-    {
-      label: "Range",
-      // `plural`, not a typed-in "s": this page's OWN DEFAULT is a one-day
-      // range, so "1 days" over "1 daily buckets" was the first thing an owner
-      // read on the first screen. See `plural` in `@/lib/counter/format`.
-      value: plural(dayCount(range), "day"),
-      note: `${plural(p.periods.length, `${BUCKET_WORD[bucket]} bucket`)} · ${cmp.on ? `vs ${cmp.label}` : "no comparison"}`,
-    },
-  ]
+  /*
+   * NO "Range" CELL, and its absence is the point.
+   *
+   * It printed "7 days · 7 daily buckets · vs the same 4 weekdays" — which the
+   * page title says, the sub-line under the title says, the date control on
+   * the right says, and the net-sales chart's own meta says. Four statements
+   * of one fact, and the fourth was inside the loudest element on the page:
+   * `.moving` is a signal-coloured band, and the design's own note is that it
+   * is for what is STILL MOVING and therefore not in the figures above. A
+   * range is not moving.
+   */
+  const cells: MovingCell[] = []
 
-  if (invoices) {
+  if (invoices && invoices.pendingReviewCount > 0) {
+    // Only when something is actually held. "$0 · everything received has
+    // posted to COGS" is good news drawn in the colour of a warning, in a band
+    // that exists to say what is missing from the figures.
     cells.push({
       label: "Not in the figures",
       value: money(invoices.pendingReviewTotal),
-      note:
-        invoices.pendingReviewCount === 0
-          ? "Everything received has posted to COGS"
-          : `${plural(invoices.pendingReviewCount, "invoice")} in review · COGS understated by this much`,
+      note: `${plural(invoices.pendingReviewCount, "invoice")} in review · COGS understated by this much`,
     })
   }
 
@@ -816,10 +1052,33 @@ const TONE_FOR_SEVERITY: Record<string, Tone> = {
 const QUEUE_LIMIT = 3
 
 /**
- * `getAlertInbox` → the queue.
+ * The queue: what needs the reader, derived and ingested, in that order of
+ * urgency and not in that order of source.
+ *
+ * ## Two labour items the page can derive for itself
+ *
+ * `getAlertInbox` is an INGESTED list — a nightly job writes rows and this
+ * reads them. Two of the things most worth a reader's afternoon are not in it
+ * and never will be, because they are not events: hours running past the
+ * schedule the store published, and an hour of labour returning less than
+ * these weekdays usually return. Both are already computed for the head block
+ * above, both are priced, and both point at a page this app serves. Deriving
+ * them here costs nothing and no cron has to remember to.
+ *
+ * They are DERIVED, not invented: every figure in them comes from `splhLead`,
+ * which comes from the same two loads the lead figure is drawn from, so a
+ * queue item and the figure above it cannot disagree.
+ *
+ * ## The order, and why it is not simply "derived first"
+ *
+ * A `CRITICAL` alert is somebody's explicit judgement that this needs a person
+ * now; a derived labour item is this page noticing something. So criticals
+ * lead, the two derived items come next, and the rest of the inbox follows.
+ * The list is then cut to `QUEUE_LIMIT`, which is where a genuinely quiet
+ * `WATCH` row is the thing that falls off — the right one to lose.
  *
  * An `Alert` has no figure of its own — `metadata` holds one for some sources
- * but `getAlertInbox` does not select it — so the lead is the one number every
+ * but `getAlertInbox` does not select it — so its lead is the one number every
  * alert genuinely has: how long it has been sitting open. Inventing a
  * percentage to fill the prototype's `18% per lb` slot is exactly what this
  * plan exists to stop.
@@ -835,8 +1094,9 @@ function buildQueue(
     storeName: string
   }>,
   today: Date,
+  lead: SplhLead | null,
 ): QueueEntry[] {
-  return alerts.slice(0, QUEUE_LIMIT).map((a) => {
+  const fromAlert = (a: (typeof alerts)[number]): QueueEntry => {
     // Both sides in the @db.Date encoding: UTC midnight of an LA business
     // date. `occurredOn` already is one; `today` becomes one here.
     const days = Math.max(
@@ -859,7 +1119,61 @@ function buildQueue(
       href: "/dashboard/alerts",
       actLabel: "Open in the queue",
     }
-  })
+  }
+
+  const critical = alerts.filter((a) => a.severity === "CRITICAL").map(fromAlert)
+  const rest = alerts.filter((a) => a.severity !== "CRITICAL").map(fromAlert)
+
+  return [...critical, ...laborQueue(lead), ...rest].slice(0, QUEUE_LIMIT)
+}
+
+/**
+ * The two items the head block's own figures already prove.
+ *
+ * Each one is emitted only when the reading it is about is genuinely outside
+ * where it should be — `scheduleHeld` decides the first (the same predicate
+ * the Labor page's verdict uses, so the two pages cannot call the same week
+ * different things) and the published `SPLH_TOLERANCE` band decides the
+ * second. A queue that fills up every day with "the schedule was 20 minutes
+ * out" is a queue nobody opens.
+ */
+function laborQueue(lead: SplhLead | null): QueueEntry[] {
+  if (lead === null) return []
+  const items: QueueEntry[] = []
+
+  if (lead.gap !== null && lead.scheduled !== null && lead.held === false && lead.gap > 0) {
+    const priced = lead.gapCost === null ? "" : `, about ${money(lead.gapCost)} at the blended rate`
+    items.push({
+      key: "labor-over-schedule",
+      tone: "warn",
+      lead: hoursText(lead.gap),
+      unit: "over schedule",
+      title: "Hours ran past the schedule the store published",
+      body:
+        `${hoursText(lead.hours)} worked against ${hoursText(lead.scheduled)} published${priced}. ` +
+        `The schedule is the only plan these hours are read against, and this range did not hold it.`,
+      href: "/dashboard/labor",
+      actLabel: "Open the week in Labor",
+    })
+  }
+
+  if (lead.outsideUsual && lead.vsUsual !== null && lead.vsUsual < 0 && lead.usual !== null) {
+    items.push({
+      key: "splh-under-usual",
+      tone: "warn",
+      lead: money(lead.value, { cents: true }),
+      unit: "per hour",
+      title: "Sales per labor hour is under what these weekdays usually return",
+      body:
+        `${money(lead.value, { cents: true })} against a usual ${money(lead.usual, { cents: true })} — ` +
+        `${money(Math.abs(lead.vsUsual), { cents: true })} less for every hour worked. ` +
+        `The staffing curve is where the hours that did it are.`,
+      href: "/dashboard/labor",
+      actLabel: "See the staffing curve",
+    })
+  }
+
+  return items
 }
 
 /**
@@ -958,8 +1272,58 @@ export function getOverviewSectionPromises(
 
   const splhP = classify(() => getSplhSeries(bucket === "day" ? "day" : "week", bounds), {
     retryAction: "retrySplh",
+    /*
+     * NO SERIES AT ALL means the labour sync has not written a row for this
+     * scope — `getSplhSeries` returns one series per store that has ANY hours,
+     * so an empty array is "nobody's hours are in this database", never "the
+     * reader picked a quiet range".
+     *
+     * The reason matters because `Empty` renders one sentence per reason and
+     * `no_match`'s is "widen the filters and date range" — unfollowable advice
+     * on a range that is already right, and the exact defect `no_delivery` was
+     * split off `no_match` to stop. `isEmpty` fires ahead of every derivation
+     * below, so the reason has to be right HERE; naming it downstream is too
+     * late.
+     */
     isEmpty: (series) => series.length === 0,
+    emptyReason: "no_labor_synced",
   })
+
+  /*
+   * The published schedule, and the hours actually worked against it.
+   *
+   * `loadLaborWeek` is the Labor page's own loader, not a second reading of
+   * the same tables — the rule CLAUDE.md states as judgment the linter cannot
+   * check. It takes any `DateRange`, not only a week, and it is `cached` under
+   * its own key with `harri` and the range's otter tags, so the Labor page and
+   * this one share the fold rather than each folding it.
+   *
+   * `salesByDay` is only used for its per-day labour PERCENTAGE, which this
+   * page reads off the statement instead; an empty map leaves `LaborDay
+   * .laborPct` null and costs nothing. Threading the statement in would make
+   * this load wait on the P&L rollup, which is the slowest thing on the page
+   * and the whole reason Task 3 unpicked the awaits.
+   */
+  const laborP = classify(
+    () => loadLaborWeek({ range, storeId, accountId, salesByDay: new Map<string, number>() }),
+    { retryAction: "retryLabor", isEmpty: (d) => d.days.every((x) => x.actualHours === 0) },
+  )
+
+  /*
+   * What feeds the figures, and how fresh each one is. One grouped query,
+   * cached a minute alongside the shell's own status — it sits under the fold
+   * on a page that already makes a dozen round trips.
+   */
+  const feedsP = storeFilesP.then((storeFilesSd) =>
+    classify(
+      () =>
+        getFeedHealth({
+          accountId,
+          storeIds: (dataOf(storeFilesSd) ?? []).map((f) => f.id),
+        }),
+      { retryAction: "retryFeeds" },
+    ),
+  )
 
   const invoicesP = classify<InvoiceKpis>(
     () =>
@@ -968,7 +1332,17 @@ export function getOverviewSectionPromises(
         startDate: isoDate(bounds.startDate),
         endDate: isoDate(bounds.endDate),
       }),
-    { retryAction: "retryInvoices" },
+    {
+      retryAction: "retryInvoices",
+      /*
+       * Three lines all reading "0 · $0" is not a reconciliation; it is an
+       * empty state drawn as a statement. `nothing_received` is the reason
+       * written for exactly this — nothing has arrived in the window this
+       * section watches — and it is the one the Invoices page itself uses.
+       */
+      isEmpty: (k) => k.invoiceCount === 0,
+      emptyReason: "nothing_received",
+    },
   )
 
   // NOT owed. `getAlertInbox` has been in the tree since F21 — the previous
@@ -979,7 +1353,21 @@ export function getOverviewSectionPromises(
       if (!result.ok) throw new Error("You do not have access to the alert inbox")
       return result.data
     },
-    { retryAction: "retryNeedsYou", isEmpty: (d) => d.alerts.length === 0 },
+    {
+      retryAction: "retryNeedsYou",
+      /*
+       * An empty inbox is ALL CLEAR, not "nothing matched". `no_match`'s copy
+       * is "widen the filters and date range", and this section has no date
+       * range to widen — the inbox is not scoped to one. `all_clear` says the
+       * true thing: every line here is accounted for.
+       *
+       * The section can still come out non-empty after this: the page derives
+       * two labour items of its own, and the combined list is what actually
+       * decides. See `buildQueue`.
+       */
+      isEmpty: (d) => d.alerts.length === 0,
+      emptyReason: "all_clear",
+    },
   )
 
   const ratingsP = classify(
@@ -1062,40 +1450,137 @@ export function getOverviewSectionPromises(
   // function that does that; the raw per-store series stays for the cards.
   const splhPointsP = splhP.then((splhSd) => mapReady(splhSd, (series) => foldSplhSeries(series)))
 
+  /*
+   * The second lead figure, derived ONCE and read by four sections — the lead
+   * itself, the verdict, the queue and the SPLH chart's caption.
+   *
+   * `splhLead` returns `null` when no hours were posted, which is the case
+   * this page is in whenever the labour sync has not run: the sections that
+   * depend on it then render the designed `no_labor_synced` state instead of a
+   * quotient with no denominator.
+   */
+  const leadP = Promise.all([splhPointsP, laborP]).then(([splhPoints, laborSd]) =>
+    splhLead({
+      points: dataOf(splhPoints) ?? [],
+      days: dataOf(laborSd)?.days ?? [],
+    }),
+  )
+
+  /*
+   * The head figure's reading, derived ONCE. `sales` renders it and the
+   * verdict writes a sentence about it — two callers of `comparisonPhrase`
+   * over one figure is how a page ends up wording one comparison two ways.
+   */
+  const salesP = Promise.all([scopeP, cmpP, channelsP]).then(([scopeSd, cmp, channelsSd]) =>
+    mapReady(scopeSd, (p): SalesReading => {
+      const reading = comparisonPhrase(p.grossSales, cmp, cmp.scope?.grossSales ?? null)
+      const mix = dataOf(channelsSd)
+      const orders = mix ? mix.reduce((t, c) => t + c.orders, 0) : null
+      const channelNet = mix ? mix.reduce((t, c) => t + c.net, 0) : null
+      return {
+        grossSales: p.grossSales,
+        // The same array the chart below is drawn from, so the sparkline in
+        // the lead figure and the bars under it cannot describe two different
+        // weeks.
+        series: rowValues(p.rows, TOTAL_SALES_CODE) ?? [],
+        /*
+         * What the figure is made of — the two numbers that multiply into it.
+         * Both come from `loadChannelMix`, which reads net and orders off the
+         * SAME rows, so the ticket printed here is the net in that table over
+         * the orders in that table (Task 1's ruling) and never the page
+         * headline divided by these orders.
+         */
+        note:
+          orders !== null && orders > 0 && channelNet !== null
+            ? `${count(orders)} orders · ${money(channelNet / orders, { cents: true })} ticket`
+            : null,
+        comparison: reading.text,
+        comparisonTone: reading.tone,
+      }
+    }),
+  )
+
   const stripP = Promise.all([scopeP, channelsP, targetsP]).then(
     ([scopeSd, channelsSd, targetsSd]) =>
       mapReady(scopeSd, (p) => buildStrip(p, dataOf(channelsSd), dataOf(targetsSd))),
   )
 
   return {
-    sales: guardSection(
-      Promise.all([scopeP, cmpP]).then(([scopeSd, cmp]) =>
-        mapReady(scopeSd, (p) => {
-          const reading = comparisonPhrase(p.grossSales, cmp, cmp.scope?.grossSales ?? null)
-          return {
-            grossSales: p.grossSales,
-            comparison: reading.text,
-            comparisonTone: reading.tone,
-          }
-        }),
-      ),
-      "retrySales",
-    ),
+    sales: guardSection(salesP, "retrySales"),
 
     splh: guardSection(
-      splhPointsP.then((splhPoints) =>
+      Promise.all([splhPointsP, leadP]).then(([splhPoints, lead]) =>
         mapReadyTo(splhPoints, (points) => {
-          const net = points.reduce((t, p) => t + p.netSales, 0)
-          const hours = points.reduce((t, p) => t + p.laborHours, 0)
-          if (hours <= 0) return empty("no_match")
+          /*
+           * NOT `no_match`. The hours are missing because a sync has not run,
+           * not because the reader picked a range with nothing in it, and
+           * "widen the filters and date range" is unfollowable advice on a
+           * range that is already right. See `no_labor_synced` in
+           * `section-data.ts`.
+           */
+          if (lead === null) return empty("no_labor_synced")
+
+          const usual = lead.usual
+          const detail =
+            lead.vsUsual === null || usual === null
+              ? "no weekday history to compare with yet"
+              : `${lead.vsUsual < 0 ? "\u25bc" : "\u25b2"} ` +
+                `${money(Math.abs(lead.vsUsual), { cents: true })} vs a usual ` +
+                `${money(usual, { cents: true })}`
+
+          /*
+           * The caption, in the order an owner asks the questions: how many
+           * hours, how that compares with what was published, and what the
+           * difference cost. Each clause is dropped rather than guessed when
+           * its input is missing, so a range with no schedule reads
+           * "74.0 h worked" and stops.
+           */
+          const parts = [`${hoursText(lead.hours)} worked`]
+          if (lead.scheduled !== null && lead.gap !== null) {
+            parts.push(
+              lead.held
+                ? `on the ${hoursText(lead.scheduled)} published`
+                : `${hoursText(Math.abs(lead.gap))} ${lead.gap > 0 ? "over" : "under"} the ` +
+                  `${hoursText(lead.scheduled)} published`,
+            )
+            if (!lead.held && lead.gapCost !== null) parts.push(`${money(lead.gapCost)} of labor`)
+          } else {
+            parts.push("no schedule published for this range")
+          }
+
           return ready({
-            value: net / hours,
-            // No column publishes a floor. See the doc comment on `splh` above.
-            floor: null,
+            value: lead.value,
+            detail,
+            // SENTIMENT, NOT DIRECTION. A fall in sales per labor hour is bad
+            // news; `is-flat` is for the reading that has nothing to compare
+            // with, which is a statement of fact rather than a movement.
+            detailTone:
+              lead.vsUsual === null ? "is-flat" : lead.vsUsual < 0 ? "is-down" : undefined,
+            /*
+             * The usual range, as a BAND. `better: "high"` because a low
+             * sales-per-hour is the bad one, and the band's edges are the
+             * published `SPLH_TOLERANCE` rather than a width chosen here —
+             * see `src/lib/counter/splh-lead.ts` on why this is drawn as a
+             * usual and never as a floor.
+             */
+            reference:
+              lead.band === null
+                ? null
+                : {
+                    v: lead.value,
+                    lo: lead.band.lo,
+                    hi: lead.band.hi,
+                    better: "high",
+                    label:
+                      `Sales per labor hour ${money(lead.value, { cents: true })} against a usual ` +
+                      `${money(lead.band.lo, { cents: true })} to ` +
+                      `${money(lead.band.hi, { cents: true })}`,
+                  },
+            caption: parts.join(" \u00b7 "),
             // A `Spark` cannot draw a gap, so a day with no reading is dropped
             // from the sparkline rather than flattened to zero. The chart below
             // keeps the gap, because a chart can draw one.
-            series: points.map((p) => p.splh).filter((v): v is number => v != null),
+            series: points.map((x) => x.splh).filter((v): v is number => v != null),
           })
         }),
       ),
@@ -1105,7 +1590,16 @@ export function getOverviewSectionPromises(
     strip: guardSection(stripP, "retrySales"),
 
     verdict: guardSection(
-      stripP.then((strip) => mapReadyTo(strip, (cells) => buildVerdict(cells))),
+      Promise.all([stripP, leadP, salesP]).then(([strip, lead, salesSd]) =>
+        mapReadyTo(strip, (cells) => {
+          const sales = dataOf(salesSd)
+          // The strip loaded, so the statement did, so this cannot be absent
+          // — they are the same `scopeP`. Guarded rather than asserted,
+          // because a `!` here would be a crash on the head block.
+          if (!sales) return empty<Verdict>("no_match")
+          return buildVerdict(cells, lead, sales)
+        }),
+      ),
       "retrySales",
     ),
 
@@ -1123,8 +1617,19 @@ export function getOverviewSectionPromises(
       "retrySales",
     ),
 
+    /*
+     * `queueP` classifies an EMPTY INBOX as empty, and that verdict is now
+     * wrong on its own: this page derives two labour items of its own, so a
+     * range with no ingested alert but an overrun schedule has something to
+     * show. `mapReadyTo` re-decides it over the combined list — the derived
+     * items and the inbox together — and only then calls it all clear.
+     */
     needsYou: guardSection(
-      queueP.then((queueSd) => mapReady(queueSd, (d) => buildQueue(d.alerts, today))),
+      Promise.all([queueP, leadP]).then(([queueSd, lead]) => {
+        const items = buildQueue(dataOf(queueSd)?.alerts ?? [], today, lead)
+        if (items.length > 0) return ready(items)
+        return mapReadyTo(queueSd, () => empty<QueueEntry[]>("all_clear"))
+      }),
       "retryNeedsYou",
     ),
 
@@ -1136,7 +1641,14 @@ export function getOverviewSectionPromises(
     ),
 
     splhChart: guardSection(
-      splhPointsP.then((splhPoints) => mapReady(splhPoints, (points) => buildSplhChart(points))),
+      splhPointsP.then((splhPoints) =>
+        mapReadyTo(splhPoints, (points) => {
+          // The same gate as the lead figure above it, for the same reason: a
+          // chart of nulls is not a chart of a quiet week.
+          if (points.every((x) => x.splh === null)) return empty<ChartData>("no_labor_synced")
+          return ready(buildSplhChart(points))
+        }),
+      ),
       "retrySplh",
     ),
 
@@ -1177,6 +1689,22 @@ export function getOverviewSectionPromises(
     invoices: guardSection(
       invoicesP.then((invoicesSd) => mapReady(invoicesSd, buildInvoiceLines)),
       "retryInvoices",
+    ),
+
+    feeds: guardSection(
+      feedsP.then((feedsSd) =>
+        mapReady(feedsSd, (lines): MoneyLine[] =>
+          lines.map((f) => ({
+            label: f.label,
+            value: f.reading,
+            // Only a feed that has actually gone wrong takes a colour. A fresh
+            // one and a feed that has never run here are both simply facts,
+            // and a block where every line is coloured says nothing.
+            tone: f.tone === "warn" ? ("warn" as const) : undefined,
+          })),
+        ),
+      ),
+      "retryFeeds",
     ),
 
     ratings: guardSection(
@@ -1231,6 +1759,10 @@ function buildSalesChart(p: Statement, cmp: ComparisonContext, range: DateRange)
     legend: aligned !== null,
     vs: aligned !== null ? 1 : null,
     vsLabel: `against ${cmp.label}`,
+    // The comparison window's OWN dates. At a single-bucket range `Chart`
+    // degrades to two read-out cells, and without this the prior cell was
+    // captioned with the selected day's date — see `ChartSpec.vsLabels`.
+    vsLabels: cmp.scope ? cmp.scope.periods.map((x) => x.label) : undefined,
     alt: "Net sales",
     series: [
       { name: "Net sales", color: "var(--ink)", data: values, fill: true, w: 1.9 },
@@ -1250,14 +1782,47 @@ function buildSalesChart(p: Statement, cmp: ComparisonContext, range: DateRange)
   }
 }
 
-/** SPLH over the range. No `rule`, because no column publishes a floor to rule against. */
+/**
+ * SPLH over the range, against what these same weekdays usually return.
+ *
+ * NO `rule`, because no column publishes a floor to rule against — a rule is a
+ * line somebody drew, and `SPLH_FLOOR = 68.00` is the prototype's invention.
+ * What IS drawn is a dashed USUAL: `SplhPoint.targetSplh` is the median of the
+ * store's own trailing history for that weekday, which is a description of the
+ * past and not a target for the future. The legend says "usual" for exactly
+ * that reason, and `src/lib/counter/splh-lead.ts` carries the long form of the
+ * distinction.
+ *
+ * The dashed series is dropped entirely when no day in the range has enough
+ * weekday history behind it — a dashed line drawn through two of seven points
+ * is a shape a reader will read as a trend.
+ */
 function buildSplhChart(points: SplhPoint[]): ChartData {
+  const usual = points.map((p) => p.targetSplh)
+  const scored = usual.filter((v) => v != null).length
+  const drawUsual = scored >= 2 && scored >= Math.ceil(points.length / 2)
+
   return {
     type: "line",
     h: 150,
     labels: points.map((p) => p.label),
+    legend: drawUsual,
     alt: "Sales per labor hour",
-    series: [{ name: "SPLH", color: "var(--ink)", data: points.map((p) => p.splh), fill: true }],
+    series: [
+      { name: "Sales per labor hour", color: "var(--ink)", data: points.map((p) => p.splh), fill: true },
+      ...(drawUsual
+        ? [
+            {
+              name: "usual for this weekday",
+              color: "var(--ink-3)",
+              data: usual,
+              as: "line" as const,
+              dash: true,
+              w: 1.5,
+            },
+          ]
+        : []),
+    ],
   }
 }
 
@@ -1342,6 +1907,11 @@ function buildStoreCards(input: {
       // no average ticket. Zero would claim every order on this store was free.
       ticket: orders > 0 ? channelNet / orders : null,
       salesPerHour: hours > 0 ? splhNet / hours : null,
+      kept: (() => {
+        const rated = mix.filter((c) => c.commission !== null)
+        if (rated.length === 0) return null
+        return rated.reduce((t, c) => t + c.net - (c.commission as number), 0)
+      })(),
       // Passed through from loadChannelMix — the one place commission is
       // derived (store contract rate × gross, null when the schema
       // publishes no rate).
