@@ -215,6 +215,12 @@ const COUNTER_ROOT_EXCEPTIONS: Array<{ file: string; token: string }> = [
   { file: "app/signup/[token]/page.tsx", token: "login" },
   { file: "app/signup/phone/[token]/counter-phone-signup-client.tsx", token: "ct-root" },
   { file: "app/signup/phone/[token]/counter-phone-signup-client.tsx", token: "ct-phone" },
+  // THE CREW'S STORE-CHECK PAGE, reached from a QR poster by someone with a
+  // PIN and no account. `bare` for the fourth time: no shell, no tab bar, so
+  // the page mounts its own root, and `page.tsx` emits it once more for the
+  // "this QR code isn't in use" refusal.
+  { file: "app/checks/[code]/crew-check-client.tsx", token: "ct-root" },
+  { file: "app/checks/[code]/page.tsx", token: "ct-root" },
   // ...and the phone's own type scale, `.pframe`'s, worn WITH `ct-root` on
   // the same element. Listed separately because a file that emitted
   // `ct-phone` WITHOUT `ct-root` would be redeclaring the scale over the
@@ -306,9 +312,12 @@ describe("the Counter/editorial token-name collision stays harmless", () => {
     // first three and unlike them it is mounted from a layout that is still
     // editorial, which is exactly why it carries the root itself.
     //
-    // Twenty entries, eleven files.
-    expect(COUNTER_ROOT_EXCEPTIONS).toHaveLength(20)
-    expect(new Set(COUNTER_ROOT_EXCEPTIONS.map((x) => x.file)).size).toBe(11)
+    // The two newest files are the crew's store-check page and its refusal,
+    // public for the same reason as the invite: a PIN, not an account.
+    //
+    // Twenty-two entries, thirteen files.
+    expect(COUNTER_ROOT_EXCEPTIONS).toHaveLength(22)
+    expect(new Set(COUNTER_ROOT_EXCEPTIONS.map((x) => x.file)).size).toBe(13)
     // `ct-phone` is only ever worn with `ct-root`; a file carrying it alone
     // would be redeclaring the type scale over the wrong ink and ground.
     const phone = COUNTER_ROOT_EXCEPTIONS.filter((x) => x.token === "ct-phone")

@@ -22,24 +22,24 @@ describe("Rail", () => {
    * reader, which is the rail an owner was actually shown while the gate
    * behind it refused them.
    */
-  it("renders all eighteen destinations for a developer", () => {
+  it("renders all nineteen destinations for a developer", () => {
     render(<Rail pathname="/dashboard" user={{ name: "Vardan", role: "Developer", isDeveloper: true }} />)
     const nav = screen.getByRole("navigation", { name: /sections/i })
-    expect(within(nav).getAllByRole("link")).toHaveLength(18)
+    expect(within(nav).getAllByRole("link")).toHaveLength(19)
     expect(within(nav).getByText("Monitoring")).toBeTruthy()
   })
 
   it("hides Monitoring from an owner, whose only destination there is a wall", () => {
     render(<Rail pathname="/dashboard" user={{ name: "Chris Karimian", role: "Owner" }} />)
     const nav = screen.getByRole("navigation", { name: /sections/i })
-    expect(within(nav).getAllByRole("link")).toHaveLength(17)
+    expect(within(nav).getAllByRole("link")).toHaveLength(18)
     expect(within(nav).queryByText("Monitoring")).toBeNull()
   })
 
   it("hides it when it does not know who is reading, rather than guessing yes", () => {
     render(<Rail pathname="/dashboard" />)
     const nav = screen.getByRole("navigation", { name: /sections/i })
-    expect(within(nav).getAllByRole("link")).toHaveLength(17)
+    expect(within(nav).getAllByRole("link")).toHaveLength(18)
   })
 
   it("renders the five group captions", () => {

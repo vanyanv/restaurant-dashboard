@@ -455,6 +455,7 @@ export function CounterAlertsClient({
             "HARRI_VARIANCE",
             "QUANTITY_SPIKE",
             "NEW_PRODUCT",
+            "STORE_CHECK",
           ] as AlertSource[]
         ).filter((s) => pressed.has(s)),
         ...carry,
