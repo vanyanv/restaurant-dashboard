@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 vi.mock("@/lib/prisma", () => ({ prisma: {} }))
 
@@ -107,6 +107,8 @@ describe("PINs and codes", () => {
 })
 
 describe("crew pass", () => {
+  beforeEach(() => vi.stubEnv("CHECKS_SECRET", "test-secret"))
+  afterEach(() => vi.unstubAllEnvs())
   const pass = { storeId: "s1", crewMemberId: "c1", kind: "MORNING" as const, day: "2026-10-25" }
   it("round-trips, and expires", () => {
     const now = Date.now()
