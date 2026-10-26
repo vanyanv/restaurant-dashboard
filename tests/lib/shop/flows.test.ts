@@ -142,6 +142,11 @@ describe("orders", () => {
     expect(sent().body).toEqual({})
   })
 
+  it("a dot-segment id is refused before signing", async () => {
+    expect(await markOrderReady({ orderId: ".." })).toEqual({ ok: false, error: "Not found." })
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
   it("an order id with slashes cannot reach another route", async () => {
     reply(404, { ok: false, error: "Order not found." })
     const r = await markOrderReady({ orderId: "../products/p1/status" })

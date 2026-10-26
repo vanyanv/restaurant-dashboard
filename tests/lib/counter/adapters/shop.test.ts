@@ -85,6 +85,18 @@ describe("getShopTodaySectionPromises", () => {
     expect(String(fetchMock.mock.calls[1][0])).toMatch(/\/orders\/\?filter=open$/)
   })
 
+  it("pages through every open order, so the oldest (late) ones are not cut off", async () => {
+    fetchMock.mockImplementation(async (url: string) => {
+      if (url.includes("/summary")) return json(summary)
+      return url.includes("cursor=")
+        ? json({ ok: true, nextCursor: null, rows: [row({ id: "oldest", createdAt: ago(70) })] })
+        : json({ ok: true, nextCursor: "c2", rows: [row({ id: "new" })] })
+    })
+    const s = await getShopTodaySectionPromises({ accountId: "acct-shop", now }).today
+    if (s.status !== "ready") throw new Error(`section ${s.status}`)
+    expect(s.data.late.map((o) => o.id)).toEqual(["oldest"])
+  })
+
   it("the site failing is a failed section, not a crashed page", async () => {
     fetchMock.mockImplementation(async () => json({ ok: false, error: "Internal error" }, 500))
     const s = await getShopTodaySectionPromises({ accountId: "acct-shop", now }).today

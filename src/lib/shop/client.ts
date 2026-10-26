@@ -85,6 +85,9 @@ async function call<T>(
   // (`.\w+` at the end, which every email-keyed customer path does) keeps
   // no slash.
   const [pathname, search] = path.split("?")
+  // `encodeURIComponent` leaves "." and ".." alone, and a URL parser would
+  // collapse them into a different path than the one signed.
+  if (pathname.split("/").some((seg) => seg === "." || seg === "..")) throw new ShopRefused("Not found.")
   const slash = /\.\w+$/.test(pathname) ? "" : "/"
   const pathWithSearch = `/api/internal/shop${pathname}${slash}${search ? `?${search}` : ""}`
   const ts = Date.now()

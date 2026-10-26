@@ -213,6 +213,23 @@ async function orNull<T>(p: Promise<T>): Promise<T | null> {
 
 // ─── Today ──────────────────────────────────────────────────────────────────
 
+/**
+ * Every open order, not just the newest page of 50: the late ones are the
+ * OLDEST, so a first page alone would hide exactly the orders Today exists
+ * to show. Capped, so a runaway list can't hold the page forever.
+ */
+async function allOpenOrders(accountId: string): Promise<ShopOrderRow[]> {
+  const rows: ShopOrderRow[] = []
+  let cursor: string | undefined
+  for (let page = 0; page < 10; page++) {
+    const r = await shop.orders(accountId, "open", cursor)
+    rows.push(...r.rows)
+    if (!r.nextCursor) break
+    cursor = r.nextCursor
+  }
+  return rows
+}
+
 export type TodayData = {
   counts: { toShip: number; lateToShip: number; toBag: number; readyForPickup: number; doneLast7: number }
   late: OrderLine[]
@@ -229,11 +246,8 @@ export function getShopTodaySectionPromises(opts: { accountId: string; now?: Dat
   const now = opts.now ?? new Date()
   return {
     today: shopSection(opts.accountId, "shop.today", async () => {
-      const [summary, open] = await Promise.all([
-        shop.summary(opts.accountId),
-        shop.orders(opts.accountId, "open"),
-      ])
-      const lines = open.rows.map((r) => orderLine(r, now))
+      const [summary, open] = await Promise.all([shop.summary(opts.accountId), allOpenOrders(opts.accountId)])
+      const lines = open.map((r) => orderLine(r, now))
       const days = summary.sales.days.slice(-7)
       return {
         counts: {
