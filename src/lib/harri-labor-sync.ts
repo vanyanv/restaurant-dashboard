@@ -51,7 +51,12 @@ export type HarriSyncResult = {
 /** "Harri API error 500 on /path" — the message without the response body. */
 function errorHead(reason: unknown): string {
   const message = reason instanceof Error ? reason.message : String(reason)
-  return message.split(":")[0]
+  return message.match(/^Harri API error \d+ on \S+/)?.[0] ?? message.slice(0, 300)
+}
+
+/** Harri answered with an HTTP error, as opposed to a timeout or network failure. */
+function isHarriHttpError(reason: unknown): boolean {
+  return reason instanceof Error && /^Harri API error \d+ on /.test(reason.message)
 }
 
 export async function runHarriLaborSync(opts: RunHarriLaborSyncOpts): Promise<HarriSyncResult> {
@@ -128,6 +133,9 @@ export async function runHarriLaborSync(opts: RunHarriLaborSyncOpts): Promise<Ha
           let actual: HarriLaborTotal
           if (actualRes.status === "fulfilled") {
             actual = actualRes.value.data
+          } else if (!isHarriHttpError(actualRes.reason)) {
+            // A timeout or network blip is not a refusal: fail the store as before.
+            throw actualRes.reason
           } else {
             console.warn(
               `[harri.sync]   ${errorHead(actualRes.reason)}; using categories total for ${date.toISOString().slice(0, 10)}`
