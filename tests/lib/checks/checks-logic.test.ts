@@ -86,6 +86,22 @@ describe("due time by weekday", () => {
     expect(acceptingDay(LATE_WEEKEND, new Date("2026-10-24T09:20:00Z"))).toBe("2026-10-23")
   })
 
+  it("opens after midnight and still belongs to the night before", () => {
+    // Van Nuys: opens 12:30 am, due 2:00 am, 3:00 am Fri-Sun nights.
+    const AFTER_MIDNIGHT: CheckWindow = {
+      opensAtMin: 24 * 60 + 30,
+      dueAtMin: 24 * 60 + 120,
+      graceMin: 30,
+      dueByWeekday: [1620, 1560, 1560, 1560, 1560, 1620, 1620],
+    }
+    // Monday 2026-10-26 night: 12:45 am Tuesday PDT is 07:45Z Tuesday.
+    expect(acceptingDay(AFTER_MIDNIGHT, new Date("2026-10-27T07:45:00Z"))).toBe("2026-10-26")
+    // Monday evening at 11 pm, nothing is open yet.
+    expect(acceptingDay(AFTER_MIDNIGHT, new Date("2026-10-27T06:00:00Z"))).toBeNull()
+    // Friday 2026-10-23 night at 2:40 am Saturday is still on time.
+    expect(lateMinutes("2026-10-23", AFTER_MIDNIGHT, new Date("2026-10-24T09:40:00Z"))).toBe(0)
+  })
+
   it("says which nights differ", () => {
     expect(windowSummary(LATE_WEEKEND)).toBe("9:00 pm – 1:00 am · 2:00 am Fri, Sat, Sun")
     expect(windowSummary(EVENING)).toBe("9:00 pm – 12:30 am")

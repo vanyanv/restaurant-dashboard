@@ -31,7 +31,8 @@ const text = (max: number) => z.string().trim().max(max)
 const ChecklistInput = z.object({
   storeId: z.string().min(1),
   kind: KIND,
-  opensAtMin: z.number().int().min(0).max(1439),
+  // Past 1439 opens after midnight and still counts for the night before.
+  opensAtMin: z.number().int().min(0).max(1440 + 6 * 60 - 1),
   dueAtMin: z.number().int().min(1).max(1440 + 6 * 60),
   /** Empty, or seven due times (Sunday first) for stores whose close moves by night. */
   dueByWeekday: z.array(z.number().int().min(1).max(1440 + 6 * 60)).refine((a) => a.length === 0 || a.length === 7, "Set a due time for every day").optional(),

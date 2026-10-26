@@ -38,8 +38,11 @@ const fromTime = (v: string) => {
   const [h, m] = v.split(":").map(Number)
   return Number.isFinite(h) && Number.isFinite(m) ? h * 60 + m : 0
 }
-/** A clock time at or before the open time means after midnight. */
-const afterOpen = (clock: number, opens: number) => (clock <= opens ? clock + 1440 : clock)
+/** A due clock time is the first one after the open time, past midnight if need be. */
+const afterOpen = (clock: number, opens: number) => {
+  const d = clock + (opens >= 1440 ? 1440 : 0)
+  return d <= opens ? d + 1440 : d
+}
 /** Monday first, with each day's index into `dueByWeekday` (Sunday = 0). */
 const WEEK: Array<[string, number]> = [["Mon", 1], ["Tue", 2], ["Wed", 3], ["Thu", 4], ["Fri", 5], ["Sat", 6], ["Sun", 0]]
 const label12 = (min: number) => {
@@ -158,7 +161,7 @@ function Editor({ data }: { data: ChecklistsData }) {
                 value={toTime(t.opensAtMin)}
                 onChange={(e) =>
                   update((t) => {
-                    const o = fromTime(e.target.value)
+                    const o = fromTime(e.target.value) + (t.opensAtMin >= 1440 ? 1440 : 0)
                     t.opensAtMin = o
                     t.dueAtMin = afterOpen(t.dueAtMin % 1440, o)
                     t.dueByWeekday = t.dueByWeekday.map((d) => afterOpen(d % 1440, o))
@@ -205,6 +208,23 @@ function Editor({ data }: { data: ChecklistsData }) {
                 <span style={{ left: left(t.dueAtMin) }}>{label12(t.dueAtMin)}</span>
               </div>
             </div>
+          </div>
+          <div className="ck-esect">
+            <label className="ck-check">
+              <input
+                type="checkbox"
+                checked={t.opensAtMin >= 1440}
+                onChange={(e) =>
+                  update((t) => {
+                    const o = (t.opensAtMin % 1440) + (e.target.checked ? 1440 : 0)
+                    t.opensAtMin = o
+                    t.dueAtMin = afterOpen(t.dueAtMin % 1440, o)
+                    t.dueByWeekday = t.dueByWeekday.map((d) => afterOpen(d % 1440, o))
+                  })
+                }
+              />
+              Opens after midnight. A 12:30 am open still counts for the night before, so Friday&apos;s close is Friday&apos;s check.
+            </label>
           </div>
           <div className="ck-esect">
             <label className="ck-check">
