@@ -33,7 +33,7 @@
  */
 
 export type NavId =
-  | "overview" | "ask" | "needs-you" | "decisions" | "orders"
+  | "overview" | "ask" | "needs-you" | "checks" | "decisions" | "orders"
   | "analytics" | "pnl" | "cogs" | "labor"
   | "menu" | "recipes"
   | "invoices" | "inventory" | "ingredients" | "vendors"
@@ -84,6 +84,7 @@ export const NAV_GROUPS: readonly NavGroup[] = [
       { id: "overview", label: "Overview", href: "/dashboard", icon: "LayoutDashboard", exact: true },
       { id: "ask", label: "Ask", href: "/dashboard/ask", icon: "MessageSquare" },
       { id: "needs-you", label: "Needs you", href: "/dashboard/alerts", icon: "Bell" },
+      { id: "checks", label: "Store checks", href: "/dashboard/checks", icon: "ClipboardCheck" },
       { id: "decisions", label: "The week ahead", href: "/dashboard/decisions", icon: "CalendarCheck" },
       { id: "orders", label: "Orders", href: "/dashboard/orders", icon: "Receipt" },
     ],
@@ -191,6 +192,15 @@ export const USAGE_TABS: readonly SubNavItem[] = [
   { label: "Usage", href: "/dashboard/operations/product-usage" },
   { label: "Menu item costs", href: "/dashboard/menu-profit" },
   { label: "Vendor prices", href: "/dashboard/operations/vendors" },
+] as const
+
+/** Store checks — five tabs over one feature. See `src/lib/checks/`. */
+export const CHECKS_TABS: readonly SubNavItem[] = [
+  { label: "Today", href: "/dashboard/checks" },
+  { label: "History", href: "/dashboard/checks/history" },
+  { label: "Checklists", href: "/dashboard/checks/checklists" },
+  { label: "Crew & PINs", href: "/dashboard/checks/crew" },
+  { label: "QR posters", href: "/dashboard/checks/posters" },
 ] as const
 
 export const MONITORING_TABS: readonly SubNavItem[] = [

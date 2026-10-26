@@ -104,3 +104,6 @@ ml/.venv/
 # stay on disk for triage, tracking only)
 /tmp/
 /debug-*.png
+
+# store check photos written locally when R2 is not configured (dev only)
+/.check-photos

@@ -124,7 +124,7 @@ describe("getAlertInbox", () => {
     })
   })
 
-  it("tallies every source, including the four that have never fired", async () => {
+  it("tallies every source, including the five that have never fired", async () => {
     vi.mocked(getServerSession).mockResolvedValue(owner as never)
     vi.mocked(prisma.alert.groupBy).mockResolvedValue([
       { severity: "CRITICAL", status: "OPEN", source: "ANOMALY_EVENT", _count: { _all: 40 } },
@@ -133,7 +133,7 @@ describe("getAlertInbox", () => {
 
     const res = await getAlertInbox()
     if (!res.ok) throw new Error("expected ok")
-    // All five keys present, all statuses summed — this is what the five
+    // All six keys present, all statuses summed — this is what the six
     // source toggles read, and a missing key would render as a missing toggle.
     expect(res.data.bySource).toEqual({
       ANOMALY_EVENT: 50,
@@ -141,6 +141,7 @@ describe("getAlertInbox", () => {
       HARRI_VARIANCE: 0,
       QUANTITY_SPIKE: 0,
       NEW_PRODUCT: 0,
+      STORE_CHECK: 0,
     })
   })
 

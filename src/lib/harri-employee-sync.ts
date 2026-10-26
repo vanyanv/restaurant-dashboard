@@ -13,6 +13,7 @@
 import { prisma } from "@/lib/prisma"
 import { withJobRun } from "@/lib/monitoring/job-run"
 import { buildTeamUsersUrl, harriFetch, type HarriUser } from "@/lib/harri"
+import { syncCrewFromHarri } from "@/lib/checks/setup"
 
 const CHUNK_SIZE = 10
 
@@ -51,7 +52,23 @@ export async function refreshHarriEmployees(
         distinct: ["userId"],
         select: { userId: true },
       })
-      const userIds = seen.map((r) => r.userId).filter((n) => Number.isFinite(n) && n > 0)
+      // Plus everyone scheduled in the last 60 days. Store checks need the
+      // whole crew, not only the people who ever triggered a clock-in alert.
+      const scheduled = await prisma.harriShift.findMany({
+        where: {
+          storeId,
+          userId: { not: null },
+          date: { gte: new Date(Date.now() - 60 * 24 * 60 * 60 * 1000) },
+        },
+        distinct: ["userId"],
+        select: { userId: true },
+      })
+      const userIds = [
+        ...new Set([
+          ...seen.map((r) => r.userId),
+          ...scheduled.map((r) => r.userId).filter((n): n is number => n !== null),
+        ]),
+      ].filter((n) => Number.isFinite(n) && n > 0)
 
       if (userIds.length === 0) {
         return { requested: 0, fetched: 0, upserted: 0 }
@@ -101,6 +118,12 @@ export async function refreshHarriEmployees(
       }
 
       addRows(upserted)
+      // Store checks: new people get a PIN, people who left lose theirs. The
+      // roster above is already written; a crew-sync failure must not mark
+      // this job failed, and the next run (or the owner's Sync) retries it.
+      await syncCrewFromHarri(storeId).catch((err) => {
+        console.error("[harri-employee-sync] crew sync failed", storeId, err)
+      })
       return { requested: userIds.length, fetched, upserted }
     }
   )

@@ -1,6 +1,5 @@
 #!/usr/bin/env sh
-# Run the @smoke E2E subset before pushing. ~30s.
-# Bypass with `git push --no-verify` for WIP feature branches.
-
-echo "→ Running E2E smoke suite (pre-push)..."
-npm run e2e:smoke
+# The E2E smoke suite used to run here. It needs a live database seeded with
+# real restaurant data, which cloud sessions do not have, so every push from
+# one failed on it. Removed at the owner's request on 2026-10-26; run it by
+# hand with `npm run e2e:smoke` against a database that has data.

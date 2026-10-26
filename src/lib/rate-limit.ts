@@ -170,6 +170,16 @@ function memoryRateLimit(key: string, config: RateLimitConfig): NextResponse | n
  * Rate limit a request. Returns null if allowed, or a 429 NextResponse if blocked.
  * Call at the top of route handlers before any business logic.
  */
+/**
+ * The same limiter on a key the caller names, for limits that are not about
+ * one client: e.g. every PIN attempt at one store, from any address.
+ */
+export async function rateLimitKey(key: string, config: RateLimitConfig): Promise<NextResponse | null> {
+  const redisResult = await redisRateLimit(key, config)
+  if (redisResult !== undefined) return redisResult
+  return memoryRateLimit(key, config)
+}
+
 export async function rateLimit(
   request: Request,
   config: RateLimitConfig

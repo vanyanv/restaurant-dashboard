@@ -60,6 +60,7 @@ export const ALERT_SOURCES: readonly AlertFilterOption<AlertSource>[] = [
   { id: "HARRI_VARIANCE", label: "Labor variance" },
   { id: "QUANTITY_SPIKE", label: "Quantity spikes" },
   { id: "NEW_PRODUCT", label: "New products" },
+  { id: "STORE_CHECK", label: "Store checks" },
 ] as const
 
 /**

@@ -1,10 +1,11 @@
-name: Harri Employees Monthly Refresh
+name: Harri Employees Weekly Refresh
 on:
   schedule:
-    # 07:00 UTC on the 1st of each month. Names change rarely; once a month
-    # is plenty. Hot paths (hourly labor sync, alert reads) never call the
-    # team endpoint — they read names from the HarriEmployee cache.
-    - cron: '0 7 1 * *'
+    # 07:00 UTC every Monday. Weekly rather than monthly because store checks
+    # hand out PINs from this roster, and a new hire should not wait a month.
+    # Hot paths (hourly labor sync, alert reads) never call the team endpoint —
+    # they read names from the HarriEmployee cache.
+    - cron: '0 7 * * 1'
   workflow_dispatch:
 
 concurrency:

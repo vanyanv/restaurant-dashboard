@@ -26,6 +26,7 @@
  * resolves against tokens that are already declared. */
 @import "../styles/counter-components.css";
 @import "../styles/counter-repairs.css";
+@import "../styles/counter-checks.css";
 
 @theme {
   --color-background: var(--ct-paper);

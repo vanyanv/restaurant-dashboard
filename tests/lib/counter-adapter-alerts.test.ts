@@ -64,6 +64,7 @@ const INBOX = {
     HARRI_VARIANCE: 0,
     QUANTITY_SPIKE: 0,
     NEW_PRODUCT: 0,
+    STORE_CHECK: 0,
   },
   muteRules: [],
   stores: [{ id: "hollywood", name: "Chris N Eddys - Hollywood" }],
@@ -80,14 +81,14 @@ describe("getAlertsSections", () => {
   })
 
   /* N-R1 */
-  it("renders all five source toggles, each carrying its live count", async () => {
+  it("renders all six source toggles, each carrying its live count", async () => {
     const s = await getAlertsSections({ today: TODAY })
     const togs = dataOf(s.filters)!.sources
-    expect(togs).toHaveLength(5)
+    expect(togs).toHaveLength(6)
     expect(togs.find((t) => t.id === "PRICE_DELTA")).toMatchObject({ count: 0, disabled: true })
     expect(togs.find((t) => t.id === "ANOMALY_EVENT")).toMatchObject({ count: 87, disabled: false })
-    // Four of the five have never fired.
-    expect(togs.filter((t) => t.disabled)).toHaveLength(4)
+    // Five of the six have never fired.
+    expect(togs.filter((t) => t.disabled)).toHaveLength(5)
   })
 
   /*

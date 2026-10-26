@@ -220,6 +220,17 @@ model Store {
 
   fixedExpenses StoreFixedExpense[]
 
+  // Store cleaning checks — see the CheckTemplate block at the end of this file.
+  /// The store's half of its public check-in link: `/checks/<checkCode>`, the
+  /// URL printed on its QR poster. Rotatable from the posters page, which
+  /// kills every poster printed before.
+  checkCode        String?           @unique
+  checkTemplates   CheckTemplate[]
+  crewMembers      CrewMember[]
+  checkSubmissions CheckSubmission[]
+  checkStarts      CheckStart[]
+  checkClosures    CheckClosure[]
+
   @@index([ownerId])
   @@index([accountId])
   @@index([latitude, longitude])
@@ -910,12 +921,12 @@ model OtterOrder {
 }
 
 model OtterOrderItem {
-  id       String @id @default(cuid())
+  id       String  @id @default(cuid())
   orderId  String
   skuId    String?
   name     String
   quantity Float
-  price    Float  @default(0)
+  price    Float   @default(0)
 
   order    OtterOrder          @relation(fields: [orderId], references: [id], onDelete: Cascade)
   subItems OtterOrderSubItem[]
@@ -2069,6 +2080,7 @@ enum AlertSource {
   ANOMALY_EVENT
   PRICE_DELTA
   HARRI_VARIANCE
+  STORE_CHECK
   QUANTITY_SPIKE
   NEW_PRODUCT
 }
@@ -2081,6 +2093,7 @@ enum AlertTarget {
   REFUNDS
   PRICE
   PRODUCT
+  STORE_CHECK
 }
 
 enum AlertSeverity {
@@ -2277,4 +2290,175 @@ model HarriEmployee {
   @@unique([storeId, userId])
   @@index([storeId])
   @@index([userId])
+}
+
+// ─── Store cleaning checks ──────────────────────────────────────────────────
+//
+// Crew scan a store's QR poster, enter a 4-digit PIN and complete that store's
+// open check (morning, transition or evening), with a required photo per
+// section where the owner asks for one. One submission per store, check and
+// business day; it locks for everyone once it is in. Times are wall-clock
+// minutes in America/Los_Angeles. See src/lib/checks/.
+
+enum CheckKind {
+  MORNING
+  TRANSITION
+  EVENING
+}
+
+enum CrewSource {
+  HARRI
+  MANUAL
+}
+
+model CheckTemplate {
+  id         String    @id @default(cuid())
+  storeId    String
+  kind       CheckKind
+  /// Minutes after LA midnight of the business day the check opens.
+  opensAtMin Int
+  /// Minutes after LA midnight of the business day the check is due. May
+  /// pass 1440: an evening check due at 12:30 am still belongs to the day it
+  /// started on.
+  dueAtMin   Int
+  /// Minutes after the due time that a submission is still taken, as late.
+  /// Past that the check is missed.
+  graceMin   Int       @default(30)
+  enabled    Boolean   @default(true)
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  store       Store             @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  sections    CheckSection[]
+  submissions CheckSubmission[]
+
+  @@unique([storeId, kind])
+}
+
+model CheckSection {
+  id            String  @id @default(cuid())
+  templateId    String
+  position      Int
+  nameEn        String
+  nameEs        String?
+  photoRequired Boolean @default(true)
+  photoHintEn   String?
+  photoHintEs   String?
+
+  template CheckTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  items    CheckItem[]
+
+  @@index([templateId, position])
+}
+
+model CheckItem {
+  id        String  @id @default(cuid())
+  sectionId String
+  position  Int
+  textEn    String
+  /// Null shows crew the English text.
+  textEs    String?
+
+  section CheckSection @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+
+  @@index([sectionId, position])
+}
+
+/// A person who can sign a check at one store. Harri crew are created and
+/// deactivated by the sync; an owner's PIN edit always survives it.
+model CrewMember {
+  id             String     @id @default(cuid())
+  storeId        String
+  source         CrewSource
+  /// Harri `user_id`. Null for crew the owner added by hand.
+  harriUserId    Int?
+  firstName      String
+  lastName       String?
+  email          String?
+  /// Four digits, unique within the store. Null while inactive ("PIN off").
+  pin            String?
+  active         Boolean    @default(true)
+  inactiveReason String?
+  pinEmailedAt   DateTime?
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+
+  store       Store             @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  submissions CheckSubmission[]
+  starts      CheckStart[]
+
+  @@unique([storeId, pin])
+  @@unique([storeId, harriUserId])
+  @@index([storeId])
+}
+
+/// One completed check. `content` is a snapshot of the wording crew saw and
+/// what they ticked or flagged, so later checklist edits never rewrite it.
+model CheckSubmission {
+  id           String    @id @default(cuid())
+  storeId      String
+  templateId   String
+  kind         CheckKind
+  /// LA business day the check belongs to (the day its window opened).
+  businessDate DateTime  @db.Date
+  crewMemberId String?
+  /// Name as it was when submitted.
+  crewName     String
+  startedAt    DateTime?
+  submittedAt  DateTime  @default(now())
+  /// 0 when on time.
+  lateMinutes  Int       @default(0)
+  flaggedCount Int       @default(0)
+  content      Json
+
+  store      Store         @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  template   CheckTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  crewMember CrewMember?   @relation(fields: [crewMemberId], references: [id], onDelete: SetNull)
+  photos     CheckPhoto[]
+
+  @@unique([storeId, kind, businessDate])
+  @@index([storeId, businessDate])
+}
+
+model CheckPhoto {
+  id           String   @id @default(cuid())
+  submissionId String
+  sectionName  String
+  storageKey   String
+  contentType  String
+  size         Int
+  createdAt    DateTime @default(now())
+
+  submission CheckSubmission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+
+  @@index([submissionId])
+}
+
+/// Someone entered their PIN for a check that is not in yet. Lets Today tell
+/// "in progress" from "nobody has started".
+model CheckStart {
+  id           String    @id @default(cuid())
+  storeId      String
+  kind         CheckKind
+  businessDate DateTime  @db.Date
+  crewMemberId String
+  startedAt    DateTime  @default(now())
+
+  store      Store      @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  crewMember CrewMember @relation(fields: [crewMemberId], references: [id], onDelete: Cascade)
+
+  @@unique([storeId, kind, businessDate, crewMemberId])
+  @@index([storeId, businessDate])
+}
+
+/// The store is closed for a business day: none of its checks count as missed.
+model CheckClosure {
+  id           String   @id @default(cuid())
+  storeId      String
+  businessDate DateTime @db.Date
+  createdAt    DateTime @default(now())
+
+  store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  @@unique([storeId, businessDate])
 }

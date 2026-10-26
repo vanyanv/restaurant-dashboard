@@ -1,0 +1,33 @@
+name: Store checks (missed-check alerts)
+
+# Puts missed and late store checks on Needs you. The dashboard also does
+# this whenever the owner opens Store checks; this run keeps Needs you current
+# when nobody has. Idempotent: an alert is created once per store, check and day.
+on:
+  schedule:
+    - cron: '*/30 * * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: checks-cron
+  cancel-in-progress: false
+
+jobs:
+  alerts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Record missed and late checks
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          APP_URL: ${{ secrets.APP_URL }}
+        run: |
+          if [ -z "$APP_URL" ] || [ -z "$CRON_SECRET" ]; then
+            echo "APP_URL or CRON_SECRET not set — skipping."
+            exit 0
+          fi
+          curl -sS --fail-with-body -X POST "$APP_URL/api/cron/checks" \
+            -H "Authorization: Bearer $CRON_SECRET" \
+            -H "Content-Type: application/json" \
+            -d '{}' \
+            --max-time 60

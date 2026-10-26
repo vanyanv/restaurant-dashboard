@@ -145,7 +145,7 @@ export type ProductPhotoFetch = {
 }
 
 export function isProductPhotoContentType(value: string): value is ProductPhotoContentType {
-  return value in PRODUCT_PHOTO_CONTENT_TYPES
+  return Object.hasOwn(PRODUCT_PHOTO_CONTENT_TYPES, value)
 }
 
 export async function putProductPhoto(
@@ -215,4 +215,75 @@ export async function deleteProductPhoto(pathname: string): Promise<void> {
     if (err instanceof NoSuchKey || (err as { name?: string }).name === "NoSuchKey") return
     throw err
   }
+}
+
+// --- Store check photos (one per checklist section) --------------------------
+
+/**
+ * Where a check photo lives when R2 is not configured: a folder on local disk.
+ * Development and tests only — production without R2 refuses the upload
+ * rather than writing to a serverless function's throwaway filesystem.
+ */
+function localCheckPhotoDir(): string | null {
+  if (process.env.R2_BUCKET_NAME) return null
+  if (process.env.NODE_ENV === "production" && !process.env.CHECK_PHOTOS_LOCAL_DIR) return null
+  return process.env.CHECK_PHOTOS_LOCAL_DIR ?? `${process.cwd()}/.check-photos`
+}
+
+export async function putCheckPhoto(
+  storeId: string,
+  photoBytes: Buffer,
+  contentType: ProductPhotoContentType,
+): Promise<ProductPhotoUpload> {
+  const safeId = storeId.replace(/[^A-Za-z0-9._-]/g, "_")
+  const key = `checks/${safeId}/${randomUUID()}.${PRODUCT_PHOTO_CONTENT_TYPES[contentType]}`
+
+  const localDir = localCheckPhotoDir()
+  if (localDir) {
+    const { mkdir, writeFile } = await import("node:fs/promises")
+    const path = `${localDir}/${key}`
+    await mkdir(path.slice(0, path.lastIndexOf("/")), { recursive: true })
+    await writeFile(path, photoBytes)
+    return { pathname: key, size: photoBytes.byteLength, uploadedAt: new Date() }
+  }
+
+  const { client, bucket } = getR2Client()
+  await client.send(
+    new PutObjectCommand({ Bucket: bucket, Key: key, Body: photoBytes, ContentType: contentType }),
+  )
+  return { pathname: key, size: photoBytes.byteLength, uploadedAt: new Date() }
+}
+
+/** Best-effort removal, for photos of a submission that did not go through. */
+export async function deleteCheckPhoto(pathname: string): Promise<void> {
+  const localDir = localCheckPhotoDir()
+  if (localDir) {
+    const { rm } = await import("node:fs/promises")
+    await rm(`${localDir}/${pathname}`, { force: true })
+    return
+  }
+  await deleteProductPhoto(pathname)
+}
+
+export async function getCheckPhotoStream(pathname: string): Promise<ProductPhotoFetch> {
+  const localDir = localCheckPhotoDir()
+  if (localDir) {
+    const { readFile } = await import("node:fs/promises")
+    try {
+      const bytes = await readFile(`${localDir}/${pathname}`)
+      return {
+        statusCode: 200,
+        stream: new ReadableStream({
+          start(c) {
+            c.enqueue(new Uint8Array(bytes))
+            c.close()
+          },
+        }),
+        contentType: null,
+      }
+    } catch {
+      return { statusCode: 404, stream: toEmptyStream(), contentType: null }
+    }
+  }
+  return getProductPhotoStream(pathname)
 }
