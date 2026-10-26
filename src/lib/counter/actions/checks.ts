@@ -325,6 +325,21 @@ export async function syncStoreCrew(input: { storeId: string }): Promise<ActionR
     const brands = await prisma.harriBrand.findMany({ where: { storeId: input.storeId, active: true }, select: { brandId: true } })
     if (brands.length > 0) {
       try {
+        // The roster refresh only looks up people it has already seen in
+        // shifts or clock alerts. A store linked to Harri today has neither,
+        // so pull the last eight weeks of schedule (and the published weeks
+        // ahead) first; otherwise its first sync finds nobody.
+        const { runHarriScheduleSync } = await import("@/lib/harri-schedule-sync")
+        const day = 24 * 60 * 60 * 1000
+        const schedule = await runHarriScheduleSync({
+          storeId: input.storeId,
+          startDate: new Date(Date.now() - 56 * day),
+          endDate: new Date(Date.now() + 14 * day),
+          triggeredBy: "manual",
+        })
+        if (schedule.weeksOk === 0) {
+          harriNote = " Harri didn't send this store's schedule, so its crew may be missing. Check the Harri login can see this location."
+        }
         const { refreshHarriEmployees } = await import("@/lib/harri-employee-sync")
         for (const b of brands) {
           await refreshHarriEmployees({ storeId: input.storeId, brandId: b.brandId, triggeredBy: "manual" })
