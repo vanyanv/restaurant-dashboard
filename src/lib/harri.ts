@@ -303,7 +303,10 @@ export async function harriFetch<T>(url: string): Promise<T> {
 
     if (!response.ok) {
       const text = await response.text()
-      throw new Error(`Harri API error ${response.status}: ${text.slice(0, 400)}`)
+      // Name the endpoint: a sync issues a dozen calls per store in parallel,
+      // and a bare "500" doesn't say which service refused the brand.
+      const { pathname } = new URL(url)
+      throw new Error(`Harri API error ${response.status} on ${pathname}: ${text.slice(0, 400)}`)
     }
 
     return (await response.json()) as T

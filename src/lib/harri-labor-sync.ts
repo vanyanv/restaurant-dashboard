@@ -48,6 +48,17 @@ export type HarriSyncResult = {
   alertsWritten: number
 }
 
+/** "Harri API error 500 on /path" — the message without the response body. */
+function errorHead(reason: unknown): string {
+  const message = reason instanceof Error ? reason.message : String(reason)
+  return message.match(/^Harri API error \d+ on \S+/)?.[0] ?? message.slice(0, 300)
+}
+
+/** Harri answered with an HTTP error, as opposed to a timeout or network failure. */
+function isHarriHttpError(reason: unknown): boolean {
+  return reason instanceof Error && /^Harri API error \d+ on /.test(reason.message)
+}
+
 export async function runHarriLaborSync(opts: RunHarriLaborSyncOpts): Promise<HarriSyncResult> {
   const { storeId, startDate, endDate, triggeredBy } = opts
 
@@ -90,15 +101,53 @@ export async function runHarriLaborSync(opts: RunHarriLaborSyncOpts): Promise<Ha
 
       const perDay: PerDay[] = await Promise.all(
         days.map(async (date): Promise<PerDay> => {
-          const [actualEnv, forecastEnv, categoriesEnv, alertsEnv] = await Promise.all([
+          const [actualRes, forecastRes, categoriesRes, alertsRes] = await Promise.allSettled([
             harriFetch<HarriEnvelope<HarriLaborTotal>>(buildLaborActualUrl(brandId, date)),
             harriFetch<HarriEnvelope<HarriLaborTotal>>(buildLaborForecastUrl(brandId, date)),
             harriFetch<HarriEnvelope<HarriLaborCategoriesResponse>>(buildLaborCategoriesUrl(brandId, date)),
             harriFetch<HarriEnvelope<HarriAlertsResponse>>(buildTimekeepingAlertsUrl(brandId, date)),
           ])
+
+          // Report every endpoint that failed, not just the first to reject,
+          // so a newly linked brand shows exactly which Harri services refuse it.
+          const failures = [forecastRes, categoriesRes, alertsRes].flatMap((r) =>
+            r.status === "rejected" ? [errorHead(r.reason)] : []
+          )
+          if (failures.length > 0) {
+            throw new Error(`${failures.join("; ")} (brand ${brandId})`)
+          }
+          const forecastEnv = (forecastRes as PromiseFulfilledResult<HarriEnvelope<HarriLaborTotal>>).value
+          const categoriesEnv = (
+            categoriesRes as PromiseFulfilledResult<HarriEnvelope<HarriLaborCategoriesResponse>>
+          ).value
+          const alertsEnv = (alertsRes as PromiseFulfilledResult<HarriEnvelope<HarriAlertsResponse>>).value
+
+          /*
+           * /stats/labor answers 500 on the brands linked 2026-10-26
+           * (Van Nuys 20122359, Glendale 20122358) while the other three calls
+           * answer — so neither store had ever written a labor row. The
+           * categories endpoint carries the same day's total: on Hollywood it
+           * equalled /stats/labor on 117 of 118 days since 2026-07-01. Fall
+           * back to it rather than dropping the store's labor entirely.
+           */
+          let actual: HarriLaborTotal
+          if (actualRes.status === "fulfilled") {
+            actual = actualRes.value.data
+          } else if (!isHarriHttpError(actualRes.reason)) {
+            // A timeout or network blip is not a refusal: fail the store as before.
+            throw actualRes.reason
+          } else {
+            console.warn(
+              `[harri.sync]   ${errorHead(actualRes.reason)}; using categories total for ${date.toISOString().slice(0, 10)}`
+            )
+            actual = {
+              total_labor_cost: categoriesEnv.data.total_labor_cost,
+              date: categoriesEnv.data.date,
+            }
+          }
           return {
             date,
-            actual: actualEnv.data,
+            actual,
             forecast: forecastEnv.data,
             categories: categoriesEnv.data,
             alerts: alertsEnv.data.alerts ?? [],
