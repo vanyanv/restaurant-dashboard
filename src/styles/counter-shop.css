@@ -1,0 +1,84 @@
+/* src/styles/counter-shop.css
+ *
+ * Shop: the owner tabs under /dashboard/shop. They wear Store checks' parts
+ * (glyphs, tables, drawers, inputs from counter-checks.css); this file only
+ * adds what a merch desk has and a check does not — count tiles, the order
+ * queue with its one-tap next step, the ship form and product thumbnails.
+ * Every colour is a Counter token; nothing here declares a colour of its own.
+ *
+ * The queue and the forms are the parts used from a phone at the counter, so
+ * they stack below 700px and every button there is at least 44px tall.
+ */
+
+/* ── count tiles ──────────────────────────────────────────────────────── */
+.sh-tiles{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+@media (max-width:900px){.sh-tiles{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.sh-tile{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:12px 14px;
+  display:grid;gap:4px;align-content:start;color:inherit;text-decoration:none}
+a.sh-tile:hover{border-color:var(--line-strong)}
+.sh-tile .k{font-family:var(--mono);font-size:9.5px;letter-spacing:.15em;text-transform:uppercase;color:var(--ink-3)}
+.sh-tile .v{font-size:28px;font-weight:600;font-variant-numeric:tabular-nums;letter-spacing:-.02em;line-height:1.1}
+.sh-tile .s{font-size:var(--t-cap);color:var(--ink-2)}
+.sh-tile--bad{border-color:var(--bad);background:var(--bad-wash)}
+
+/* ── banner (shop paused) ─────────────────────────────────────────────── */
+.sh-banner{display:grid;grid-template-columns:auto 1fr auto;gap:14px;align-items:center;padding:12px 16px;
+  border-radius:var(--r);background:var(--warn-wash);border:1px solid var(--warn)}
+@media (max-width:700px){.sh-banner{grid-template-columns:auto 1fr}.sh-banner > :last-child{grid-column:1 / -1}}
+
+/* ── order queue ──────────────────────────────────────────────────────── */
+.sh-queue{display:grid}
+.sh-order{display:grid;grid-template-columns:auto minmax(0,1.3fr) minmax(0,1.6fr) auto auto;gap:12px;align-items:center;
+  padding:11px 14px;border-bottom:1px solid var(--line)}
+.sh-order:last-child{border-bottom:0}
+.sh-order .who{display:grid;gap:2px;min-width:0}
+.sh-order .who b{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sh-order .what{color:var(--ink-2);font-size:var(--t-cap);min-width:0}
+.sh-order .amt{font-variant-numeric:tabular-nums;text-align:right}
+.sh-order .act{display:flex;gap:6px;justify-content:flex-end;flex-wrap:wrap}
+.sh-order--open{background:var(--sunk)}
+@media (max-width:700px){
+  .sh-order{grid-template-columns:auto minmax(0,1fr) auto;row-gap:6px}
+  .sh-order .what{grid-column:2 / -1}
+  .sh-order .act{grid-column:1 / -1;justify-content:stretch}
+  .sh-order .act .btn{flex:1;min-height:44px}
+}
+.sh-empty{padding:14px;color:var(--ink-2);font-size:var(--t-cap);margin:0}
+
+/* ── forms inside a row or drawer ─────────────────────────────────────── */
+.sh-form{display:grid;gap:10px;padding:12px 14px;border-top:1px dashed var(--line);background:var(--surface)}
+.sh-form .row{display:flex;gap:8px;flex-wrap:wrap;align-items:end}
+.sh-form .row > .ck-field{flex:1 1 160px}
+.sh-form .btn{min-height:40px}
+@media (max-width:700px){.sh-form .btn{min-height:44px;flex:1}}
+.sh-check{display:flex;gap:8px;align-items:center;font-size:var(--t-cap)}
+.sh-check input{width:18px;height:18px;accent-color:var(--accent)}
+textarea.ck-input{min-height:84px;resize:vertical;font-family:var(--sans);line-height:1.4}
+
+/* ── order detail ─────────────────────────────────────────────────────── */
+.sh-lines{display:grid;gap:6px;margin:0;padding:0;list-style:none}
+.sh-lines li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 10px;font-size:var(--t-cap)}
+.sh-lines li .amt{font-variant-numeric:tabular-nums}
+.sh-totals{display:grid;grid-template-columns:1fr auto;gap:2px 10px;font-size:var(--t-cap);
+  border-top:1px solid var(--line);padding-top:8px;font-variant-numeric:tabular-nums}
+.sh-totals b{font-size:var(--t-body)}
+.sh-addr{font-size:var(--t-cap);line-height:1.45;margin:0;font-style:normal}
+
+/* ── sales strip ──────────────────────────────────────────────────────── */
+.sh-spark{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:6px;align-items:end;height:88px;padding:0 2px}
+.sh-spark span{display:grid;gap:4px;justify-items:stretch;align-content:end;height:100%}
+.sh-spark i{display:block;background:var(--signal);border-radius:3px 3px 0 0;min-height:2px}
+.sh-spark em{font-style:normal;font-family:var(--mono);font-size:9.5px;color:var(--ink-3);text-align:center;white-space:nowrap}
+
+/* ── products ─────────────────────────────────────────────────────────── */
+.sh-thumb{width:40px;height:40px;border-radius:6px;object-fit:cover;background:var(--sunk);display:block}
+.sh-thumb--none{border:1.5px dashed var(--line-strong);background:none}
+.sh-pname{display:flex;gap:10px;align-items:center;min-width:0}
+.sh-low{color:var(--bad);font-weight:600}
+.sh-stock{display:flex;gap:6px;align-items:center}
+.sh-stock .ck-input{width:90px;font-variant-numeric:tabular-nums}
+.sh-photos{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+.sh-photos img{width:100%;aspect-ratio:1;object-fit:cover;border-radius:6px;background:var(--sunk)}
+.ck-table tr.sh-sel td{background:var(--sunk)}
+.ck-table td a.sh-rowlink{color:inherit;text-decoration:none}
+.ck-table td a.sh-rowlink:hover b{text-decoration:underline}
