@@ -2312,21 +2312,25 @@ enum CrewSource {
 }
 
 model CheckTemplate {
-  id         String    @id @default(cuid())
-  storeId    String
-  kind       CheckKind
+  id           String    @id @default(cuid())
+  storeId      String
+  kind         CheckKind
   /// Minutes after LA midnight of the business day the check opens.
-  opensAtMin Int
+  opensAtMin   Int
   /// Minutes after LA midnight of the business day the check is due. May
   /// pass 1440: an evening check due at 12:30 am still belongs to the day it
   /// started on.
-  dueAtMin   Int
+  dueAtMin     Int
+  /// Due time per weekday, Sunday first, same minutes as dueAtMin (a store
+  /// that closes at 1 am most nights and 2 am Friday to Sunday). Empty means
+  /// every day uses dueAtMin. The weekday is the day the window opens on.
+  dueByWeekday Int[]     @default([])
   /// Minutes after the due time that a submission is still taken, as late.
   /// Past that the check is missed.
-  graceMin   Int       @default(30)
-  enabled    Boolean   @default(true)
-  createdAt  DateTime  @default(now())
-  updatedAt  DateTime  @updatedAt
+  graceMin     Int       @default(30)
+  enabled      Boolean   @default(true)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
 
   store       Store             @relation(fields: [storeId], references: [id], onDelete: Cascade)
   sections    CheckSection[]

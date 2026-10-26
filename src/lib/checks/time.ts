@@ -25,6 +25,43 @@ export type CheckWindow = {
   opensAtMin: number
   dueAtMin: number
   graceMin: number
+  /**
+   * Due time per weekday, Sunday first, in the same minutes as `dueAtMin`.
+   * Empty means every day uses `dueAtMin`. The weekday is the business day
+   * the window opens on, so "Friday, due 2:00 am" is Friday night's close.
+   */
+  dueByWeekday?: readonly number[]
+}
+
+export const WEEKDAY_SHORT = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as const
+
+/** 0 = Sunday, for a business day "YYYY-MM-DD". */
+export function weekdayOf(day: string): number {
+  return new Date(`${day}T12:00:00.000Z`).getUTCDay()
+}
+
+/** The due minute that applies on `day`, after any weekday override. */
+export function dueAtFor(day: string, w: CheckWindow): number {
+  const byDay = w.dueByWeekday
+  return byDay && byDay.length === 7 ? byDay[weekdayOf(day)] : w.dueAtMin
+}
+
+/**
+ * "10:00 pm – 1:00 am", or with weekday overrides
+ * "10:00 pm – 1:00 am · 2:00 am Fri, Sat, Sun".
+ */
+export function windowSummary(w: CheckWindow): string {
+  const base = `${minutesLabel(w.opensAtMin)} – ${minutesLabel(w.dueAtMin)}`
+  const byDay = w.dueByWeekday
+  if (!byDay || byDay.length !== 7) return base
+  const groups = new Map<number, string[]>()
+  // Monday first reads naturally for a week of closes.
+  for (const d of [1, 2, 3, 4, 5, 6, 0]) {
+    if (byDay[d] === w.dueAtMin) continue
+    groups.set(byDay[d], [...(groups.get(byDay[d]) ?? []), WEEKDAY_SHORT[d]])
+  }
+  if (groups.size === 0) return base
+  return [base, ...[...groups].map(([min, days]) => `${minutesLabel(min)} ${days.join(", ")}`)].join(" · ")
 }
 
 const offsetFmt = new Intl.DateTimeFormat("en-US", {
@@ -78,10 +115,11 @@ export function todayLA(now: Date): string {
 export type WindowBounds = { opens: Date; due: Date; closes: Date }
 
 export function windowBounds(day: string, w: CheckWindow): WindowBounds {
+  const dueAtMin = dueAtFor(day, w)
   return {
     opens: laInstant(day, w.opensAtMin),
-    due: laInstant(day, w.dueAtMin),
-    closes: laInstant(day, w.dueAtMin + w.graceMin),
+    due: laInstant(day, dueAtMin),
+    closes: laInstant(day, dueAtMin + w.graceMin),
   }
 }
 

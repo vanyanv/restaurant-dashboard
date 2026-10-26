@@ -38,6 +38,10 @@ const fromTime = (v: string) => {
   const [h, m] = v.split(":").map(Number)
   return Number.isFinite(h) && Number.isFinite(m) ? h * 60 + m : 0
 }
+/** A clock time at or before the open time means after midnight. */
+const afterOpen = (clock: number, opens: number) => (clock <= opens ? clock + 1440 : clock)
+/** Monday first, with each day's index into `dueByWeekday` (Sunday = 0). */
+const WEEK: Array<[string, number]> = [["Mon", 1], ["Tue", 2], ["Wed", 3], ["Thu", 4], ["Fri", 5], ["Sat", 6], ["Sun", 0]]
 const label12 = (min: number) => {
   const m = ((min % 1440) + 1440) % 1440
   const h = Math.floor(m / 60)
@@ -78,6 +82,7 @@ function Editor({ data }: { data: ChecklistsData }) {
         kind: t.kind,
         opensAtMin: t.opensAtMin,
         dueAtMin: t.dueAtMin,
+        dueByWeekday: t.dueByWeekday,
         graceMin: t.graceMin,
         enabled: t.enabled,
         sections: t.sections.map((s) => ({
@@ -154,9 +159,9 @@ function Editor({ data }: { data: ChecklistsData }) {
                 onChange={(e) =>
                   update((t) => {
                     const o = fromTime(e.target.value)
-                    const dueClock = t.dueAtMin % 1440
                     t.opensAtMin = o
-                    t.dueAtMin = dueClock <= o ? dueClock + 1440 : dueClock
+                    t.dueAtMin = afterOpen(t.dueAtMin % 1440, o)
+                    t.dueByWeekday = t.dueByWeekday.map((d) => afterOpen(d % 1440, o))
                   })
                 }
               />
@@ -169,8 +174,10 @@ function Editor({ data }: { data: ChecklistsData }) {
                 value={toTime(t.dueAtMin)}
                 onChange={(e) =>
                   update((t) => {
-                    const d = fromTime(e.target.value)
-                    t.dueAtMin = d <= t.opensAtMin ? d + 1440 : d
+                    const d = afterOpen(fromTime(e.target.value), t.opensAtMin)
+                    // Nights that followed the usual due time keep following it.
+                    t.dueByWeekday = t.dueByWeekday.map((x) => (x === t.dueAtMin ? d : x))
+                    t.dueAtMin = d
                   })
                 }
               />
@@ -198,6 +205,36 @@ function Editor({ data }: { data: ChecklistsData }) {
                 <span style={{ left: left(t.dueAtMin) }}>{label12(t.dueAtMin)}</span>
               </div>
             </div>
+          </div>
+          <div className="ck-esect">
+            <label className="ck-check">
+              <input
+                type="checkbox"
+                checked={t.dueByWeekday.length === 7}
+                onChange={(e) =>
+                  update((t) => void (t.dueByWeekday = e.target.checked ? Array(7).fill(t.dueAtMin) : []))
+                }
+              />
+              Due at a different time on some nights, for a store that closes later on weekends.
+            </label>
+            {t.dueByWeekday.length === 7 && (
+              <div className="ck-days">
+                {WEEK.map(([label, d]) => (
+                  <label className="ck-field" key={d}>
+                    <span className="ck-mono">{label}</span>
+                    <input
+                      className="ck-input"
+                      type="time"
+                      aria-label={`Due on ${label}`}
+                      value={toTime(t.dueByWeekday[d])}
+                      onChange={(e) =>
+                        update((t) => void (t.dueByWeekday[d] = afterOpen(fromTime(e.target.value), t.opensAtMin)))
+                      }
+                    />
+                  </label>
+                ))}
+              </div>
+            )}
           </div>
           <div className="ck-esect">
             <label className="ck-check">

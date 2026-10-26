@@ -13,7 +13,7 @@ import {
   clockLabel,
   dayLabel,
   durationLabel,
-  minutesLabel,
+  windowSummary,
   todayLA,
   windowBounds,
   type CheckKindName,
@@ -153,7 +153,7 @@ export function getChecksTodaySectionPromises(opts: { accountId: string; now?: D
           return {
             kind,
             label: CHECK_LABEL[kind].en,
-            window: t ? `${minutesLabel(t.opensAtMin)} – ${minutesLabel(t.dueAtMin)}` : "",
+            window: t ? windowSummary(t) : "",
           }
         })
         const yesterday = addDays(today, -1)
@@ -297,6 +297,8 @@ export type EditorTemplate = {
   label: string
   opensAtMin: number
   dueAtMin: number
+  /** Empty, or seven due times, Sunday first. */
+  dueByWeekday: number[]
   graceMin: number
   enabled: boolean
   sections: EditorSection[]
@@ -335,6 +337,7 @@ export function getChecksChecklistsSectionPromises(opts: {
               label: CHECK_LABEL[kind].en,
               opensAtMin: t.opensAtMin,
               dueAtMin: t.dueAtMin,
+              dueByWeekday: t.dueByWeekday,
               graceMin: t.graceMin,
               enabled: t.enabled,
               sections: t.sections.map((s) => ({
@@ -461,7 +464,7 @@ export function getChecksPostersSectionPromises(opts: { accountId: string }): St
           where: { accountId: opts.accountId, isActive: true },
           select: {
             id: true, name: true, checkCode: true,
-            checkTemplates: { select: { kind: true, opensAtMin: true, dueAtMin: true, enabled: true } },
+            checkTemplates: { select: { kind: true, opensAtMin: true, dueAtMin: true, dueByWeekday: true, graceMin: true, enabled: true } },
           },
           orderBy: { name: "asc" },
         })
@@ -481,7 +484,7 @@ export function getChecksPostersSectionPromises(opts: { accountId: string }): St
               windows: CHECK_KINDS.flatMap((kind) => {
                 const t = r.checkTemplates.find((x) => x.kind === kind)
                 if (!t || !t.enabled) return []
-                return [{ label: CHECK_LABEL[kind].en, window: `${minutesLabel(t.opensAtMin)} – ${minutesLabel(t.dueAtMin)}` }]
+                return [{ label: CHECK_LABEL[kind].en, window: windowSummary(t) }]
               }),
             }
           }),
