@@ -33,7 +33,7 @@
  */
 
 export type NavId =
-  | "overview" | "ask" | "needs-you" | "checks" | "decisions" | "orders"
+  | "overview" | "ask" | "needs-you" | "checks" | "shop" | "decisions" | "orders"
   | "analytics" | "pnl" | "cogs" | "labor"
   | "menu" | "recipes"
   | "invoices" | "inventory" | "ingredients" | "vendors"
@@ -85,6 +85,7 @@ export const NAV_GROUPS: readonly NavGroup[] = [
       { id: "ask", label: "Ask", href: "/dashboard/ask", icon: "MessageSquare" },
       { id: "needs-you", label: "Needs you", href: "/dashboard/alerts", icon: "Bell" },
       { id: "checks", label: "Store checks", href: "/dashboard/checks", icon: "ClipboardCheck" },
+      { id: "shop", label: "Shop", href: "/dashboard/shop", icon: "ShoppingBag" },
       { id: "decisions", label: "The week ahead", href: "/dashboard/decisions", icon: "CalendarCheck" },
       { id: "orders", label: "Orders", href: "/dashboard/orders", icon: "Receipt" },
     ],
@@ -201,6 +202,15 @@ export const CHECKS_TABS: readonly SubNavItem[] = [
   { label: "Checklists", href: "/dashboard/checks/checklists" },
   { label: "Crew & PINs", href: "/dashboard/checks/crew" },
   { label: "QR posters", href: "/dashboard/checks/posters" },
+] as const
+
+/** Shop — the chrisneddys.com merch desk. See `src/lib/shop/`. */
+export const SHOP_TABS: readonly SubNavItem[] = [
+  { label: "Today", href: "/dashboard/shop" },
+  { label: "Orders", href: "/dashboard/shop/orders" },
+  { label: "Products", href: "/dashboard/shop/products" },
+  { label: "Customers", href: "/dashboard/shop/customers" },
+  { label: "Settings", href: "/dashboard/shop/settings" },
 ] as const
 
 export const MONITORING_TABS: readonly SubNavItem[] = [

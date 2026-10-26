@@ -27,6 +27,7 @@
 @import "../styles/counter-components.css";
 @import "../styles/counter-repairs.css";
 @import "../styles/counter-checks.css";
+@import "../styles/counter-shop.css";
 
 @theme {
   --color-background: var(--ct-paper);
