@@ -7,6 +7,7 @@ import {
   CHECK_KINDS,
   CHECK_LABEL,
   clockLabel,
+  dueAtFor,
   minutesLabel,
   todayLA,
   windowBounds,
@@ -107,7 +108,7 @@ export async function loadCrewView(store: CrewStore, now: Date): Promise<CrewVie
     return [{
       kind,
       label: CHECK_LABEL[kind],
-      windowLabel: `${minutesLabel(t.opensAtMin)} – ${minutesLabel(t.dueAtMin)}`,
+      windowLabel: `${minutesLabel(t.opensAtMin)} – ${minutesLabel(dueAtFor(day, t))}`,
       status: cell?.status ?? "upcoming",
       doneBy: cell?.submission?.crewName ?? null,
       doneAt: cell?.submission ? clockLabel(cell.submission.submittedAt) : null,
@@ -125,7 +126,7 @@ export async function loadCrewView(store: CrewStore, now: Date): Promise<CrewVie
       label: CHECK_LABEL[active.kind],
       dueAt: b.due.getTime(),
       closesAt: b.closes.getTime(),
-      dueLabel: minutesLabel(t.dueAtMin),
+      dueLabel: minutesLabel(dueAtFor(active.day, t)),
       sections: await loadSections(store.id, active.kind),
     }
   }

@@ -145,7 +145,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     : null
   const tpl = await prisma.checkTemplate.findUnique({
     where: { storeId_kind: { storeId: store.id, kind: active.kind } },
-    select: { id: true, opensAtMin: true, dueAtMin: true, graceMin: true },
+    select: { id: true, opensAtMin: true, dueAtMin: true, dueByWeekday: true, graceMin: true },
   })
   if (!tpl) return NextResponse.json({ error: "This check has closed." }, { status: 409 })
 

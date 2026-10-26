@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 vi.mock("@/lib/prisma", () => ({ prisma: {} }))
 
-import { acceptingDay, laInstant, lateMinutes, windowPhase, type CheckWindow } from "@/lib/checks/time"
+import { acceptingDay, dueAtFor, laInstant, lateMinutes, windowPhase, windowSummary, type CheckWindow } from "@/lib/checks/time"
 import { cellStatus, onTimeRate } from "@/lib/checks/status"
 import { harriIsActive, isWeakPin, newCheckCode, pickPin, slugify } from "@/lib/checks/setup"
 import { issueCrewPass, readCrewPass } from "@/lib/checks/crew-session"
@@ -52,6 +52,43 @@ describe("acceptingDay", () => {
   })
   it("is null outside every window", () => {
     expect(acceptingDay(MORNING, new Date("2026-10-25T20:00:00Z"))).toBeNull()
+  })
+})
+
+describe("due time by weekday", () => {
+  // Closes 1 am most nights and 2 am Friday, Saturday and Sunday nights.
+  const ONE = 24 * 60 + 60
+  const TWO = 24 * 60 + 120
+  const LATE_WEEKEND: CheckWindow = {
+    opensAtMin: 21 * 60,
+    dueAtMin: ONE,
+    graceMin: 30,
+    dueByWeekday: [TWO, ONE, ONE, ONE, ONE, TWO, TWO],
+  }
+
+  it("uses the night the window opens on", () => {
+    expect(dueAtFor("2026-10-22", LATE_WEEKEND)).toBe(ONE) // Thursday
+    expect(dueAtFor("2026-10-23", LATE_WEEKEND)).toBe(TWO) // Friday
+    expect(dueAtFor("2026-10-25", LATE_WEEKEND)).toBe(TWO) // Sunday
+    expect(dueAtFor("2026-10-26", LATE_WEEKEND)).toBe(ONE) // Monday
+    expect(dueAtFor("2026-10-23", EVENING)).toBe(EVENING.dueAtMin)
+  })
+
+  it("is on time at 1:45 am on a Friday night, late on a Thursday", () => {
+    // 1:45 am PDT is 08:45Z the next calendar day.
+    expect(lateMinutes("2026-10-23", LATE_WEEKEND, new Date("2026-10-24T08:45:00Z"))).toBe(0)
+    expect(lateMinutes("2026-10-22", LATE_WEEKEND, new Date("2026-10-23T08:45:00Z"))).toBe(45)
+    expect(windowPhase("2026-10-23", LATE_WEEKEND, new Date("2026-10-24T08:45:00Z"))).toBe("open")
+    expect(windowPhase("2026-10-22", LATE_WEEKEND, new Date("2026-10-23T08:45:00Z"))).toBe("closed")
+  })
+
+  it("keeps a Friday-night check open for the day it started past 2 am", () => {
+    expect(acceptingDay(LATE_WEEKEND, new Date("2026-10-24T09:20:00Z"))).toBe("2026-10-23")
+  })
+
+  it("says which nights differ", () => {
+    expect(windowSummary(LATE_WEEKEND)).toBe("9:00 pm – 1:00 am · 2:00 am Fri, Sat, Sun")
+    expect(windowSummary(EVENING)).toBe("9:00 pm – 12:30 am")
   })
 })
 

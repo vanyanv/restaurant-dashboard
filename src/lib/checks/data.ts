@@ -82,7 +82,7 @@ export async function loadCheckGrid(opts: {
   const [templates, submissions, closures, starts] = await Promise.all([
     prisma.checkTemplate.findMany({
       where: { storeId: { in: storeIds }, store: { accountId: opts.accountId } },
-      select: { storeId: true, kind: true, opensAtMin: true, dueAtMin: true, graceMin: true, enabled: true, createdAt: true },
+      select: { storeId: true, kind: true, opensAtMin: true, dueAtMin: true, dueByWeekday: true, graceMin: true, enabled: true, createdAt: true },
     }),
     prisma.checkSubmission.findMany({
       where: { storeId: { in: storeIds }, businessDate: range, store: { accountId: opts.accountId } },
@@ -116,6 +116,7 @@ export async function loadCheckGrid(opts: {
         kind: t.kind as CheckKindName,
         opensAtMin: t.opensAtMin,
         dueAtMin: t.dueAtMin,
+        dueByWeekday: t.dueByWeekday,
         graceMin: t.graceMin,
         enabled: t.enabled,
         createdAt: t.createdAt,

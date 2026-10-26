@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma"
 import { loadCheckGrid } from "./data"
-import { addDays, CHECK_LABEL, dayLabel, laInstant, clockLabel, todayLA } from "./time"
+import { addDays, CHECK_LABEL, dayLabel, dueAtFor, laInstant, clockLabel, todayLA } from "./time"
 
 /**
  * Puts missed and late store checks on Needs you, as `Alert` rows.
@@ -28,7 +28,7 @@ export async function recordCheckAlerts(opts: { accountId?: string; now: Date; d
         const tpl = store.templates.find((t) => t.kind === cell.kind)
         if (!tpl) continue
         const label = CHECK_LABEL[cell.kind].en
-        const due = clockLabel(laInstant(cell.day, tpl.dueAtMin))
+        const due = clockLabel(laInstant(cell.day, dueAtFor(cell.day, tpl)))
         const missed = cell.status === "missed"
         const dedupeKey = `STORE_CHECK:${store.id}:${cell.kind}:${cell.day}`
         const exists = await prisma.alert.findUnique({ where: { dedupeKey }, select: { id: true } })

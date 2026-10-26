@@ -33,6 +33,8 @@ const ChecklistInput = z.object({
   kind: KIND,
   opensAtMin: z.number().int().min(0).max(1439),
   dueAtMin: z.number().int().min(1).max(1440 + 6 * 60),
+  /** Empty, or seven due times (Sunday first) for stores whose close moves by night. */
+  dueByWeekday: z.array(z.number().int().min(1).max(1440 + 6 * 60)).refine((a) => a.length === 0 || a.length === 7, "Set a due time for every day").optional(),
   graceMin: z.number().int().min(0).max(240),
   enabled: z.boolean(),
   sections: z
@@ -66,10 +68,15 @@ function fail(err: unknown): ActionResult {
 export async function saveChecklist(raw: z.input<typeof ChecklistInput>): Promise<ActionResult> {
   try {
     const input = ChecklistInput.parse(raw)
-    if (input.dueAtMin <= input.opensAtMin) return { ok: false, error: "The due time has to be after the open time" }
-    // One day's window, grace included, must close before the next day's opens.
-    if (input.dueAtMin + input.graceMin - input.opensAtMin >= 1440) {
-      return { ok: false, error: "The check window, with its late time, has to be shorter than a day" }
+    // Seven equal days are the same as none, and keep the summary short.
+    const byDay = input.dueByWeekday ?? []
+    const dueByWeekday = byDay.every((d) => d === input.dueAtMin) ? [] : byDay
+    for (const due of [input.dueAtMin, ...dueByWeekday]) {
+      if (due <= input.opensAtMin) return { ok: false, error: "The due time has to be after the open time" }
+      // One day's window, grace included, must close before the next day's opens.
+      if (due + input.graceMin - input.opensAtMin >= 1440) {
+        return { ok: false, error: "The check window, with its late time, has to be shorter than a day" }
+      }
     }
     await requireOwnerStore(input.storeId)
     const tpl = await prisma.checkTemplate.findUnique({
@@ -84,6 +91,7 @@ export async function saveChecklist(raw: z.input<typeof ChecklistInput>): Promis
         data: {
           opensAtMin: input.opensAtMin,
           dueAtMin: input.dueAtMin,
+          dueByWeekday,
           graceMin: input.graceMin,
           enabled: input.enabled,
           sections: {
@@ -146,6 +154,7 @@ export async function copyChecklistToOtherStores(input: { storeId: string; kind:
         kind,
         opensAtMin: source.opensAtMin,
         dueAtMin: source.dueAtMin,
+        dueByWeekday: source.dueByWeekday,
         graceMin: source.graceMin,
         enabled: source.enabled,
         sections,

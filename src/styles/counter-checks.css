@@ -99,6 +99,8 @@ button.ck-gl:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .ck-cklist button[aria-pressed="true"]{background:var(--paper);box-shadow:inset 3px 0 0 var(--accent)}
 .ck-win{display:grid;grid-template-columns:repeat(3,minmax(0,140px)) minmax(0,1fr);gap:12px;padding:14px 16px;border-bottom:1px solid var(--line);align-items:end}
 @media (max-width:760px){.ck-win{grid-template-columns:1fr 1fr}}
+.ck-days{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:8px;margin-top:10px}
+@media (max-width:760px){.ck-days{grid-template-columns:repeat(4,minmax(0,1fr))}}
 .ck-timeline{position:relative;height:28px;border-radius:var(--r-sm);background:var(--sunk);margin-bottom:18px}
 .ck-timeline i{position:absolute;top:0;bottom:0;border-radius:var(--r-sm)}
 .ck-timeline .w{background:var(--good-wash);border:1px solid var(--good)}
