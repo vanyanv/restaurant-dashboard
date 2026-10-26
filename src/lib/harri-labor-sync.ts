@@ -90,12 +90,30 @@ export async function runHarriLaborSync(opts: RunHarriLaborSyncOpts): Promise<Ha
 
       const perDay: PerDay[] = await Promise.all(
         days.map(async (date): Promise<PerDay> => {
-          const [actualEnv, forecastEnv, categoriesEnv, alertsEnv] = await Promise.all([
+          const settled = await Promise.allSettled([
             harriFetch<HarriEnvelope<HarriLaborTotal>>(buildLaborActualUrl(brandId, date)),
             harriFetch<HarriEnvelope<HarriLaborTotal>>(buildLaborForecastUrl(brandId, date)),
             harriFetch<HarriEnvelope<HarriLaborCategoriesResponse>>(buildLaborCategoriesUrl(brandId, date)),
             harriFetch<HarriEnvelope<HarriAlertsResponse>>(buildTimekeepingAlertsUrl(brandId, date)),
-          ])
+          ] as const)
+          // Report every endpoint that failed, not just the first to reject,
+          // so a newly linked brand shows exactly which Harri services refuse it.
+          const failures = settled.flatMap((r) =>
+            r.status === "rejected"
+              ? [r.reason instanceof Error ? r.reason.message.split(":")[0] : String(r.reason)]
+              : []
+          )
+          if (failures.length > 0) {
+            throw new Error(`${failures.join("; ")} (brand ${brandId})`)
+          }
+          const [actualEnv, forecastEnv, categoriesEnv, alertsEnv] = settled.map(
+            (r) => (r as PromiseFulfilledResult<unknown>).value
+          ) as [
+            HarriEnvelope<HarriLaborTotal>,
+            HarriEnvelope<HarriLaborTotal>,
+            HarriEnvelope<HarriLaborCategoriesResponse>,
+            HarriEnvelope<HarriAlertsResponse>,
+          ]
           return {
             date,
             actual: actualEnv.data,
