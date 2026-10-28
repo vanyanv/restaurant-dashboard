@@ -17,7 +17,7 @@ export const DESKTOP_TO_MOBILE: Record<string, string> = {
   "/dashboard/chat": "/m/ask",
   "/dashboard/cogs": "/m/cogs",
   // The weekly count and the waste log are phone-first. The report and the
-  // setup stay on the desk layout on a phone, as Store checks' owner tabs do.
+  // setup have no phone page yet; they are on `DESK_ONLY` below.
   "/dashboard/count": "/m/count",
   "/dashboard/count/waste": "/m/count/waste",
   "/dashboard/decisions": "/m/decisions",
@@ -103,6 +103,13 @@ export const DESKTOP_TO_MOBILE: Record<string, string> = {
   // what happens when that owner is on a phone.
   "/dashboard/forbidden": "/m/forbidden",
   "/dashboard/settings": "/m/more",
+  // Store checks, rebuilt for the phone: the same five tabs and the same
+  // clients as the desk, drawn inside the phone shell.
+  "/dashboard/checks": "/m/checks",
+  "/dashboard/checks/history": "/m/checks/history",
+  "/dashboard/checks/checklists": "/m/checks/checklists",
+  "/dashboard/checks/crew": "/m/checks/crew",
+  "/dashboard/checks/posters": "/m/checks/posters",
 }
 
 // Desktop routes with a dynamic sub-path that has a matching mobile page
@@ -205,11 +212,6 @@ export function phoneHref(deskHref: string): string {
  * a line in this list.
  */
 export const DESK_ONLY: ReadonlySet<string> = new Set([
-  "/dashboard/checks",
-  "/dashboard/checks/history",
-  "/dashboard/checks/checklists",
-  "/dashboard/checks/crew",
-  "/dashboard/checks/posters",
   "/dashboard/shop",
   "/dashboard/shop/orders",
   "/dashboard/shop/products",

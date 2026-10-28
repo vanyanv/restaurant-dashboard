@@ -55,6 +55,7 @@ const ChecklistInput = z.object({
 
 function revalidateChecks() {
   revalidatePath("/dashboard/checks", "layout")
+  revalidatePath("/m/checks", "layout")
 }
 
 function fail(err: unknown): ActionResult {

@@ -157,6 +157,50 @@ button.ck-gl:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .ck-poster .foot .ck-mono{font-size:2.4cqw}
 .ck-url{font-family:var(--mono);font-size:var(--t-micro);color:var(--ink-3);word-break:break-all}
 
+/* ---- Phone width -------------------------------------------------------
+   The phone routes (/m/checks/...) draw these same clients inside the phone
+   shell, and a narrow desk window gets the same layout. */
+@media (max-width:760px){
+  /* Today: one store per block, its three checks side by side under it. */
+  .ck-matrix{grid-template-columns:repeat(3,minmax(0,1fr));overflow:visible}
+  .ck-matrix > *{padding:10px 8px}
+  .ck-matrix > .ck-h:first-child{display:none}
+  .ck-matrix > .ck-h{background:var(--paper)}
+  .ck-matrix > .ck-h + .ck-h{border-left:1px solid var(--line)}
+  .ck-h b{font-size:var(--t-body)}
+  .ck-matrix > .ck-s{grid-column:1/-1;display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 10px;padding:12px 12px 8px}
+  .ck-matrix > .ck-s + .ck-c{border-left:0}
+  .ck-matrix > :nth-last-child(-n+4){border-bottom:1px solid var(--line)}
+  .ck-matrix > :nth-last-child(-n+3){border-bottom:0}
+  .ck-st{font-size:var(--t-cap);gap:6px}
+  .ck-thumb{width:34px;height:34px}
+  .ck-alert{grid-template-columns:auto 1fr;gap:10px;padding:12px}
+  .ck-alert > .btn{grid-column:1/-1;justify-self:start}
+
+  /* Checklist editor: English over Spanish, the arrows and the remove button
+     either side, so neither input is cut to a few letters. */
+  .ck-erow{grid-template-columns:auto minmax(0,1fr) auto}
+  .ck-erow > :nth-child(1){grid-row:1/3;align-self:center}
+  .ck-erow > .ck-row:first-child{flex-direction:column}
+  .ck-erow > :nth-child(2){grid-column:2;grid-row:1}
+  .ck-erow > :nth-child(3){grid-column:2;grid-row:2}
+  .ck-erow > :nth-child(4){grid-column:3;grid-row:1/3;align-self:center}
+  .ck-erow--head{display:none}
+  .ck-iconbtn{width:36px;height:36px}
+
+  /* Crew & PINs: each person a card rather than a six-column row. */
+  .ck-table thead{display:none}
+  .ck-table tr{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 12px;padding:12px 14px;border-bottom:1px solid var(--line)}
+  .ck-table tr:last-child{border-bottom:0}
+  .ck-table td{display:block;padding:0;border:0}
+  .ck-table td[colspan]{grid-column:1/-1}
+  .ck-table td:nth-child(4){text-align:right}
+  .ck-table td:nth-child(n+5){grid-column:1/-1}
+  .ck-table td:nth-child(6) .ck-row{justify-content:flex-start !important;gap:16px;padding-top:6px}
+  .ck-table .ck-link{min-height:36px}
+  .ck-crewform{grid-template-columns:1fr}
+}
+
 /* Printing a poster: the page prints only the poster that asked to. The
    poster is pinned to the light ground, because paper is. */
 @media print{

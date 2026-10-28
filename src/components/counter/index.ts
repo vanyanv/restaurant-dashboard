@@ -129,6 +129,7 @@ export { MTop, type MTopProps } from "./shell/m-top"
    `/m` route rather than by `PhoneShell`, because it belongs to the routes
    still on the editorial design too. */
 export { MTabs } from "./shell/m-tabs"
+export { useOnPhone, useSurfaceHref } from "./shell/use-surface"
 export { MDateSheet, type MDateSheetProps } from "./shell/m-date-sheet"
 export { PhoneSheet } from "./shell/phone-sheet"
 

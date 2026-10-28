@@ -2,7 +2,7 @@
 
 import { useEffect, useState, type ReactNode } from "react"
 import { useRouter } from "next/navigation"
-import { PageHead, SubNav } from "@/components/counter"
+import { PageHead, SubNav, useSurfaceHref } from "@/components/counter"
 import { CHECKS_TABS } from "@/lib/counter/nav"
 import type { CellStatus } from "@/lib/checks/status"
 
@@ -13,9 +13,10 @@ import type { CellStatus } from "@/lib/checks/status"
  */
 
 export function ChecksHead({ sub, children }: { sub: string; children?: ReactNode }) {
+  const href = useSurfaceHref()
   return (
     <PageHead title="Store checks" sub={sub}>
-      <SubNav items={CHECKS_TABS} label="Store checks" />
+      <SubNav items={CHECKS_TABS.map((t) => ({ ...t, href: href(t.href) }))} label="Store checks" />
       {children}
     </PageHead>
   )
@@ -148,12 +149,13 @@ export function StorePicker({
   extra?: string
 }) {
   const router = useRouter()
+  const target = useSurfaceHref()(path)
   const go = (id: string | null) => {
     const q = new URLSearchParams(extra ?? "")
     if (id) q.set("store", id)
     else q.delete("store")
     const qs = q.toString()
-    router.push(qs ? `${path}?${qs}` : path)
+    router.push(qs ? `${target}?${qs}` : target)
   }
   return (
     <div className="seg" role="group" aria-label="Store">
