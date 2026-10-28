@@ -15,6 +15,11 @@ import { vendorMatchKey } from "@/lib/vendor-normalize"
  * the number is too thin to identify a bill (empty, under 4 characters, or
  * no digits at all, like an extractor's "N/A"): better to store a duplicate
  * than to drop a real bill.
+ *
+ * Pass `invoiceDate: null` for a bill whose PDF printed no date: the sync
+ * dates those by the email's arrival, which differs between two copies of
+ * the same bill, so the date cannot be part of what makes them the same.
+ * `loadInvoiceIdentities` stores both the dated and the dateless key.
  */
 export function invoiceIdentityKey(inv: {
   vendorName: string
@@ -58,6 +63,8 @@ export async function loadInvoiceIdentities(
   for (const r of rows) {
     const key = invoiceIdentityKey(r)
     if (key) out.add(key)
+    const dateless = invoiceIdentityKey({ ...r, invoiceDate: null })
+    if (dateless) out.add(dateless)
   }
   return out
 }

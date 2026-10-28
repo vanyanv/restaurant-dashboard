@@ -270,6 +270,9 @@ export interface ReviewReason {
 const fmt = (n: number) =>
   `$${Math.abs(n).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 
+/** `fmt` with the sign kept, for a line whose credit is the point. */
+const fmtSigned = (n: number) => (n < 0 ? `−${fmt(n)}` : fmt(n))
+
 export function composeReviewReasons(input: {
   dateSuspect: boolean
   mathMismatches: LineMathMismatch[]
@@ -317,8 +320,8 @@ export function composeReviewReasons(input: {
     reasons.push({
       kind: "line_math",
       message:
-        `Line ${m.lineNumber} "${m.productName}": ${m.quantity} ${m.unit ?? "×"} at ${fmt(m.unitPrice)} ` +
-        `computes to ${fmt(m.computed)}, but the invoice prints ${fmt(m.extendedPrice)}` +
+        `Line ${m.lineNumber} "${m.productName}": ${m.quantity} ${m.unit ?? "×"} at ${fmtSigned(m.unitPrice)} ` +
+        `computes to ${fmtSigned(m.computed)}, but the invoice prints ${fmtSigned(m.extendedPrice)}` +
         (m.impliedQuantity != null
           ? ` — quantity was probably misread (implied ≈ ${m.impliedQuantity.toFixed(2)}).`
           : " — quantity or price was misread."),
@@ -820,6 +823,36 @@ export function dropDuplicatedLines(extraction: InvoiceExtraction): {
   return dropped.length > 0
     ? { extraction: { ...extraction, lineItems: lines }, dropped }
     : { extraction, dropped }
+}
+
+/**
+ * A credit line read with a positive quantity under a negative amount.
+ *
+ * Vendors print the minus on the amount only ("1 CS  118.71  118.71-"), and the
+ * model carries it to `extendedPrice` but not to `quantity`. The line then
+ * fails its own arithmetic and the credit sits in review: Vitco credit
+ * 323469-0A on 2026-10-28, and an IFS return of 11 cases fixed by hand the same
+ * day. When the size of the amount matches quantity × price, the quantity takes
+ * the amount's sign. Anything that does not match is left for the math check.
+ */
+export function fixCreditLineSigns(extraction: InvoiceExtraction): {
+  extraction: InvoiceExtraction
+  flipped: number[]
+} {
+  const flipped: number[] = []
+  const lineItems = extraction.lineItems.map((li) => {
+    const qty = Number(li.quantity)
+    const unitPrice = Number(li.unitPrice)
+    const ext = Number(li.extendedPrice)
+    if (!(qty > 0 && unitPrice > 0 && ext < 0)) return li
+    const drift = Math.abs(qty * unitPrice + ext) / Math.abs(ext)
+    if (drift > LINE_MATH_TOLERANCE) return li
+    flipped.push(li.lineNumber)
+    return { ...li, quantity: -qty }
+  })
+  return flipped.length > 0
+    ? { extraction: { ...extraction, lineItems }, flipped }
+    : { extraction, flipped }
 }
 
 /**

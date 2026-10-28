@@ -3,7 +3,7 @@
 
 import { describe, expect, it } from "vitest"
 import type { InvoiceExtraction } from "@/types/invoice"
-import { describeMoneyProblems, dropDuplicatedLines, moneyProblemScore } from "@/lib/invoice-sanity"
+import { describeMoneyProblems, dropDuplicatedLines, findLineMathMismatches, fixCreditLineSigns, moneyProblemScore } from "@/lib/invoice-sanity"
 
 const line = (lineNumber: number, productName: string, extendedPrice: number, quantity = 1) => ({
   lineNumber,
@@ -81,5 +81,49 @@ describe("dropDuplicatedLines · never pairs different products", () => {
     const noSku = (n: number) => ({ ...line(n, "BEEF", 50), sku: null })
     const e = extraction({ subtotal: 50, totalAmount: 50, lineItems: [noSku(1), noSku(2)] })
     expect(dropDuplicatedLines(e).dropped).toEqual([])
+  })
+})
+
+describe("fixCreditLineSigns", () => {
+  const base = {
+    vendorName: "Vitco Foodservice",
+    invoiceNumber: "323469-0A",
+    invoiceDate: null,
+    subtotal: -118.71,
+    taxAmount: 0,
+    totalAmount: -118.71,
+  }
+  const line = (over: Record<string, unknown>) => ({
+    lineNumber: 1,
+    sku: "15725",
+    productName: "Chris & Eddy's House Sauce",
+    quantity: 1,
+    unit: "CS",
+    unitPrice: 118.71,
+    extendedPrice: -118.71,
+    ...over,
+  })
+
+  it("gives a credit line's quantity the amount's minus sign", () => {
+    const ex = { ...base, lineItems: [line({})] } as unknown as InvoiceExtraction
+    const { extraction, flipped } = fixCreditLineSigns(ex)
+    expect(flipped).toEqual([1])
+    expect(extraction.lineItems[0].quantity).toBe(-1)
+    expect(findLineMathMismatches(extraction.lineItems)).toEqual([])
+  })
+
+  it("leaves a line whose size does not match quantity × price", () => {
+    const ex = { ...base, lineItems: [line({ quantity: 3 })] } as unknown as InvoiceExtraction
+    const { extraction, flipped } = fixCreditLineSigns(ex)
+    expect(flipped).toEqual([])
+    expect(extraction).toBe(ex)
+  })
+
+  it("leaves ordinary and already-negative lines alone", () => {
+    const ex = {
+      ...base,
+      lineItems: [line({ extendedPrice: 118.71 }), line({ lineNumber: 2, quantity: -1 })],
+    } as unknown as InvoiceExtraction
+    expect(fixCreditLineSigns(ex).flipped).toEqual([])
   })
 })

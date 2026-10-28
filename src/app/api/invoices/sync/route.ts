@@ -622,6 +622,12 @@ async function runSync(
     )
     const dateSuspect =
       Boolean(inv.extraction.invoiceDate) && invoiceDate === null
+    // No date printed at all (Vitco's order-credit PDFs have none): the email
+    // arrived the day it was issued, and an undated row drops out of every
+    // date-filtered total. A date that was read and rejected stays empty —
+    // that one goes to review as suspect.
+    const datedInvoice =
+      invoiceDate ?? (!inv.extraction.invoiceDate ? emailReceivedAt : null)
 
     const mathMismatches = findLineMathMismatches(inv.extraction.lineItems)
     for (const m of mathMismatches) {
@@ -707,7 +713,10 @@ async function runSync(
       attachmentName: inv.attachmentName,
       vendorName: normalizeVendorName(inv.extraction.vendorName),
       invoiceNumber: inv.extraction.invoiceNumber,
-      invoiceDate,
+      invoiceDate: datedInvoice,
+      // Dated from the email, not the PDF: two copies of this bill would
+      // carry different dates, so dedup must not compare them.
+      dateFromEmail: datedInvoice !== invoiceDate,
       dueDate: inv.extraction.dueDate ? new Date(inv.extraction.dueDate) : null,
       deliveryAddress: inv.extraction.deliveryAddress,
       subtotal: inv.extraction.subtotal,
@@ -748,7 +757,9 @@ async function runSync(
   )
   for (let i = 0; i < invoicesToCreate.length; i++) {
     const inv = invoicesToCreate[i]
-    const identity = invoiceIdentityKey(inv)
+    const identity = invoiceIdentityKey(
+      inv.dateFromEmail ? { ...inv, invoiceDate: null } : inv
+    )
     if (identity && seenIdentities.has(identity)) {
       logger.warn(
         `[invoice-sync] skipping ${inv.vendorName} #${inv.invoiceNumber} ` +
@@ -816,6 +827,8 @@ async function runSync(
       })
       createdInvoiceIds.push(created.id)
       if (identity) seenIdentities.add(identity)
+      const dateless = invoiceIdentityKey({ ...inv, invoiceDate: null })
+      if (dateless) seenIdentities.add(dateless)
       counts.created++
     } catch (err) {
       // Unique constraint violation (P2002) = already processed (race condition safety)
