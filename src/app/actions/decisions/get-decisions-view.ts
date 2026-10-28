@@ -7,6 +7,10 @@ import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { Prisma } from "@/generated/prisma/client"
 import { weekdayTargets, type SplhInput } from "@/lib/splh"
+import { foldSplhHistory, type SplhHistoryRow } from "@/lib/decisions/splh-history"
+import { getAllStoresPnL } from "@/app/actions/store/pnl-actions"
+import { TOTAL_SALES_CODE } from "@/lib/pnl"
+import { rowValues } from "@/lib/counter/statement"
 import { getCachedSession, resolveStoreContext } from "@/app/actions/forecasts/_shared"
 import { getRevenueForecast } from "@/app/actions/forecasts/revenue-forecast-actions"
 import { getOpenAnomalies } from "@/app/actions/forecasts/anomaly-actions"
@@ -378,55 +382,13 @@ export async function getDecisionsView(input: {
       },
       _sum: { orderCount: true },
     }).catch(() => []),
-    // Labor hours joined to net sales, for the per-weekday productivity median.
-    // Same sources and grain as getSplhSeries: HarriPositionDaily.actualSeconds
-    // and OtterHourlySummary.netSales, both LA-calendar daily.
-    prisma.$queryRaw<
-      Array<{ date: Date; hours: number | null; net: number | null; unsynced: bigint }>
-    >(
-      Prisma.sql`
-        -- One row per DAY, account-wide. Two levels, and the inner one is not
-        -- optional: "HarriPositionDaily" is unique on (storeId, date,
-        -- categoryCode, positionCode, payType), so a store-day is MANY rows —
-        -- one per position on the roster. Joining the single daily sales
-        -- figure onto that and summing it counted the day's net sales once
-        -- per position, ten or twenty times over, while SUM(actualSeconds)
-        -- stayed right. Every weekday SPLH median came out that multiple too
-        -- high, which is what targetSplh is, which made computeLaborLane
-        -- ask for a fraction of the hours it should and call every day heavy.
-        --
-        -- So labour is folded to one row per store-day FIRST, and only then
-        -- does the sales figure join it. Grouping by s.net instead — which is
-        -- what splh-actions.ts does, correctly, because it wants per-store
-        -- rows — would emit one row per store here and make the medians
-        -- medians of store-days.
-        SELECT d."date",
-               SUM(d.hours)                                              AS hours,
-               SUM(s.net)                                                AS net,
-               COUNT(DISTINCT d."storeId") FILTER (WHERE s.net IS NULL)  AS unsynced
-          FROM (
-            SELECT h."storeId",
-                   h."date",
-                   SUM(h."actualSeconds") / 3600.0 AS hours
-              FROM "HarriPositionDaily" h
-             WHERE h."storeId" IN (${Prisma.join(storeIds)})
-               AND h."date" >= ${addDays(today, -120)}
-               -- Today is always partial; one low sample would drag a weekday
-               -- median that only has ~17 observations behind it.
-               AND h."date" < ${today}
-             GROUP BY h."storeId", h."date"
-          ) d
-          LEFT JOIN (
-            SELECT "storeId", "date", SUM("netSales") AS net
-              FROM "OtterHourlySummary"
-             WHERE "storeId" IN (${Prisma.join(storeIds)})
-               AND "date" >= ${addDays(today, -120)}
-               AND "date" < ${today}
-             GROUP BY "storeId", "date"
-          ) s ON s."storeId" = d."storeId" AND s."date" = d."date"
-         GROUP BY d."date"
-      `,
-    ).catch(() => []),
+    // Labor hours against net sales, for the per-weekday productivity median.
+    // Hours: HarriPositionDaily.actualSeconds per store-day. Sales: the
+    // statement's Net Sales — the same figure `getSplhSeries`, the P&L and the
+    // Labor page use (it was OtterHourlySummary.netSales).
+    loadSplhHistoryRows(accountId, storeIds, addDays(today, -120), addDays(today, -1)).catch(
+      () => [] as SplhHistoryRow[],
+    ),
     // The forecast's own explanation. Read here rather than through
     // getRevenueForecast so that shared action keeps its shape; merging across
     // stores is sound because SHAP contributions are additive.
@@ -526,7 +488,7 @@ export async function getDecisionsView(input: {
       (r) => Number(r.hours ?? 0) > 0 && Number(r.net ?? 0) > 0 && Number(r.unsynced) === 0,
     )
     .map((r) => ({
-      date: ymd(r.date),
+      date: r.day,
       netSales: Number(r.net ?? 0),
       laborHours: Number(r.hours ?? 0),
       laborCost: 0,
@@ -777,6 +739,44 @@ export async function getDecisionsView(input: {
 /** How many closed days the strip's sparkline draws. Fourteen is two weeks of
  *  weekday pairs, so the line shows a trend rather than a weekend. */
 const SPLH_SPARK_DAYS = 14
+
+/**
+ * One row per day, account-wide: hours worked and the statement's Net Sales
+ * for the stores that worked it. See `foldSplhHistory` for the rules.
+ */
+async function loadSplhHistoryRows(
+  accountId: string,
+  storeIds: string[],
+  from: Date,
+  to: Date,
+): Promise<SplhHistoryRow[]> {
+  const [hourRows, pnl] = await Promise.all([
+    prisma.harriPositionDaily.groupBy({
+      by: ["storeId", "date"],
+      where: { storeId: { in: storeIds }, store: { accountId }, date: { gte: from, lte: to } },
+      _sum: { actualSeconds: true },
+    }),
+    getAllStoresPnL({ startDate: from, endDate: to, granularity: "daily" }),
+  ])
+  const net = new Map<string, number>()
+  if (!("error" in pnl)) {
+    for (const st of pnl.perStore) {
+      const values = rowValues(st.rows, TOTAL_SALES_CODE) ?? []
+      pnl.periods.forEach((p, i) => {
+        const v = values[i]
+        if (typeof v === "number" && Number.isFinite(v) && v > 0) net.set(`${st.storeId}|${ymd(p.startDate)}`, v)
+      })
+    }
+  }
+  return foldSplhHistory({
+    hours: hourRows.map((r) => ({
+      storeId: r.storeId,
+      day: ymd(r.date),
+      hours: (r._sum.actualSeconds ?? 0) / 3600,
+    })),
+    net,
+  })
+}
 
 function addDays(d: Date, n: number): Date {
   const out = new Date(d)

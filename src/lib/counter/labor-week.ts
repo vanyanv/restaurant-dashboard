@@ -4,6 +4,7 @@ import { getScopedStores } from "@/lib/account-stores"
 import { cached, stableKey } from "@/lib/cache/cached"
 import { otterRangeTags, rangeTtl } from "@/lib/cache/range"
 import { loadLaborCost } from "@/lib/counter/labor-cost"
+import { missingLaborByDay, missingStoresByDay } from "@/lib/counter/labor-cost-core"
 import {
   dayCount,
   isoDay,
@@ -74,11 +75,20 @@ export interface LaborDay {
   scheduledHours: number | null
   cost: number
   /**
-   * No labor reading for this day in either Harri table (`loadLaborCost`'s
-   * MISSING). `cost` is 0 then, but the day was not free — it was not synced.
+   * Store-days that SOLD on this day and have no labor reading in either Harri
+   * table (`loadLaborCost`'s MISSING). `cost` leaves them out — they were not
+   * free, they were not synced — and so do `laborPct` and `splh`.
    */
+  missingStoreDays: number
+  /** `missingStoreDays > 0`. */
   costMissing: boolean
-  /** Total Sales over hours worked. `null` with no hours or no sales — never `0`. */
+  /**
+   * The day's Total Sales less the sales on its missing store-days: what
+   * `laborPct` and `splh` divide by, so neither has a numerator short of a
+   * store the denominator still counts. `null` with no sales figure.
+   */
+  ratedSales: number | null
+  /** Rated sales over hours worked. `null` with no hours or no sales — never `0`. */
   splh: number | null
   /** This day's labour over this day's Total Sales, 0..100. `null` with no sales. */
   laborPct: number | null
@@ -108,8 +118,8 @@ export interface LaborWeek {
   actualHours: number
   scheduledHours: number | null
   cost: number
-  /** Days that sold something but have no labor reading — the week's labor total is short by them. */
-  missingCostDays: number
+  /** Store-days that sold and have no labor reading — the week's labor total is short by them. */
+  missingStoreDays: number
   /** `cost / actualHours`. The rate the leak ledger costs its hours at. */
   blendedRate: number | null
   splh: number | null
@@ -142,6 +152,8 @@ export interface LaborTrendWeek {
   laborPct: number | null
   /** Over the same TOTAL SALES as `laborPct`. `null` with no sales or no hours. */
   splh: number | null
+  /** Store-days that sold with no labor reading inside the week. */
+  missingStoreDays: number
   /** Fewer days than a full week fell inside the data (L-R11). */
   isPartial: boolean
 }
@@ -220,19 +232,28 @@ export function laborDay(input: {
   /** `null` when `HarriShift` published no shift at all for this day. */
   scheduledMinutes: number | null
   cost: number
-  /** `loadLaborCost` found no reading for the day. */
-  costMissing?: boolean
-  /** Off the statement's Total Sales row — the denominator of BOTH `laborPct` and `splh`. */
+  /** Store-days that sold with no labor reading (see `LaborDay.missingStoreDays`). */
+  missingStoreDays?: number
+  /** Net Sales on those store-days; left out of the ratios' denominator. */
+  missingSales?: number
+  /** Off the statement's Total Sales row — what the page prints as the day's sales. */
   totalSales: number | null
 }): LaborDay {
   const actualHours = input.actualSeconds / 3600
   const scheduledHours =
     input.scheduledMinutes === null ? null : input.scheduledMinutes / 60
+  const missingStoreDays = input.missingStoreDays ?? 0
+  const ratedSales =
+    input.totalSales === null || !Number.isFinite(input.totalSales)
+      ? input.totalSales
+      : Math.max(0, input.totalSales - (input.missingSales ?? 0))
   const splh =
-    input.totalSales === null || !Number.isFinite(input.totalSales) || actualHours === 0
+    ratedSales === null || !Number.isFinite(ratedSales) || actualHours === 0
       ? null
-      : input.totalSales / actualHours
-  const laborPct = pctOfSales(input.cost, input.totalSales)
+      : ratedSales / actualHours
+  // A day whose labor is missing has a rated denominator of 0 (single store),
+  // so its percentage is "no reading", never 0.0%.
+  const laborPct = pctOfSales(input.cost, ratedSales)
 
   return {
     key: input.key,
@@ -240,7 +261,9 @@ export function laborDay(input: {
     actualHours,
     scheduledHours,
     cost: input.cost,
-    costMissing: input.costMissing ?? false,
+    missingStoreDays,
+    costMissing: missingStoreDays > 0,
+    ratedSales,
     splh,
     laborPct,
     totalSales: input.totalSales,
@@ -281,7 +304,7 @@ export function laborWeek(days: LaborDay[], overtimeCost: number): LaborWeek {
 
   const splhKnown = days.filter((d) => d.splh !== null)
   const splhHours = sum(splhKnown.map((d) => d.actualHours))
-  const splhSales = sum(splhKnown.map((d) => d.totalSales as number))
+  const splhSales = sum(splhKnown.map((d) => d.ratedSales as number))
   const splh = splhHours > 0 ? splhSales / splhHours : null
 
   /*
@@ -298,20 +321,20 @@ export function laborWeek(days: LaborDay[], overtimeCost: number): LaborWeek {
   // making the week's denominator NaN — one bad row must not take the other
   // six with it, which is the failure this whole block exists to prevent.
   const salesKnown = days.filter(
-    (d) => d.totalSales !== null && Number.isFinite(d.totalSales),
+    (d) => d.ratedSales !== null && Number.isFinite(d.ratedSales),
   )
   const totalSales =
-    salesKnown.length === 0 ? null : sum(salesKnown.map((d) => d.totalSales as number))
+    salesKnown.length === 0 ? null : sum(salesKnown.map((d) => d.ratedSales as number))
   const laborPct = pctOfSales(cost, totalSales)
 
-  const missingCostDays = days.filter((d) => d.costMissing && (d.totalSales ?? 0) > 0).length
+  const missingStoreDays = sum(days.map((d) => d.missingStoreDays))
 
   return {
     days,
     actualHours,
     scheduledHours,
     cost,
-    missingCostDays,
+    missingStoreDays,
     blendedRate,
     splh,
     laborPct,
@@ -351,6 +374,11 @@ export function laborRole(
 interface TrendDayInput {
   cost: number
   hours: number
+  /** The day's Total Sales; `null` when the statement has no figure for it. */
+  sales: number | null
+  /** Store-days that sold with no labor reading, and the sales on them. */
+  missingStoreDays: number
+  missingSales: number
 }
 
 /**
@@ -374,18 +402,31 @@ export function laborTrendWeek(
   weekStart: Date,
   isPartial: boolean,
   days: TrendDayInput[],
-  totalSales: number | null,
 ): LaborTrendWeek {
   const cost = sum(days.map((d) => d.cost))
   const hours = sum(days.map((d) => d.hours))
+
+  // Both ratios divide RATED sales — the day's sales less the store-days with
+  // no labor reading — so a missing day cannot dilute them. SPLH pairs a day's
+  // sales with that day's hours, as `laborWeek` does: sales on a day with no
+  // hours are not a rate.
+  const rated = days.map((d) =>
+    d.sales === null || !Number.isFinite(d.sales) ? null : Math.max(0, d.sales - d.missingSales),
+  )
+  const known = rated.filter((r): r is number => r !== null)
+  const ratedTotal = known.length === 0 ? null : sum(known)
+  const paired = days.filter((d, i) => rated[i] !== null && d.hours > 0)
+  const pairedHours = sum(paired.map((d) => d.hours))
+  const pairedSales = sum(paired.map((d) => rated[days.indexOf(d)] as number))
 
   return {
     key: isoDay(weekStart),
     label: monthDay(weekStart),
     cost,
     hours,
-    laborPct: pctOfSales(cost, totalSales),
-    splh: totalSales !== null && Number.isFinite(totalSales) && hours > 0 ? totalSales / hours : null,
+    laborPct: pctOfSales(cost, ratedTotal),
+    splh: pairedHours > 0 ? pairedSales / pairedHours : null,
+    missingStoreDays: sum(days.map((d) => d.missingStoreDays)),
     isPartial,
   }
 }
@@ -406,8 +447,10 @@ export async function loadLaborWeek(input: {
   accountId: string
   /** Per-day Total Sales, keyed `YYYY-MM-DD`, off the statement the page already loaded. */
   salesByDay: Map<string, number>
+  /** The same Net Sales per store and day, off the same statement — see `salesByStoreDayOf`. */
+  salesByStoreDay: Map<string, Map<string, number>>
 }): Promise<{ days: LaborDay[]; roles: LaborRole[]; overtimeCost: number }> {
-  const { range, storeId, accountId, salesByDay } = input
+  const { range, storeId, accountId, salesByDay, salesByStoreDay } = input
   const { startDate, endDate } = toQueryBounds(range)
 
   const stores = await getScopedStores(accountId, storeId ?? null)
@@ -431,6 +474,8 @@ export async function loadLaborWeek(input: {
     () => foldLaborWeekRows({ accountId, storeIds, startDate, endDate }),
   )
 
+  const missing = missingLaborByDay(fold.missingByDay, salesByStoreDay)
+
   const days: LaborDay[] = []
   const n = dayCount(range)
   for (let i = 0; i < n; i++) {
@@ -444,7 +489,8 @@ export async function loadLaborWeek(input: {
         actualSeconds: hb?.seconds ?? 0,
         scheduledMinutes: key in fold.scheduledByDate ? fold.scheduledByDate[key] : null,
         cost: fold.costByDate[key] ?? 0,
-        costMissing: !(key in fold.costByDate),
+        missingStoreDays: missing[key]?.storeDays ?? 0,
+        missingSales: missing[key]?.sales ?? 0,
         totalSales: salesByDay.has(key) ? (salesByDay.get(key) as number) : null,
       }),
     )
@@ -469,6 +515,8 @@ async function foldLaborWeekRows(input: {
   hoursByDate: Record<string, { seconds: number }>
   /** `loadLaborCost`'s decided days, summed over stores. A day not in here is missing. */
   costByDate: Record<string, number>
+  /** Per day, the stores with no labor reading (whether or not they sold). */
+  missingByDay: Record<string, string[]>
   scheduledByDate: Record<string, number>
   roles: Array<{ position: string; payType: "HOURLY" | "SALARIED"; hours: number; cost: number }>
   overtimeCost: number
@@ -544,7 +592,7 @@ async function foldLaborWeekRows(input: {
     scheduledByDate[key] = (scheduledByDate[key] ?? 0) + s.minutes
   }
 
-  return { hoursByDate, costByDate, scheduledByDate, roles: [...roleAgg.values()], overtimeCost }
+  return { hoursByDate, costByDate, missingByDay: missingStoresByDay(laborCost), scheduledByDate, roles: [...roleAgg.values()], overtimeCost }
 }
 
 /**
@@ -572,10 +620,12 @@ export async function loadLaborTrend(input: {
   /** How many weeks back from the range's end. Twelve on both pages. */
   weeks: number
   endingOn: Date
-  /** This week's Total Sales, keyed `isoDay(week.start)`. See above. */
-  weeklyTotalSales: Map<string, number>
+  /** Per-day Total Sales over the trend's span, keyed `YYYY-MM-DD`. See above. */
+  salesByDay: Map<string, number>
+  /** The same per store and day — see `salesByStoreDayOf`. */
+  salesByStoreDay: Map<string, Map<string, number>>
 }): Promise<LaborTrendWeek[]> {
-  const { storeId, accountId, weeks, endingOn, weeklyTotalSales } = input
+  const { storeId, accountId, weeks, endingOn, salesByDay, salesByStoreDay } = input
 
   const stores = await getScopedStores(accountId, storeId ?? null)
   if (stores.length === 0) return []
@@ -590,12 +640,14 @@ export async function loadLaborTrend(input: {
 
   // Same rule as `loadLaborWeek`: the fold is cached, `weeklyTotalSales` is
   // the statement's and stays outside.
-  const { costByDate, hoursByDate } = await cached(
-    `counter:labortrend2:${stableKey({ a: accountId, ids: [...storeIds].sort(), from: startDate, to: endDate })}`,
+  const { costByDate, hoursByDate, missingByDay } = await cached(
+    `counter:labortrend3:${stableKey({ a: accountId, ids: [...storeIds].sort(), from: startDate, to: endDate })}`,
     rangeTtl(endDate),
     ["harri", ...otterRangeTags(startDate, endDate)],
     () => foldLaborTrendRows({ accountId, storeIds, startDate, endDate }),
   )
+
+  const missing = missingLaborByDay(missingByDay, salesByStoreDay)
 
   return windows.map((w) => {
     const days: TrendDayInput[] = []
@@ -605,11 +657,12 @@ export async function loadLaborTrend(input: {
       days.push({
         cost: costByDate[key] ?? 0,
         hours: hoursByDate[key] ?? 0,
+        sales: salesByDay.has(key) ? (salesByDay.get(key) as number) : null,
+        missingStoreDays: missing[key]?.storeDays ?? 0,
+        missingSales: missing[key]?.sales ?? 0,
       })
     }
-    const weekKey = isoDay(w.start)
-    const totalSales = weeklyTotalSales.has(weekKey) ? (weeklyTotalSales.get(weekKey) as number) : null
-    return laborTrendWeek(w.start, w.partial, days, totalSales)
+    return laborTrendWeek(w.start, w.partial, days)
   })
 }
 
@@ -623,6 +676,7 @@ async function foldLaborTrendRows(input: {
   /** `loadLaborCost`'s decided days, summed over stores. A day not in here is missing. */
   costByDate: Record<string, number>
   hoursByDate: Record<string, number>
+  missingByDay: Record<string, string[]>
 }> {
   const { accountId, storeIds, startDate, endDate } = input
 
@@ -646,5 +700,5 @@ async function foldLaborTrendRows(input: {
     hoursByDate[key] = (hoursByDate[key] ?? 0) + (r.actualSeconds ?? 0) / 3600
   }
 
-  return { costByDate, hoursByDate }
+  return { costByDate, hoursByDate, missingByDay: missingStoresByDay(laborCost) }
 }

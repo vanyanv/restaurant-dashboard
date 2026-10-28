@@ -19,6 +19,12 @@
  * 3. otherwise the day is MISSING — not $0. A missing day is a gap in the
  *    sync, and a $0 would read as a day nobody was paid.
  *
+ * Neither table's 0 counts as a reading. The position sum must be > 0 too: a
+ * store that was paid nobody on an open day is indistinguishable, in this data,
+ * from a sync that wrote placeholder rows (SALARIED rows carry $0 and 0
+ * seconds), so a TRUE zero-labor day reads as missing. That errs toward saying
+ * "labor missing" rather than printing a $0 week.
+ *
  * A daily `actualCost` of 0 does not count as a reading: it is what a store
  * with no payroll yet looks like, and it is what the sync writes for days it
  * has not filled in. The position rows are asked before it is believed.
@@ -47,7 +53,7 @@ export function combineLaborDay(
   if (typeof daily === "number" && Number.isFinite(daily) && daily > 0) {
     return { amount: daily, source: "daily" }
   }
-  if (typeof positions === "number" && Number.isFinite(positions)) {
+  if (typeof positions === "number" && Number.isFinite(positions) && positions > 0) {
     return { amount: positions, source: "positions" }
   }
   return null
@@ -188,4 +194,40 @@ export function laborByPeriods(
     )
     return { actualUsd: w.amount, coveredDays: w.coveredDays, missingDays: w.missingDays }
   })
+}
+
+/**
+ * Per day, the stores with no labor reading. Which of them SOLD that day is
+ * the caller's to say (sales come from the statement, not from Harri):
+ * `missingLaborByDay` below joins the two.
+ */
+export function missingStoresByDay(cost: LaborCost): Record<string, string[]> {
+  const out: Record<string, string[]> = {}
+  for (const store of Object.values(cost.stores)) {
+    for (const day of store.missingDays) (out[day] ??= []).push(store.storeId)
+  }
+  return out
+}
+
+/**
+ * The store-days that sold and have no labor reading, per day: how many, and
+ * the Net Sales on them. A day nobody sold on is not a gap in labor, so it is
+ * not counted; and the sales on a counted store-day are what a labor % or
+ * SPLH must leave out of its denominator, because no labor is on its other side.
+ */
+export function missingLaborByDay(
+  missingStores: Record<string, string[]>,
+  salesByStoreDay: Map<string, Map<string, number>>,
+): Record<string, { storeDays: number; sales: number }> {
+  const out: Record<string, { storeDays: number; sales: number }> = {}
+  for (const [day, storeIds] of Object.entries(missingStores)) {
+    for (const storeId of storeIds) {
+      const sales = salesByStoreDay.get(storeId)?.get(day) ?? 0
+      if (!(sales > 0)) continue
+      const cur = (out[day] ??= { storeDays: 0, sales: 0 })
+      cur.storeDays += 1
+      cur.sales += sales
+    }
+  }
+  return out
 }

@@ -46,8 +46,8 @@ export type LaborActualsResult = {
     laborPct: number | null
     /** Total Sales (the P&L's Net Sales) per hour worked. */
     salesPerLaborHour: number | null
-    /** Days that sold but have no labour reading in Harri; laborCost is short by them. */
-    missingLaborDays: number
+    /** Store-days that sold but have no labour reading in Harri; laborCost is short by them. */
+    missingLaborStoreDays: number
     overtimeCost: number
     avgHourlyRate: number | null
   }
@@ -55,10 +55,15 @@ export type LaborActualsResult = {
     date: string
     actualHours: number
     scheduledHours: number | null
-    laborCost: number
+    /** Null when Harri has no labour reading for the day (see `laborMissing`). */
+    laborCost: number | null
+    /** True when a store that sold that day has no labour reading. */
+    laborMissing: boolean
     laborPct: number | null
     salesPerLaborHour: number | null
   }>
+  /** How to read `roles` against `totals.laborCost`. */
+  note: string
   roles: Array<{ position: string; payType: string; hours: number; cost: number; sharePct: number }>
   /** Clock-in/out drift, costed at the range's average hourly rate. Null with no hours worked. */
   timekeeping: {
@@ -107,7 +112,7 @@ export const getLaborActuals: ChatTool<typeof params, LaborActualsResult> = {
         laborCost: round2(week.cost),
         laborPct: orNull(week.laborPct, round1),
         salesPerLaborHour: orNull(week.splh, round2),
-        missingLaborDays: week.missingCostDays,
+        missingLaborStoreDays: week.missingStoreDays,
         overtimeCost: round2(week.overtimeCost),
         avgHourlyRate: orNull(week.blendedRate, round2),
       },
@@ -115,10 +120,18 @@ export const getLaborActuals: ChatTool<typeof params, LaborActualsResult> = {
         date: d.key,
         actualHours: round1(d.actualHours),
         scheduledHours: orNull(d.scheduledHours, round1),
-        laborCost: round2(d.cost),
+        // A day with nothing read is missing, not $0. When only some stores
+        // are missing the others' dollars stay and `laborMissing` says it.
+        laborCost: d.costMissing && d.cost === 0 ? null : round2(d.cost),
+        laborMissing: d.costMissing,
         laborPct: orNull(d.laborPct, round1),
         salesPerLaborHour: orNull(d.splh, round2),
       })),
+      note:
+        "laborCost uses Harri's daily total where it has one and the sum of position rows otherwise; " +
+        "roles[].cost always comes from position rows, so roles may not sum to laborCost on days the " +
+        "daily total was used. Days with laborMissing true have no labour reading and are left out of " +
+        "laborPct and salesPerLaborHour.",
       roles: f.roles.map((r) => ({
         position: r.position,
         payType: r.payType,

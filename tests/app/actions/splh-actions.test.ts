@@ -11,13 +11,18 @@ import { describe, it, expect, vi, beforeEach } from "vitest"
 vi.mock("next-auth", () => ({ getServerSession: vi.fn() }))
 vi.mock("@/lib/auth", () => ({ authOptions: {}, hasOwnerAccess: () => true }))
 vi.mock("@/lib/prisma", () => ({
-  prisma: { $queryRaw: vi.fn(), store: { findMany: vi.fn() } },
+  prisma: { harriPositionDaily: { groupBy: vi.fn() }, store: { findMany: vi.fn() } },
 }))
+vi.mock("@/app/actions/store/pnl-actions", () => ({ getAllStoresPnL: vi.fn() }))
+vi.mock("@/lib/counter/labor-cost", () => ({ loadLaborCost: vi.fn() }))
 
 import { getServerSession } from "next-auth"
 import { prisma } from "@/lib/prisma"
 import { toQueryBounds } from "@/lib/counter/date-range"
 import { getSplhSeries } from "@/app/actions/splh-actions"
+import { getAllStoresPnL } from "@/app/actions/store/pnl-actions"
+import { loadLaborCost } from "@/lib/counter/labor-cost"
+import { TOTAL_SALES_CODE } from "@/lib/pnl"
 
 /** TARGET_HISTORY_DAYS in splh-actions — the medians' lookback, not a bar. */
 const TARGET_HISTORY_DAYS = 56
@@ -49,13 +54,50 @@ function daysBetween(from: string, to: string) {
   return out
 }
 
-/** The Date parameters the query was actually bound with, in order. */
-function boundDates(): Date[] {
-  const call = vi.mocked(prisma.$queryRaw).mock.calls[0]?.[0] as
-    | { values: unknown[] }
+type Row = Omit<ReturnType<typeof row>, "net"> & { net: number | null }
+
+/**
+ * Feed the three sources `getSplhSeries` joins from the row-shaped fixtures:
+ * hours off HarriPositionDaily, labor dollars off `loadLaborCost`, and Net
+ * Sales off the statement. A `net: null` row is a day the statement does not
+ * price at all.
+ */
+function feed(rows: Row[]) {
+  vi.mocked(prisma.harriPositionDaily.groupBy).mockResolvedValue(
+    rows.map((r) => ({
+      storeId: r.storeId,
+      date: r.date,
+      _sum: { actualSeconds: r.hours * 3600 },
+    })) as never,
+  )
+  const byDay: Record<string, { amount: number; source: "daily" }> = {}
+  for (const r of rows) {
+    byDay[r.date.toISOString().slice(0, 10)] = { amount: r.cost, source: "daily" }
+  }
+  vi.mocked(loadLaborCost).mockResolvedValue({
+    stores: { s1: { storeId: "s1", byDay, total: 0, days: [], missingDays: [] } },
+    total: 0,
+    missingStoreDays: 0,
+  } as never)
+  const priced = rows.filter((r) => r.net !== null)
+  vi.mocked(getAllStoresPnL).mockResolvedValue({
+    periods: priced.map((r) => ({ startDate: r.date })),
+    perStore: [
+      {
+        storeId: "s1",
+        rows: [{ code: TOTAL_SALES_CODE, label: "Net Sales", values: priced.map((r) => r.net) }],
+      },
+    ],
+  } as never)
+}
+
+/** The where-clause the hours read was made with. */
+function hoursWhere(): { date: { gte: Date; lte: Date }; store: unknown } {
+  const call = vi.mocked(prisma.harriPositionDaily.groupBy).mock.calls[0]?.[0] as
+    | { where: { date: { gte: Date; lte: Date }; store: unknown } }
     | undefined
-  if (!call) throw new Error("$queryRaw was never called")
-  return call.values.filter((v): v is Date => v instanceof Date)
+  if (!call) throw new Error("the hours read never happened")
+  return call.where
 }
 
 beforeEach(() => {
@@ -67,19 +109,22 @@ beforeEach(() => {
 })
 
 describe("getSplhSeries — no range (the behaviour every existing caller has)", () => {
-  it("still binds no upper bound, so the window runs to the newest row", async () => {
-    vi.mocked(prisma.$queryRaw).mockResolvedValue(
-      daysBetween("2026-06-01", "2026-08-24") as never,
-    )
+  it("runs the window to today and reads the same bounds from every source", async () => {
+    feed(daysBetween("2026-06-01", "2026-08-24"))
     await getSplhSeries("day")
-    // One `since` per WHERE clause (sales subquery + labor outer), and nothing
-    // else. An upper bound would make it four.
-    expect(boundDates()).toHaveLength(2)
+    const w = hoursWhere()
+    expect(w.date.lte).toBeInstanceOf(Date)
+    expect(w.store).toEqual({ accountId: "acct-A" })
+    const sales = vi.mocked(getAllStoresPnL).mock.calls[0][0]
+    expect(sales.startDate.getTime()).toBe(w.date.gte.getTime())
+    expect(sales.endDate.getTime()).toBe(w.date.lte.getTime())
+    expect(sales.granularity).toBe("daily")
+    expect(vi.mocked(loadLaborCost).mock.calls[0][0].accountId).toBe("acct-A")
   })
 
   it("shows a trailing 14 days", async () => {
-    vi.mocked(prisma.$queryRaw).mockResolvedValue(
-      daysBetween("2026-06-01", "2026-08-24") as never,
+    feed(
+      daysBetween("2026-06-01", "2026-08-24"),
     )
     const [series] = await getSplhSeries("day")
     expect(series.points).toHaveLength(14)
@@ -90,22 +135,19 @@ describe("getSplhSeries — no range (the behaviour every existing caller has)",
 describe("getSplhSeries — with a range", () => {
   it("binds the range's own bounds, the end one inclusive", async () => {
     const bounds = toQueryBounds(range)
-    vi.mocked(prisma.$queryRaw).mockResolvedValue(
-      daysBetween("2026-06-01", "2026-08-24") as never,
+    feed(
+      daysBetween("2026-06-01", "2026-08-24"),
     )
     await getSplhSeries("day", bounds)
 
-    const dates = boundDates()
-    // Two clauses, each `>= since AND <= until`.
-    expect(dates).toHaveLength(4)
-    const [since, until] = dates
+    const { gte: since, lte: until } = hoursWhere().date
 
     // The upper bound is `endDate` VERBATIM — 23:59:59 on the range's last
     // day, not a local midnight. Hand a query the raw `end` and the last day
     // of every range disappears; `toQueryBounds` exists for exactly this and
     // the action must not undo it.
     expect(until.getTime()).toBe(bounds.endDate.getTime())
-    expect(dates[3].getTime()).toBe(bounds.endDate.getTime())
+    expect(vi.mocked(getAllStoresPnL).mock.calls[0][0].endDate.getTime()).toBe(bounds.endDate.getTime())
 
     // The lower bound reaches TARGET_HISTORY_DAYS behind the range's start,
     // because a day is scored against the median of the same weekday before
@@ -113,12 +155,11 @@ describe("getSplhSeries — with a range", () => {
     const expectedSince = new Date(bounds.startDate)
     expectedSince.setUTCDate(expectedSince.getUTCDate() - TARGET_HISTORY_DAYS)
     expect(since.getTime()).toBe(expectedSince.getTime())
-    expect(dates[2].getTime()).toBe(expectedSince.getTime())
   })
 
   it("bars exactly the range's days — not a trailing 14, and not the history", async () => {
-    vi.mocked(prisma.$queryRaw).mockResolvedValue(
-      daysBetween("2026-06-01", "2026-08-24") as never,
+    feed(
+      daysBetween("2026-06-01", "2026-08-24"),
     )
     const [series] = await getSplhSeries("day", toQueryBounds(range))
 
@@ -129,8 +170,8 @@ describe("getSplhSeries — with a range", () => {
   })
 
   it("counts coverage over the range, not over the medians' history", async () => {
-    vi.mocked(prisma.$queryRaw).mockResolvedValue(
-      daysBetween("2026-06-01", "2026-08-24") as never,
+    feed(
+      daysBetween("2026-06-01", "2026-08-24"),
     )
     const [series] = await getSplhSeries("day", toQueryBounds(range))
     // 7 days asked about, all of them with hours and sales.
@@ -140,8 +181,8 @@ describe("getSplhSeries — with a range", () => {
   it("shows only the weeks that start inside the range", async () => {
     // Mon 3 Aug .. Sun 23 Aug is three whole weeks; the range covers the two
     // that start on the 10th and the 17th.
-    vi.mocked(prisma.$queryRaw).mockResolvedValue(
-      daysBetween("2026-06-01", "2026-08-23") as never,
+    feed(
+      daysBetween("2026-06-01", "2026-08-23"),
     )
     const [series] = await getSplhSeries("week", {
       startDate: new Date(2026, 7, 10),
@@ -153,7 +194,7 @@ describe("getSplhSeries — with a range", () => {
 
 /* ── A day the sales side never answered ──────────────────────────────── */
 
-describe("getSplhSeries — the LEFT JOIN's misses", () => {
+describe("getSplhSeries — a day the statement does not price", () => {
   /** `daysBetween`, with one day's sales row absent from the join. */
   function withNullNet(from: string, to: string, missing: string) {
     return daysBetween(from, to).map((r) =>
@@ -162,8 +203,8 @@ describe("getSplhSeries — the LEFT JOIN's misses", () => {
   }
 
   it("does not draw a day whose sales are unknown as a day of no sales", async () => {
-    vi.mocked(prisma.$queryRaw).mockResolvedValue(
-      withNullNet("2026-06-01", "2026-08-24", "2026-08-20") as never,
+    feed(
+      withNullNet("2026-06-01", "2026-08-24", "2026-08-20"),
     )
     const [series] = await getSplhSeries("day", toQueryBounds(range))
 
@@ -186,7 +227,7 @@ describe("getSplhSeries — the LEFT JOIN's misses", () => {
       ...r,
       net: null,
     }))
-    vi.mocked(prisma.$queryRaw).mockResolvedValue(allNull as never)
+    feed(allNull)
 
     const series = await getSplhSeries("day", toQueryBounds(range))
     expect(series).toHaveLength(1)
@@ -201,7 +242,7 @@ describe("getSplhSeries — the LEFT JOIN's misses", () => {
   it("still skips a store the query returned no rows for at all", async () => {
     // No labour, no sales, no outage to report — that store is simply absent
     // from the window, and an empty card would be noise.
-    vi.mocked(prisma.$queryRaw).mockResolvedValue([] as never)
+    feed([])
     expect(await getSplhSeries("day", toQueryBounds(range))).toEqual([])
   })
 
@@ -209,8 +250,8 @@ describe("getSplhSeries — the LEFT JOIN's misses", () => {
     // 2026-08-13 is a Thursday in the medians' history, not a bar. With its
     // NULL read as 0, that 0 joined the Thursday bucket and dragged the target
     // every real Thursday — including the 20th — is scored against.
-    vi.mocked(prisma.$queryRaw).mockResolvedValue(
-      withNullNet("2026-06-01", "2026-08-24", "2026-08-13") as never,
+    feed(
+      withNullNet("2026-06-01", "2026-08-24", "2026-08-13"),
     )
     const [series] = await getSplhSeries("day", toQueryBounds(range))
     const thursday = series.points.find((p) => p.weekday === 4)
@@ -219,9 +260,28 @@ describe("getSplhSeries — the LEFT JOIN's misses", () => {
     expect(thursday?.status).toBe("on")
   })
 
+  it("takes a day's sales from the statement and its dollars from loadLaborCost", async () => {
+    const rows = daysBetween("2026-06-01", "2026-08-24")
+    feed(rows)
+    // The statement's Net Sales is not the old hourly-summary figure.
+    vi.mocked(getAllStoresPnL).mockResolvedValue({
+      periods: rows.map((r) => ({ startDate: r.date })),
+      perStore: [
+        {
+          storeId: "s1",
+          rows: [{ code: TOTAL_SALES_CODE, label: "Net Sales", values: rows.map(() => 3200) }],
+        },
+      ],
+    } as never)
+    const [series] = await getSplhSeries("day", toQueryBounds(range))
+    // 3200 net over 40 hours, every day.
+    expect(series.points.every((p) => p.splh === 80)).toBe(true)
+    expect(series.blendedRate).toBe(20)
+  })
+
   it("withholds the whole week rather than drawing one a day's sales short", async () => {
-    vi.mocked(prisma.$queryRaw).mockResolvedValue(
-      withNullNet("2026-06-01", "2026-08-23", "2026-08-12") as never,
+    feed(
+      withNullNet("2026-06-01", "2026-08-23", "2026-08-12"),
     )
     const [series] = await getSplhSeries("week", {
       startDate: new Date(2026, 7, 10),

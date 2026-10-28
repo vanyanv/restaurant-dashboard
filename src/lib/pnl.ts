@@ -717,6 +717,10 @@ export function computeStorePnL(input: {
       if (days <= 0) return 0
       const covered = Math.max(0, Math.min(days, h.coveredDays))
       if (covered === 0) {
+        // A period with no sales and no labor reading is a store that has not
+        // opened (Glendale: daily rows of $0 used to say so as a "reading").
+        // It owes no wage bill, so the fixed budget is not charged to it.
+        if (totalSales[i] <= 0) return 0
         return fixedLaborByPeriod[i]
       }
       // Estimate uncovered portion proportionally from monthly fixed.
@@ -727,6 +731,8 @@ export function computeStorePnL(input: {
     laborUnknown = periods.map((p, i) => {
       const h = harriLaborByPeriod[i]
       if (h.coveredDays >= p.days) return false
+      // Same pre-open case as above: nothing sold, nothing read, nothing unknown.
+      if (h.coveredDays <= 0 && totalSales[i] <= 0) return false
       /*
        * Partial / no Harri coverage falls back on fixed; flag as unknown when
        * the fixed estimate is also missing — whatever the coverage.

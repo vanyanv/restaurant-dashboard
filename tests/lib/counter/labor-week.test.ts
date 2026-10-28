@@ -303,8 +303,11 @@ describe("laborTrendWeek — the running week is partial, the one before it isn'
     const newestDays = Array.from({ length: 4 }, () => ({
       cost: 3695 / 4,
       hours: 182 / 4,
+      sales: NEWEST_TOTAL_SALES / 4,
+      missingStoreDays: 0,
+      missingSales: 0,
     }))
-    const newest = laborTrendWeek(new Date(2026, 7, 24), true, newestDays, NEWEST_TOTAL_SALES)
+    const newest = laborTrendWeek(new Date(2026, 7, 24), true, newestDays)
     expect(newest.isPartial).toBe(true)
     expect(newest.hours).toBeCloseTo(182, 0)
     expect(newest.cost).toBeCloseTo(3695, 0)
@@ -327,8 +330,11 @@ describe("laborTrendWeek — the running week is partial, the one before it isn'
     const priorDays = Array.from({ length: 7 }, () => ({
       cost: 8500 / 7,
       hours: 417 / 7,
+      sales: PRIOR_TOTAL_SALES / 7,
+      missingStoreDays: 0,
+      missingSales: 0,
     }))
-    const prior = laborTrendWeek(new Date(2026, 7, 17), false, priorDays, PRIOR_TOTAL_SALES)
+    const prior = laborTrendWeek(new Date(2026, 7, 17), false, priorDays)
     expect(prior.isPartial).toBe(false)
     expect(prior.hours).toBeCloseTo(417, 0)
     expect(prior.cost).toBeCloseTo(8500, 0)
@@ -356,8 +362,11 @@ describe("laborTrendWeek — the running week is partial, the one before it isn'
     const trendDays = Array.from({ length: 7 }, () => ({
       cost: cost / 7,
       hours: hours / 7,
+      sales: totalSales / 7,
+      missingStoreDays: 0,
+      missingSales: 0,
     }))
-    const trendWeek = laborTrendWeek(new Date(2026, 7, 17), false, trendDays, totalSales)
+    const trendWeek = laborTrendWeek(new Date(2026, 7, 17), false, trendDays)
 
     const priorKeys = [
       "2026-08-17", "2026-08-18", "2026-08-19", "2026-08-20",
@@ -381,7 +390,7 @@ describe("laborTrendWeek — the running week is partial, the one before it isn'
   })
 })
 
-describe("laborWeek — days with no labor reading", () => {
+describe("days with no labor reading", () => {
   const day = (key: string, over: Partial<Parameters<typeof laborDay>[0]> = {}) =>
     laborDay({
       key,
@@ -392,22 +401,61 @@ describe("laborWeek — days with no labor reading", () => {
       totalSales: 1000,
       ...over,
     })
+  const missingDay = (key: string) =>
+    day(key, { cost: 0, actualSeconds: 0, missingStoreDays: 1, missingSales: 1000 })
 
-  it("counts a missing day that sold, and does not count a closed one", () => {
-    const week = laborWeek(
-      [
-        day("2026-10-19"),
-        day("2026-10-20", { cost: 0, actualSeconds: 0, costMissing: true }),
-        day("2026-10-21", { cost: 0, actualSeconds: 0, costMissing: true, totalSales: 0 }),
-      ],
-      0,
-    )
-    expect(week.missingCostDays).toBe(1)
-    // the total is the decided days only; the missing day is a gap, not $0 of spend
+  it("a missing day's labor % is null, not 0.0%", () => {
+    const d = missingDay("2026-10-20")
+    expect(d.costMissing).toBe(true)
+    expect(d.laborPct).toBeNull()
+    expect(d.splh).toBeNull()
+  })
+
+  it("the week counts the store-days and leaves their sales out of both ratios", () => {
+    const week = laborWeek([day("2026-10-19"), missingDay("2026-10-20")], 0)
+    expect(week.missingStoreDays).toBe(1)
     expect(week.cost).toBe(200)
+    // $200 on the one day with a labor reading, not on $2,000 of sales
+    expect(week.laborPct as number).toBeCloseTo(20, 6)
+    expect(week.splh as number).toBeCloseTo(1000 / 8, 6)
+  })
+
+  it("all-stores: one store missing leaves the other store's sales in the denominator", () => {
+    // two stores, $1,000 each; store B has no labor reading
+    const d = day("2026-10-19", { totalSales: 2000, missingStoreDays: 1, missingSales: 1000 })
+    expect(d.costMissing).toBe(true)
+    expect(d.laborPct as number).toBeCloseTo(20, 6)
   })
 
   it("reports none when every day has a reading", () => {
-    expect(laborWeek([day("2026-10-19")], 0).missingCostDays).toBe(0)
+    expect(laborWeek([day("2026-10-19")], 0).missingStoreDays).toBe(0)
+  })
+})
+
+describe("laborTrendWeek — missing days and SPLH pairing", () => {
+  const td = (over: Partial<Parameters<typeof laborTrendWeek>[2][number]> = {}) => ({
+    cost: 200,
+    hours: 8,
+    sales: 1000,
+    missingStoreDays: 0,
+    missingSales: 0,
+    ...over,
+  })
+
+  it("carries the missing count and drops those days' sales from the denominator", () => {
+    const w = laborTrendWeek(new Date(2026, 9, 19), false, [
+      td(),
+      td({ cost: 0, hours: 0, missingStoreDays: 1, missingSales: 1000 }),
+    ])
+    expect(w.missingStoreDays).toBe(1)
+    expect(w.laborPct as number).toBeCloseTo(20, 6)
+  })
+
+  it("pairs sales with hours only over days that have hours", () => {
+    const w = laborTrendWeek(new Date(2026, 9, 19), false, [
+      td(),
+      td({ hours: 0, cost: 0 }), // sold, nobody clocked in
+    ])
+    expect(w.splh as number).toBeCloseTo(1000 / 8, 6)
   })
 })

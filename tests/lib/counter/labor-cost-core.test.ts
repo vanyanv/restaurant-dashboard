@@ -5,6 +5,8 @@ import {
   foldLaborCost,
   hasFixedLabor,
   laborInWindow,
+  missingLaborByDay,
+  missingStoresByDay,
 } from "@/lib/counter/labor-cost-core"
 
 describe("combineLaborDay", () => {
@@ -27,6 +29,10 @@ describe("combineLaborDay", () => {
     expect(combineLaborDay(undefined, undefined)).toBeNull()
     // a daily 0 with no positions is a sync placeholder, not a day of no pay
     expect(combineLaborDay(0, null)).toBeNull()
+  })
+  it("treats a position sum of 0 as missing too (a true zero day is indistinguishable)", () => {
+    expect(combineLaborDay(null, 0)).toBeNull()
+    expect(combineLaborDay(0, 0)).toBeNull()
   })
 })
 
@@ -123,5 +129,29 @@ describe("hasFixedLabor", () => {
     expect(hasFixedLabor(undefined)).toBe(false)
     expect(hasFixedLabor(0)).toBe(false)
     expect(hasFixedLabor(25000)).toBe(true)
+  })
+})
+
+describe("missingLaborByDay — all-stores gaps", () => {
+  it("names the store with no reading even when another store has data", () => {
+    const cost = foldLaborCost({
+      storeIds: ["a", "b"],
+      days: ["2026-10-19"],
+      daily: [{ storeId: "a", day: "2026-10-19", actualCost: 500 }],
+      positions: [],
+    })
+    expect(missingStoresByDay(cost)).toEqual({ "2026-10-19": ["b"] })
+    const sales = new Map([
+      ["a", new Map([["2026-10-19", 3000]])],
+      ["b", new Map([["2026-10-19", 2000]])],
+    ])
+    expect(missingLaborByDay(missingStoresByDay(cost), sales)).toEqual({
+      "2026-10-19": { storeDays: 1, sales: 2000 },
+    })
+  })
+
+  it("does not count a store-day that sold nothing (pre-open)", () => {
+    const sales = new Map([["b", new Map([["2026-10-19", 0]])]])
+    expect(missingLaborByDay({ "2026-10-19": ["b"] }, sales)).toEqual({})
   })
 })
