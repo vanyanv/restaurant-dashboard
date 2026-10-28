@@ -5,6 +5,7 @@ import { recomputeCanonicalCost } from "@/lib/ingredient-cost"
 export type MatchResult = {
   matchedBySku: number
   matchedByAlias: number
+  matchedByName: number
   unmatched: number
   costsUpdated: number
 }
@@ -14,6 +15,13 @@ export type MatchResult = {
  * to a CanonicalIngredient:
  *   1. (vendor, sku) → IngredientSkuMatch   (preferred, learned from prior confirms)
  *   2. productName    → IngredientAlias      (fallback for skuless vendors / legacy)
+ *   3. productName    → an earlier matched line, any vendor or store, when
+ *      that exact name (case and punctuation aside) has only ever been
+ *      linked to one ingredient. This is what carries a vendor that starts
+ *      billing under a new name: its SKUs and per-store aliases are unknown
+ *      under the new key, but "Syrup Coca Cola Zero Sugar" is still the
+ *      ingredient it was. A name seen on two ingredients proves nothing and
+ *      is left for review.
  *
  * Leaves `canonicalIngredientId` null when neither path hits — those land in
  * the "Needs review" queue at /dashboard/ingredients.
@@ -25,7 +33,7 @@ export async function matchNewLineItems(
   invoiceIds: string[]
 ): Promise<MatchResult> {
   if (invoiceIds.length === 0) {
-    return { matchedBySku: 0, matchedByAlias: 0, unmatched: 0, costsUpdated: 0 }
+    return { matchedBySku: 0, matchedByAlias: 0, matchedByName: 0, unmatched: 0, costsUpdated: 0 }
   }
 
   const invoices = await prisma.invoice.findMany({
@@ -36,7 +44,7 @@ export async function matchNewLineItems(
       storeId: true,
       lineItems: {
         where: { canonicalIngredientId: null },
-        select: { id: true, sku: true, productName: true },
+        select: { id: true, sku: true, productName: true, unit: true },
       },
     },
   })
@@ -66,8 +74,14 @@ export async function matchNewLineItems(
     }
   }
 
+  const nameIndex = await loadUniqueProductNames(
+    accountId,
+    invoices.flatMap((i) => i.lineItems.map((li) => li.productName))
+  )
+
   let matchedBySku = 0
   let matchedByAlias = 0
+  let matchedByName = 0
   let unmatched = 0
   const now = new Date()
   const touchedCanonicals = new Set<string>()
@@ -76,7 +90,7 @@ export async function matchNewLineItems(
     const vendor = vendorMatchKey(inv.vendorName)
     for (const li of inv.lineItems) {
       let canonicalId: string | undefined
-      let source: "sku" | "alias" | undefined
+      let source: "sku" | "alias" | "name" | undefined
 
       if (li.sku) {
         canonicalId = skuIndex.get(`${vendor}::${li.sku}`)
@@ -85,6 +99,15 @@ export async function matchNewLineItems(
       if (!canonicalId && inv.storeId) {
         canonicalId = aliasIndex.get(`${inv.storeId}::${li.productName.toLowerCase()}`)
         if (canonicalId) source = "alias"
+      }
+      if (!canonicalId) {
+        const known = nameIndex.get(productNameKey(li.productName))
+        // A different invoice unit (CS vs LB) would cost the line on another
+        // basis than the ingredient's history; that one is for a person.
+        if (known && (!li.unit || known.units.size === 0 || known.units.has(li.unit.toUpperCase()))) {
+          canonicalId = known.canonicalId
+          source = "name"
+        }
       }
 
       if (canonicalId && source) {
@@ -98,7 +121,8 @@ export async function matchNewLineItems(
         })
         touchedCanonicals.add(canonicalId)
         if (source === "sku") matchedBySku++
-        else matchedByAlias++
+        else if (source === "alias") matchedByAlias++
+        else matchedByName++
       } else {
         unmatched++
       }
@@ -117,5 +141,51 @@ export async function matchNewLineItems(
     }
   }
 
-  return { matchedBySku, matchedByAlias, unmatched, costsUpdated }
+  return { matchedBySku, matchedByAlias, matchedByName, unmatched, costsUpdated }
+}
+
+/** Case, punctuation and spacing are noise in a product name, as in a vendor's. */
+export function productNameKey(name: string): string {
+  return name.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim()
+}
+
+/**
+ * Product name → ingredient, for the names in this batch that every line
+ * matched by SKU or by hand has linked to the same one ingredient, with the
+ * invoice units those lines came in. Names linked to more than one are dropped
+ * rather than guessed at. Alias and name matches are left out on purpose: a
+ * guess must not become the evidence for the next guess.
+ */
+async function loadUniqueProductNames(
+  accountId: string,
+  productNames: string[]
+): Promise<Map<string, { canonicalId: string; units: Set<string> }>> {
+  const out = new Map<string, { canonicalId: string; units: Set<string> }>()
+  const names = [...new Set(productNames.map((n) => n.trim()).filter(Boolean))]
+  if (names.length === 0) return out
+  const rows = await prisma.invoiceLineItem.groupBy({
+    by: ["productName", "canonicalIngredientId", "unit"],
+    where: {
+      canonicalIngredientId: { not: null },
+      matchSource: { in: ["sku", "manual"] },
+      productName: { in: names, mode: "insensitive" },
+      invoice: { accountId },
+    },
+  })
+  const owners = new Map<string, { canonicals: Set<string>; units: Set<string> }>()
+  for (const r of rows) {
+    if (!r.canonicalIngredientId) continue
+    const key = productNameKey(r.productName)
+    if (!key) continue
+    const entry = owners.get(key) ?? { canonicals: new Set<string>(), units: new Set<string>() }
+    entry.canonicals.add(r.canonicalIngredientId)
+    if (r.unit) entry.units.add(r.unit.toUpperCase())
+    owners.set(key, entry)
+  }
+  for (const [key, entry] of owners) {
+    if (entry.canonicals.size === 1) {
+      out.set(key, { canonicalId: [...entry.canonicals][0], units: entry.units })
+    }
+  }
+  return out
 }

@@ -37,3 +37,10 @@ describe("vendorMatchKey", () => {
     expect(vendorMatchKey("  ***Acme*** ")).toBe("acme")
   })
 })
+
+describe("Imperial Brady", () => {
+  it("is Individual FoodService under its new billing name", () => {
+    expect(normalizeVendorName("Imperial Brady")).toBe("Individual FoodService")
+    expect(vendorMatchKey("Imperial Brady")).toBe(vendorMatchKey("Individual FoodService"))
+  })
+})
