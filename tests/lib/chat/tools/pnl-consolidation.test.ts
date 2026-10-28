@@ -15,6 +15,10 @@
  */
 import { describe, it, expect, vi } from "vitest"
 
+// `commission.ts` imports the app's client at module load; the tool reads
+// through the context's own client, so the app's is never used here.
+vi.mock("@/lib/prisma", () => ({ prisma: {} }))
+
 vi.mock("@/lib/chat/owner-scope", () => ({
   assertOwnerOwnsStores: vi.fn(async () => ["holly", "gln"]),
 }))
