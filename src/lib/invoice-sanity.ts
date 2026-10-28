@@ -776,7 +776,7 @@ export function findPackShapeAnomalies(
  * Order" note under it; the model stored both as lines, so the $2,691.45
  * credit read as $5,382.90 and sat in review with nothing the owner could do
  * but reject it. A duplicate is the same SKU, quantity, unit price and amount,
- * with one name the start of the other. It is only dropped when the tie-out
+ * with the second name the whole first name plus, at most, a note. It is only dropped when the tie-out
  * fails with it and passes without it — two genuinely identical cases of
  * something on one delivery are left alone.
  */
@@ -793,17 +793,22 @@ export function dropDuplicatedLines(extraction: InvoiceExtraction): {
   const dropped: number[] = []
   if (tieOut(lines, head).reconciles) return { extraction, dropped }
 
-  const stem = (name: string) => name.trim().toLowerCase().slice(0, 20)
+  const name = (n: string) => n.trim().toLowerCase()
   for (let j = 1; j < lines.length; j++) {
     const b = lines[j]
+    // Same SKU (never two blanks), same money, and the second name is the
+    // whole first name — possibly with a note after it ("… Return/Cancelled
+    // Order") — so two different products can never pair up.
     const twin = lines.slice(0, j).find(
       (a) =>
-        (a.sku ?? null) === (b.sku ?? null) &&
+        a.sku != null &&
+        a.sku.trim() !== "" &&
+        a.sku === b.sku &&
         a.quantity === b.quantity &&
         a.unitPrice === b.unitPrice &&
         a.extendedPrice === b.extendedPrice &&
-        stem(b.productName).startsWith(stem(a.productName)) &&
-        stem(a.productName).length > 0,
+        name(a.productName).length > 0 &&
+        name(b.productName).startsWith(name(a.productName)),
     )
     if (!twin) continue
     const without = lines.filter((_, k) => k !== j)

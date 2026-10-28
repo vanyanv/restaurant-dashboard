@@ -75,3 +75,11 @@ describe("describeMoneyProblems", () => {
     expect(moneyProblemScore(empty)).toBeGreaterThan(moneyProblemScore(short))
   })
 })
+
+describe("dropDuplicatedLines · never pairs different products", () => {
+  it("leaves lines with no SKU alone", () => {
+    const noSku = (n: number) => ({ ...line(n, "BEEF", 50), sku: null })
+    const e = extraction({ subtotal: 50, totalAmount: 50, lineItems: [noSku(1), noSku(2)] })
+    expect(dropDuplicatedLines(e).dropped).toEqual([])
+  })
+})

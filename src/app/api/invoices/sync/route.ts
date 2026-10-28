@@ -54,6 +54,14 @@ const EXTRACTION_BUDGET_MS = 30_000
  * both fit inside withConcurrency's 60s task timeout (reads run 10–25s).
  */
 const REREAD_IF_FIRST_READ_UNDER_MS = 30_000
+/** Both reads together must finish by this, measured from the first read's start. */
+const REREAD_DEADLINE_MS = 50_000
+
+/** Two printed amounts are the same figure (both absent counts as the same). */
+function sameMoney(a: number | null | undefined, b: number | null | undefined): boolean {
+  if (a == null || b == null) return a == null && b == null
+  return Math.round(Math.abs(Number(a) - Number(b)) * 100) === 0
+}
 
 /**
  * The lookback the previous run used, from its JobRun.metadata, else 0. A
@@ -64,13 +72,6 @@ const REREAD_IF_FIRST_READ_UNDER_MS = 30_000
 function readLookback(metadata: unknown): number {
   if (!metadata || typeof metadata !== "object") return 0
   const v = (metadata as Record<string, unknown>).lookbackDays
-  return typeof v === "number" && Number.isFinite(v) ? v : 0
-}
-
-/** Emails the previous run failed to read, from its JobRun.metadata, else 0. */
-function readFailed(metadata: unknown): number {
-  if (!metadata || typeof metadata !== "object") return 0
-  const v = (metadata as Record<string, unknown>).failed
   return typeof v === "number" && Number.isFinite(v) ? v : 0
 }
 
@@ -313,12 +314,20 @@ async function runSync(
   // A run that hit its budget leaves `deferred > 0` on its JobRun row. Keep
   // the wide window until a run clears the backlog; otherwise the emails it
   // deferred age out of the 7-day window and are never synced.
-  // An email whose extraction failed is retried by the next run only while it
-  // is inside the window, so a failed read counts as backlog too.
-  const backlogPending = readDeferred(lastSync?.metadata) > 0 || readFailed(lastSync?.metadata) > 0
+  // `failed` is recorded for the record but deliberately NOT backlog: some
+  // emails fail on every run (a statement that is not an invoice), and
+  // treating them as backlog would hold the window open and re-send them to
+  // the model every hour.
+  const backlogPending = readDeferred(lastSync?.metadata) > 0
+  // While a backlog remains the window never narrows: an explicit shorter
+  // override mid-backfill would otherwise drop the emails the backfill found.
+  const carried = backlogPending ? readLookback(lastSync?.metadata) : 0
   const lookbackDays =
-    lookbackDaysOverride ??
-    (lastSync && !backlogPending ? 7 : Math.max(30, backlogPending ? readLookback(lastSync?.metadata) : 0))
+    lookbackDaysOverride != null
+      ? Math.max(lookbackDaysOverride, carried)
+      : lastSync && !backlogPending
+        ? 7
+        : Math.max(30, carried)
   const sinceDate = new Date()
   sinceDate.setDate(sinceDate.getDate() - lookbackDays)
 
@@ -423,14 +432,32 @@ async function runSync(
       const problems = describeMoneyProblems(extraction)
       if (problems.length > 0 && Date.now() - readStartedAt < REREAD_IF_FIRST_READ_UNDER_MS) {
         try {
-          const second = await extractInvoiceData(pdf.contentBytes, pdf.name, { rereadProblems: problems })
+          // Bounded so the task always finishes inside withConcurrency's 60s
+          // timeout with the first read in hand; a timeout there would drop
+          // the invoice without even counting it as an error.
+          const budget = Math.max(0, REREAD_DEADLINE_MS - (Date.now() - readStartedAt))
+          const second = await Promise.race([
+            extractInvoiceData(pdf.contentBytes, pdf.name, { rereadProblems: problems }),
+            new Promise<never>((_, reject) =>
+              setTimeout(() => reject(new Error(`re-read over its ${budget}ms budget`)), budget)
+            ),
+          ])
           const before = moneyProblemScore(extraction)
           const after = moneyProblemScore(second.extraction)
+          // The re-read must describe the SAME document: a read that "fixes"
+          // the sum by changing the printed subtotal or total, or the number
+          // the invoice is stored under, has moved the goalposts, not the lines.
+          const sameHeader =
+            second.extraction.invoiceNumber?.trim().toUpperCase() === extraction.invoiceNumber?.trim().toUpperCase() &&
+            sameMoney(second.extraction.totalAmount, extraction.totalAmount) &&
+            sameMoney(second.extraction.subtotal, extraction.subtotal)
+          const keep = sameHeader && after < before
           logger.warn(
             `[invoice-sync] re-read "${msg.subject}" (${problems.length} problem(s)): score ${before} → ${after}` +
-              (after < before ? ", keeping the re-read" : ", keeping the first read")
+              (sameHeader ? "" : ", header differs") +
+              (keep ? ", keeping the re-read" : ", keeping the first read")
           )
-          if (after < before) {
+          if (keep) {
             extraction = second.extraction
             model = `${second.model} (re-read)`
           }
@@ -552,10 +579,39 @@ async function runSync(
   })
 
   // ─── Phase 3: Match addresses to stores ───
+  // An address an owner has already approved for a store is that store. IFS
+  // prints "1452 A Sherman Way" for 14523, which the matcher rightly scores
+  // as uncertain (0.75) — and so every Van Nuys IFS delivery sat in review
+  // for the same confirmation. Once one is approved, the rest follow it.
+  const confirmedAddresses = new Map<string, string>()
+  const batchAddresses = [
+    ...new Set(validExtractions.map((inv) => inv.extraction.deliveryAddress).filter((a): a is string => Boolean(a))),
+  ]
+  if (batchAddresses.length > 0) {
+    try {
+      const approved = await prisma.invoice.findMany({
+        where: { accountId, status: "APPROVED", storeId: { not: null }, deliveryAddress: { in: batchAddresses } },
+        select: { deliveryAddress: true, storeId: true },
+      })
+      for (const a of approved) {
+        if (a.deliveryAddress && a.storeId) confirmedAddresses.set(a.deliveryAddress, a.storeId)
+      }
+    } catch (err) {
+      logger.error("[invoice-sync] approved-address lookup failed — continuing without it:", err)
+    }
+  }
+
   const invoicesToCreate = validExtractions.map((inv) => {
-    const match = inv.extraction.deliveryAddress
+    const fuzzy = inv.extraction.deliveryAddress
       ? matchInvoiceToStore(inv.extraction.deliveryAddress, stores)
       : null
+    const confirmedStore = inv.extraction.deliveryAddress
+      ? confirmedAddresses.get(inv.extraction.deliveryAddress)
+      : undefined
+    const match =
+      fuzzy && confirmedStore === fuzzy.storeId && fuzzy.confidence < 0.85
+        ? { ...fuzzy, confidence: 1 }
+        : fuzzy
 
     const emailReceivedAt = inv.receivedAt ? new Date(inv.receivedAt) : null
     const contextLabel = `${inv.extraction.vendorName} #${inv.extraction.invoiceNumber}`
