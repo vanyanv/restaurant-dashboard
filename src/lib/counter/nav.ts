@@ -36,7 +36,7 @@ export type NavId =
   | "overview" | "ask" | "needs-you" | "checks" | "shop" | "decisions" | "orders"
   | "analytics" | "pnl" | "cogs" | "labor"
   | "menu" | "recipes"
-  | "invoices" | "inventory" | "ingredients" | "vendors"
+  | "invoices" | "count" | "inventory" | "ingredients" | "vendors"
   | "stores" | "settings" | "monitoring"
 
 export interface NavItem {
@@ -110,6 +110,7 @@ export const NAV_GROUPS: readonly NavGroup[] = [
     caption: "Stock and suppliers",
     items: [
       { id: "invoices", label: "Invoices", href: "/dashboard/invoices", icon: "FileText" },
+      { id: "count", label: "Count & waste", href: "/dashboard/count", icon: "ClipboardList" },
       { id: "inventory", label: "Inventory", href: "/dashboard/operations/inventory", icon: "Package" },
       { id: "ingredients", label: "Ingredients", href: "/dashboard/ingredients", icon: "Carrot" },
       { id: "vendors", label: "Vendors", href: "/dashboard/operations/vendors", icon: "Truck" },
@@ -202,6 +203,14 @@ export const CHECKS_TABS: readonly SubNavItem[] = [
   { label: "Checklists", href: "/dashboard/checks/checklists" },
   { label: "Crew & PINs", href: "/dashboard/checks/crew" },
   { label: "QR posters", href: "/dashboard/checks/posters" },
+] as const
+
+/** Count & waste — the weekly count, the waste log, the report and the setup. */
+export const COUNT_TABS: readonly SubNavItem[] = [
+  { label: "Count", href: "/dashboard/count" },
+  { label: "Waste", href: "/dashboard/count/waste" },
+  { label: "Report", href: "/dashboard/count/report" },
+  { label: "Setup", href: "/dashboard/count/setup" },
 ] as const
 
 /** Invoices — the worklist, the full list, and what the prices did. */
