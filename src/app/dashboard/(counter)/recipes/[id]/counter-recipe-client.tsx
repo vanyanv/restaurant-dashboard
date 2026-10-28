@@ -7,6 +7,7 @@ import {
   Chart,
   CostBar,
   DateControl,
+  MenuPhoto,
   MoneyLines,
   Note,
   PageHead,
@@ -32,6 +33,8 @@ import {
 } from "@/lib/counter/actions/recipe"
 import type { SectionSources } from "@/lib/counter/adapters/types"
 import { DishPhoto } from "./dish-photo"
+import { ingredientPhoto } from "@/lib/counter/ingredient-photos"
+import { photoFrame } from "@/lib/counter/menu-photos"
 import type {
   BuilderField,
   BuilderLine,
@@ -632,10 +635,11 @@ function Picker({
         return (
           <button
             type="button"
-            className="pickrow"
+            className="pickrow pickrow--photo"
             key={`${o.kind}:${o.id}`}
             onClick={() => onAdd(o)}
           >
+            <MenuPhoto frame={pictureOf(o.kind, o.name)} alt={o.name} className="mi-photo--line" />
             <span>{o.name}</span>
             <span>{o.price}</span>
             {here ? (
@@ -912,6 +916,7 @@ function Builder({
             columns={LINE_COLUMNS}
             name={l.name}
             sub={l.sub}
+            photo={<MenuPhoto frame={pictureOf(l.kind, l.name)} alt={l.name} className="mi-photo--line" />}
           >
             <input
               className="inp"
@@ -1034,3 +1039,8 @@ function Builder({
  * warning, and it matches `STALE_PRICE_DAYS` in the adapter.
  */
 const STALE_ON_SCREEN_DAYS = 45
+
+/** An ingredient's generated shot, or a sub-recipe's dish photo from the site. */
+function pictureOf(kind: "ingredient" | "component", name: string) {
+  return kind === "ingredient" ? ingredientPhoto(name) : photoFrame(name)
+}

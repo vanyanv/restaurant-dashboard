@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation"
 import {
   Chart,
   DateControl,
+  MenuPhoto,
   Note,
   PageHead,
   Section,
@@ -15,6 +16,7 @@ import {
   type Column,
   type SwitchableStore,
 } from "@/components/counter"
+import { ingredientPhoto } from "@/lib/counter/ingredient-photos"
 import { readCounterParams, writeCounterParams } from "@/lib/counter/url-state"
 import { stepRange } from "@/lib/counter/date-range"
 import type { SectionSources } from "@/lib/counter/adapters/types"
@@ -257,6 +259,8 @@ export function CounterIngredientClient({
         />
       </PageHead>
 
+      <IngredientPhoto name={title} />
+
       <Section bare title="The figures" data={sections.head} pending={pending}>
         {(h) => (
           <>
@@ -369,3 +373,21 @@ export function CounterIngredientClient({
 
 /** Dollars, to the cent — a unit price, not a total. */
 const PRICE = (v: number) => `$${v.toFixed(2)}`
+
+/**
+ * The ingredient's picture under its name, so the page opens on the thing
+ * itself rather than its vendor SKU text. Nothing at all when there is no
+ * shot: a dashed "No photo" box at the top of a page is noise, not news.
+ */
+function IngredientPhoto({ name }: { name: string }) {
+  const frame = ingredientPhoto(name)
+  if (!frame) return null
+  return (
+    <div className="mi-hero">
+      <MenuPhoto frame={frame} alt={name} size="full" />
+      <p className="ck-meta" style={{ margin: 0 }}>
+        Illustrative photo, not your vendor&apos;s exact product
+      </p>
+    </div>
+  )
+}

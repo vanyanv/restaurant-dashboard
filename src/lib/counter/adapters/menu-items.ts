@@ -4,6 +4,7 @@ import { count, money, pct } from "@/lib/counter/format"
 import { toQueryBounds, type DateRange } from "@/lib/counter/date-range"
 import { classify, guardSection, type StreamedSections } from "@/lib/counter/adapters/types"
 import { photoFrame, type PhotoFrame } from "@/lib/counter/menu-photos"
+import { ingredientPhoto } from "@/lib/counter/ingredient-photos"
 import type { SectionData } from "@/lib/counter/section-data"
 
 /**
@@ -378,7 +379,7 @@ export async function loadMenuItems(input: MenuItemsInput): Promise<MenuItemsDat
       what: `Newest price is from ${when}${s.vendor ? ` (${s.vendor})` : ""}. If you buy it somewhere else now, that invoice isn't linked to it.`,
       amount: `Since ${when}`,
       act: { label: "Open the ingredient", href: `/dashboard/ingredients/${s.id}` },
-      photo: null,
+      photo: ingredientPhoto(s.name),
       weight,
     })
   }
