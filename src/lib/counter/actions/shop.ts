@@ -24,6 +24,7 @@ async function ownerAccount(): Promise<string> {
 
 function revalidateShop() {
   revalidatePath("/dashboard/shop", "layout")
+  revalidatePath("/m/shop", "layout")
 }
 
 function fail(err: unknown): ActionResult {

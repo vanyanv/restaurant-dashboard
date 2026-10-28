@@ -110,6 +110,12 @@ export const DESKTOP_TO_MOBILE: Record<string, string> = {
   "/dashboard/checks/checklists": "/m/checks/checklists",
   "/dashboard/checks/crew": "/m/checks/crew",
   "/dashboard/checks/posters": "/m/checks/posters",
+  // Shop, the same way: five tabs, the desk clients in the phone shell.
+  "/dashboard/shop": "/m/shop",
+  "/dashboard/shop/orders": "/m/shop/orders",
+  "/dashboard/shop/products": "/m/shop/products",
+  "/dashboard/shop/customers": "/m/shop/customers",
+  "/dashboard/shop/settings": "/m/shop/settings",
 }
 
 // Desktop routes with a dynamic sub-path that has a matching mobile page
@@ -212,10 +218,5 @@ export function phoneHref(deskHref: string): string {
  * a line in this list.
  */
 export const DESK_ONLY: ReadonlySet<string> = new Set([
-  "/dashboard/shop",
-  "/dashboard/shop/orders",
-  "/dashboard/shop/products",
-  "/dashboard/shop/customers",
-  "/dashboard/shop/settings",
   "/dashboard/menu/items",
 ])

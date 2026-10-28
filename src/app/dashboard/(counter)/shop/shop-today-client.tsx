@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { Section, useCounterTransition, usePageChrome } from "@/components/counter"
+import { Section, useCounterTransition, usePageChrome, useSurfaceHref } from "@/components/counter"
 import type { SectionSources } from "@/lib/counter/adapters/types"
 import type { OrderLine, TodayData, TodaySections } from "@/lib/counter/adapters/shop"
 import { OrderRow, ShopGlyphMark, ShopHead, ShopLegend } from "./shop-ui"
@@ -53,6 +53,7 @@ export function ShopTodayClient({ sections }: { sections: SectionSources<TodaySe
 }
 
 function Top({ data }: { data: TodayData }) {
+  const surface = useSurfaceHref()
   const c = data.counts
   return (
     <div style={{ display: "grid", gap: 10 }}>
@@ -62,7 +63,7 @@ function Top({ data }: { data: TodayData }) {
           <span>
             <b>The shop is paused.</b> <span className="ck-meta">{data.paused.note ?? "Customers can look but not buy."}</span>
           </span>
-          <Link className="btn" href="/dashboard/shop/settings">
+          <Link className="btn" href={surface("/dashboard/shop/settings")}>
             Open settings
           </Link>
         </div>
@@ -80,7 +81,7 @@ function Top({ data }: { data: TodayData }) {
                   {o.customer} · {o.items}
                 </span>
               </span>
-              <Link className="btn" href={`/dashboard/shop/orders?order=${encodeURIComponent(o.id)}`}>
+              <Link className="btn" href={surface(`/dashboard/shop/orders?order=${encodeURIComponent(o.id)}`)}>
                 Open order
               </Link>
             </div>
@@ -88,10 +89,10 @@ function Top({ data }: { data: TodayData }) {
         </div>
       )}
       <div className="sh-tiles">
-        <Tile k="To ship" v={c.toShip} s={c.lateToShip ? `${c.lateToShip} late` : "None late"} bad={c.lateToShip > 0} href="/dashboard/shop/orders" />
-        <Tile k="To bag" v={c.toBag} s="Pickup orders to pack" href="/dashboard/shop/orders" />
-        <Tile k="At the counter" v={c.readyForPickup} s="Bagged, waiting for the customer" href="/dashboard/shop/orders" />
-        <Tile k="Done this week" v={c.doneLast7} s="Shipped or picked up" href="/dashboard/shop/orders?filter=all" />
+        <Tile k="To ship" v={c.toShip} s={c.lateToShip ? `${c.lateToShip} late` : "None late"} bad={c.lateToShip > 0} href={surface("/dashboard/shop/orders")} />
+        <Tile k="To bag" v={c.toBag} s="Pickup orders to pack" href={surface("/dashboard/shop/orders")} />
+        <Tile k="At the counter" v={c.readyForPickup} s="Bagged, waiting for the customer" href={surface("/dashboard/shop/orders")} />
+        <Tile k="Done this week" v={c.doneLast7} s="Shipped or picked up" href={surface("/dashboard/shop/orders?filter=all")} />
       </div>
     </div>
   )
@@ -108,11 +109,12 @@ function Tile({ k, v, s, bad, href }: { k: string; v: number; s: string; bad?: b
 }
 
 function Queue({ rows, empty }: { rows: OrderLine[]; empty: string }) {
+  const surface = useSurfaceHref()
   if (rows.length === 0) return <p className="sh-empty">{empty}</p>
   return (
     <div className="sh-queue">
       {rows.map((o) => (
-        <OrderRow key={o.id} o={o} href={`/dashboard/shop/orders?order=${encodeURIComponent(o.id)}`} />
+        <OrderRow key={o.id} o={o} href={surface(`/dashboard/shop/orders?order=${encodeURIComponent(o.id)}`)} />
       ))}
     </div>
   )
@@ -141,6 +143,7 @@ function Sales({ data }: { data: TodayData }) {
 }
 
 function Low({ data }: { data: TodayData }) {
+  const surface = useSurfaceHref()
   if (data.lowStock.length === 0) return <p className="sh-empty">Nothing is close to selling out.</p>
   return (
     <table className="ck-table">
@@ -148,7 +151,7 @@ function Low({ data }: { data: TodayData }) {
         {data.lowStock.map((p) => (
           <tr key={p.productId}>
             <td>
-              <Link className="sh-rowlink" href={`/dashboard/shop/products?product=${encodeURIComponent(p.productId)}`}>
+              <Link className="sh-rowlink" href={surface(`/dashboard/shop/products?product=${encodeURIComponent(p.productId)}`)}>
                 <b>{p.name}</b>
               </Link>
             </td>
