@@ -184,6 +184,33 @@ export function tieOut(
   lines: ReadonlyArray<{ productName: string; sku?: string | null; extendedPrice: unknown }>,
   head: { subtotal: number | null; taxAmount: number | null; totalAmount: number }
 ): TieOut {
+  const tax = head.taxAmount ?? 0
+  const printed = tieOutAgainst(
+    lines,
+    head.subtotal ?? head.totalAmount - tax,
+    head.subtotal != null ? "subtotal" : "total less tax"
+  )
+  if (printed.reconciles || head.subtotal == null) return printed
+
+  // Sysco prints a subtotal per product group, and the model sometimes takes
+  // one group's for the invoice's (945683569: $612.50 read for $695.60). When
+  // every goods line is a real catalogue item (a SKU on each) and they tie
+  // exactly to the printed total less tax, the subtotal is the misread. An
+  // extra line with no SKU gets no such pass — that is the shape of a line
+  // the model invented, which the total-less-tax reading used to let through.
+  const goodsHaveSkus = lines.every(
+    (line) => readPrice(line.extendedPrice) === null || isFeeRow(line) || !!line.sku?.trim()
+  )
+  if (!goodsHaveSkus) return printed
+  const total = tieOutAgainst(lines, head.totalAmount - tax, "total less tax")
+  return Math.round(Math.abs(total.gap) * 100) <= 1 ? total : printed
+}
+
+function tieOutAgainst(
+  lines: ReadonlyArray<{ productName: string; sku?: string | null; extendedPrice: unknown }>,
+  reference: number,
+  referenceKind: TieOut["referenceKind"]
+): TieOut {
   let base = 0
   const fees: Array<{ index: number; price: number }> = []
   lines.forEach((line, index) => {
@@ -192,10 +219,6 @@ export function tieOut(
     if (isFeeRow(line) && fees.length < MAX_FEE_ROWS) fees.push({ index, price })
     else base += price
   })
-
-  const tax = head.taxAmount ?? 0
-  const reference = head.subtotal ?? head.totalAmount - tax
-  const referenceKind = head.subtotal != null ? "subtotal" : "total less tax"
 
   let best: TieOut | null = null
   const consider = (candidate: TieOut) => {

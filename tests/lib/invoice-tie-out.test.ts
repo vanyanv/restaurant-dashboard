@@ -31,10 +31,16 @@ describe("tieOut", () => {
   })
 
   it("does not move a product line to make the sum work", () => {
-    // An unnamed extra $7.75 line with a SKU is goods, so the gap stands.
+    // A $7.75 line with a SKU is goods, never a fee moved outside the
+    // subtotal. Against the subtotal the gap stands; it ties only because the
+    // printed total less tax agrees to the cent (the group-subtotal case below).
     const t = tieOut(goods(100, 52.8, 7.75), { subtotal: 152.8, taxAmount: 12.2, totalAmount: 172.75 })
-    expect(t.reconciles).toBe(false)
-    expect(t.gap).toBeCloseTo(7.75, 2)
+    expect(t.outside.size).toBe(0)
+    expect(t.goods).toBeCloseTo(160.55, 2)
+    expect(t.referenceKind).toBe("total less tax")
+    const offByFiveCents = tieOut(goods(100, 52.8, 7.75), { subtotal: 152.8, taxAmount: 12.2, totalAmount: 172.8 })
+    expect(offByFiveCents.reconciles).toBe(false)
+    expect(offByFiveCents.gap).toBeCloseTo(7.75, 2)
   })
 
   it("flags a credit whose one line was read twice (Premier 2250793)", () => {
@@ -75,5 +81,31 @@ describe("isFeeRow", () => {
   it("leaves products alone", () => {
     expect(isFeeRow({ productName: "Soda Sprite Mexican Glass CRV Inc", sku: null })).toBe(false)
     expect(isFeeRow({ productName: "Miso Paste", sku: null })).toBe(false)
+  })
+})
+
+describe("tieOut: a group subtotal read as the invoice's", () => {
+  // Sysco 945683569 (2026-03-05): fries $380 + rolls $232.50 + onions $83.10,
+  // tax $8.95, total $704.55 — but the subtotal was read as $612.50, the first
+  // two groups only.
+  const head = { subtotal: 612.5, taxAmount: 8.95, totalAmount: 704.55 }
+
+  it("ties out against total less tax when every line is a catalogue item", () => {
+    const t = tieOut(goods(380, 232.5, 83.1), head)
+    expect(t.reconciles).toBe(true)
+    expect(t.referenceKind).toBe("total less tax")
+    expect(t.reference).toBeCloseTo(695.6, 2)
+  })
+
+  it("keeps the subtotal reading when the extra line has no SKU", () => {
+    const t = tieOut([...goods(380, 232.5), { productName: "Item 2", sku: null, extendedPrice: 83.1 }], head)
+    expect(t.reconciles).toBe(false)
+    expect(t.referenceKind).toBe("subtotal")
+  })
+
+  it("needs the total to tie to the cent, not within the dollar tolerance", () => {
+    const t = tieOut(goods(380, 232.5, 83.6), head)
+    expect(t.reconciles).toBe(false)
+    expect(t.referenceKind).toBe("subtotal")
   })
 })

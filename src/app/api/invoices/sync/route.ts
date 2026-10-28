@@ -18,7 +18,7 @@ import {
 import { putInvoicePdf, type InvoicePdfUpload } from "@/lib/blob"
 import { sendGraphMail } from "@/lib/graph-mail"
 import { buildPriceAlertEmail, type PriceHike } from "@/lib/price-alert-email"
-import { normalizeVendorName } from "@/lib/vendor-normalize"
+import { normalizeVendorName, vendorMatchKey } from "@/lib/vendor-normalize"
 import { invoiceIdentityKey, loadInvoiceIdentities } from "@/lib/invoice-identity"
 import { matchNewLineItems } from "@/lib/ingredient-matching"
 import { autoResolveUnmatchedLines } from "@/lib/ingredient-auto-match"
@@ -601,6 +601,22 @@ async function runSync(
     }
   }
 
+  // Vendors this account has had a bill from before. A first bill from a
+  // stranger with no delivery address on it is not a supply delivery: on
+  // 2026-10-20 a "Re: Coaching That Turns Vision…" email carried a $29,969
+  // "BlLL-J46515.pdf" and sat in review as if it were one.
+  let knownVendors: Set<string> | null = null
+  try {
+    const rows = await prisma.invoice.findMany({
+      where: { accountId },
+      select: { vendorName: true },
+      distinct: ["vendorName"],
+    })
+    knownVendors = new Set(rows.map((r) => vendorMatchKey(r.vendorName)))
+  } catch (err) {
+    logger.error("[invoice-sync] known-vendor lookup failed — not screening senders this run:", err)
+  }
+
   const invoicesToCreate = validExtractions.map((inv) => {
     const fuzzy = inv.extraction.deliveryAddress
       ? matchInvoiceToStore(inv.extraction.deliveryAddress, stores)
@@ -672,8 +688,15 @@ async function runSync(
       )
     }
 
-    let status: "MATCHED" | "REVIEW" | "PENDING"
-    if (
+    const notASupplier =
+      knownVendors !== null &&
+      !inv.extraction.deliveryAddress?.trim() &&
+      !knownVendors.has(vendorMatchKey(inv.extraction.vendorName ?? ""))
+
+    let status: "MATCHED" | "REVIEW" | "PENDING" | "REJECTED"
+    if (notASupplier) {
+      status = "REJECTED"
+    } else if (
       dateSuspect ||
       mathMismatches.length > 0 ||
       packAnomalies.length > 0 ||
@@ -689,8 +712,16 @@ async function runSync(
 
     // Persist WHY it needs review — the detail page renders these so the
     // owner isn't left staring at a bare badge.
-    const reviewReasons: ReviewReason[] =
-      status === "REVIEW"
+    const reviewReasons: ReviewReason[] = notASupplier
+      ? [
+          {
+            kind: "not_a_supplier",
+            message:
+              "First bill from this sender and no delivery address on it — set aside as not a supply delivery. " +
+              "Check it is a real supplier before paying anything.",
+          },
+        ]
+      : status === "REVIEW"
         ? composeReviewReasons({
             dateSuspect,
             mathMismatches,

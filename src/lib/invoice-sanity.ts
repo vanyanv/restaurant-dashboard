@@ -260,6 +260,7 @@ export interface ReviewReason {
     | "no_lines"
     | "low_match_confidence"
     | "no_store_match"
+    | "not_a_supplier"
     | "unknown"
   /** Owner-facing sentence. Amounts pre-formatted; no jargon. */
   message: string
