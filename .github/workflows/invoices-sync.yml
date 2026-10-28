@@ -1,10 +1,11 @@
 name: Invoices Sync
 on:
   schedule:
-    # Hourly at :30 since 2026-10-28. Every 6h was enough for new mail but a
-    # run reads only six emails, so any backlog took days to clear (13 were
-    # still waiting on 2026-10-28). Concurrency lock prevents pile-up.
-    - cron: '30 * * * *'
+    # Every 15 minutes since 2026-10-28. A run reads only six emails (the PDF
+    # reads have to fit in one function call), so hourly still left a 50-email
+    # September backfill waiting ~9 hours. A run with nothing new is one Gmail
+    # search. Concurrency lock prevents pile-up.
+    - cron: '*/15 * * * *'
   workflow_dispatch:
     inputs:
       lookback_days:
