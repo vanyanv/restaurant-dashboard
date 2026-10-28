@@ -36,11 +36,9 @@
     "model": "gpt-5-mini",
     "evaluatedAt": "2026-10-28",
     "cases": 16,
-    "passed": 0,
-    "passRate": 0,
-    "costUsd": 0,
-    "floor": 0.75,
-    "pendingReEval": true,
-    "pendingReason": "2026-10-28: the classifier model moved from gpt-4.1-nano (retired by OpenAI; every call 404'd) to gpt-4.1-mini. The prompt and tools are unchanged since the 15/16 run recorded earlier today. Numbers are zeroed per the rule. Run `npm run eval:llm -- --feature chat-tool-choice --record`."
+    "passed": 14,
+    "passRate": 0.875,
+    "costUsd": 0.02342,
+    "floor": 0.75
   }
 }

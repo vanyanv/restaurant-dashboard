@@ -2,8 +2,7 @@
   "called": [
     "getAlerts",
     "getOpenAnomalies",
-    "getAlerts",
-    "getOpenAnomalies"
+    "getAlerts"
   ],
   "model": "gpt-5-mini",
   "pass": true,
