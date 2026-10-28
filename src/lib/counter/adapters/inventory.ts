@@ -1,3 +1,4 @@
+import { ADJUST_FORM_REASONS } from "@/lib/counter/waste-reasons"
 import { prisma } from "@/lib/prisma"
 import { purchaseLineFilterSql, purchaseLineWhere } from "@/lib/counter/purchases"
 import { businessQueryDate } from "@/lib/counter/business-date"
@@ -112,11 +113,14 @@ export interface InventorySettle {
  *   - `waste-cluster-actions.ts` builds the waste root-cause forecast;
  *   - `store-inventory-context.ts` feeds the model its per-store picture;
  *   - the chat's `getRecentInventoryAdjustments` returns [] every time;
- *   - and the COGS adapter DROPS its waste line entirely, saying so in its
- *     own docblock, because the table is empty.
+ *   - and the COGS adapter used to DROP its waste line entirely, because the
+ *     table was empty.
  *
- * So every pound thrown away on this account has been landing in food cost,
- * where it makes the plate look expensive and names no cause.
+ * So every pound thrown away on this account landed in food cost, where it
+ * makes the plate look expensive and names no cause. The table has rows now
+ * (this form, and the Count & waste log since 2026-10-28), and COGS, Product
+ * usage and the count report all value them through one reason taxonomy —
+ * `@/lib/counter/waste-reasons`.
  */
 export interface InventoryAdjust {
   /** Null when the account has no active store — the form says so instead. */
@@ -149,16 +153,10 @@ function adjustOf(d: InventoryData): InventoryAdjust {
       name: titleCase(i.name.toLowerCase()),
       unit: i.recipeUnit ?? "each",
     })),
-    // `InventoryAdjustmentReason` in the schema. The labels are the words an
-    // operator uses; SUPPLIER_RETURN is "sent back" because nobody standing in
-    // a walk-in calls it a supplier return.
-    reasons: [
-      { id: "EXPIRY", label: "Expired" },
-      { id: "DAMAGE", label: "Damaged" },
-      { id: "THEFT", label: "Theft" },
-      { id: "SUPPLIER_RETURN", label: "Sent back" },
-      { id: "OTHER", label: "Other" },
-    ],
+    // `InventoryAdjustmentReason` in the schema, labelled by the one taxonomy
+    // the waste log reads too (`@/lib/counter/waste-reasons`), so EXPIRY says
+    // "Went bad" on both forms and each reason is counted under one class.
+    reasons: ADJUST_FORM_REASONS.map((r) => ({ id: r.id, label: r.label })),
     meta:
       d.storeId === null
         ? "no store"
@@ -166,9 +164,10 @@ function adjustOf(d: InventoryData): InventoryAdjust {
     callout:
       `Every adjustment is written with a reason and a name against it. ` +
       `An unexplained variance goes to food cost and makes the plate look expensive; an ` +
-      `explained one goes to shrink and makes the waste visible, which is the number you can ` +
-      `actually do something about. This table is empty, so all of it has been going to food ` +
-      `cost.`,
+      `explained one is counted as waste, theft or a return and makes the loss visible, which ` +
+      `is the number you can actually do something about. Damaged and gone-bad stock counts as ` +
+      `waste here and in the Count & waste log alike; theft and stock sent back are kept apart ` +
+      `from it.`,
   }
 }
 

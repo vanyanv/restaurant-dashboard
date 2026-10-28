@@ -460,6 +460,13 @@ const MOTION_ALLOWED = /[/\\]components[/\\]counter[/\\]motion[/\\]/
  * read by `adapters/product-usage.ts` and `adapters/inventory.ts`, so "what
  * counts as a purchase" against usage is one rule on both pages.
  *
+ * `price-move.ts` and `logged-waste.ts` were named on the same two tests on
+ * 2026-10-28: each runs `@/lib/prisma` queries at runtime. `price-move.ts` is
+ * the one function that owns an ingredient's price move and is read by
+ * `adapters/prices.ts`, `adapters/ingredients.ts`, `adapters/ingredient.ts`
+ * and `adapters/cogs.ts`; `logged-waste.ts` values logged stock adjustments
+ * by reason class for `adapters/product-usage.ts` and `adapters/cogs.ts`.
+ *
  * Confirmed empirically: extending rule 4 to `.ts` with no exemption beyond
  * `adapters/` produced 25 violations across 20 files (12 under `actions/`,
  * 8 top-level); this allowance, `(adapters|actions)/` plus these eight
@@ -469,7 +476,7 @@ const MOTION_ALLOWED = /[/\\]components[/\\]counter[/\\]motion[/\\]/
  * a fake Prisma import inside a hook is still caught.
  */
 const DATA_ALLOWED_TOP_LEVEL_FILES =
-  "channel-mix|cogs|item-discounts|item-economics|labor-leaks|labor-week|purchases|run-out|service-profile|staffing-curve|statement|vendor-basket"
+  "channel-mix|cogs|item-discounts|item-economics|labor-leaks|labor-week|logged-waste|price-move|purchases|run-out|service-profile|staffing-curve|statement|vendor-basket"
 const DATA_ALLOWED = new RegExp(
   String.raw`[/\\]lib[/\\]counter[/\\](?:adapters|actions)[/\\]` +
     "|" +

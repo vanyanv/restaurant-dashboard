@@ -21,6 +21,12 @@ vi.mock("@/lib/prisma", () => ({
   prisma: { $queryRaw: vi.fn() },
 }))
 vi.mock("@/lib/account-stores", () => ({ getScopedStores: vi.fn() }))
+// The price move is `@/lib/counter/price-move`'s, tested on its own; this
+// file is about other queries, so it reads no moves.
+vi.mock("@/lib/counter/price-move", async (orig) => ({
+  ...(await orig<typeof import("@/lib/counter/price-move")>()),
+  loadPriceMoves: vi.fn(async () => ({ moves: new Map(), unpriceable: 0, totalCanonicals: 0 })),
+}))
 
 import { prisma } from "@/lib/prisma"
 import { getScopedStores } from "@/lib/account-stores"

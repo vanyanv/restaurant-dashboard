@@ -18,6 +18,11 @@ vi.mock("@/lib/prisma", () => ({
   },
 }))
 vi.mock("@/lib/account-stores", () => ({ getScopedStores: vi.fn() }))
+// The price move is `@/lib/counter/price-move`'s, tested on its own.
+vi.mock("@/lib/counter/price-move", async (orig) => ({
+  ...(await orig<typeof import("@/lib/counter/price-move")>()),
+  loadPriceMoves: vi.fn(async () => ({ moves: new Map(), unpriceable: 0, totalCanonicals: 0 })),
+}))
 vi.mock("@/lib/recipe-cost", () => ({ batchRecipeCosts: vi.fn() }))
 
 import { prisma } from "@/lib/prisma"

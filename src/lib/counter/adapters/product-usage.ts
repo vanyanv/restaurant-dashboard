@@ -16,6 +16,8 @@ import {
   type StreamedSections,
 } from "@/lib/counter/adapters/types"
 import { mapReady, type SectionData } from "@/lib/counter/section-data"
+import { loadLoggedAdjustments } from "@/lib/counter/logged-waste"
+import type { AdjustmentTotals } from "@/lib/counter/waste-reasons"
 import type { FigureProps, MListRow, QueueItem, Row } from "@/components/counter"
 
 /**
@@ -116,6 +118,8 @@ interface UsageData {
   rows: VarianceRow[]
   /** Daily theoretical and purchased, for the chart. */
   series: Array<{ day: string; theoretical: number; purchased: number }>
+  /** Logged stock adjustments in the range, by reason class — `@/lib/counter/logged-waste`. */
+  logged: AdjustmentTotals
   rangeLabel: string
 }
 
@@ -183,7 +187,7 @@ async function loadUsage(input: ProductUsageInput): Promise<UsageData> {
     to: endDate,
   }
 
-  const [costs, sold, purchasedByIngredient, dailyTheoretical, dailyPurchased] =
+  const [costs, sold, purchasedByIngredient, dailyTheoretical, dailyPurchased, logged] =
     await Promise.all([
       batchRecipeCosts(accountId),
       storeIds.length === 0
@@ -205,6 +209,15 @@ async function loadUsage(input: ProductUsageInput): Promise<UsageData> {
               AND date >= ${startDate}::date AND date <= ${endDate}::date
             GROUP BY 1 ORDER BY 1`,
       purchaseSpendByDay(purchases),
+      // What the waste log and "Adjust on hand" wrote in the range, grouped by
+      // the one reason taxonomy. Its own figure beside the variance — it
+      // explains part of the gap but is not subtracted from it.
+      loadLoggedAdjustments({
+        accountId,
+        storeIds: storeId ? storeIds : null,
+        from: startDate,
+        to: endDate,
+      }),
     ])
 
   const memo = new Map<string, Map<string, { name: string; dollars: number }>>()
@@ -266,6 +279,7 @@ async function loadUsage(input: ProductUsageInput): Promise<UsageData> {
       theoretical: theoDay.get(day) ?? 0,
       purchased: buyDay.get(day) ?? 0,
     })),
+    logged,
     rangeLabel: rangeLabel(range, "custom"),
   }
 }
@@ -282,13 +296,17 @@ const D = (iso: string) =>
 /* -- sections --------------------------------------------------------- */
 
 /**
- * The strip, and the cell that replaces waste.
+ * The strip.
  *
- * `Waste logged · $520 · 1.2% of COGS` is the prototype's fourth. **No table
- * in this schema matches `%waste%`** — there is no waste log, so the cell has
- * no source at all.
+ * `Waste logged · $520 · 1.2% of COGS` is the prototype's fourth. It has a
+ * source now — the Count & waste log and Inventory's "Adjust on hand" both
+ * write `InventoryAdjustment` — and it is valued by `loadLoggedAdjustments`,
+ * the same grouping the count report and COGS read, so "waste" here is the
+ * waste CLASS only (dropped, went bad, burnt, remade, damaged); theft and
+ * stock sent back are named in its delta, not added in. The variance is
+ * unchanged by it: logged waste explains part of a gap, it does not close it.
  *
- * What takes it is the figure this page most owes the reader: how much of the
+ * The cell beside it is the figure this page most owes the reader: how much of the
  * theoretical cost the table below can actually attribute to a named
  * ingredient. It is **80.7%** here, and the missing fifth is recipes costed by
  * a recipe-level override — no ingredient lines under them to divide — plus
@@ -309,6 +327,21 @@ function headlineOf(d: UsageData): UsageHeadline {
         : "no theoretical to compare",
     deltaTone: variance > 0 ? "is-down" : "is-flat",
   }
+  const { dollars } = d.logged
+  const wasteCell: FigureProps = {
+    label: "Waste logged",
+    value: money(dollars.waste),
+    delta:
+      d.theoretical > 0 && dollars.waste > 0
+        ? `${pct((dollars.waste / d.theoretical) * 100, { scaled: true })} of theoretical` +
+          (dollars.shrink + dollars.return > 0
+            ? ` · theft ${money(dollars.shrink)} · sent back ${money(dollars.return)}`
+            : "")
+        : dollars.shrink + dollars.return > 0
+          ? `theft ${money(dollars.shrink)} · sent back ${money(dollars.return)}`
+          : `nothing logged over ${d.rangeLabel}`,
+    deltaTone: "is-flat",
+  }
   const coverageCell: FigureProps = {
     label: "Attributed",
     value: coverage === null ? "—" : pct(coverage, { scaled: true }),
@@ -322,10 +355,16 @@ function headlineOf(d: UsageData): UsageHeadline {
   return {
     cells: [
       {
+        // The desk strip is the prototype's four cells, so "Attributed" rides
+        // on this cell's delta here rather than taking a fifth; the phone
+        // keeps it as a cell.
         label: "Theoretical",
         value: money(d.theoretical),
-        delta: "from recipes × units sold",
-        deltaTone: "is-flat",
+        delta:
+          coverage === null || coverage >= 99.95
+            ? "from recipes × units sold"
+            : `${pct(coverage, { scaled: true })} attributed · ${money(d.theoretical - d.attributed)} has no ingredient`,
+        deltaTone: coverage !== null && coverage < 95 ? "is-down" : "is-flat",
       },
       {
         label: "Purchased",
@@ -334,7 +373,7 @@ function headlineOf(d: UsageData): UsageHeadline {
         deltaTone: "is-flat",
       },
       varianceCell,
-      coverageCell,
+      wasteCell,
     ],
     phoneCells: [varianceCell, coverageCell],
   }

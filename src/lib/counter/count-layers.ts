@@ -1,5 +1,6 @@
 import { convertQty } from "@/lib/inventory/usage-math"
 import { unitsCompatibleWith } from "@/lib/unit-conversion"
+import { WASTE_LOG_REASONS, reasonLabel } from "@/lib/counter/waste-reasons"
 
 /**
  * The weekly count's arithmetic, in one place. A CountItem is counted in
@@ -175,17 +176,16 @@ export function describeShelf(layers: Layer[], values: ReadonlyArray<number | nu
   return parts.length ? parts.join(" + ") : "0"
 }
 
-export const WASTE_REASONS = [
-  { id: "DROPPED", label: "Dropped" },
-  { id: "EXPIRY", label: "Went bad" },
-  { id: "BURNT", label: "Burnt" },
-  { id: "REMAKE", label: "Remake" },
-  { id: "OTHER", label: "Other" },
-] as const
+/**
+ * The waste log's reasons. The labels and the class each one is counted
+ * under live in `@/lib/counter/waste-reasons` — the one taxonomy Inventory's
+ * "Adjust on hand" form reads too, so EXPIRY is "Went bad" on both.
+ */
+export const WASTE_REASONS = WASTE_LOG_REASONS
 export type WasteReason = (typeof WASTE_REASONS)[number]["id"]
-/** Adjustments the waste log owns; returns and damage logged elsewhere are not waste here. */
+/** The reasons the waste log writes — what it may list and undo as its own entries. */
 export const WASTE_REASON_IDS: WasteReason[] = WASTE_REASONS.map((r) => r.id)
 
 export function wasteReasonLabel(id: string): string {
-  return WASTE_REASONS.find((r) => r.id === id)?.label ?? id.charAt(0) + id.slice(1).toLowerCase().replace(/_/g, " ")
+  return reasonLabel(id)
 }

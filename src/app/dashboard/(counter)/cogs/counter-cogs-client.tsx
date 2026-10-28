@@ -61,15 +61,14 @@ import type { CogsSections, MovedSection, ItemsSection } from "@/lib/counter/ada
  *
  * ## Four departures from the prototype, all forced by the data
  *
- * 1. **The strip is THREE cells, not four** (C-R3, C-R4). "Waste" is dropped
- *    because `InventoryAdjustment` has zero rows in the whole table and
- *    `StockCount` has four — there is no waste series and no honest way to
- *    invent one. "Theoretical" is dropped because `DailyCogsItem.lineCost`
- *    already IS the theoretical cost, so a cell reading it beside the food
- *    cost would be the same number twice. "Against plan" is added: it is the
- *    only extra figure this schema publishes a reference for
- *    (`Store.targetCogsPct`). `Strip` sizes itself from `cells.length`, so
- *    this is a shorter strip, not two boxes reading "—".
+ * 1. **The strip swaps one of the prototype's four cells** (C-R3, C-R4).
+ *    "Theoretical" is dropped because `DailyCogsItem.lineCost` already IS the
+ *    theoretical cost, so a cell reading it beside the food cost would be the
+ *    same number twice. "Against plan" takes its place: it is the only extra
+ *    figure this schema publishes a reference for (`Store.targetCogsPct`).
+ *    "Waste logged" reads the waste log (`loadLoggedAdjustments`). `Strip`
+ *    sizes itself from `cells.length`, so the store route's extra cell is a
+ *    wider strip, not a box reading "—".
  *
  * 2. **The chart draws ONE line, not two** (C-R4). The prototype's dashed
  *    "Theoretical" series needs an ACTUAL to be read against, and the only
@@ -237,7 +236,7 @@ export function CounterCogsClient({
       <SubNav items={storeViewTabs("/dashboard/cogs", counterParams.storeId, paramsString, [{ label: "Theoretical vs actual", href: "/dashboard/operations/product-usage" }], "Cost")} label="COGS" />
 
       {/* Page level, above the first `.sec`, exactly as `strip([...])` is
-          written in `P.cogs.desk()`. Three cells (C-R3, C-R4). */}
+          written in `P.cogs.desk()`. Four cells on the group route (C-R3, C-R4). */}
       <Section bare title="The figures" data={sections.headline} pending={pending}>
         {(h) => <Strip cells={h.cells} />}
       </Section>
@@ -273,7 +272,7 @@ export function CounterCogsClient({
         <Section
           title="What moved"
           pending={pending}
-          // Names the thirty-day window and the unit prices are normalized to,
+          // Names the 120-day median basis and the unit prices are normalized to,
           // because neither follows the date control above.
           meta={(m) => m.meta}
           data={sections.moved}

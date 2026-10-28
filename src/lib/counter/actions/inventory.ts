@@ -1,6 +1,7 @@
 "use server"
 
 import { logInventoryAdjustment } from "@/app/actions/inventory/adjustment-actions"
+import type { AdjustFormReason } from "@/lib/counter/waste-reasons"
 
 /**
  * The Counter layer's write path for stock adjustments.
@@ -20,7 +21,7 @@ export async function recordInventoryAdjustment(input: {
   storeId: string
   ingredientId: string
   qty: number
-  reason: "THEFT" | "EXPIRY" | "SUPPLIER_RETURN" | "DAMAGE" | "OTHER"
+  reason: AdjustFormReason
   note: string | null
 }): Promise<{ ok: true } | { ok: false; error: string }> {
   const result = await logInventoryAdjustment({

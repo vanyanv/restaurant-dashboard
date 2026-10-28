@@ -10,7 +10,7 @@ import { CountHead, money, StoreChips } from "../count-ui"
 
 /**
  * Count & waste — Report. For each item counted this time and last time:
- * last count + delivered − what sales used − logged waste = what should be on
+ * last count + delivered − what sales used − logged waste, theft and returns = what should be on
  * the shelf. The gap to what was counted is food that went somewhere nobody
  * wrote down. Below it, how often each item is ordered, from invoices.
  */
@@ -76,12 +76,22 @@ function Gap({ data }: { data: ReportData }) {
             <div className="cw-fig">
               <span className="cw__mono">Missing, nobody logged it</span>
               <b className={data.missingDollars > 0 ? "miss" : ""}>{money(data.missingDollars)}</b>
-              <span>Should have been there, wasn&apos;t, and no waste entry</span>
+              <span>Should have been there, wasn&apos;t, and nothing logged it</span>
+            </div>
+            <div className="cw-fig">
+              <span className="cw__mono">Extra on the shelf</span>
+              <b>{money(data.extraDollars)}</b>
+              <span>More counted than the numbers say — kept apart, not netted off the missing</span>
             </div>
             <div className="cw-fig">
               <span className="cw__mono">Waste you logged</span>
               <b>{money(data.wasteDollars)}</b>
-              <span>{data.wasteEntries} {data.wasteEntries === 1 ? "entry" : "entries"} since {data.previous.label}</span>
+              <span>{data.wasteEntries} {data.wasteEntries === 1 ? "entry" : "entries"} since {data.previous.label} · dropped, went bad, burnt, remade, damaged</span>
+            </div>
+            <div className="cw-fig">
+              <span className="cw__mono">Theft · sent back · other</span>
+              <b>{money(data.theftDollars + data.returnDollars + data.otherDollars)}</b>
+              <span>Theft {money(data.theftDollars)} · sent back {money(data.returnDollars)} · other {money(data.otherDollars)}</span>
             </div>
             <div className="cw-fig">
               <span className="cw__mono">Compared</span>
@@ -100,7 +110,8 @@ function Gap({ data }: { data: ReportData }) {
                     <th>Last count</th>
                     <th>+ Delivered</th>
                     <th>− Sales used</th>
-                    <th>− Logged waste</th>
+                    <th>− Waste</th>
+                    <th>− Theft, sent back, other</th>
                     <th>= Should have</th>
                     <th>You counted</th>
                     <th>Missing</th>
@@ -118,7 +129,8 @@ function Gap({ data }: { data: ReportData }) {
                         <td data-label="Last count">{q(r.last)} {r.unit}</td>
                         <td data-label="+ Delivered">{q(r.delivered)}</td>
                         <td data-label="− Sales used">{q(r.used)}</td>
-                        <td data-label="− Logged waste">{q(r.waste)}</td>
+                        <td data-label="− Waste">{q(r.waste)}</td>
+                        <td data-label="− Theft, sent back, other">{q(r.theft + r.returned + r.other)}</td>
                         <td data-label="= Should have">{q(r.should)}</td>
                         <td data-label="You counted">{q(r.counted)}</td>
                         <td data-label="Missing" className={off ? "ok" : r.missing > 0 ? "miss" : ""}>
@@ -136,7 +148,7 @@ function Gap({ data }: { data: ReportData }) {
             </div>
           )}
           <p className="cw__sub" style={{ padding: 14, borderTop: "1px solid var(--line)" }}>
-            &quot;Sales used&quot; is every item sold times its recipe. Extras and &quot;no cheese&quot; changes aren&apos;t in it yet, so a small gap on cheese or sauce is expected. &quot;Extra&quot; means more on the shelf than the numbers say, usually a delivery whose invoice hasn&apos;t come in.
+            Every row adds across: last count + delivered − sales used − waste − theft, sent back and other = should have. The figures above are those rows summed{data.offReportEntries > 0 ? `; ${data.offReportEntries} more ${data.offReportEntries === 1 ? "entry" : "entries"} (${money(data.offReportDollars)}) were logged against items not counted both times, so they are on no row` : ""}. &quot;Sales used&quot; is every item sold times its recipe. Extras and &quot;no cheese&quot; changes aren&apos;t in it yet, so a small gap on cheese or sauce is expected. &quot;Extra&quot; means more on the shelf than the numbers say, usually a delivery whose invoice hasn&apos;t come in.
           </p>
         </>
       )}

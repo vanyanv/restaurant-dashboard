@@ -96,8 +96,8 @@ export default async function StoreCogsPage({
   const storesP = getOverviewStores()
 
   // NOT AWAITED — one promise per section, each unwrapped inside its own
-  // Suspense boundary by `Section`. "What moved" walks the ingredient price
-  // monitor's own thirty-day comparison and is by far the slowest of the four;
+  // Suspense boundary by `Section`. "What moved" walks the
+  // shared price move (`@/lib/counter/price-move`) and is by far the slowest of the four;
   // it holds up the strip, the plan chart and the worst-margin table for
   // exactly as long as it holds up nothing.
   const sections = getStoreCogsSectionPromises({

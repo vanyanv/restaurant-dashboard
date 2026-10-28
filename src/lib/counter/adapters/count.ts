@@ -15,6 +15,7 @@ import {
   wasteReasonLabel,
   type Layer,
 } from "@/lib/counter/count-layers"
+import { reasonClass, sumAdjustments, type ValuedAdjustment } from "@/lib/counter/waste-reasons"
 import { classify, guardSection, type StreamedSections } from "./types"
 import type { SectionData } from "@/lib/counter/section-data"
 
@@ -271,7 +272,17 @@ export type GapRow = {
   counted: number
   /** should − counted. Positive means it went somewhere nobody logged. */
   missing: number
+  /** Signed: positive is a shortage, negative an overage. */
   missingDollars: number | null
+  /** Logged out by reason class, in the row's display unit (`waste` is the waste class only). */
+  theft: number
+  returned: number
+  other: number
+  /** The same entries, valued — the totals are the sum of these. */
+  wasteDollars: number
+  theftDollars: number
+  returnDollars: number
+  otherDollars: number
   /** Some deliveries could not be turned into this unit (no case size yet). */
   partial: boolean
 }
@@ -293,9 +304,19 @@ export type ReportData = {
   current: { id: string; label: string } | null
   previous: { label: string } | null
   rows: GapRow[]
+  /** Σ shortages only. */
   missingDollars: number
+  /** Σ overages, as a positive figure — shown beside the shortages, never netted into them. */
+  extraDollars: number
+  /** Σ of the rows' class dollars; rows add up to these exactly. */
   wasteDollars: number
+  theftDollars: number
+  returnDollars: number
+  otherDollars: number
   wasteEntries: number
+  /** Entries in the window on items not counted both times — not on any row. */
+  offReportEntries: number
+  offReportDollars: number
   orders: OrderRow[]
 }
 export type ReportSections = { report: SectionData<ReportData | null> }
@@ -391,7 +412,9 @@ export function getCountReportSectionPromises(opts: { accountId: string; storeId
           stores, store, counts,
           current: cur ? { id: cur.id, label: dayLabel(cur.countedAt) } : null,
           previous: prev ? { label: dayLabel(prev.countedAt) } : null,
-          rows: [], missingDollars: 0, wasteDollars: 0, wasteEntries: 0, orders,
+          rows: [], missingDollars: 0, extraDollars: 0, wasteDollars: 0, theftDollars: 0,
+          returnDollars: 0, otherDollars: 0, wasteEntries: 0, offReportEntries: 0,
+          offReportDollars: 0, orders,
         }
         if (!cur || !prev) return base
 
@@ -409,11 +432,21 @@ export function getCountReportSectionPromises(opts: { accountId: string; storeId
             where: { accountId: opts.accountId, stockCountLines: { some: { stockCountId: cur.id } } },
             select: { id: true, name: true, recipeUnit: true, costPerRecipeUnit: true, caseUnit: true, recipeUnitsPerCase: true, innerPackUnit: true, innerPacksPerCase: true },
           }),
+          // EVERY reason, over the window the "should have" walk subtracts —
+          // after the previous count, up to `asOf`. The rows and the totals
+          // are both `sumAdjustments` over these, so they add up.
           prisma.inventoryAdjustment.findMany({
-            where: { storeId: store.id, store: { accountId: opts.accountId }, occurredAt: { gt: prev.countedAt, lte: cur.countedAt }, reason: { in: WASTE_REASON_IDS } },
-            select: { qty: true, canonicalIngredient: { select: { costPerRecipeUnit: true } } },
+            where: { storeId: store.id, store: { accountId: opts.accountId }, occurredAt: { gt: prev.countedAt, lte: asOf } },
+            select: { canonicalIngredientId: true, reason: true, qty: true, canonicalIngredient: { select: { costPerRecipeUnit: true } } },
           }),
         ])
+        const adjBy = new Map<string, ValuedAdjustment[]>()
+        for (const a of waste) {
+          const list = adjBy.get(a.canonicalIngredientId) ?? []
+          list.push({ reason: a.reason, qty: a.qty, cost: a.canonicalIngredient.costPerRecipeUnit })
+          adjBy.set(a.canonicalIngredientId, list)
+        }
+        const onRows = new Set<string>()
         const counted = new Map(lines.map((l) => [l.canonicalIngredientId, l.qtyInRecipeUnit]))
         const rows: GapRow[] = []
         for (const ing of ings) {
@@ -421,8 +454,10 @@ export function getCountReportSectionPromises(opts: { accountId: string; storeId
           const r = runningOnHandFromContext(ctx, ing)
           // Only items counted both times have a starting point.
           if (!r.baseAt || r.baseAt.getTime() !== prev.countedAt.getTime()) continue
+          onRows.add(ing.id)
           const got = counted.get(ing.id) ?? 0
           const missing = r.onHand - got
+          const adj = sumAdjustments(adjBy.get(ing.id) ?? [])
           // Shown in lb when the recipes use oz; dollars are worked out first.
           const k = ing.recipeUnit.trim().toLowerCase() === "oz" ? 16 : 1
           rows.push({
@@ -431,25 +466,57 @@ export function getCountReportSectionPromises(opts: { accountId: string; storeId
             last: r.baseQty / k,
             delivered: r.deliveriesQty / k,
             used: r.depletionQty / k,
-            waste: r.adjustmentsQty / k,
+            waste: adj.qty.waste / k,
+            theft: adj.qty.shrink / k,
+            returned: adj.qty.return / k,
+            other: adj.qty.other / k,
             should: r.onHand / k,
             counted: got / k,
             missing: missing / k,
             missingDollars: ing.costPerRecipeUnit != null ? missing * ing.costPerRecipeUnit : null,
+            wasteDollars: adj.dollars.waste,
+            theftDollars: adj.dollars.shrink,
+            returnDollars: adj.dollars.return,
+            otherDollars: adj.dollars.other,
             partial: r.partial,
           })
         }
         rows.sort((a, b) => (b.missingDollars ?? 0) - (a.missingDollars ?? 0))
+        const off = sumAdjustments(
+          [...adjBy].filter(([id]) => !onRows.has(id)).flatMap(([, list]) => list),
+        )
+        const onEntries = [...adjBy].filter(([id]) => onRows.has(id)).flatMap(([, list]) => list)
         return {
           ...base,
+          ...reportTotals(rows),
           rows,
-          missingDollars: rows.reduce((t, r) => t + Math.max(0, r.missingDollars ?? 0), 0),
-          wasteDollars: waste.reduce((t, w) => t + w.qty * (w.canonicalIngredient.costPerRecipeUnit ?? 0), 0),
-          wasteEntries: waste.length,
+          wasteEntries: onEntries.filter((e) => reasonClass(e.reason) === "waste").length,
+          offReportEntries: Object.values(off.entries).reduce((t, n) => t + n, 0),
+          offReportDollars: Object.values(off.dollars).reduce((t, n) => t + n, 0),
         }
       }, { retryAction: "count.report", isEmpty: (d) => d === null, emptyReason: "no_stores" }),
       "count.report",
     ),
+  }
+}
+
+/**
+ * The report's totals, from its rows and nothing else — so the rows add up to
+ * them. Missing is SHORTAGES only; overages are their own figure rather than
+ * dropped (or netted against the shortages, which would hide both).
+ */
+export function reportTotals(rows: GapRow[]): Pick<
+  ReportData,
+  "missingDollars" | "extraDollars" | "wasteDollars" | "theftDollars" | "returnDollars" | "otherDollars"
+> {
+  const sum = (f: (r: GapRow) => number) => rows.reduce((t, r) => t + f(r), 0)
+  return {
+    missingDollars: sum((r) => Math.max(0, r.missingDollars ?? 0)),
+    extraDollars: sum((r) => Math.max(0, -(r.missingDollars ?? 0))),
+    wasteDollars: sum((r) => r.wasteDollars),
+    theftDollars: sum((r) => r.theftDollars),
+    returnDollars: sum((r) => r.returnDollars),
+    otherDollars: sum((r) => r.otherDollars),
   }
 }
 

@@ -14,6 +14,7 @@ import {
   type StreamedSections,
 } from "@/lib/counter/adapters/types"
 import { mapReady, type SectionData } from "@/lib/counter/section-data"
+import { loadPriceMoves, movePctOf } from "@/lib/counter/price-move"
 import type { FigureProps, MListRow, QueueItem, Row } from "@/components/counter"
 
 /**
@@ -43,13 +44,14 @@ import type { FigureProps, MListRow, QueueItem, Row } from "@/components/counter
  * printed rather than borrowing the control's authority:
  *
  *   - **The price monitor is a fixed 8 weeks.** See `pricesOf`.
- *   - **The catalogue's move column is a fixed 30 days**, and its header says
- *     "30d move". It is read off the same weekly medians the monitor is drawn
- *     from (see `moveOf`), so it is bounded by that 8-week series; and the
- *     default range on every Counter page is a single day, which has no
- *     weekly median to compare against at all. A move column that emptied
- *     itself to "no prior" whenever somebody picked Yesterday would be worse
- *     than a fixed one, and dishonest on top of it.
+ *   - **The catalogue's move column is the latest price against its own
+ *     trailing 120-day median**, and its header says "Price move". It is
+ *     `@/lib/counter/price-move`'s figure — the same one the ingredient's
+ *     own page, COGS and the Prices page print — normalised per recipe unit
+ *     and spike-guarded the way booked costs are. The default range on every
+ *     Counter page is a single day, which has no history to compare against,
+ *     so a move column that followed the control would empty itself to
+ *     "no prior" whenever somebody picked Yesterday.
  *
  * The catalogue's ROW SET is not range-bound either: it is every ingredient
  * that has ever been invoiced, so a quiet range empties the spend column
@@ -214,7 +216,7 @@ interface CatRow {
   vendors: number
   lastPrice: number | null
   lastUnit: string | null
-  /** Percent change against the newest reading at least 30 days older, same unit. */
+  /** Percent, latest vs trailing 120-day median — `@/lib/counter/price-move`. */
   move: number | null
   recipes: number
   /**
@@ -287,13 +289,12 @@ async function loadIngredients(input: IngredientsInput): Promise<IngredientData>
   const storeIds = stores.map((s) => s.id)
 
   /*
-   * A FIXED THIRTY DAYS, and the only two things still on it.
+   * A FIXED THIRTY DAYS, and the only thing still on it.
    *
    * `recent` below ("none added in 30 days" on the strip) asks whether the
-   * catalogue pipeline has stopped, and `moveOf` asks how a price has moved.
-   * Neither is a question the date control can ask — see the module docblock's
-   * "The three windows" — and both print the words "30 days" where the reader
-   * can see them.
+   * catalogue pipeline has stopped. That is not a question the date control
+   * can ask — see the module docblock's "The three windows" — and it prints
+   * the words "30 days" where the reader can see them.
    */
   const d30 = new Date(today)
   d30.setDate(d30.getDate() - 30)
@@ -307,6 +308,7 @@ async function loadIngredients(input: IngredientsInput): Promise<IngredientData>
     modifiers,
     orphanRows,
     categories,
+    priceMoves,
   ] = await Promise.all([
     /*
      * THREE COUNTS OVER ONE TABLE, asked once.
@@ -333,11 +335,10 @@ async function loadIngredients(input: IngredientsInput): Promise<IngredientData>
     // over lines whose pack size changed mid-window reads as a price move that
     // never happened. Fries showed +31% that way and −13% on the printed one.
     //
-    // The 30-day MOVE is not computed here at all — it comes from the same
-    // weekly medians the price monitor is drawn from, so the chart and the
-    // column cannot disagree. Two single readings 30 days apart put fries at
-    // −40% where eight weekly medians put them at −13%, because "CS" covers
-    // two different case sizes.
+    // The MOVE is not computed here at all — it is `loadPriceMoves`, below.
+    // Two single readings 30 days apart put fries at −40% where eight weekly
+    // medians put them at −13%, because "CS" covers two different case sizes;
+    // the shared function compares normalised costs, so case size drops out.
     prisma.$queryRaw<
       Array<{
         id: string
@@ -463,29 +464,14 @@ async function loadIngredients(input: IngredientsInput): Promise<IngredientData>
       LEFT JOIN "Invoice" i ON i.id = li."invoiceId"
       WHERE ci."accountId" = ${accountId}
       GROUP BY 1 ORDER BY 4 DESC, 2 DESC`,
+    // The move column — the one definition every page that prints a price
+    // move reads. Store-scoped when the page is.
+    loadPriceMoves({ accountId, storeIds: storeId ? storeIds : null, asOf: today }),
   ])
 
-  // The weekly medians, per ingredient, oldest first — the ONE series both the
-  // chart and the catalogue's 30d column read.
-  const series = new Map<string, Array<{ week: string; price: number }>>()
-  for (const w of weekly) {
-    const iso = w.wk.toISOString().slice(0, 10)
-    series.set(w.id, [...(series.get(w.id) ?? []), { week: iso, price: w.px }])
-  }
-  for (const list of series.values()) list.sort((a, b) => a.week.localeCompare(b.week))
-
-  const d30Iso = d30.toISOString().slice(0, 10)
-  const moveOf = (id: string): number | null => {
-    const list = series.get(id)
-    if (!list || list.length < 2) return null
-    const latest = list[list.length - 1]
-    // The newest week that is still older than the 30-day mark. Falls back to
-    // the oldest week we have, so an ingredient delivered only inside the last
-    // month still reports the move it made.
-    const before = [...list].reverse().find((p) => p.week < d30Iso) ?? list[0]
-    if (before.week === latest.week || before.price === 0) return null
-    return ((latest.price - before.price) / before.price) * 100
-  }
+  // The move column is `@/lib/counter/price-move`'s, so it is the same figure
+  // the ingredient's own page, COGS and the Prices page print.
+  const moveOf = (id: string): number | null => movePctOf(priceMoves.moves.get(id))
 
   return {
     // `?? 0` on each: an account with no catalogue at all returns no ROW from
@@ -1027,10 +1013,10 @@ function movingOf(d: IngredientData): IngredientMoving {
       // A price RISE is the bad one — this is what the restaurant pays.
       noteTone: (c.move ?? 0) > 0 ? "down" : "up",
     })),
-    // The same fixed thirty days the desk's "30d move" column is on — see the
-    // module docblock. It is written out here because the phone has no control
-    // at all, so the window has to come from somewhere.
-    meta: "30 days",
+    // The same comparison the desk's "Price move" column is — see the module
+    // docblock. It is written out here because the phone has no control at
+    // all, so the basis has to come from somewhere.
+    meta: "vs 120-day median",
   }
 }
 

@@ -1,10 +1,8 @@
 import { prisma } from "@/lib/prisma"
 import { count, money, pct, unitCost } from "@/lib/counter/format"
-import {
-  COST_SPIKE_THRESHOLD,
-  deriveCostFromLineItem,
-  getLineItemBaseQty,
-} from "@/lib/invoice-line-shape"
+import { COST_SPIKE_THRESHOLD } from "@/lib/invoice-line-shape"
+import { loadPriceMoves, VOLUME_DAYS } from "@/lib/counter/price-move"
+import { counterToday } from "@/lib/counter/today"
 import type { ChartSpec } from "@/lib/counter/chart-geometry"
 import {
   awaitSections,
@@ -54,14 +52,17 @@ import type { FigureProps, MListRow, Row } from "@/components/counter"
  * ones that also breach the guard are excluded.
  *
  * See `docs/counter/measurements/2026-08-29-prices.md`.
+ *
+ * ## The move is not computed here
+ *
+ * It is `loadPriceMoves` (`@/lib/counter/price-move`), which every page that
+ * prints a price move now reads. Two things changed when it moved there: the
+ * latest price is spike-guarded the way booked costs are (a mis-parse is set
+ * aside rather than compared), and the volume is in RECIPE units. It used to
+ * be summed in the invoice's base unit and multiplied by a per-recipe-unit Δ,
+ * which put an ingredient costed per ounce and billed by the pound 16× low.
  */
 
-/** How far back a price history is read. */
-const HISTORY_DAYS = 120
-/** The window the volume figure — and so the money — is taken over. */
-const VOLUME_DAYS = 30
-/** Below this many priced deliveries an ingredient has no trailing median worth having. */
-const MIN_DELIVERIES = 3
 /** Rows the movers table prints. */
 const TABLE_ROWS = 12
 /** Ingredients drawn on the chart. */
@@ -80,15 +81,22 @@ export interface Mover {
   name: string
   unit: string
   recipes: number
+  /** The trailing median — `PriceMove.baseline`. */
   median: number
+  /** The spike-guarded latest — `PriceMove.latest`. */
   latest: number
   latestAt: Date
+  /** A fraction. */
   move: number
+  /** Recipe units bought in the last 30 days. */
   volume: number
   costs: number
   deliveries: number
   packVaries: boolean
+  /** Held: even the guarded latest is beyond the spike threshold. */
   spike: boolean
+  /** The newest reading the guard set aside, when it set one aside. */
+  setAside: number | null
   history: Delivery[]
 }
 
@@ -102,132 +110,46 @@ export interface PriceData {
 
 /* ── Load ─────────────────────────────────────────────────────────────── */
 
-export async function loadPrices(accountId: string): Promise<PriceData> {
-  const since = new Date(Date.now() - HISTORY_DAYS * 86_400_000)
-  const volumeSince = new Date(Date.now() - VOLUME_DAYS * 86_400_000)
+/**
+ * The movers, off `loadPriceMoves` — the one function every page that prints
+ * a price move reads (`@/lib/counter/price-move`). Nothing about the move is
+ * computed here any more; this only ranks and shapes it.
+ */
+export async function loadPrices(
+  accountId: string,
+  opts: { asOf?: Date; storeIds?: string[] | null } = {},
+): Promise<PriceData> {
+  const set = await loadPriceMoves({
+    accountId,
+    storeIds: opts.storeIds,
+    asOf: opts.asOf ?? counterToday(),
+  })
 
-  const [canonicals, lines] = await Promise.all([
-    prisma.canonicalIngredient.findMany({
-      where: { accountId },
-      select: {
-        id: true,
-        name: true,
-        recipeUnit: true,
-        _count: { select: { recipeIngredients: true } },
-      },
-    }),
-    prisma.invoiceLineItem.findMany({
-      where: {
-        canonicalIngredientId: { not: null },
-        // The account boundary reaches a line through its invoice. Filtering
-        // on the date alone ranked every account's deliveries in one table.
-        invoice: { accountId, invoiceDate: { gte: since } },
-      },
-      orderBy: { invoice: { invoiceDate: "asc" } },
-      select: {
-        canonicalIngredientId: true,
-        sku: true,
-        productName: true,
-        quantity: true,
-        unit: true,
-        packSize: true,
-        unitSize: true,
-        unitSizeUom: true,
-        unitPrice: true,
-        extendedPrice: true,
-        invoice: { select: { invoiceDate: true } },
-      },
-    }),
-  ])
-
-  const byCanonical = new Map<string, typeof lines>()
-  for (const line of lines) {
-    const id = line.canonicalIngredientId
-    if (id === null) continue
-    const bucket = byCanonical.get(id) ?? []
-    bucket.push(line)
-    byCanonical.set(id, bucket)
-  }
-
-  const movers: Mover[] = []
-  let unpriceable = 0
-
-  for (const canonical of canonicals) {
-    const bucket = byCanonical.get(canonical.id)
-    const recipeUnit = canonical.recipeUnit
-    if (!bucket || !recipeUnit) {
-      if (bucket) unpriceable++
-      continue
-    }
-
-    const priced = bucket
-      .map((line) => {
-        const cost = deriveCostFromLineItem(line, recipeUnit)
-        const base = getLineItemBaseQty(line)
-        // `invoiceDate` is nullable in the schema; an undated line has no
-        // place on a time series, so it is dropped rather than dated today.
-        const at = line.invoice.invoiceDate
-        return cost === null || base === null || at === null
-          ? null
-          : {
-              at,
-              cost,
-              qty: Math.abs(base.totalBaseQty),
-              // A SKU's pack shape is packSize × unitSize; more than one of
-              // those for one SKU is what produces a fictional price move.
-              key: line.sku ?? line.productName.toLowerCase(),
-              shape: (line.packSize ?? 1) * (line.unitSize ?? 1),
-            }
-      })
-      .filter((x): x is NonNullable<typeof x> => x !== null)
-
-    if (priced.length < MIN_DELIVERIES) {
-      if (priced.length === 0) unpriceable++
-      continue
-    }
-
-    const shapes = new Map<string, Set<number>>()
-    for (const p of priced) {
-      const set = shapes.get(p.key) ?? new Set<number>()
-      set.add(p.shape)
-      shapes.set(p.key, set)
-    }
-
-    const latest = priced[priced.length - 1]
-    const trailing = median(priced.slice(0, -1).map((p) => p.cost))
-    if (trailing === null || trailing <= 0) continue
-
-    const volume = priced
-      .filter((p) => p.at >= volumeSince)
-      .reduce((sum, p) => sum + p.qty, 0)
-
-    movers.push({
-      id: canonical.id,
-      name: canonical.name,
-      unit: recipeUnit,
-      recipes: canonical._count.recipeIngredients,
-      median: trailing,
-      latest: latest.cost,
-      latestAt: latest.at,
-      move: (latest.cost - trailing) / trailing,
-      volume,
-      costs: (latest.cost - trailing) * volume,
-      deliveries: priced.length,
-      packVaries: [...shapes.values()].some((s) => s.size > 1),
-      spike:
-        latest.cost > trailing * COST_SPIKE_THRESHOLD ||
-        trailing > latest.cost * COST_SPIKE_THRESHOLD,
-      history: priced.map((p) => ({ at: p.at, cost: p.cost, qty: p.qty })),
-    })
-  }
+  const movers: Mover[] = [...set.moves.values()].map((m) => ({
+    id: m.id,
+    name: m.name,
+    unit: m.recipeUnit,
+    recipes: m.recipes,
+    median: m.baseline,
+    latest: m.latest,
+    latestAt: m.latestAt,
+    move: m.move,
+    volume: m.volume30,
+    costs: m.impact30,
+    deliveries: m.readings.length,
+    packVaries: m.packVaries,
+    spike: m.held,
+    setAside: m.setAside[0]?.cost ?? null,
+    history: m.readings.map((r) => ({ at: r.at, cost: r.cost, qty: r.qty })),
+  }))
 
   movers.sort((a, b) => Math.abs(b.costs) - Math.abs(a.costs))
 
   return {
     movers: movers.filter((m) => !m.spike),
     held: movers.filter((m) => m.spike),
-    unpriceable,
-    totalCanonicals: canonicals.length,
+    unpriceable: set.unpriceable,
+    totalCanonicals: set.totalCanonicals,
   }
 }
 
@@ -412,6 +334,17 @@ function moversOf(d: PriceData): PriceMovers {
        * and nothing is lost: the table had one row on this account and its
        * whole content was the reason it was held out, which is prose.
        */
+      (() => {
+        const guarded = d.movers.filter((m) => m.setAside !== null)
+        return guarded.length === 0
+          ? ``
+          : ` ${count(guarded.length)} latest price${guarded.length === 1 ? " is" : "s are"} ` +
+              `the one recipes are booked at rather than the newest reading: the cost guard set ` +
+              `aside ${guarded
+                .slice(0, 3)
+                .map((m) => `${m.name}'s ${unitCost(m.setAside!)}`)
+                .join(", ")} as a pack read wrong.`
+      })() +
       (d.held.length === 0
         ? ` Nothing moved by more than ${count(COST_SPIKE_THRESHOLD)}× its trailing median, ` +
           `so nothing is being kept off this table.`
@@ -441,7 +374,7 @@ export function getPriceSectionPromises(accountId: string): StreamedSections<Pri
      * Two causes, two answers — and `no_match` was neither.
      *
      * `loadPrices()` takes the account and nothing else: not the reader's
-     * range, not the store scope. Its window is a fixed `HISTORY_DAYS`
+     * range, not the store scope. Its window is a fixed `HISTORY_DAYS`  (`@/lib/counter/price-move`)
      * trailing one. So "Widen either to see figures" pointed at two controls
      * that cannot reach this section, on the page whose whole subject is what
      * things cost.

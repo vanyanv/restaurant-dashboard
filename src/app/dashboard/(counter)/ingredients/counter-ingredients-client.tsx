@@ -48,20 +48,17 @@ export type CounterIngredientsSections = SectionSources<IngredientsSections>
  * The catalogue's five, and the one header on this page that still says
  * thirty days on purpose.
  *
- * `move` is read off the eight weekly medians the price monitor is drawn from
- * — see `moveOf` in the adapter — so it is bounded by that series and cannot
- * follow a ninety-day range. It cannot follow a one-day range either, which
- * is the default on every Counter page: a week-over-week median has nothing
- * to compare a single day against, and a column that emptied itself to "no
- * prior" the moment somebody picked Yesterday would be worse than a fixed
- * one. So it stays thirty days and the header says "30d move" rather than a
- * bare "30d", which beside a date control reads like a unit the control sets.
+ * `move` is `@/lib/counter/price-move`'s figure — the latest normalised price
+ * against its own trailing 120-day median, the same one every page that
+ * prints a price move reads. It does not follow the date control: a one-day
+ * range, the default on every Counter page, has no history to compare
+ * against. So the header says "Price move", not a window the control sets.
  */
 const CATALOGUE_COLUMNS: Column[] = [
   { key: "item", label: "Ingredient" },
   { key: "vendors", label: "Vendors", numeric: true },
   { key: "price", label: "Last price", numeric: true },
-  { key: "move", label: "30d move", numeric: true },
+  { key: "move", label: "Price move", numeric: true },
   { key: "recipes", label: "Recipes", numeric: true },
 ]
 
