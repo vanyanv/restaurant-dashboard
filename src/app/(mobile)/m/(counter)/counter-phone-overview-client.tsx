@@ -159,11 +159,9 @@ export function CounterPhoneOverviewClient({
    * nowhere else for it to go". The phone Stores LIST was moved over then;
    * these two buttons on the Overview were missed.
    *
-   * The distinction matters because this codebase has a component for the
-   * other case. `DeskHandoff` is what `/m/recipes/[id]` and `/m/stores/[id]`
-   * use to say "this one opens on the desk" — a labelled, deliberate
-   * crossing. These were bare `.btn`s wearing no such label, so a reader
-   * tapping "Open the store file" on a phone got a desk page with no warning.
+   * A bare `.btn` to a desk path gave a reader tapping "Open the store file"
+   * on a phone a desk page with no warning. Every desk page now has a phone
+   * page (see `src/lib/phone-routes.ts`), so a phone link stays on `/m`.
    */
   const toRow = (c: OverviewStoreCard): StoreCard => {
     if (c.kind === "pre_open") {

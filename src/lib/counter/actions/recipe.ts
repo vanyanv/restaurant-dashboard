@@ -152,6 +152,7 @@ export async function saveRecipeLines(input: {
 
   revalidatePath(`/dashboard/recipes/${input.recipeId}`)
   revalidatePath("/dashboard/recipes")
+  revalidatePath("/m/recipes", "layout")
   return { ok: true, error: null }
 }
 
@@ -208,6 +209,7 @@ export async function removeRecipe(recipeId: string): Promise<SaveResult> {
     return { ok: false, error: error instanceof Error ? error.message : String(error) }
   }
   revalidatePath("/dashboard/recipes")
+  revalidatePath("/m/recipes", "layout")
   return { ok: true, error: null }
 }
 
@@ -220,6 +222,7 @@ export async function markRecipeConfirmed(recipeId: string): Promise<SaveResult>
   }
   revalidatePath(`/dashboard/recipes/${recipeId}`)
   revalidatePath("/dashboard/recipes")
+  revalidatePath("/m/recipes", "layout")
   return { ok: true, error: null }
 }
 
@@ -260,6 +263,7 @@ export async function createRecipe(input: {
       ingredients: [],
     })
     revalidatePath("/dashboard/recipes")
+    revalidatePath("/m/recipes", "layout")
     return { ok: true, recipeId: id, error: null }
   } catch (error) {
     return { ok: false, recipeId: null, error: writeError(error) }

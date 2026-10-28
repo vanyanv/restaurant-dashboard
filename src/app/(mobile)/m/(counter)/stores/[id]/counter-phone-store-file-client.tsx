@@ -2,7 +2,6 @@
 
 import Link from "next/link"
 import {
-  DeskHandoff,
   MList,
   MStrip,
   Note,
@@ -100,15 +99,16 @@ export function CounterPhoneStoreFileClient({
         {(e) => <MList rows={e.phoneRows} />}
       </Section>
 
-      {/* `P.storecosts.phone()`'s closing `.mbtn`, outside every section. It
-          was a `<Link>` to the desk file and could not work: the proxy sends a
-          phone straight back off `/dashboard/**`, so it landed where it
-          started. `DeskHandoff` sets `prefer-desktop` first. */}
+      {/* `P.storecosts.phone()`'s closing `.mbtn`, outside every section. A
+          link to the desk file could not work (the proxy sends a phone back
+          off `/dashboard/**`), and the desk hand-off that replaced it pinned
+          the phone in desk mode. It opens the desk editor inside the phone
+          shell instead, at `/m/stores/[id]/edit`. */}
       <Section bare title="Edit" data={sections.head} pending={pending}>
         {(h) => (
-          <DeskHandoff href={`/dashboard/stores/${h.storeId}`}>
-            Edit this file on the desk
-          </DeskHandoff>
+          <Link className="mbtn mbtn--primary" href={`/m/stores/${h.storeId}/edit`}>
+            Edit this file
+          </Link>
         )}
       </Section>
     </>

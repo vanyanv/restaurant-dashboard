@@ -169,9 +169,10 @@ export default withAuth(
     }
 
     /*
-     * Back on a phone page means back on the phone. `DeskHandoff` sets
-     * `prefer-desktop` for a week so one desk edit can be reached, and nothing
-     * ever cleared it: every `/dashboard` link for the next seven days then
+     * Back on a phone page means back on the phone. The old desk handoff
+     * (removed once recipe and store edits got phone pages) set
+     * `prefer-desktop` for a week so one desk edit could be reached, and
+     * nothing ever cleared it: every `/dashboard` link for the next seven days then
      * stayed on the desk shell, which is where "the bottom bar disappears"
      * came from. A phone page is only reached from the bar or a phone link,
      * so arriving on one ends the desk preference.

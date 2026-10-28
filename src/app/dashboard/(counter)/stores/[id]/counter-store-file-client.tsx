@@ -13,6 +13,7 @@ import {
   usePageChrome,
   type Row,
   SubNav,
+  useSurfaceHref,
 } from "@/components/counter"
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react"
 import { usePathname, useRouter } from "next/navigation"
@@ -95,6 +96,7 @@ function StoreFileForm({
   picked: string | null
   onPick: (id: string | null) => void
 }) {
+  const surface = useSurfaceHref()
   const router = useRouter()
   const [form, setForm] = useState({
     rent: fieldOf(data.rent),
@@ -185,7 +187,7 @@ function StoreFileForm({
         setSaid({ ok: false, text: result.error })
         return
       }
-      router.push("/dashboard/stores")
+      router.push(surface("/dashboard/stores"))
     })
   }
 
@@ -589,6 +591,7 @@ export function CounterStoreFileClient({
   today: Date
   sections: SectionSources<StoreFileSections>
 }) {
+  const surface = useSurfaceHref()
   const router = useRouter()
   const pathname = usePathname()
   const params = useMemo(() => new URLSearchParams(paramsString), [paramsString])
@@ -644,7 +647,7 @@ export function CounterStoreFileClient({
           nothing at all on the other two, so the create form and the store file
           each sat with no way back to their siblings. Same three tabs, same
           order, one helper. */}
-      <SubNav items={storesViewTabs("/dashboard/stores", storeId)} label="Stores" />
+      <SubNav items={storesViewTabs("/dashboard/stores", storeId).map((t) => ({ ...t, href: surface(t.href) }))} label="Stores" />
 
       <Section bare title="The figures" data={sections.head} pending={pending}>
         {(h) => (

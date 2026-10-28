@@ -21,6 +21,7 @@ import {
   usePageChrome,
   type Column,
   type SwitchableStore,
+  useSurfaceHref,
 } from "@/components/counter"
 import { readCounterParams, writeCounterParams } from "@/lib/counter/url-state"
 import { stepRange } from "@/lib/counter/date-range"
@@ -182,6 +183,7 @@ export function CounterRecipeClient({
   title: string
   sections: CounterRecipeSections
 }) {
+  const surface = useSurfaceHref()
   const router = useRouter()
   const pathname = usePathname()
   const params = useMemo(() => new URLSearchParams(paramsString), [paramsString])
@@ -473,7 +475,7 @@ export function CounterRecipeClient({
                 {c.gap.href ? (
                   <Link
                     className="btn"
-                    href={c.gap.href}
+                    href={surface(c.gap.href)}
                     style={{ width: "100%", justifyContent: "center" }}
                   >
                     See what it is matched to
@@ -772,6 +774,7 @@ function Builder({
   /** Drop the draft — what was on screen is now what is stored. */
   onSaved: () => void
 }) {
+  const surface = useSurfaceHref()
   const router = useRouter()
   const setLines = onLines
   const lines = draft.lines
@@ -843,7 +846,7 @@ function Builder({
     start(async () => {
       const result = await removeRecipe(builder.recipeId)
       if (result.ok) {
-        router.push("/dashboard/recipes")
+        router.push(surface("/dashboard/recipes"))
         return
       }
       setConfirmingDelete(false)
