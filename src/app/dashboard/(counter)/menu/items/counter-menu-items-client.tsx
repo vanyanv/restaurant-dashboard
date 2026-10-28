@@ -11,6 +11,7 @@ import {
   SubNav,
   useCounterTransition,
   usePageChrome,
+  useSurfaceHref,
   type SwitchableStore,
 } from "@/components/counter"
 import { MENU_TABS } from "@/lib/counter/nav"
@@ -67,6 +68,7 @@ export function CounterMenuItemsClient({
   today: Date
   sections: SectionSources<MenuItemsSections>
 }) {
+  const surface = useSurfaceHref()
   const router = useRouter()
   const pathname = usePathname()
   const params = useMemo(() => new URLSearchParams(paramsString), [paramsString])
@@ -100,11 +102,11 @@ export function CounterMenuItemsClient({
           onStep={(direction) => push({ range: stepRange(range, direction) })}
           onRange={(next) => push({ range: next })}
         />
-        <Link className="btn btn--primary" href="/dashboard/menu/items/new">
+        <Link className="btn btn--primary" href={surface("/dashboard/menu/items/new")}>
           New menu item
         </Link>
       </PageHead>
-      <SubNav items={MENU_TABS} label="Menu" />
+      <SubNav items={MENU_TABS.map((t) => ({ ...t, href: surface(t.href) }))} label="Menu" />
 
       <Section bare title="Menu items" data={sections.items} pending={pending}>
         {(d) => <Body data={d} />}
@@ -114,6 +116,7 @@ export function CounterMenuItemsClient({
 }
 
 function Body({ data }: { data: MenuItemsData }) {
+  const surface = useSurfaceHref()
   const c = data.counts
   const foodCost = c.revenue > 0 ? c.cost / c.revenue : null
   return (
@@ -162,13 +165,13 @@ function Body({ data }: { data: MenuItemsData }) {
               <div className="mi-need" key={n.key}>
                 <Glyph glyph={n.glyph} />
                 <MenuPhoto frame={n.photo} alt={n.title} />
-                <Link className="who" href={n.act.href}>
+                <Link className="who" href={surface(n.act.href)}>
                   <b>{n.title}</b>
                   <span className="ck-mono">{n.sub}</span>
                 </Link>
                 <span className="what">{n.what}</span>
                 <span className="amt">{n.amount}</span>
-                <Link className={`btn${n.glyph === "miss" ? " btn--primary" : ""}`} href={n.act.href}>
+                <Link className={`btn${n.glyph === "miss" ? " btn--primary" : ""}`} href={surface(n.act.href)}>
                   {n.act.label}
                 </Link>
               </div>
@@ -192,6 +195,7 @@ function Body({ data }: { data: MenuItemsData }) {
 }
 
 function AllItems({ data }: { data: MenuItemsData }) {
+  const surface = useSurfaceHref()
   const [category, setCategory] = useState<string | null>(null)
   const [search, setSearch] = useState("")
   const query = useDeferredValue(search).trim().toLowerCase()
@@ -258,7 +262,7 @@ function AllItems({ data }: { data: MenuItemsData }) {
                     <Glyph glyph={r.glyph} title={r.why} small />
                   </td>
                   <td>
-                    <Link className="mi-dish" href={r.href}>
+                    <Link className="mi-dish" href={surface(r.href)}>
                       <MenuPhoto frame={r.photo} alt={r.name} />
                       <span>
                         <b>{r.name}</b>

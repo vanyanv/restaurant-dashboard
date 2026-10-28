@@ -33,6 +33,9 @@ export const DESKTOP_TO_MOBILE: Record<string, string> = {
   "/dashboard/labor": "/m/labor",
   "/dashboard/menu": "/m/menu",
   "/dashboard/menu/catalog": "/m/menu/catalog",
+  // Menu items and the new-item start, the desk clients in the phone shell.
+  "/dashboard/menu/items": "/m/menu/items",
+  "/dashboard/menu/items/new": "/m/menu/items/new",
   "/dashboard/operations": "/m/operations",
   "/dashboard/operations/inventory": "/m/operations/inventory",
   // Built on Counter with phone surfaces of their own, and unreachable from
@@ -217,6 +220,4 @@ export function phoneHref(deskHref: string): string {
  * left here, as it does when a new desk page arrives without a phone page or
  * a line in this list.
  */
-export const DESK_ONLY: ReadonlySet<string> = new Set([
-  "/dashboard/menu/items",
-])
+export const DESK_ONLY: ReadonlySet<string> = new Set<string>([])
