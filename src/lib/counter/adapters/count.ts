@@ -6,11 +6,12 @@ import {
 import {
   COUNT_AREAS,
   areaLabel,
-  defaultLayers,
+  WASTE_REASON_IDS,
   fmtQty,
-  parseLayers,
+  layersFor,
   showQty,
   unitChoices,
+  valuesFit,
   wasteReasonLabel,
   type Layer,
 } from "@/lib/counter/count-layers"
@@ -126,7 +127,7 @@ export function getCountWalkSectionPromises(opts: { accountId: string; storeId?:
             select: { countedAt: true },
           }),
           prisma.inventoryAdjustment.findMany({
-            where: { storeId: store.id, store: { accountId: opts.accountId }, occurredAt: { gte: weekAgo() } },
+            where: { storeId: store.id, store: { accountId: opts.accountId }, occurredAt: { gte: weekAgo() }, reason: { in: WASTE_REASON_IDS } },
             select: { qty: true, canonicalIngredient: { select: { costPerRecipeUnit: true } } },
           }),
         ])
@@ -146,7 +147,8 @@ export function getCountWalkSectionPromises(opts: { accountId: string; storeId?:
           items: items.flatMap((it) => {
             const unit = it.canonicalIngredient.recipeUnit
             if (!unit) return []
-            const layers = parseLayers(it.layers)
+            const layers = layersFor(it.layers, unit)
+            const values = typed.get(it.id)
             return [{
               id: it.id,
               ingredientId: it.canonicalIngredientId,
@@ -155,8 +157,8 @@ export function getCountWalkSectionPromises(opts: { accountId: string; storeId?:
               areaLabel: areaLabel(it.area),
               unit,
               cost: it.canonicalIngredient.costPerRecipeUnit,
-              layers: layers.length ? layers : defaultLayers(unit),
-              values: typed.get(it.id) ?? null,
+              layers,
+              values: valuesFit(layers, values) ? values : null,
             }]
           }),
           waste: {
@@ -195,7 +197,7 @@ export function getCountWasteSectionPromises(opts: { accountId: string; storeId?
         const [items, recent] = await Promise.all([
           countItems(opts.accountId),
           prisma.inventoryAdjustment.findMany({
-            where: { storeId: store.id, store: { accountId: opts.accountId }, occurredAt: { gte: weekAgo() } },
+            where: { storeId: store.id, store: { accountId: opts.accountId }, occurredAt: { gte: weekAgo() }, reason: { in: WASTE_REASON_IDS } },
             orderBy: { occurredAt: "desc" },
             select: {
               id: true, qty: true, reason: true, note: true, occurredAt: true,
@@ -216,8 +218,11 @@ export function getCountWasteSectionPromises(opts: { accountId: string; storeId?
             cost: it.canonicalIngredient.costPerRecipeUnit,
             layers: [],
           }
-          for (const l of parseLayers(it.layers)) {
-            if (!cur.layers.some((x) => x.label === l.label)) cur.layers.push(l)
+          // Two areas can both say "Case" and mean different cases; keep both.
+          for (const l of layersFor(it.layers, unit)) {
+            if (cur.layers.some((x) => x.label === l.label && x.per === l.per)) continue
+            const clash = cur.layers.some((x) => x.label === l.label)
+            cur.layers.push(clash ? { ...l, label: `${l.label} (${areaLabel(it.area)})` } : l)
           }
           byIng.set(it.canonicalIngredientId, cur)
         }
@@ -405,7 +410,7 @@ export function getCountReportSectionPromises(opts: { accountId: string; storeId
             select: { id: true, name: true, recipeUnit: true, costPerRecipeUnit: true, caseUnit: true, recipeUnitsPerCase: true, innerPackUnit: true, innerPacksPerCase: true },
           }),
           prisma.inventoryAdjustment.findMany({
-            where: { storeId: store.id, store: { accountId: opts.accountId }, occurredAt: { gt: prev.countedAt, lte: cur.countedAt } },
+            where: { storeId: store.id, store: { accountId: opts.accountId }, occurredAt: { gt: prev.countedAt, lte: cur.countedAt }, reason: { in: WASTE_REASON_IDS } },
             select: { qty: true, canonicalIngredient: { select: { costPerRecipeUnit: true } } },
           }),
         ])
@@ -492,7 +497,6 @@ export function getCountSetupSectionPromises(opts: { accountId: string }): Strea
           items: items.flatMap((it) => {
             const unit = it.canonicalIngredient.recipeUnit
             if (!unit) return []
-            const layers = parseLayers(it.layers)
             return [{
               id: it.id,
               ingredientId: it.canonicalIngredientId,
@@ -501,7 +505,7 @@ export function getCountSetupSectionPromises(opts: { accountId: string }): Strea
               unit,
               units: unitChoices(unit),
               cost: it.canonicalIngredient.costPerRecipeUnit,
-              layers: layers.length ? layers : defaultLayers(unit),
+              layers: layersFor(it.layers, unit),
             }]
           }),
           options: ings

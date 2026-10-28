@@ -3,9 +3,11 @@ import {
   defaultLayers,
   describeShelf,
   guessArea,
+  layersFor,
   parseLayers,
   resolveLayers,
   shelfTotal,
+  valuesFit,
 } from "@/lib/counter/count-layers"
 
 describe("resolveLayers", () => {
@@ -80,5 +82,19 @@ describe("defaultLayers", () => {
   it("starts ounce items in pounds and everything else in its recipe unit", () => {
     expect(defaultLayers("oz")).toEqual([{ label: "Loose (lb)", qty: 1, of: "lb", quarters: false, per: 16 }])
     expect(defaultLayers("each")[0].per).toBe(1)
+  })
+})
+
+describe("layersFor and valuesFit", () => {
+  it("works per out again from the recipe unit, so a unit change can't skew the count", () => {
+    const stored = [{ label: "Chubs", qty: 10, of: "lb", per: 10 }]
+    expect(layersFor(stored, "oz")[0].per).toBe(160)
+    expect(layersFor(null, "each")[0].label).toBe("Loose (each)")
+  })
+  it("drops values typed against a different set of layers", () => {
+    const layers = layersFor([{ label: "Case", qty: 4, of: "Chubs", per: 40 }, { label: "Chubs", qty: 10, of: "lb", per: 10 }], "lb")
+    expect(valuesFit(layers, [1, 2])).toBe(true)
+    expect(valuesFit(layers, [3])).toBe(false)
+    expect(valuesFit(layers, null)).toBe(false)
   })
 })

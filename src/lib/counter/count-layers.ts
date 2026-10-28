@@ -93,6 +93,28 @@ export function parseLayers(raw: unknown): Layer[] {
   })
 }
 
+/**
+ * The layers to count with, read fresh: `per` is worked out again from each
+ * layer's `qty` and `of`, so an ingredient whose recipe unit changed since
+ * setup (lb → oz) is not counted off by that factor. Falls back to what was
+ * stored if it no longer resolves, and to the default when nothing is set.
+ */
+export function layersFor(raw: unknown, recipeUnit: string): Layer[] {
+  const stored = parseLayers(raw)
+  if (stored.length === 0) return defaultLayers(recipeUnit)
+  const r = resolveLayers(stored, recipeUnit)
+  return r.ok ? r.layers : stored
+}
+
+/**
+ * Saved values belong to the layers they were typed against. Once a layer
+ * is added or removed in setup, the old numbers would land on the wrong
+ * layer ("3 lb" read as "3 cases"), so they no longer count.
+ */
+export function valuesFit(layers: Layer[], values: ReadonlyArray<number> | null | undefined): values is number[] {
+  return Array.isArray(values) && values.length === layers.length
+}
+
 /** One number per layer, as typed. Missing or bad entries count as 0. */
 export function shelfTotal(layers: Layer[], values: ReadonlyArray<number | null | undefined>): number {
   let t = 0
@@ -161,6 +183,8 @@ export const WASTE_REASONS = [
   { id: "OTHER", label: "Other" },
 ] as const
 export type WasteReason = (typeof WASTE_REASONS)[number]["id"]
+/** Adjustments the waste log owns; returns and damage logged elsewhere are not waste here. */
+export const WASTE_REASON_IDS: WasteReason[] = WASTE_REASONS.map((r) => r.id)
 
 export function wasteReasonLabel(id: string): string {
   return WASTE_REASONS.find((r) => r.id === id)?.label ?? id.charAt(0) + id.slice(1).toLowerCase().replace(/_/g, " ")

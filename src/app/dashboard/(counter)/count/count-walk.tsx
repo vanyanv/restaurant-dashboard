@@ -20,7 +20,7 @@ import { money, OutcomeLine, StoreChips, type Outcome } from "./count-ui"
  * store chips and links stay on the same surface.
  */
 
-type Screen = { kind: "list" } | { kind: "item"; idx: number } | { kind: "done" }
+type Screen = { kind: "list" } | { kind: "item"; idx: number } | { kind: "done"; n: number; value: number }
 
 function parse(s: string | undefined): number | null {
   if (s == null || s.trim() === "") return null
@@ -37,7 +37,7 @@ export function CountWalk({ data, base }: { data: WalkData; base: "/dashboard/co
   const [confirmFinish, setConfirmFinish] = useState(false)
   // What is typed, as text, per item per layer. Seeded from the open count.
   const [typed, setTyped] = useState<Record<string, string[]>>(() =>
-    Object.fromEntries(data.items.filter((i) => i.values).map((i) => [i.id, i.values!.map((v) => (v ? fmtQty(v) : ""))])),
+    Object.fromEntries(data.items.filter((i) => i.values).map((i) => [i.id, i.values!.map((v) => (v ? fmtQty(v).replace(/,/g, "") : ""))])),
   )
   const [savedIds, setSavedIds] = useState<Set<string>>(() => new Set(data.items.filter((i) => i.values).map((i) => i.id)))
 
@@ -93,8 +93,8 @@ export function CountWalk({ data, base }: { data: WalkData; base: "/dashboard/co
         </div>
         <div className="cw__hero">
           <span className="cw__mono">Counted</span>
-          <b>{done} of {items.length} items</b>
-          <span>{shelfValue > 0 ? `${money(shelfValue)} on the shelves` : "Value shows once items have a price"}</span>
+          <b>{screen.n} of {items.length} items</b>
+          <span>{screen.value > 0 ? `${money(screen.value)} on the shelves` : "Value shows once items have a price"}</span>
         </div>
         <p className="cw__sub">
           This count is the starting point now. Next week&apos;s count is compared against it, plus deliveries from invoices, minus what sales say you used and the waste you logged.
@@ -207,7 +207,12 @@ export function CountWalk({ data, base }: { data: WalkData; base: "/dashboard/co
         setOutcome({ ok: false, text: r.error })
         return
       }
-      setScreen({ kind: "done" })
+      // A fresh start for the next count, without a reload.
+      setCountId(null)
+      setSavedIds(new Set())
+      setTyped({})
+      setConfirmFinish(false)
+      setScreen({ kind: "done", n: done, value: shelfValue })
       router.refresh()
     })
   }

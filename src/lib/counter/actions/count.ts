@@ -15,12 +15,14 @@ import {
 import {
   COUNT_AREAS,
   WASTE_REASONS,
+  WASTE_REASON_IDS,
   defaultLayers,
   describeShelf,
   guessArea,
-  parseLayers,
+  layersFor,
   resolveLayers,
   shelfTotal,
+  valuesFit,
 } from "@/lib/counter/count-layers"
 
 /**
@@ -134,17 +136,23 @@ export async function saveCountItem(input: z.input<typeof SaveItemInput>): Promi
 
     // Every stop for this ingredient, with its current layers.
     const stops = await prisma.countItem.findMany({
-      where: { accountId: owner.accountId, canonicalIngredientId: item.canonicalIngredientId, id: { in: Object.keys(breakdown) } },
+      where: { accountId: owner.accountId, canonicalIngredientId: item.canonicalIngredientId, active: true, id: { in: Object.keys(breakdown) } },
       select: { id: true, layers: true },
     })
+    // A stop removed in setup, or whose layers changed since it was counted,
+    // drops out: its old numbers would add to the wrong total.
+    const kept: Record<string, number[]> = {}
     let total = 0
     const notes: string[] = []
     for (const s of stops) {
-      const layers = parseLayers(s.layers)
-      const vals = breakdown[s.id] ?? []
+      const layers = layersFor(s.layers, ing.recipeUnit)
+      const vals = breakdown[s.id]
+      if (!valuesFit(layers, vals)) continue
+      kept[s.id] = vals
       total += shelfTotal(layers, vals)
       notes.push(describeShelf(layers, vals))
     }
+    if (!kept[item.id]) return { ok: false, error: "This item's setup changed. Reload and count it again" }
 
     // The model's expectation, only once a finished count anchors it — before
     // that it integrates from the first invoice and teaches the model nothing.
@@ -160,7 +168,7 @@ export async function saveCountItem(input: z.input<typeof SaveItemInput>): Promi
       nativeQty: total,
       nativeUnit: ing.recipeUnit,
       note: notes.join("; ").slice(0, 500),
-      breakdown: breakdown as Prisma.InputJsonValue,
+      breakdown: kept as Prisma.InputJsonValue,
     }
     await prisma.stockCountLine.upsert({
       where: { stockCountId_canonicalIngredientId: { stockCountId: count.id, canonicalIngredientId: item.canonicalIngredientId } },
@@ -187,10 +195,12 @@ export async function finishCount(countId: string): Promise<ActionResult> {
     // Calibration reads the previous COMPLETED count, so it runs before this
     // one becomes COMPLETED. Same order as `completeStockCount`.
     await applyCalibrationUpdatesForCount(count.id)
-    await prisma.stockCount.update({
-      where: { id: count.id },
+    // Guarded on status, so a double tap can't finish it twice.
+    const done = await prisma.stockCount.updateMany({
+      where: { id: count.id, status: "IN_PROGRESS" },
       data: { status: "COMPLETED", completedAt: new Date(), countedAt: new Date() },
     })
+    if (done.count === 0) return { ok: false, error: "This count is already finished" }
     revalidateCount()
     return { ok: true, id: count.id }
   } catch (err) {
@@ -245,7 +255,7 @@ export async function deleteWaste(id: string): Promise<ActionResult> {
   try {
     const owner = await requireOwner()
     const row = await prisma.inventoryAdjustment.findFirst({
-      where: { id, store: { accountId: owner.accountId }, occurredAt: { gte: new Date(Date.now() - 7 * DAY_MS) } },
+      where: { id, store: { accountId: owner.accountId }, reason: { in: WASTE_REASON_IDS }, occurredAt: { gte: new Date(Date.now() - 7 * DAY_MS) } },
       select: { id: true },
     })
     if (!row) return { ok: false, error: "That entry can't be removed any more" }

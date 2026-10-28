@@ -28,6 +28,8 @@ export function WasteLog({ data, base }: { data: WasteData; base: "/dashboard/co
   const item = data.items.find((i) => i.ingredientId === pick) ?? null
   const unit = item?.layers[layer] ?? null
   const qty = Number(amount.replace(",", "."))
+  const step = unit?.quarters ? 0.25 : 1
+  const bump = (dir: 1 | -1) => setAmount(fmtQty(Math.max(0, (Number.isFinite(qty) ? qty : 0) + dir * step)).replace(/,/g, ""))
   const valid = item && unit && Number.isFinite(qty) && qty > 0 && reason
   const shown = filter.trim()
     ? data.items.filter((i) => i.name.toLowerCase().includes(filter.trim().toLowerCase()))
@@ -36,6 +38,10 @@ export function WasteLog({ data, base }: { data: WasteData; base: "/dashboard/co
   const save = () => {
     if (!valid) {
       setOutcome({ ok: false, text: "Pick what, how much and why" })
+      return
+    }
+    if (qty * unit.per > 100_000) {
+      setOutcome({ ok: false, text: "That's more than a store holds. Check the amount" })
       return
     }
     start(async () => {
@@ -106,9 +112,9 @@ export function WasteLog({ data, base }: { data: WasteData; base: "/dashboard/co
                   {item.cost != null && unit && qty > 0 ? ` · ${money(qty * unit.per * item.cost)}` : ""}
                 </small>
               </label>
-              <button type="button" className="cw__step" aria-label="Less" onClick={() => setAmount(fmtQty(Math.max(0, (Number(amount) || 0) - (unit?.quarters ? 0.25 : 1))).replace(/,/g, ""))}>−</button>
+              <button type="button" className="cw__step" aria-label="Less" onClick={() => bump(-1)}>−</button>
               <input id="cw-waste-amt" className="cw__qty" inputMode="decimal" placeholder="0" value={amount} onChange={(e) => setAmount(e.target.value)} />
-              <button type="button" className="cw__step" aria-label="More" onClick={() => setAmount(fmtQty((Number(amount) || 0) + (unit?.quarters ? 0.25 : 1)).replace(/,/g, ""))}>+</button>
+              <button type="button" className="cw__step" aria-label="More" onClick={() => bump(1)}>+</button>
             </div>
           </div>
           {item.layers.length > 1 && (
