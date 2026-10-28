@@ -46,6 +46,8 @@ describe("normalizeRoute", () => {
   })
 
   it("strips query string, hash and trailing slash", () => {
+    expect(normalizeRoute("/dashboard/invoices/all?view=gaps")).toBe("/dashboard/invoices/all")
+    expect(normalizeRoute("/dashboard/invoices/prices")).toBe("/dashboard/invoices/prices")
     expect(normalizeRoute("/dashboard/invoices/abc123?tab=lines")).toBe(
       "/dashboard/invoices/[id]",
     )

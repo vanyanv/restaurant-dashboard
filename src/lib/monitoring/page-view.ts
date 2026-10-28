@@ -37,6 +37,13 @@ const DYNAMIC_BASES: ReadonlyArray<readonly [string, string]> = [
 const ID_SEGMENT =
   /^(c[a-z0-9]{20,}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|\d+)$/i
 
+/**
+ * Static routes that sit beside a base's dynamic segment. Next resolves them
+ * ahead of `[id]`, so they are pages of their own and are counted as such
+ * rather than folded into the detail page.
+ */
+const STATIC_CHILDREN = new Set(["/dashboard/invoices/all", "/dashboard/invoices/prices"])
+
 /** Strip query, hash and trailing slash. */
 function bare(path: string): string {
   const cut = path.split(/[?#]/)[0] ?? ""
@@ -50,6 +57,7 @@ function bare(path: string): string {
  */
 export function normalizeRoute(path: string): string {
   const clean = bare(path)
+  if (STATIC_CHILDREN.has(clean)) return clean
   for (const [base, placeholder] of DYNAMIC_BASES) {
     if (clean.startsWith(base + "/")) {
       const rest = clean.slice(base.length + 1).split("/")

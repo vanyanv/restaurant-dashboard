@@ -28,7 +28,7 @@ export const VIEW_LABEL: Record<View, string> = {
 }
 
 export function inView(r: InvoiceListRow, v: View): boolean {
-  if (v === "gaps") return r.gap !== null
+  if (v === "gaps") return r.openGap
   if (v === "needs") return r.needsYou
   if (v === "review") return r.status === "REVIEW"
   if (!r.inWindow) return false

@@ -131,6 +131,24 @@ describe("invoices adapter · the list's status shapes", () => {
     expect(costed.value).toBe("$100")
   })
 
+  it("takes a rejected invoice that does not add up off the worklist", async () => {
+    const rows = [invoice("rej", { status: "REJECTED", lines: [], total: 1474.06, subtotal: 1474.06 })]
+    const s = await sectionsOf(rows)
+    const list = await ready(s.list)
+    expect(list.rows[0]).toMatchObject({ glyph: "off", openGap: false, needsYou: false })
+    expect(list.rows[0].gap).not.toBeNull()
+    expect(list.gapCount).toBe(0)
+    const desk = await ready(s.desk)
+    expect(desk.items).toHaveLength(0)
+    expect(desk.broken).toBe(0)
+  })
+
+  it("says total, not subtotal, when the invoice prints no subtotal", async () => {
+    const row = { ...invoice("nosub", { lines: [80], total: 100 }), subtotal: null }
+    const desk = await ready((await sectionsOf([row])).desk)
+    expect(desk.items[0].reason).toBe("The lines are $20.00 short of the printed total.")
+  })
+
   it("names the store, marks credits, and flags what needs the owner", async () => {
     const rows = [
       invoice("credit", { isReturn: true, lines: [-50] }),

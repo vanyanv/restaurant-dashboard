@@ -114,15 +114,18 @@ export interface InvoiceListRow {
   store: string | null
   /** Recorded as a credit memo rather than a bill. */
   isReturn: boolean
+  /** It does not reconcile and has not been rejected: the "Does not add up" view. */
+  openGap: boolean
   /**
-   * On the Needs you worklist: it does not reconcile, or it is held in review.
+   * On the Needs you worklist: an open gap, or it is held in review.
    * The same test `worklistOf` uses, so the chip and the queue count one set.
    */
   needsYou: boolean
   /**
-   * The row's status shape, Store checks' glyphs: `miss` does not reconcile,
-   * `open` held in review, `off` rejected, `up` a credit memo, `ok` ties out.
-   * What is wrong outranks what kind of document it is.
+   * The row's status shape, Store checks' glyphs: `off` rejected, `miss` does
+   * not reconcile, `open` held in review, `up` a credit memo, `ok` ties out.
+   * A rejection outranks a gap (it is the owner's answer to it); otherwise
+   * what is wrong outranks what kind of document it is.
    */
   glyph: "miss" | "open" | "ok" | "up" | "off"
 }
@@ -437,6 +440,13 @@ function goodsOf(i: LoadedInvoice): number {
 
 const gapOf = (i: LoadedInvoice) => goodsOf(i) - printedOf(i)
 const reconciles = (i: LoadedInvoice) => Math.abs(gapOf(i)) < EPSILON
+/**
+ * Still on the worklist for its gap: it does not reconcile and the owner has
+ * not rejected it. A rejected invoice is a decision already made, so its gap
+ * is shown on the row but no longer asks for anything; without this, Reject
+ * (the invoice page's own way out) left it at the top of Needs you for good.
+ */
+const openGap = (i: LoadedInvoice) => !reconciles(i) && i.status !== "REJECTED"
 
 const sum = (list: LoadedInvoice[]) => list.reduce((t, i) => t + i.totalAmount, 0)
 
@@ -496,7 +506,7 @@ function headlineOf(d: InvoiceData): InvoiceHeadline {
   const received = d.received
   const inReview = d.all.filter((i) => i.status === "REVIEW")
   const costed = received.filter((i) => i.status === "MATCHED")
-  const broken = d.all.filter((i) => !reconciles(i))
+  const broken = d.all.filter(openGap)
   // The SIGNED net, not the sum of magnitudes. Five invoices are short and two
   // are over; summing the absolutes gives $4,390 while the section's own
   // statement below totals $3,974, and one page must not print two figures for
@@ -591,7 +601,7 @@ function listOf(d: InvoiceData): InvoiceList {
   const receivedIds = new Set(d.received.map((i) => i.id))
   // Older invoices still open on the worklist — short, over, or held in review
   // — so every view that names a worklist figure can reach all of it.
-  const strays = d.all.filter((i) => (!reconciles(i) || i.status === "REVIEW") && !receivedIds.has(i.id))
+  const strays = d.all.filter((i) => (openGap(i) || i.status === "REVIEW") && !receivedIds.has(i.id))
 
   const source: ReadonlyArray<{ i: LoadedInvoice; inWindow: boolean }> = [
     ...d.received.map((i) => ({ i, inWindow: true })),
@@ -623,14 +633,15 @@ function listOf(d: InvoiceData): InvoiceList {
       search: `${i.number} ${i.vendor} ${i.storeName ?? ""} ${i.lines.map((l) => l.productName).join(" ")}`.toLowerCase(),
       store: i.storeName,
       isReturn: i.isReturn,
-      needsYou: gap !== null || i.status === "REVIEW",
+      openGap: openGap(i),
+      needsYou: openGap(i) || i.status === "REVIEW",
       glyph:
-        gap !== null
-          ? "miss"
-          : i.status === "REVIEW"
-            ? "open"
-            : i.status === "REJECTED"
-              ? "off"
+        i.status === "REJECTED"
+          ? "off"
+          : gap !== null
+            ? "miss"
+            : i.status === "REVIEW"
+              ? "open"
               : i.isReturn
                 ? "up"
                 : "ok",
@@ -656,8 +667,8 @@ function listOf(d: InvoiceData): InvoiceList {
     // The strip's own figure, and the part of it this window cannot show —
     // which is what makes the chip worth pressing rather than a duplicate of
     // the Reconciles column.
-    gapCount: rows.filter((r) => r.gap !== null).length,
-    gapOutsideWindow: strays.filter((i) => !reconciles(i)).length,
+    gapCount: rows.filter((r) => r.openGap).length,
+    gapOutsideWindow: strays.filter(openGap).length,
     windowLabel: `last ${RECEIVED_DAYS} days`,
     dueNote: dueNoteOf(d),
   }
@@ -824,7 +835,7 @@ function reviewOf(d: InvoiceData): InvoiceReview {
   }
   const candidates: Candidate[] = []
 
-  for (const i of d.all.filter((x) => !reconciles(x))) {
+  for (const i of d.all.filter(openGap)) {
     const gap = gapOf(i)
     const doubled =
       i.lines.length === 2 &&
@@ -944,7 +955,7 @@ function deskOf(d: InvoiceData): InvoiceDesk {
     [i.storeName, i.invoiceDate ? D(i.invoiceDate) : null].filter(Boolean).join(" · ") || "no store, no date"
 
   const ranked: Array<{ weight: number; item: DeskItem }> = []
-  const broken = d.all.filter((x) => !reconciles(x))
+  const broken = d.all.filter(openGap)
   const brokenIds = new Set(broken.map((i) => i.id))
 
   for (const i of broken) {
@@ -968,7 +979,7 @@ function deskOf(d: InvoiceData): InvoiceDesk {
             ? "No lines were read from the PDF."
             : doubled
               ? "One return was read twice."
-              : `The lines are ${off} of the printed subtotal.`,
+              : `The lines are ${off} of the printed ${i.subtotal === null ? "total" : "subtotal"}.`,
         detail:
           i.lines.length === 0
             ? `${money(printedOf(i), { cents: true })} of goods is in the invoice total and in nothing that costs a plate.`
@@ -999,7 +1010,9 @@ function deskOf(d: InvoiceData): InvoiceDesk {
           : "Held for review before the sync recorded why.",
         detail:
           reason?.message ??
-          "It ties out and its PDF is on file. It needs a look, not a fix.",
+          (i.hasPdf
+            ? "It ties out and its PDF is on file. It needs a look, not a fix."
+            : "It ties out, but no PDF is on file. It needs a look, not a fix."),
         total: money(i.totalAmount, { cents: true }),
         gap: null,
         act: "Check it",
@@ -1140,7 +1153,7 @@ function productsOf(d: InvoiceData): InvoiceProducts {
  * is worth, then by the invoice's size.
  */
 function phoneQueuesOf(d: InvoiceData): InvoicePhoneQueues {
-  const broken = d.all.filter((i) => !reconciles(i))
+  const broken = d.all.filter(openGap)
   const flagged = d.all.filter((i) => i.status === "REVIEW" && reconciles(i))
 
   // The second line carries the due date the desk's Due column carries, and

@@ -11,7 +11,7 @@ import {
 import type { SectionSources } from "@/lib/counter/adapters/types"
 import type { DeskItem, InvoiceDesk, InvoicesSections } from "@/lib/counter/adapters/invoices"
 import type { PriceSections } from "@/lib/counter/adapters/prices"
-import { InvoiceGlyph, InvoiceLegend, InvoicesHead, Tiles } from "./invoices-ui"
+import { InvoiceGlyph, InvoiceLegend, InvoicesHead, Tiles, useScoped } from "./invoices-ui"
 
 /**
  * Invoices — Needs you. The desk in one screen, the way Shop's Today is: the
@@ -111,6 +111,7 @@ export function CounterInvoicesClient({
 }
 
 function Alert({ desk }: { desk: InvoiceDesk }) {
+  const scoped = useScoped()
   if (desk.broken === 0) return null
   return (
     <div className="ck-alerts">
@@ -123,7 +124,7 @@ function Alert({ desk }: { desk: InvoiceDesk }) {
           </b>{" "}
           <span className="ck-meta">Approve stays locked on each until its lines match what it prints.</span>
         </span>
-        <Link className="btn" href="/dashboard/invoices/all?view=gaps">
+        <Link className="btn" href={scoped("/dashboard/invoices/all?view=gaps")}>
           Show them
         </Link>
       </div>

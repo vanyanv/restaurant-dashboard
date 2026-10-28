@@ -1,9 +1,11 @@
 "use client"
 
-import type { ReactNode } from "react"
+import { useCallback, useMemo, type ReactNode } from "react"
 import Link from "next/link"
+import { useSearchParams } from "next/navigation"
 import { PageHead, SubNav, type FigureProps } from "@/components/counter"
 import { INVOICES_TABS } from "@/lib/counter/nav"
+import { scopeQuery } from "@/lib/counter/url-state"
 import type { InvoiceListRow } from "@/lib/counter/adapters/invoices"
 
 /**
@@ -12,10 +14,26 @@ import type { InvoiceListRow } from "@/lib/counter/adapters/invoices"
  * in greyscale on every screen), and the count tiles Shop opens with.
  */
 
+/**
+ * Carries the store and date selection onto an in-section link, the way the
+ * rail does (`scopeQuery`). Without it a tile read for Van Nuys opened All
+ * invoices on every store, and the two screens printed different counts.
+ */
+export function useScoped(): (href: string) => string {
+  const params = useSearchParams()
+  const scope = useMemo(() => scopeQuery(new URLSearchParams(params?.toString() ?? "")), [params])
+  return useCallback(
+    (href: string) => (scope ? `${href}${href.includes("?") ? "&" : "?"}${scope}` : href),
+    [scope],
+  )
+}
+
 export function InvoicesHead({ sub, children }: { sub: string; children?: ReactNode }) {
+  const scoped = useScoped()
+  const tabs = useMemo(() => INVOICES_TABS.map((t) => ({ ...t, href: scoped(t.href) })), [scoped])
   return (
     <PageHead title="Invoices" sub={sub}>
-      <SubNav items={INVOICES_TABS} label="Invoices" />
+      <SubNav items={tabs} label="Invoices" />
       {children}
     </PageHead>
   )
@@ -59,6 +77,7 @@ export function InvoiceLegend() {
  * delta the adapter marks as bad news is the one tile drawn in red.
  */
 export function Tiles({ cells, hrefs }: { cells: FigureProps[]; hrefs?: Array<string | null> }) {
+  const scoped = useScoped()
   return (
     <div className="sh-tiles iv-tiles">
       {cells.map((c, i) => {
@@ -72,7 +91,7 @@ export function Tiles({ cells, hrefs }: { cells: FigureProps[]; hrefs?: Array<st
         )
         const href = hrefs?.[i]
         return href ? (
-          <Link key={c.label} className={cls} href={href}>
+          <Link key={c.label} className={cls} href={scoped(href)}>
             {body}
           </Link>
         ) : (
