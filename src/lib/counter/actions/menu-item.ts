@@ -1,6 +1,10 @@
 "use server"
 
+import { revalidatePath } from "next/cache"
 import { mapOtterItemToRecipe } from "@/app/actions/menu-item-actions"
+import { getAuthScope } from "@/lib/auth-scope"
+import { prisma } from "@/lib/prisma"
+import { createRecipe, saveRecipeLines } from "@/lib/counter/actions/recipe"
 
 /**
  * Connect a sold menu item to the recipe that makes it.
@@ -39,4 +43,75 @@ export async function mapItemToRecipe(input: {
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : "mapping failed" }
   }
+}
+
+/**
+ * Start a menu item from the New menu item screen, in one click.
+ *
+ * Three starts, all ending on the new recipe's page:
+ * - `posName` set: the dish is already selling under that POS name. The
+ *   recipe is created and the name mapped for every store, so the next COGS
+ *   run stops counting it as $0.
+ * - `copyFrom` set: the new recipe gets a copy of that dish's lines (the
+ *   source is read inside the caller's account; a recipe id from another
+ *   account copies nothing).
+ * - neither: a blank recipe.
+ *
+ * Creating, copying and mapping go through the existing actions, which scope
+ * by account and validate the lines. If the recipe was created but a later
+ * step failed, the id comes back WITH the error, so the screen can still open
+ * the recipe and say what is left to do instead of leaving an orphan behind
+ * a failure message.
+ */
+export async function startMenuItem(input: {
+  itemName: string
+  category: string
+  copyFrom?: string | null
+  posName?: string | null
+}): Promise<{ ok: boolean; recipeId: string | null; error: string | null }> {
+  const created = await createRecipe({ itemName: input.itemName, category: input.category })
+  if (!created.ok || !created.recipeId) return created
+  const recipeId = created.recipeId
+
+  if (input.copyFrom) {
+    const scope = await getAuthScope()
+    const source = scope
+      ? await prisma.recipe.findFirst({
+          where: { id: input.copyFrom, accountId: scope.accountId },
+          select: {
+            ingredients: {
+              select: { canonicalIngredientId: true, componentRecipeId: true, ingredientName: true, quantity: true, unit: true },
+              orderBy: { createdAt: "asc" },
+            },
+          },
+        })
+      : null
+    if (!source) return { ok: false, recipeId, error: "The dish to copy was not found, so the new item starts empty." }
+    if (source.ingredients.length > 0) {
+      const saved = await saveRecipeLines({ recipeId, lines: source.ingredients })
+      if (!saved.ok) return { ok: false, recipeId, error: `Created, but the lines were not copied: ${saved.error}` }
+    }
+  }
+
+  if (input.posName?.trim()) {
+    const mapped = await mapItemToRecipe({ otterItemName: input.posName.trim(), recipeId })
+    if (!mapped.ok) return { ok: false, recipeId, error: `Created, but not linked to the POS item: ${mapped.error}` }
+  }
+
+  revalidatePath("/dashboard/menu/items")
+  return { ok: true, recipeId, error: null }
+}
+
+/**
+ * Point a POS name that is selling with no recipe at a dish that already
+ * exists ("Signature Slider" is the Double Slider). Same mapping as
+ * {@link mapItemToRecipe}, plus a refresh of the Menu items list.
+ */
+export async function linkSellingItem(input: {
+  otterItemName: string
+  recipeId: string
+}): Promise<{ ok: true } | { ok: false; error: string }> {
+  const result = await mapItemToRecipe(input)
+  if (result.ok) revalidatePath("/dashboard/menu/items")
+  return result
 }

@@ -31,6 +31,7 @@ import {
   type DraftCost,
 } from "@/lib/counter/actions/recipe"
 import type { SectionSources } from "@/lib/counter/adapters/types"
+import { DishPhoto } from "./dish-photo"
 import type {
   BuilderField,
   BuilderLine,
@@ -310,6 +311,8 @@ export function CounterRecipeClient({
           onRange={(next) => push({ range: next })}
         />
       </PageHead>
+
+      <DishPhoto name={title} justCreated={params.get("new") === "1"} />
 
       <Section bare title="The figures" data={sections.head} pending={pending}>
         {(h) => (

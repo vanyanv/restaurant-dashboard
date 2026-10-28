@@ -58,6 +58,7 @@ export { SearchGlyph } from "./surface/search-glyph"
 export { MathLines, type MathRow } from "./surface/math-line"
 export { Briefing, type BriefingLine } from "./surface/briefing"
 export { Dots } from "./surface/dots"
+export { MenuPhoto } from "./surface/menu-photo"
 export { Tag, StatusPill, type TagTone, type PillSeverity } from "./surface/tag"
 export { WeekPicker, type WeekDay } from "./surface/week-picker"
 /* The labour week's own strip. Same two classes as `WeekPicker`, deliberately
