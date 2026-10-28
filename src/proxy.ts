@@ -350,6 +350,20 @@ export default withAuth(
       )
     }
 
+    /*
+     * Back on a phone page means back on the phone. `DeskHandoff` sets
+     * `prefer-desktop` for a week so one desk edit can be reached, and nothing
+     * ever cleared it: every `/dashboard` link for the next seven days then
+     * stayed on the desk shell, which is where "the bottom bar disappears"
+     * came from. A phone page is only reached from the bar or a phone link,
+     * so arriving on one ends the desk preference.
+     */
+    if (preferDesktop && (path === "/m" || path.startsWith("/m/"))) {
+      const res = NextResponse.next()
+      res.cookies.delete("prefer-desktop")
+      return res
+    }
+
     if (isPhone && !preferDesktop && path.startsWith("/dashboard")) {
       const target = mobilePathFor(path)
       if (target) {

@@ -5,6 +5,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { Rail, type RailUser } from "./rail"
 import { PAGE_TITLE_ID } from "./page-head"
 import { Topbar } from "./topbar"
+import { MTabs } from "./m-tabs"
 import { PageChromeContext, type PageChrome } from "./page-chrome"
 import { CounterTransitionContext, type CounterTransition } from "./counter-transition"
 import type { SyncState } from "./sync-chip"
@@ -325,6 +326,18 @@ export function AppShell({
           // "Go to" and the rail cannot list different destinations.
           isDeveloper={user?.isDeveloper}
         />
+      </div>
+
+      {/*
+       * The phone's bottom bar, on the desk pages that have no phone page yet
+       * (Store checks, Shop, Menu items, Count report and setup). A phone that
+       * reached one of those — from a phone page's own link, or after a "do
+       * this on the desk" handoff — used to land on this shell with no bar at
+       * all and no way back but the browser's. `.ct-deskbar` shows it at phone
+       * width only (counter-repairs.css), where it replaces the rail strip.
+       */}
+      <div className="ct-deskbar">
+        <MTabs />
       </div>
     </div>
   )
