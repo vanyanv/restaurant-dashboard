@@ -449,6 +449,11 @@ const MOTION_ALLOWED = /[/\\]components[/\\]counter[/\\]motion[/\\]/
  * engineering action behind `menu-profit.ts`), so every per-item margin nets
  * its deals through one function.
  *
+ * `purchases.ts` was named on the same two tests on 2026-10-28: it builds
+ * `Prisma.sql` fragments and runs `@/lib/prisma` queries at runtime, and is
+ * read by `adapters/product-usage.ts` and `adapters/inventory.ts`, so "what
+ * counts as a purchase" against usage is one rule on both pages.
+ *
  * Confirmed empirically: extending rule 4 to `.ts` with no exemption beyond
  * `adapters/` produced 25 violations across 20 files (12 under `actions/`,
  * 8 top-level); this allowance, `(adapters|actions)/` plus these eight
@@ -458,7 +463,7 @@ const MOTION_ALLOWED = /[/\\]components[/\\]counter[/\\]motion[/\\]/
  * a fake Prisma import inside a hook is still caught.
  */
 const DATA_ALLOWED_TOP_LEVEL_FILES =
-  "channel-mix|cogs|item-discounts|labor-leaks|labor-week|run-out|service-profile|staffing-curve|statement|vendor-basket"
+  "channel-mix|cogs|item-discounts|labor-leaks|labor-week|purchases|run-out|service-profile|staffing-curve|statement|vendor-basket"
 const DATA_ALLOWED = new RegExp(
   String.raw`[/\\]lib[/\\]counter[/\\](?:adapters|actions)[/\\]` +
     "|" +

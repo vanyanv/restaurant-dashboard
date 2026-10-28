@@ -84,6 +84,12 @@ export type GetMenuEngineeringResult =
 export async function getMenuEngineering(input: {
   /** Omit to roll across all stores the caller owns. */
   storeId?: string
+  /**
+   * Days from the window's first day to `asOf`. The window is
+   * `[asOf − lookbackDays, asOf]` with both ends included, so it covers
+   * `lookbackDays + 1` days. A caller showing an N-day range passes `N − 1`
+   * (`adapters/menu-profit.ts`, `adapters/analytics.ts`).
+   */
   lookbackDays?: number
   asOf?: Date
   /** Items with fewer than this many units in the window are excluded so the

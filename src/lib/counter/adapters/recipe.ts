@@ -350,6 +350,9 @@ async function loadRecipe(input: RecipeInput): Promise<Loaded | null> {
             FROM "OtterItemMapping" m
             JOIN "OtterOrderItem" oi ON oi.name = m."otterItemName"
             JOIN "OtterOrder" o ON o.id = oi."orderId"
+              -- A mapping is per store: (storeId, otterItemName) is its key. Without
+              -- this a line counted once per store that maps the same POS name.
+              AND o."storeId" = m."storeId"
             WHERE m."recipeId" = ${recipeId}
               AND o."storeId" = ANY(${storeIds})
               AND o."referenceTimeLocal" >= ${startDate}

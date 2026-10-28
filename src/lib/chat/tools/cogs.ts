@@ -41,11 +41,18 @@ export const getCogsByItem: ChatTool<typeof params, CogsByItemRow[]> = {
     const storeIds = await resolveStoreIds(ctx, args.storeIds)
     const { from, to } = parseDateRange(args.dateRange)
 
+    // COSTED rows only, as the description promises. The materializer also
+    // writes UNMAPPED and MISSING_COST rows with real revenue and $0
+    // `lineCost`; summing those in returned an item nothing has costed at
+    // `cogs: 0, marginPct: 100`, and pulled a part-costed item's margin up by
+    // every sale made while it was unmapped. Uncosted items are
+    // `getTopMenuItems`' to report, which covers the full menu.
     const grouped = await ctx.prisma.dailyCogsItem.groupBy({
       by: ["itemName", "category"],
       where: {
         storeId: { in: storeIds },
         date: { gte: from, lte: to },
+        status: "COSTED",
       },
       _sum: { qtySold: true, salesRevenue: true, lineCost: true },
       orderBy: { _sum: { salesRevenue: "desc" } },

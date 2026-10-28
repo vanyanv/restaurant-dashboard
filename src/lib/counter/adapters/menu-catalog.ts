@@ -77,13 +77,13 @@ export interface CatalogRow {
   key: string
   item: string
   category: string
-  /** Revenue over quantity — what a unit actually sold for, not a list price. */
+  /** Rung-up revenue over quantity (before discounts) — not a list price. */
   price: string
   sold: string
   soldQty: number
   mapped: boolean
   isModifier: boolean
-  /** `—` when nothing costed it. */
+  /** `—` when nothing costed it — no COSTED `DailyCogsItem` row in range. */
   plateCost: string
   /** After discounts; ends ` · deal` when one is running. */
   margin: string
@@ -273,9 +273,15 @@ async function loadCatalog(input: MenuCatalogInput): Promise<CatalogData> {
       where: { storeId: { in: storeIds } },
       select: { otterSubItemName: true },
     }),
+    // COSTED rows only. The materializer also writes UNMAPPED and
+    // MISSING_COST rows, which carry real revenue and quantity at $0
+    // `lineCost`; grouping them in printed a $0.00 plate cost and a 100%
+    // margin for an item nothing has costed, and pulled a part-costed item's
+    // plate cost down by every unit sold while it was unmapped. An item with
+    // no COSTED row has no entry here, and `rowsOf` prints "—" for both.
     prisma.dailyCogsItem.groupBy({
       by: ["itemName"],
-      where,
+      where: { ...where, status: "COSTED" },
       _sum: { lineCost: true, salesRevenue: true, qtySold: true },
     }),
     getItemDiscounts({ accountId, storeIds, startDate, endDate }),
@@ -355,8 +361,9 @@ function rowsOf(data: CatalogData): CatalogRow[] {
       item: name,
       category: isModifier ? "Modifier" : [...agg.categories].sort().join(" · "),
       // Revenue over quantity, NOT a list price — this schema has no list
-      // price, and what an item actually sold for is the more useful figure
-      // anyway: it carries the discounts.
+      // price. It is the RUNG-UP price: `fpTotalSales`/`tpTotalSales` are
+      // before discounts, so a deal does not show here. Only `margin` below is
+      // taken over what was collected (`netOfDiscount`).
       price: agg.qty > 0 ? money(agg.revenue / agg.qty, { cents: true }) : "—",
       sold: count(agg.qty),
       soldQty: agg.qty,

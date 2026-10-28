@@ -9,6 +9,7 @@
 
 import { prisma } from "@/lib/prisma"
 import { getAccountStores } from "@/lib/account-stores"
+import { businessQueryDate } from "@/lib/counter/business-date"
 
 const SNAPSHOT_TTL_MS = 60_000
 
@@ -39,11 +40,14 @@ export async function buildSituationSnapshot(accountId: string, now: Date = new 
   const storeIds = stores.map((s) => s.id)
   const storeNameById = new Map(stores.map((s) => [s.id, s.name]))
 
-  const sevenDaysAgo = new Date(now)
-  sevenDaysAgo.setUTCHours(0, 0, 0, 0)
+  // Business days, not UTC days. `date` / `occurredOn` are `@db.Date` LA
+  // business days; flooring `now` at UTC midnight made "today" tomorrow from
+  // 5pm Pacific on, so the 7-day window slid a day forward every evening and
+  // took in today's half-finished day. `businessQueryDate` is the LA day as
+  // a UTC-midnight instant, the shape a `@db.Date` compare wants.
+  const today = businessQueryDate(now)
+  const sevenDaysAgo = new Date(today)
   sevenDaysAgo.setUTCDate(sevenDaysAgo.getUTCDate() - 7)
-  const today = new Date(now)
-  today.setUTCHours(0, 0, 0, 0)
 
   // Run the three reads in parallel.
   const [salesByStore, openAnomalies, latestForecast] = await Promise.all([
