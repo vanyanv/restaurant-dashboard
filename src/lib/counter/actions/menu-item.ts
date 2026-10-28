@@ -1,6 +1,10 @@
 "use server"
 
+import { revalidatePath } from "next/cache"
 import { mapOtterItemToRecipe } from "@/app/actions/menu-item-actions"
+import { getAuthScope } from "@/lib/auth-scope"
+import { prisma } from "@/lib/prisma"
+import { createRecipe, saveRecipeLines, type SaveLine } from "@/lib/counter/actions/recipe"
 
 /**
  * Connect a sold menu item to the recipe that makes it.
@@ -39,4 +43,88 @@ export async function mapItemToRecipe(input: {
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : "mapping failed" }
   }
+}
+
+/**
+ * Start a menu item from the New menu item screen, in one click.
+ *
+ * Three starts, all ending on the new recipe's page:
+ * - `posName` set: the dish is already selling under that POS name. The
+ *   recipe is created and the name mapped for every store, so the next COGS
+ *   run stops counting it as $0.
+ * - `copyFrom` set: the new recipe gets a copy of that dish's lines (the
+ *   source is read inside the caller's account; a recipe id from another
+ *   account copies nothing).
+ * - neither: a blank recipe.
+ *
+ * Creating, copying and mapping go through the existing actions, which scope
+ * by account and validate the lines. The copy source is read first, so a bad
+ * one creates nothing. If the recipe was created but a later step failed,
+ * the id comes back WITH the error, and the screen opens the recipe with
+ * that message on it rather than leaving an orphan behind a failure.
+ */
+export async function startMenuItem(input: {
+  itemName: string
+  category: string
+  copyFrom?: string | null
+  posName?: string | null
+}): Promise<{ ok: boolean; recipeId: string | null; error: string | null }> {
+  let recipeId: string | null = null
+  try {
+    // Resolve the dish to copy BEFORE creating anything, so a stale or
+    // foreign id fails cleanly instead of leaving an empty recipe behind.
+    let lines: SaveLine[] = []
+    if (input.copyFrom) {
+      const scope = await getAuthScope()
+      const source = scope
+        ? await prisma.recipe.findFirst({
+            where: { id: input.copyFrom, accountId: scope.accountId },
+            select: {
+              ingredients: {
+                select: { canonicalIngredientId: true, componentRecipeId: true, ingredientName: true, quantity: true, unit: true },
+                orderBy: { createdAt: "asc" },
+              },
+            },
+          })
+        : null
+      if (!source) return { ok: false, recipeId: null, error: "The dish to copy was not found. Nothing was created." }
+      lines = source.ingredients
+    }
+
+    const created = await createRecipe({ itemName: input.itemName, category: input.category })
+    if (!created.ok || !created.recipeId) return created
+    recipeId = created.recipeId
+
+    if (lines.length > 0) {
+      const saved = await saveRecipeLines({ recipeId, lines })
+      if (!saved.ok) return { ok: false, recipeId, error: `Created, but the lines were not copied: ${saved.error}` }
+    }
+
+    if (input.posName?.trim()) {
+      const mapped = await mapItemToRecipe({ otterItemName: input.posName.trim(), recipeId })
+      if (!mapped.ok) {
+        return { ok: false, recipeId, error: `Created, but not linked to the POS item yet: ${mapped.error}` }
+      }
+    }
+
+    revalidatePath("/dashboard/menu/items")
+    return { ok: true, recipeId, error: null }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    return { ok: false, recipeId, error: recipeId ? `Created, but not finished: ${message}` : message }
+  }
+}
+
+/**
+ * Point a POS name that is selling with no recipe at a dish that already
+ * exists ("Signature Slider" is the Double Slider). Same mapping as
+ * {@link mapItemToRecipe}, plus a refresh of the Menu items list.
+ */
+export async function linkSellingItem(input: {
+  otterItemName: string
+  recipeId: string
+}): Promise<{ ok: true } | { ok: false; error: string }> {
+  const result = await mapItemToRecipe(input)
+  if (result.ok) revalidatePath("/dashboard/menu/items")
+  return result
 }

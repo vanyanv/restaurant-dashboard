@@ -296,6 +296,7 @@ export const INVENTORY_TABS: readonly SubNavItem[] = [
  */
 export const MENU_TABS: readonly SubNavItem[] = [
   { label: "Overview", href: "/dashboard/menu" },
+  { label: "Items", href: "/dashboard/menu/items" },
   { label: "Catalog", href: "/dashboard/menu/catalog" },
   { label: "Profit", href: "/dashboard/menu-profit" },
   { label: "Mix", href: "/dashboard/product-mix" },
