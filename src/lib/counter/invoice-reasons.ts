@@ -13,6 +13,7 @@ export const REASON_LABEL: Record<string, string> = {
   low_match_confidence: "The store match is uncertain",
   no_store_match: "No store matched the address",
   not_a_supplier: "Not a supply delivery",
+  not_an_invoice: "Not an invoice",
   unknown: "Flagged",
 }
 
