@@ -540,7 +540,7 @@ async function runSync(
           packSize: true,
           unitSize: true,
           unitSizeUom: true,
-          invoice: { select: { vendorName: true } },
+          invoice: { select: { vendorName: true, status: true } },
         },
       })
       packPriors = buildPackShapePriors(
@@ -553,6 +553,7 @@ async function runSync(
           packSize: r.packSize,
           unitSize: r.unitSize,
           unitSizeUom: r.unitSizeUom,
+          approved: r.invoice.status === "APPROVED",
         }))
       )
     } catch (err) {

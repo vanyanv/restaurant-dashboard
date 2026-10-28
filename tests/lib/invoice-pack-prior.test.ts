@@ -71,6 +71,21 @@ describe("derivePackShapePrior", () => {
     })
   })
 
+  it("trusts one line from an approved invoice as a full prior (IFS 61250CS)", () => {
+    const prior = derivePackShapePrior([
+      row({ vendorName: "Individual FoodService", sku: "61250CS", productName: "Cup Portion Plastic Clear", packSize: 20, unitSize: 125, approved: true }),
+    ])
+    expect(prior).toMatchObject({ unit: "CS", packSize: 20, unitSize: 125, unitSizeUom: "CT" })
+  })
+
+  it("does not let one approved line outvote a longer accepted history", () => {
+    const prior = derivePackShapePrior([
+      row({ packSize: 20, unitSize: 125, approved: true }),
+      row(), row(), row(), row(),
+    ])
+    expect(prior).toMatchObject({ packSize: 1, unitSize: 1000 })
+  })
+
   it("returns null below the minimum support threshold", () => {
     const rows = Array.from({ length: PRIOR_MIN_SUPPORT - 1 }, () => row())
     expect(derivePackShapePrior(rows)).toBeNull()
