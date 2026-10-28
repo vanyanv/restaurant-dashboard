@@ -91,7 +91,7 @@ function PhoneReviewDecision({
       <Note tight>
         {said ??
           (blocked
-            ? "Approve unlocks when the gap is zero. These lines do not sum to the total the document prints."
+            ? "Approve unlocks when the gap is under a dollar. These lines do not sum to the total the document prints."
             : approved
               ? "Posted to COGS. Reopening puts it back in the queue."
               : "Approving posts this invoice to COGS.")}

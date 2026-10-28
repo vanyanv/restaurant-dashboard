@@ -9,7 +9,12 @@ import { matchInvoiceToStore } from "@/lib/address-matcher"
 import type { InvoiceSyncProgressEvent } from "@/types/invoice"
 import { isCronRequest, rateLimit, RATE_LIMIT_TIERS } from "@/lib/rate-limit"
 import { sanitizeInvoiceDate, findLineMathMismatches, findPackShapeAnomalies, findTotalReconciliationMismatch, findEmptyExtraction, composeReviewReasons, type ReviewReason } from "@/lib/invoice-sanity"
-import { applyPackShapePriors, buildPackShapePriors, type PackShapePrior } from "@/lib/invoice-pack-prior"
+import {
+  applyPackShapePriors,
+  buildPackShapePriors,
+  lineMatchesPrior,
+  type PackShapePrior,
+} from "@/lib/invoice-pack-prior"
 import { putInvoicePdf, type InvoicePdfUpload } from "@/lib/blob"
 import { sendGraphMail } from "@/lib/graph-mail"
 import { buildPriceAlertEmail, type PriceHike } from "@/lib/price-alert-email"
@@ -517,7 +522,9 @@ async function runSync(
       )
     }
 
-    const packAnomalies = findPackShapeAnomalies(inv.extraction.lineItems)
+    const packAnomalies = findPackShapeAnomalies(inv.extraction.lineItems, {
+      isConfirmed: (li) => lineMatchesPrior(inv.extraction.vendorName, li, packPriors),
+    })
     for (const a of packAnomalies) {
       logger.warn(
         `[invoice-sync] pack-shape anomaly on ${contextLabel} line ${a.lineNumber} ` +

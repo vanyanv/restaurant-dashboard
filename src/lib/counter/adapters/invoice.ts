@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma"
-import { goodsSum, isChargeRow } from "@/lib/invoice-charges"
+import { tieOut } from "@/lib/invoice-charges"
 import { normalizeVendorName } from "@/lib/vendor-normalize"
 import { bytes, count, money, pct, plural, pluralWord, titleCase, unitCost } from "@/lib/counter/format"
 import {
@@ -36,8 +36,6 @@ import type { FigureProps, KvRow, MListRow, MoneyLine, Row } from "@/components/
 const LINE_ROWS = 40
 /** Rows on the phone's decision list. */
 const PHONE_ROWS = 6
-/** A line reconciles when it lands inside half a cent. */
-const EPSILON = 0.02
 
 export interface InvoiceHead {
   title: string
@@ -213,6 +211,9 @@ interface Loaded {
   isReturn: boolean
   lines: LineRow[]
   goods: number
+  /** What `goods` was compared with: the subtotal, or total less tax. */
+  reference: number
+  referenceLabel: string
   gap: number | null
   reasons: Reason[]
   matchConfidence: number | null
@@ -402,9 +403,13 @@ async function loadInvoice(input: InvoiceInput): Promise<Loaded | null> {
   })
   if (!inv) return null
 
-  const goods = goodsSum(inv.lineItems)
-  const reference = inv.subtotal ?? inv.totalAmount
-  const delta = goods - reference
+  // The same `tieOut` as Needs you, the sync and the vendor pages, so an
+  // invoice cannot tie out on one of them and fail to on another.
+  const tie = tieOut(inv.lineItems, {
+    subtotal: inv.subtotal,
+    taxAmount: inv.taxAmount,
+    totalAmount: inv.totalAmount,
+  })
 
   // The raw extraction is the MODEL'S OUTPUT, not the document — see `headOf`
   // for what that rules out and `custodyOf` for what it does prove.
@@ -424,7 +429,7 @@ async function loadInvoice(input: InvoiceInput): Promise<Loaded | null> {
     subtotal: inv.subtotal,
     tax: inv.taxAmount,
     isReturn: inv.isReturn,
-    lines: inv.lineItems.map((l) => ({
+    lines: inv.lineItems.map((l, n) => ({
       lineNumber: l.lineNumber,
       sku: l.sku,
       productName: l.productName,
@@ -437,12 +442,12 @@ async function loadInvoice(input: InvoiceInput): Promise<Loaded | null> {
       unitSizeUom: l.unitSizeUom,
       matchedTo: l.canonicalIngredient?.name ?? null,
       matchSource: l.matchSource,
-      isCharge: isChargeRow(l.productName),
+      isCharge: tie.outside.has(n),
     })),
-    goods,
-    // In whole cents, matching the list's `reconciles`, so an invoice
-    // cannot tie out on its own page and fail to on Needs you.
-    gap: Math.round(Math.abs(delta) * 100) >= Math.round(EPSILON * 100) ? delta : null,
+    goods: tie.goods,
+    reference: tie.reference,
+    referenceLabel: tie.referenceKind === "subtotal" ? "subtotal" : "total less tax",
+    gap: tie.reconciles ? null : tie.gap,
     reasons,
     matchConfidence: inv.matchConfidence,
     storeName: inv.store?.name ?? null,
@@ -586,8 +591,8 @@ function headOf(d: Loaded): InvoiceHead {
       (d.storeName ? ` · ${d.storeName}` : ""),
     cells: [
       {
-        label: d.subtotal === null ? "Printed total" : "Printed subtotal",
-        value: money(d.subtotal ?? d.total, { cents: true }),
+        label: `Printed ${d.referenceLabel}`,
+        value: money(d.reference, { cents: true }),
         delta: d.subtotal === null ? "no subtotal printed" : `${money(d.total, { cents: true })} with tax`,
         deltaTone: "is-flat",
       },
@@ -615,12 +620,12 @@ function headOf(d: Loaded): InvoiceHead {
             value: money(Math.abs(d.gap), { cents: true }),
             body:
               d.lines.length === 0
-                ? `The document prints ${money(d.subtotal ?? d.total, { cents: true })} of goods ` +
+                ? `The document prints ${money(d.reference, { cents: true })} of goods ` +
                   `and we hold none of it. Every ingredient and price on this delivery is absent.`
                 : `The ${plural(d.lines.filter((l) => !l.isCharge).length, "goods line")} ` +
                   `${pluralWord(d.lines.filter((l) => !l.isCharge).length, "comes", "come")} to ` +
                   `${money(d.goods, { cents: true })} against a printed ` +
-                  `${money(d.subtotal ?? d.total, { cents: true })}.`,
+                  `${money(d.reference, { cents: true })}.`,
           },
   }
 }
@@ -801,8 +806,8 @@ function countsNote(d: Loaded): string {
 const MONEY_REASONS = new Set(["no_lines", "total_reconciliation", "line_math"])
 
 function checksOf(d: Loaded): InvoiceCheck[] {
-  const printed = d.subtotal ?? d.total
-  const printedWord = d.subtotal === null ? "total" : "subtotal"
+  const printed = d.reference
+  const printedWord = d.referenceLabel
   const goodsLines = d.lines.filter((l) => !l.isCharge)
   const unmatched = goodsLines.filter((l) => l.matchedTo === null)
 
@@ -812,7 +817,7 @@ function checksOf(d: Loaded): InvoiceCheck[] {
           key: "ties",
           tone: "good",
           title: `The lines tie to the printed ${printedWord}`,
-          body: `${plural(goodsLines.length, "goods line")} ${pluralWord(goodsLines.length, "comes", "come")} to ${money(d.goods, { cents: true })}, the same as the document prints. Delivery and tax rows are left out.`,
+          body: `${plural(goodsLines.length, "goods line")} ${pluralWord(goodsLines.length, "comes", "come")} to ${money(d.goods, { cents: true })}, within a dollar of what the document prints. Delivery, fuel and tax rows are placed on the side of the ${printedWord} they print on.`,
         }
       : {
           key: "ties",
@@ -824,7 +829,7 @@ function checksOf(d: Loaded): InvoiceCheck[] {
           body:
             `${plural(goodsLines.length, "goods line")} ${pluralWord(goodsLines.length, "comes", "come")} to ` +
             `${money(d.goods, { cents: true })} against a printed ` +
-            `${printedWord} of ${money(printed, { cents: true })}. Approve stays locked until that gap is zero.`,
+            `${printedWord} of ${money(printed, { cents: true })}. Approve stays locked until the gap is under a dollar.`,
         },
     unmatched.length === 0
       ? {
@@ -901,8 +906,8 @@ function linesOf(d: Loaded): InvoiceLines {
   const rows: MoneyLine[] = [
     { label: "Goods extracted", value: money(d.goods, { cents: true }) },
     {
-      label: d.subtotal === null ? "Printed total" : "Printed subtotal",
-      value: money(d.subtotal ?? d.total, { cents: true }),
+      label: `Printed ${d.referenceLabel}`,
+      value: money(d.reference, { cents: true }),
     },
     {
       label: "Gap",

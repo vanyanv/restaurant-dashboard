@@ -206,7 +206,7 @@ function ReviewDecision({
         </Note>
       ) : blocked ? (
         <Note tight>
-          Approve unlocks when the gap is zero. These lines do not sum to the
+          Approve unlocks when the gap is under a dollar. These lines do not sum to the
           total the document prints, so posting them would put a figure into
           COGS that the invoice itself contradicts. Reject it, or record it as a
           credit, if that is what it is.

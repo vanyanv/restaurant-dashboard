@@ -231,6 +231,22 @@ function lineAgreesWithPrior(
 }
 
 /**
+ * True when this line's shape is the one the account has accepted for this
+ * (vendor, sku) — the sanity checks take that history over their heuristics.
+ */
+export function lineMatchesPrior(
+  vendorName: string | null,
+  line: InvoiceExtractionLineItem,
+  priors: Map<string, PackShapePrior>
+): boolean {
+  const key = priorKey(vendorName, line.sku)
+  const prior = key ? priors.get(key) : undefined
+  if (!prior) return false
+  if ((line.unit?.trim().toUpperCase() ?? "") !== prior.unit) return false
+  return lineAgreesWithPrior(line, prior)
+}
+
+/**
  * Rewrite extraction lines whose pack shape disagrees with a strong
  * historical prior for the same (vendor, sku). Only fires when the line's
  * order unit matches the prior's (overriding across unit semantics would
