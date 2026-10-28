@@ -49,7 +49,9 @@ import { activePhoneTab, PHONE_TABS, type PhoneTab } from "@/lib/counter/phone-t
 export function MTabs() {
   const pathname = usePathname() ?? "/m"
   const searchParams = useSearchParams()
-  const active = activePhoneTab(pathname)
+  // On a desk page (see `AppShell`'s `.ct-deskbar`) the tab is the one its
+  // phone twin would light: `/dashboard/count/setup` is Count, not Today.
+  const active = activePhoneTab(pathname.replace(/^\/dashboard(?=\/|$)/, "/m"))
   const qs = searchParams?.toString() ?? ""
 
   /*

@@ -3314,3 +3314,32 @@ html[data-theme-switching] .ct-root *::after {
   color: var(--ink-3);
   flex: none;
 }
+
+/*
+ * ============================================================================
+ * THE BOTTOM BAR ON A DESK PAGE, AT PHONE WIDTH
+ * ============================================================================
+ *
+ * `AppShell` mounts `MTabs` inside `.ct-deskbar` so a phone that lands on a
+ * desk-only page (no `/m` twin yet) keeps its bar. Above phone width it is not
+ * drawn at all. At phone width the flattened rail strip goes — the bar and its
+ * More tab are the navigation there — and the page keeps the bar's height
+ * clear at the bottom so its last row is not under it.
+ */
+.ct-deskbar {
+  display: none;
+}
+
+@media (max-width: 760px) {
+  .ct-deskbar {
+    display: block;
+  }
+
+  .ct-root > .rail {
+    display: none;
+  }
+
+  .ct-root .screen {
+    padding-bottom: calc(12px + var(--m-bar-h) + env(safe-area-inset-bottom, 0px));
+  }
+}

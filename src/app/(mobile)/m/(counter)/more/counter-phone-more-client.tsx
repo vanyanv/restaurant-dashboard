@@ -217,6 +217,10 @@ const MORE_ROWS = [
   { key: "menuprofit", href: "/m/menu-profit", title: "Menu profit", detail: "Margin per item", value: "" },
   { key: "decisions", href: "/m/decisions", title: "Needs you", detail: "Waiting on a decision", value: "" },
   { key: "alerts", href: "/m/alerts", title: "Alerts", detail: "What tripped, and when", value: "" },
+  // Desk pages with no phone twin yet. They open on the desk shell, which
+  // keeps the bottom bar at phone width (`AppShell`'s `.ct-deskbar`).
+  { key: "checks", href: "/dashboard/checks", title: "Store checks", detail: "Today's checks, crew and PINs", value: "" },
+  { key: "shop", href: "/dashboard/shop", title: "Shop", detail: "Merch orders, products, pickup", value: "" },
   { key: "operations", href: "/m/operations", title: "Operations", detail: "Counts, vendors, packaging, usage", value: "" },
   { key: "stores", href: "/m/stores", title: "Stores", detail: "Rent, commissions, COGS targets", value: "" },
   { key: "menu", href: "/m/menu", title: "Menu", detail: "The catalogue and what it earns", value: "" },
