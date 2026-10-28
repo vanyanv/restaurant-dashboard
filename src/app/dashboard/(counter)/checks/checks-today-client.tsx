@@ -3,7 +3,7 @@
 import { Fragment, useState, useTransition } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { Section, useCounterTransition, usePageChrome } from "@/components/counter"
+import { Section, useCounterTransition, usePageChrome, useSurfaceHref } from "@/components/counter"
 import { setStoreClosed } from "@/lib/counter/actions/checks"
 import type { SectionSources } from "@/lib/counter/adapters/types"
 import type { TodayData, TodaySections, CellView } from "@/lib/counter/adapters/checks"
@@ -35,6 +35,7 @@ export function ChecksTodayClient({ sections }: { sections: SectionSources<Today
 }
 
 function Alerts({ data }: { data: TodayData }) {
+  const href = useSurfaceHref()
   if (data.alerts.length === 0) return null
   return (
     <div className="ck-alerts">
@@ -44,7 +45,7 @@ function Alerts({ data }: { data: TodayData }) {
           <span>
             <b>{a.text}</b> <span className="ck-meta">{a.detail}</span>
           </span>
-          <Link className="btn" href={`/dashboard/checks/history?store=${a.storeId}`}>
+          <Link className="btn" href={href(`/dashboard/checks/history?store=${a.storeId}`)}>
             Open in History
           </Link>
         </div>

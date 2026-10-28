@@ -1251,8 +1251,13 @@ button.wkd {
 }
 
 /* The clearance the layout's padding used to provide, moved inside so it is
-   the SCROLL region that ends above the bar rather than the page. */
+   the SCROLL region that ends above the bar rather than the page.
+
+   `minmax(0,1fr)` as the one column: an implicit grid column is sized to its
+   widest child's max-content, so a desk client reused on a phone page (Store
+   checks' five-tab bar) widened the whole page past the screen. */
 .m-shell__main > .ct-root.ct-phone > .mscroll {
+  grid-template-columns: minmax(0, 1fr);
   padding-bottom: calc(12px + var(--m-bar-h) + env(safe-area-inset-bottom, 0px));
 }
 
@@ -3341,5 +3346,33 @@ html[data-theme-switching] .ct-root *::after {
 
   .ct-root .screen {
     padding-bottom: calc(12px + var(--m-bar-h) + env(safe-area-inset-bottom, 0px));
+  }
+}
+
+/*
+ * ============================================================================
+ * A PAGE'S VIEW TABS SCROLL SIDEWAYS ON A PHONE RATHER THAN WRAP
+ * ============================================================================
+ *
+ * Store checks has five tabs and Shop five; at 390px "Crew & PINs" and
+ * "QR posters" broke onto two lines each and the bar doubled in height. One
+ * line that scrolls keeps every label whole and the bar one row tall.
+ */
+@media (max-width: 760px) {
+  .pagehead > *,
+  .pagehead .phactions {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .pagehead .seg {
+    max-width: 100%;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .pagehead .seg > * {
+    flex: none;
+    white-space: nowrap;
   }
 }

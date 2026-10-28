@@ -2,7 +2,7 @@
 
 import { Fragment, useState } from "react"
 import { useRouter } from "next/navigation"
-import { Section, useCounterTransition, usePageChrome } from "@/components/counter"
+import { Section, useCounterTransition, usePageChrome, useSurfaceHref } from "@/components/counter"
 import type { SectionSources } from "@/lib/counter/adapters/types"
 import type { CellView, HistoryData, HistorySections } from "@/lib/counter/adapters/checks"
 import { ChecksHead, Glyph, Legend, Lightbox, photoSrc, StorePicker, type PhotoRef } from "../checks-ui"
@@ -29,6 +29,7 @@ const RANGES = [7, 14, 30] as const
 
 function History({ data }: { data: HistoryData }) {
   const router = useRouter()
+  const href = useSurfaceHref()
   const [sel, setSel] = useState<{ row: number; col: number } | null>(() => firstInteresting(data))
   const row = sel ? data.rows[sel.row] : null
   const cell = row && sel ? row.cells[sel.col] : null
@@ -36,7 +37,7 @@ function History({ data }: { data: HistoryData }) {
     const q = new URLSearchParams()
     q.set("range", String(r))
     if (data.storeId) q.set("store", data.storeId)
-    router.push(`/dashboard/checks/history?${q.toString()}`)
+    router.push(href(`/dashboard/checks/history?${q.toString()}`))
   }
   const cols = `auto auto repeat(${data.days.length}, 26px) auto`
 
