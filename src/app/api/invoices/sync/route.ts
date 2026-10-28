@@ -608,11 +608,14 @@ async function runSync(
   let knownVendors: Set<string> | null = null
   try {
     const rows = await prisma.invoice.findMany({
-      where: { accountId },
+      // A set-aside bill does not make its sender known, or its next one
+      // would get through.
+      where: { accountId, status: { not: "REJECTED" } },
       select: { vendorName: true },
       distinct: ["vendorName"],
     })
-    knownVendors = new Set(rows.map((r) => vendorMatchKey(r.vendorName)))
+    // An account with no bills yet has no one to compare a sender against.
+    knownVendors = rows.length > 0 ? new Set(rows.map((r) => vendorMatchKey(r.vendorName))) : null
   } catch (err) {
     logger.error("[invoice-sync] known-vendor lookup failed — not screening senders this run:", err)
   }
@@ -856,7 +859,9 @@ async function runSync(
           },
         },
       })
-      createdInvoiceIds.push(created.id)
+      // A bill set aside as not a supply delivery is kept to look at, but its
+      // lines must not reach ingredient matching, costs or price alerts.
+      if (inv.status !== "REJECTED") createdInvoiceIds.push(created.id)
       if (identity) seenIdentities.add(identity)
       const dateless = invoiceIdentityKey({ ...inv, invoiceDate: null })
       if (dateless) seenIdentities.add(dateless)
