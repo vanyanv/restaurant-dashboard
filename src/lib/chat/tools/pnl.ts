@@ -17,6 +17,7 @@ import {
   type PnLRow,
 } from "@/lib/pnl"
 import { CogsStatus } from "@/generated/prisma/client"
+import { loadLaborCost, laborByPeriods, hasFixedLabor } from "@/lib/counter/labor-cost"
 import {
   bucketCommission,
   loadOrderFeeGroups,
@@ -311,7 +312,7 @@ export interface LaborCoverage {
   storeName: string
   /** Total days in the requested window for this store. */
   totalDays: number
-  /** Number of days that had a HarriDailyLabor row with actualCost. */
+  /** Number of days with a labor reading (daily actual, else position sum). */
   coveredDays: number
   /** Whether the store has a fixedMonthlyLabor configured. Stores with no
    *  fixed-budget config are flagged by the separate `laborMissing` caveat
@@ -390,7 +391,7 @@ async function computeWindow(input: {
   const overallStart = periods[0].startDate
   const overallEnd = periods[periods.length - 1].endDate
 
-  const [summaries, cogsRows, harriRows, fixedExpenseRows, feeGroups] = await Promise.all([
+  const [summaries, cogsRows, laborCost, fixedExpenseRows, feeGroups] = await Promise.all([
     ctx.prisma.otterDailySummary.findMany({
       where: {
         storeId: { in: storeIds },
@@ -426,14 +427,9 @@ async function computeWindow(input: {
         status: true,
       },
     }),
-    ctx.prisma.harriDailyLabor.findMany({
-      where: {
-        storeId: { in: storeIds },
-        date: { gte: overallStart, lte: overallEnd },
-        actualCost: { not: null },
-      },
-      select: { storeId: true, date: true, actualCost: true },
-    }),
+    // Labor dollars: the dashboard's one rule (daily actual, else position
+    // sum, else missing), account-scoped.
+    loadLaborCost({ accountId: ctx.accountId, storeIds, startDate: overallStart, endDate: overallEnd }, ctx.prisma),
     ctx.prisma.storeFixedExpense.findMany({
       where: { storeId: { in: storeIds }, isActive: true },
       orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
@@ -458,12 +454,6 @@ async function computeWindow(input: {
     const arr = cogsByStore.get(r.storeId) ?? []
     arr.push(r)
     cogsByStore.set(r.storeId, arr)
-  }
-  const harriByStore = new Map<string, { date: Date; actualCost: number | null }[]>()
-  for (const r of harriRows) {
-    const arr = harriByStore.get(r.storeId) ?? []
-    arr.push({ date: r.date, actualCost: r.actualCost })
-    harriByStore.set(r.storeId, arr)
   }
   const customExpensesByStore = new Map<string, CustomFixedExpense[]>()
   for (const e of fixedExpenseRows as Array<{
@@ -496,25 +486,14 @@ async function computeWindow(input: {
     const orderCounts = bucketOrderCount(storeSummaries, periods)
     const orderCount = sum(orderCounts)
 
-    const storeHarri = harriByStore.get(store.id) ?? []
-    const harriLaborByPeriod = periods.map((p) => {
-      let actualUsd = 0
-      let coveredDays = 0
-      for (const r of storeHarri) {
-        if (r.date >= p.startDate && r.date <= p.endDate && r.actualCost != null) {
-          actualUsd += r.actualCost
-          coveredDays += 1
-        }
-      }
-      return { actualUsd, coveredDays }
-    })
+    const harriLaborByPeriod = laborByPeriods(laborCost.stores[store.id], periods)
 
     const totalCovered = harriLaborByPeriod.reduce((a, h) => a + h.coveredDays, 0)
     laborCoverage.push({
       storeName: store.name,
       totalDays,
       coveredDays: totalCovered,
-      hasFixedMonthlyLabor: store.fixedMonthlyLabor != null,
+      hasFixedMonthlyLabor: hasFixedLabor(store.fixedMonthlyLabor),
     })
 
     const customFixedExpenses = customExpensesByStore.get(store.id) ?? []
@@ -540,7 +519,7 @@ async function computeWindow(input: {
       }
     }
 
-    if (store.fixedMonthlyLabor == null) laborMissing.push(store.name)
+    if (!hasFixedLabor(store.fixedMonthlyLabor)) laborMissing.push(store.name)
 
     const fixedCostsTotal =
       sum(computed.laborValues) +

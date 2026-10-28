@@ -44,8 +44,10 @@ export type LaborActualsResult = {
     laborCost: number
     /** Labour over Total Sales, 0..100 — the P&L's own labour line. */
     laborPct: number | null
-    /** Platform net sales per hour worked. */
+    /** Total Sales (the P&L's Net Sales) per hour worked. */
     salesPerLaborHour: number | null
+    /** Days that sold but have no labour reading in Harri; laborCost is short by them. */
+    missingLaborDays: number
     overtimeCost: number
     avgHourlyRate: number | null
   }
@@ -105,6 +107,7 @@ export const getLaborActuals: ChatTool<typeof params, LaborActualsResult> = {
         laborCost: round2(week.cost),
         laborPct: orNull(week.laborPct, round1),
         salesPerLaborHour: orNull(week.splh, round2),
+        missingLaborDays: week.missingCostDays,
         overtimeCost: round2(week.overtimeCost),
         avgHourlyRate: orNull(week.blendedRate, round2),
       },

@@ -1,4 +1,5 @@
 import { isAfter, isBefore } from "date-fns"
+import { hasFixedLabor } from "@/lib/counter/labor-cost-core"
 // UTC-floor on purpose: OtterDailySummary.date is a Postgres @db.Date stored
 // at UTC midnight (e.g. May 1 LA business day → 2026-05-01T00:00:00Z).
 // Period boundaries must land on the same instant or bucketSummariesByPeriod
@@ -538,9 +539,9 @@ export interface CustomFixedExpense {
 /** Per-period Harri labor actuals. Pass to computeStorePnL to override the
  *  fixed-monthly labor estimate with real numbers from /lib/harri-labor-sync. */
 export type HarriLaborByPeriod = {
-  /** Sum of HarriDailyLabor.actualCost (USD) for all days in the period that have data. */
+  /** Labor dollars for the days in the period that have a reading — `loadLaborCost`'s rule. */
   actualUsd: number
-  /** Number of days in the period that have a HarriDailyLabor row. */
+  /** Number of days in the period with a labor reading; the rest are missing, not $0. */
   coveredDays: number
 }
 
@@ -699,8 +700,12 @@ export function computeStorePnL(input: {
   // Coverage-aware blend: Harri actuals for covered days + per-day fixed
   // estimate for the rest. Label reflects overall coverage across the
   // requested period range.
+  // A stored 0 is how the store file saves a budget nobody entered: it is
+  // "not set", same as null, so it neither prices uncovered days at $0 as if
+  // known nor reads as a configured budget.
+  const fixedLabor = hasFixedLabor(store.fixedMonthlyLabor) ? store.fixedMonthlyLabor : null
   const fixedLaborByPeriod = periods.map(
-    (p) => monthlyCostForDays(store.fixedMonthlyLabor, p.days) ?? 0
+    (p) => monthlyCostForDays(fixedLabor, p.days) ?? 0
   )
   let laborValues: number[]
   let laborLabel = "Labor (fixed)"
@@ -735,16 +740,16 @@ export function computeStorePnL(input: {
        * known. Labour understated means bottom line, margin and prime cost all
        * overstated, which is the direction nobody goes looking in.
        */
-      return store.fixedMonthlyLabor == null
+      return fixedLabor == null
     })
     const totalDays = periods.reduce((a, p) => a + p.days, 0)
     const totalCovered = harriLaborByPeriod.reduce((a, h) => a + Math.max(0, h.coveredDays), 0)
     if (totalDays > 0 && totalCovered / totalDays >= 0.8) laborLabel = "Labor (actual)"
     else if (totalCovered > 0) laborLabel = "Labor (partial)"
-    else laborLabel = store.fixedMonthlyLabor != null ? "Labor (fixed)" : "Labor (estimated)"
+    else laborLabel = fixedLabor != null ? "Labor (fixed)" : "Labor (estimated)"
   } else {
     laborValues = fixedLaborByPeriod
-    laborUnknown = periods.map(() => store.fixedMonthlyLabor == null)
+    laborUnknown = periods.map(() => fixedLabor == null)
   }
 
   const rentValues = periods.map(

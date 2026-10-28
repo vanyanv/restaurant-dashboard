@@ -39,13 +39,14 @@ describe("getLaborActuals", () => {
     blendedRate: 20.0921,
     splh: 61.234,
     laborPct: 22.849,
+    missingCostDays: 0,
     overtimeCost: 45.5,
   }
 
   it("scopes the store and the account, and rounds what the model reads", async () => {
     vi.mocked(loadLaborFigures).mockResolvedValue({
       week,
-      days: [{ key: "2026-10-20", label: "Mon Oct 20", actualHours: 14.04, scheduledHours: 16, cost: 280.111, splh: 60, laborPct: 21.66, totalSales: 1293 }],
+      days: [{ key: "2026-10-20", label: "Mon Oct 20", actualHours: 14.04, scheduledHours: 16, cost: 280.111, costMissing: false, splh: 60, laborPct: 21.66, totalSales: 1293 }],
       roles: [{ position: "Line cook", payType: "HOURLY", hours: 60.04, cost: 1200.555, share: 59.01 }],
       leaks: {
         rows: [{ code: "LATE_CLOCK_OUT", label: "Clocked out late", kind: "leak", alerts: 4, hours: 1.26, cost: 25.3, people: 2 }],
@@ -71,6 +72,7 @@ describe("getLaborActuals", () => {
       laborCost: 2034.57,
       laborPct: 22.8,
       salesPerLaborHour: 61.23,
+      missingLaborDays: 0,
       overtimeCost: 45.5,
       avgHourlyRate: 20.09,
     })
@@ -80,8 +82,8 @@ describe("getLaborActuals", () => {
 
   it("passes null for every store and says when Harri has nothing", async () => {
     vi.mocked(loadLaborFigures).mockResolvedValue({
-      week: { ...week, actualHours: 0, cost: 0, blendedRate: null, splh: null, laborPct: null, overtimeCost: 0 },
-      days: [{ key: "2026-10-20", label: "Mon", actualHours: 0, scheduledHours: null, cost: 0, splh: null, laborPct: null, totalSales: 900 }],
+      week: { ...week, actualHours: 0, cost: 0, blendedRate: null, splh: null, laborPct: null, missingCostDays: 0, overtimeCost: 0 },
+      days: [{ key: "2026-10-20", label: "Mon", actualHours: 0, scheduledHours: null, cost: 0, costMissing: false, splh: null, laborPct: null, totalSales: 900 }],
       roles: [],
       leaks: null,
     })

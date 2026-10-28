@@ -107,3 +107,23 @@ describe("labour coverage — what the blend admits to", () => {
     expect(value).toBeGreaterThan(2_400)
   })
 })
+
+describe("a stored fixedMonthlyLabor of 0 is not a budget", () => {
+  const ZERO_BUDGET: StoreFixedInputs = { ...BUDGETED, fixedMonthlyLabor: 0 }
+
+  it("reads as unknown, like null, when Harri covers only part of the period", () => {
+    const zero = laborRow(ZERO_BUDGET, 3, 2_400)
+    const none = laborRow(NO_BUDGET, 3, 2_400)
+    expect(zero).toEqual(none)
+    expect(zero.unknown).toBe(true)
+  })
+
+  it("is not labelled a fixed figure when nothing is covered", () => {
+    expect(laborRow(ZERO_BUDGET, 0, 0).label).toBe("Labor (estimated)")
+    expect(laborRow(ZERO_BUDGET, 0, 0).unknown).toBe(true)
+  })
+
+  it("still uses a real budget", () => {
+    expect(laborRow(BUDGETED, 0, 0).label).toBe("Labor (fixed)")
+  })
+})

@@ -69,7 +69,6 @@ function buildWeek(): LaborDay[] {
       actualSeconds: ACTUAL_HOURS[i] * 3600,
       scheduledMinutes: SCHEDULED_HOURS[i] * 60,
       cost: COST[i],
-      platformSales: NET_SALES[i],
       totalSales: TOTAL_SALES[i],
     }),
   )
@@ -100,7 +99,6 @@ describe("pctOfSales — the guard that let NaN through", () => {
       actualSeconds: 8 * 3600,
       scheduledMinutes: 8 * 60,
       cost: 200,
-      platformSales: 1000,
       totalSales: 1000,
       ...over,
     } as never)
@@ -144,7 +142,6 @@ describe("laborWeek — a day with sales and no labour", () => {
       actualSeconds: 0,
       scheduledMinutes: 0,
       cost: 0,
-      platformSales: 0,
       // Sales are posting; labour is not. This is every current day, all day,
       // until the first clock-in syncs.
       totalSales: 6000,
@@ -177,27 +174,19 @@ describe("laborWeek — the measured window", () => {
     expect(week.blendedRate).toBeCloseTo(20.42, 2)
   })
 
-  it("takes splh over NET platform sales at $121.60 for the range — not gross's $158.76", () => {
+  it("takes splh over the SAME Total Sales as laborPct — $114.30, not Otter's own $121.60", () => {
     const week = laborWeek(buildWeek(), 51.08)
-    // $121.60 is `OtterHourlySummary.netSales` over the window — the figure
-    // `getSplhSeries`/the Overview page already print. $158.76 (task 1's
-    // original, wrong, target) was computed from `OtterDailySummary` GROSS
-    // and is ruled out explicitly below so a regression back to a gross
-    // source fails loudly instead of by coincidence.
-    expect(week.splh).toBeCloseTo(121.6, 1)
-    expect(week.splh as number).not.toBeCloseTo(158.76, 0)
+    // One "net sales" on the page: the P&L's Total Sales ($49,389) over the
+    // week's hours (432.1) — not `OtterHourlySummary.netSales` ($52,550, which
+    // read $121.60 and made the page print two net sales).
+    expect(week.splh).toBeCloseTo(49389 / 432.1, 1)
+    expect(week.splh as number).not.toBeCloseTo(121.6, 0)
   })
 
-  it("takes each day's own splh — ~$141 on 08-23, ~$102 on 08-26", () => {
+  it("takes each day's own splh off that day's Total Sales", () => {
     const week = laborWeek(buildWeek(), 51.08)
     const aug23 = week.days.find((d) => d.key === "2026-08-23")
-    const aug26 = week.days.find((d) => d.key === "2026-08-26")
-    // Precision 0 (not 2): the input here is real net sales quoted to the
-    // whole dollar over hours quoted to 0.1h, so it lands a few cents from
-    // task-1b-brief.md's own rounded SPLH column ($141.45 / $102.34) — see
-    // the fixture-precision note at the top of this file.
-    expect(aug23?.splh).toBeCloseTo(SPLH_MEASURED[3], 0)
-    expect(aug26?.splh).toBeCloseTo(SPLH_MEASURED[6], 0)
+    expect(aug23?.splh).toBeCloseTo(TOTAL_SALES[3] / ACTUAL_HOURS[3], 6)
   })
 
   it("takes laborPct over TOTAL SALES (17.9%) — never the platform-sales denominator (12.9%)", () => {
@@ -220,15 +209,14 @@ describe("laborWeek — the measured window", () => {
 })
 
 describe("laborDay — nulls, not zeros", () => {
-  it("yields splh: null for a day with hours and no platform sales", () => {
+  it("yields splh: null for a day with hours and no sales figure", () => {
     const day = laborDay({
       key: "2026-09-01",
       label: "Tue Sep 1",
       actualSeconds: 8 * 3600,
       scheduledMinutes: 8 * 60,
       cost: 200,
-      platformSales: null,
-      totalSales: 500,
+      totalSales: null,
     })
     expect(day.splh).toBeNull()
     expect(day.actualHours).toBe(8)
@@ -241,7 +229,6 @@ describe("laborDay — nulls, not zeros", () => {
       actualSeconds: 0,
       scheduledMinutes: null,
       cost: 0,
-      platformSales: 400,
       totalSales: 400,
     })
     expect(day.splh).toBeNull()
@@ -254,7 +241,6 @@ describe("laborDay — nulls, not zeros", () => {
       actualSeconds: 8 * 3600,
       scheduledMinutes: null,
       cost: 200,
-      platformSales: 800,
       totalSales: 500,
     })
     expect(day.scheduledHours).toBeNull()
@@ -267,7 +253,6 @@ describe("laborDay — nulls, not zeros", () => {
       actualSeconds: 8 * 3600,
       scheduledMinutes: 8 * 60,
       cost: 200,
-      platformSales: 800,
       totalSales: null,
     })
     expect(day.laborPct).toBeNull()
@@ -318,7 +303,6 @@ describe("laborTrendWeek — the running week is partial, the one before it isn'
     const newestDays = Array.from({ length: 4 }, () => ({
       cost: 3695 / 4,
       hours: 182 / 4,
-      platformSales: (155.6 * 182) / 4,
     }))
     const newest = laborTrendWeek(new Date(2026, 7, 24), true, newestDays, NEWEST_TOTAL_SALES)
     expect(newest.isPartial).toBe(true)
@@ -343,7 +327,6 @@ describe("laborTrendWeek — the running week is partial, the one before it isn'
     const priorDays = Array.from({ length: 7 }, () => ({
       cost: 8500 / 7,
       hours: 417 / 7,
-      platformSales: 68688.24 / 7,
     }))
     const prior = laborTrendWeek(new Date(2026, 7, 17), false, priorDays, PRIOR_TOTAL_SALES)
     expect(prior.isPartial).toBe(false)
@@ -373,7 +356,6 @@ describe("laborTrendWeek — the running week is partial, the one before it isn'
     const trendDays = Array.from({ length: 7 }, () => ({
       cost: cost / 7,
       hours: hours / 7,
-      platformSales: 68688.24 / 7,
     }))
     const trendWeek = laborTrendWeek(new Date(2026, 7, 17), false, trendDays, totalSales)
 
@@ -388,7 +370,6 @@ describe("laborTrendWeek — the running week is partial, the one before it isn'
         actualSeconds: (hours / 7) * 3600,
         scheduledMinutes: null,
         cost: cost / 7,
-        platformSales: null,
         totalSales: totalSales / 7,
       }),
     )
@@ -397,5 +378,36 @@ describe("laborTrendWeek — the running week is partial, the one before it isn'
     expect(trendWeek.laborPct).not.toBeNull()
     expect(headlineWeek.laborPct).not.toBeNull()
     expect(trendWeek.laborPct as number).toBeCloseTo(headlineWeek.laborPct as number, 6)
+  })
+})
+
+describe("laborWeek — days with no labor reading", () => {
+  const day = (key: string, over: Partial<Parameters<typeof laborDay>[0]> = {}) =>
+    laborDay({
+      key,
+      label: key,
+      actualSeconds: 8 * 3600,
+      scheduledMinutes: 8 * 60,
+      cost: 200,
+      totalSales: 1000,
+      ...over,
+    })
+
+  it("counts a missing day that sold, and does not count a closed one", () => {
+    const week = laborWeek(
+      [
+        day("2026-10-19"),
+        day("2026-10-20", { cost: 0, actualSeconds: 0, costMissing: true }),
+        day("2026-10-21", { cost: 0, actualSeconds: 0, costMissing: true, totalSales: 0 }),
+      ],
+      0,
+    )
+    expect(week.missingCostDays).toBe(1)
+    // the total is the decided days only; the missing day is a gap, not $0 of spend
+    expect(week.cost).toBe(200)
+  })
+
+  it("reports none when every day has a reading", () => {
+    expect(laborWeek([day("2026-10-19")], 0).missingCostDays).toBe(0)
   })
 })

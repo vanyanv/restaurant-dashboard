@@ -65,41 +65,22 @@ import type { DeltaTone, FigureProps, MListRow, TagTone, Tone } from "@/componen
  * page-pair earlier, and it follows that file wherever the two pages ask the
  * same structural question.
  *
- * ## L-R2 / L-R17 — TWO sales figures, and they never converge
+ * ## L-R2 / L-R17 — ONE net sales figure
  *
- * This is the single easiest thing on this page to get wrong, and getting it
- * "right" by making the two agree is the wrong fix. Measured over
- * 2026-08-20 … 26 at Hollywood, $8,825 of labour on 432.1 hours:
+ * Labor % and sales per labour hour both divide by the statement's **Total
+ * Sales** (the P&L's Net Sales), and labor DOLLARS come from `loadLaborCost`
+ * (`labor-cost.ts`) — the same function the P&L reads. This page used to
+ * divide SPLH by `OtterHourlySummary.netSales` instead ($121.60 against
+ * $114.30 for Hollywood, 2026-08-20 … 26) and cost a day from
+ * `HarriPositionDaily` alone while the P&L costed it from `HarriDailyLabor`,
+ * so one page printed two "net sales" and two labor totals. Hours and the role
+ * split still come from `HarriPositionDaily`. A day with no labor reading is
+ * MISSING, not $0, and the strip and verdict say how many.
  *
- * | figure | denominator | reads |
- * |---|---|---|
- * | Hourly labour % | the statement's **Total Sales** ($49,389) | **17.9%** |
- * | Sales per labour hour | `OtterHourlySummary.netSales` ($52,550) | **$121.60** |
- *
- * The percent is the P&L's own line: `getAllStoresPnL` computes `laborPct` on
- * `grossSales`, which IS Total Sales, and the Overview's comparison table
- * prints that number. SPLH is `splh-actions.ts`' figure — the one the Overview
- * already prints — and it divides platform net sales by the same Harri hours.
- * Forcing one denominator on both produces either a **12.9%** that contradicts
- * the P&L or a **$114.30** that contradicts the Overview. Two ratios, two
- * questions, two owners; `labor-week.ts` already does the right thing with
- * each and this file's only job is to feed it the right inputs and to NAME the
- * denominator in every caption that carries one.
- *
- * A third appearance of a sales figure USED to be a second, wrong, split: the
- * twelve-week trend's `laborPct` was computed over `OtterHourlySummary` —
- * net sales, `splh`'s figure — because that table is the only per-day
- * sales figure that reaches back twelve weeks without a second rollup over 84
- * days. It read ~12–16% under a 17.9% headline, on the same page, and the
- * mitigation shipped for it was a sentence (`TrendSection.note`) rather than a
- * fix. Task 4b closed it: the trend's `laborPct` is now on the identical Total
- * Sales the headline reads — `loadEverything`'s `trendLoadP` loads a DAILY
- * statement over the trend's own twelve-week span (the same `rowValues`
- * construct `salesByDayOf` uses below) and folds it into `trailingWeeks`' own
- * Monday-start weeks, then hands `loadLaborTrend` the finished per-week map —
- * on the identical contract `salesByDay` already is for `loadLaborWeek`.
- * `splh` is unaffected: it still reads net sales on both the week and
- * the trend, because that split was never the defect.
+ * The twelve-week trend takes both ratios on the weekly Total Sales folded
+ * from a DAILY statement over the trend's own span (task 4b): `loadEverything`'s
+ * `trendLoadP` loads it and `weeklySalesOf` folds it into `trailingWeeks`'
+ * Monday-start weeks, handed to `loadLaborTrend` as `weeklyTotalSales`.
  *
  * ## L-R1 — there is no floor and there is no band
  *
@@ -581,6 +562,15 @@ const NO_HARRI_OWED =
 /* ── The head block ───────────────────────────────────────────────────── */
 
 /**
+ * The note a labor total carries when days have no labor reading in either
+ * Harri table (`loadLaborCost`'s missing days): the total is short by them, and
+ * saying nothing would read as days that cost nothing.
+ */
+function missingLaborText(days: number, lead: string): string {
+  return days > 0 ? `${lead}labor missing for ${days} ${days === 1 ? "day" : "days"}` : ""
+}
+
+/**
  * The verdict, derived — never the prototype's "On plan, with one short
  * shift", which is a fixture.
  *
@@ -608,6 +598,7 @@ function buildVerdict(week: LaborWeek, ledger: LeakLedger | null): LaborVerdict 
     say(" of net sales for every hour worked")
   }
   say(".")
+  if (week.missingCostDays > 0) say(missingLaborText(week.missingCostDays, " ") + ".")
 
   const scheduled = week.scheduledHours
   const rate = week.blendedRate
@@ -674,7 +665,9 @@ function buildStrip(
     {
       label: "Hourly labor",
       value: pct(week.laborPct, { scaled: true }),
-      delta: `${money(week.cost)} of ${money(totalSales)} net sales`,
+      delta:
+        `${money(week.cost)} of ${money(totalSales)} net sales` +
+        missingLaborText(week.missingCostDays, " · "),
       deltaTone: "is-flat",
     },
     {
@@ -699,8 +692,7 @@ function buildStrip(
     {
       label: "Sales / labor hour",
       value: money(week.splh, { cents: true }),
-      // Names the OTHER denominator, out loud, right beside the cell that
-      // carries the first one. See the module comment.
+      // Same net sales as the cell beside it. See the module comment.
       delta: "net sales over hours worked",
       deltaTone: "is-flat",
     },
@@ -929,10 +921,8 @@ function buildWeekTable(
       "The verdict reads each day against the shifts this store published for it — its own " +
       "plan, priced at the range's blended rate. Nothing here is measured against a " +
       "sales-per-labor-hour floor: nobody has set one, and a floor invented for the " +
-      "page would be the page judging itself. Sales and Labor % are the statement's Total " +
-      "Sales; SPLH divides net sales instead, which is what the figure has always meant " +
-      "elsewhere in the product — so SPLH times hours will not equal the Sales column, and " +
-      "is not meant to.",
+      "page would be the page judging itself. Sales, Labor % and SPLH all " +
+      "use the statement's Net Sales, so SPLH times hours equals the Sales column.",
   }
 }
 
