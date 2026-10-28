@@ -42,6 +42,15 @@ describe("allocateOrderDiscount", () => {
     expect(out.get("B")).toBeCloseTo(2)
     expect(allocateOrderDiscount(0, [{ name: "A", price: 10, quantity: 1 }]).size).toBe(0)
   })
+
+  it("treats a coupon equal to one unit's price as a coupon, not that item's deal", () => {
+    const out = allocateOrderDiscount(3, [
+      { name: "Side", price: 3, quantity: 1 },
+      { name: "Main", price: 9, quantity: 1 },
+    ])
+    expect(out.get("Side")).toBeCloseTo(0.75)
+    expect(out.get("Main")).toBeCloseTo(2.25)
+  })
 })
 
 describe("share helpers", () => {

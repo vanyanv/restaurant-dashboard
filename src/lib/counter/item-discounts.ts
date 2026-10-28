@@ -73,8 +73,8 @@ const PRICE_MATCH_TOLERANCE = 0.02
 /**
  * Who an order's discount belongs to, as dollars per item name.
  *
- * A discount equal to a whole number of one item's unit price (no more units
- * than the order holds) is that item's deal — the BOGO shape, `−$13.49` on
+ * A discount equal to a whole number of one item's unit price, with at least
+ * as many paid units of it as free ones, is that item's deal — the BOGO shape, `−$13.49` on
  * `2 × $13.49`. Where several items fit, the one with the most units wins,
  * since a buy-one-get-one needs at least two. Anything else is spread across
  * the items by their share of the order's value.
@@ -89,7 +89,9 @@ export function allocateOrderDiscount(discount: number, lines: OrderLine[]): Map
       const units = Math.round(discount / l.price)
       return (
         units >= 1 &&
-        units <= l.quantity &&
+        // A free unit needs a paid one beside it: "$3 off" on one $3 side
+        // is a coupon, not that side's deal.
+        units * 2 <= l.quantity &&
         Math.abs(units * l.price - discount) <= PRICE_MATCH_TOLERANCE
       )
     })

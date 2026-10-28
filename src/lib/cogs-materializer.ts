@@ -61,16 +61,28 @@ export function removalMatchFor(result: RecipeCostResult): RemovalMatch | null {
   const m = /^\s*mod:\s*(?:remove|no)\s+(.+?)\s*$/i.exec(result.itemName)
   if (!m) return null
   const ingredientIds = result.lines.filter((l) => l.kind === "ingredient").map((l) => l.refId)
-  const word = m[1].toLowerCase()
-  // "Pickles" names the same thing as a "pickle chips" line.
-  const token = word.endsWith("s") && word.length > 3 ? word.slice(0, -1) : word
+  const token = m[1].toLowerCase()
   return { ingredientIds, token: ingredientIds.length > 0 ? null : token }
 }
 
 function lineMatches(line: RecipeCostLine, match: RemovalMatch): boolean {
   if (line.kind !== "ingredient") return false
   if (match.ingredientIds.length > 0) return match.ingredientIds.includes(line.refId)
-  return match.token !== null && line.name.toLowerCase().includes(match.token)
+  return match.token !== null && tokenPattern(match.token).test(line.name)
+}
+
+/**
+ * The removal's word as a WHOLE word, singular or plural: "pickles" matches
+ * "pickle chips", "fries" matches "fries", and "ice" does not match "rice" nor
+ * "ham" "hamburger". A substring test credited all of those.
+ */
+function tokenPattern(token: string): RegExp {
+  const escape = (w: string) => w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+  const stems = new Set(
+    [token, token.replace(/s$/, ""), token.replace(/es$/, "")].filter((w) => w.length > 1),
+  )
+  const alt = [...stems].map(escape).join("|")
+  return new RegExp(`\\b(?:${alt})(?:es|s)?\\b`, "i")
 }
 
 /**

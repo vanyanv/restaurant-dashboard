@@ -477,7 +477,7 @@ describe("removal modifiers — Remove Cheese takes the parent's cheese off", ()
     expect(removalMatchFor(removeCheese)).toEqual({ ingredientIds: [], token: "cheese" })
     expect(removalMatchFor(costResult({ itemName: "Mod: No Pickles", lines: [] }))).toEqual({
       ingredientIds: [],
-      token: "pickle",
+      token: "pickles",
     })
     expect(removalMatchFor(costResult({ itemName: "Mod: Add Cheese" }))).toBeNull()
     // Explicit lines win over the name.
@@ -493,6 +493,18 @@ describe("removal modifiers — Remove Cheese takes the parent's cheese off", ()
     expect(await removalCreditPerUse(combo, match, costFor)).toBeCloseTo(0.24)
     const noMatch = { ingredientIds: [], token: "tomato" }
     expect(await removalCreditPerUse(doubleSlider, noMatch, costFor)).toBe(0)
+  })
+
+  it("matches whole words, singular or plural — never a substring", async () => {
+    const plate = (name: string) =>
+      costResult({ itemName: "Plate", lines: [costLine({ refId: "x", name, lineCost: 1 })] })
+    const credit = (token: string, name: string) =>
+      removalCreditPerUse(plate(name), { ingredientIds: [], token }, costFor)
+    expect(await credit("pickles", "pickle chips sandwich cut")).toBe(1)
+    expect(await credit("fries", "straight cut fries")).toBe(1)
+    expect(await credit("bread", "martins bread potato roll")).toBe(1)
+    expect(await credit("ice", "rice pilaf")).toBe(0)
+    expect(await credit("ham", "hamburger patty")).toBe(0)
   })
 
   it("books the credit against the item's line cost, never below zero", async () => {
