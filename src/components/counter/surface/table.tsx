@@ -3,6 +3,7 @@
 import { Fragment, isValidElement, useRef, type KeyboardEvent, type MouseEvent, type ReactNode } from "react"
 import { useRouter } from "next/navigation"
 import { useFlip } from "@/components/counter/motion/use-flip"
+import { useSurfaceHref } from "@/components/counter/shell/use-surface"
 
 export interface Column {
   key: string
@@ -157,6 +158,8 @@ function hasTextSelection(): boolean {
 
 export function Table({ columns, rows }: { columns: Column[]; rows: Row[] }) {
   const router = useRouter()
+  // A row's href is a desk path; on a phone route it opens the phone page.
+  const surface = useSurfaceHref()
   // D11: when the same rows come back in a different order (a sort, a range
   // change that re-ranks them), each row travels to its new place over 220ms
   // instead of being redrawn there, so the row the reader was on stays
@@ -178,7 +181,7 @@ export function Table({ columns, rows }: { columns: Column[]; rows: Row[] }) {
         </thead>
         <tbody ref={body}>
           {rows.map((r) => {
-            const href = r.href
+            const href = r.href ? surface(r.href) : undefined
             const act = href ? () => router.push(href) : r.onSelect
             // Enter AND Space — note 47's own words. A row that opens nothing
             // gets no handler, no tab stop and no role, so it wears no cursor.
@@ -224,7 +227,7 @@ export function Table({ columns, rows }: { columns: Column[]; rows: Row[] }) {
                   // pressable row uses the sheet's other pressable-row hook,
                   // `data-ln` (line 304: `.tbl tbody tr[data-ln]{cursor:pointer}`),
                   // which the `is-on` selector above also depends on.
-                  data-goto={r.href}
+                  data-goto={href}
                   data-ln={r.onSelect ? r.key : undefined}
                   role={r.href ? "link" : r.onSelect ? "button" : undefined}
                   tabIndex={act ? 0 : undefined}
@@ -236,7 +239,7 @@ export function Table({ columns, rows }: { columns: Column[]; rows: Row[] }) {
                     const { v, cls } = cellOf(r.cells[c.key])
                     const className = `${c.numeric ? "num " : ""}${cls ?? ""}`.trim()
                     return (
-                      <td key={c.key} className={className || undefined}>
+                      <td key={c.key} className={className || undefined} data-label={c.label || undefined}>
                         {v}
                       </td>
                     )

@@ -3,17 +3,14 @@ import { redirect } from "next/navigation"
 import { authOptions } from "@/lib/auth"
 import { readCounterParams } from "@/lib/counter/url-state"
 import { getInvoicesSectionPromises } from "@/lib/counter/adapters/invoices"
-import { CounterPhoneInvoicesClient } from "./counter-phone-invoices-client"
+import { getPriceSectionPromises } from "@/lib/counter/adapters/prices"
+import { getOverviewStores } from "@/lib/counter/adapters/overview"
+import { CounterInvoicesClient } from "@/app/dashboard/(counter)/invoices/counter-invoices-client"
 import { counterToday } from "@/lib/counter/today"
 
 export const dynamic = "force-dynamic"
 
-/**
- * Invoices, on a phone — `P.invoices.phone()`
- * (`docs/counter/counter-prototype.html:5698`).
- *
- * Calls `getInvoicesSectionPromises`, the same function the desk calls.
- */
+/** Invoices — Needs you, on a phone: the desk client drawn in the phone shell. */
 export default async function MobileInvoicesPage({
   searchParams,
 }: {
@@ -30,6 +27,8 @@ export default async function MobileInvoicesPage({
 
   const today = counterToday()
   const counterParams = readCounterParams(params, today)
+  const stores = await getOverviewStores()
+  const storeName = stores.find((s) => s.id === counterParams.storeId)?.name ?? "All stores"
 
   const sections = getInvoicesSectionPromises({
     range: counterParams.range,
@@ -38,10 +37,15 @@ export default async function MobileInvoicesPage({
     accountId: session.user.accountId,
     today,
   })
+  const prices = getPriceSectionPromises(session.user.accountId)
 
   return (
     <>
-      <CounterPhoneInvoicesClient sections={sections} />
+      <CounterInvoicesClient
+        sub={`${storeName} · read from the invoices inbox`}
+        sections={{ headline: sections.headline, desk: sections.desk }}
+        prices={{ movers: prices.movers }}
+      />
       <span hidden data-perf-ready="/m/invoices" />
     </>
   )

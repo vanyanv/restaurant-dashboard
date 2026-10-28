@@ -3,20 +3,22 @@
 import { Section } from "@/components/counter"
 import { loading } from "@/lib/counter/section-data"
 
-/** The phone invoice's loading boundary — the four entries the client renders. */
-export default function MobileInvoiceLoading() {
+/** The invoice page's loading boundary — the sections the client renders. */
+export default function InvoiceLoading() {
   return (
     <>
-      <Section bare title="Invoice" data={loading()}>
+      <Section bare title="The figures" data={loading()}>
         {() => null}
       </Section>
-      <Section title="The document" data={loading()}>
-        {() => null}
-      </Section>
-      <Section title="Needs a decision" data={loading()}>
-        {() => null}
-      </Section>
-      <Section title="Totals" data={loading()}>
+      <div className="split">
+        <Section title="The invoice" data={loading()}>
+          {() => null}
+        </Section>
+        <Section title="What we checked" data={loading()} pad={false}>
+          {() => null}
+        </Section>
+      </div>
+      <Section title="Lines" data={loading()}>
         {() => null}
       </Section>
     </>

@@ -40,13 +40,15 @@ function onPhone(path: string): URL {
 }
 
 describe("Invoices tabs on a phone", () => {
-  // Both sit under the `[id]` prefix; without exact entries they rewrote onto
-  // `/m/invoices/all` and `/m/invoices/prices`, read as invoice ids, and 404'd.
-  it("sends All invoices to the phone's invoice list", () => {
-    expect(onPhone("/dashboard/invoices/all?view=gaps").pathname).toBe("/m/invoices")
+  // Both sit under the `[id]` prefix. They once rewrote onto phone routes that
+  // did not exist and 404'd; the phone has its own All and Prices tabs now.
+  it("sends All invoices to the phone's All tab, view kept", () => {
+    const url = onPhone("/dashboard/invoices/all?view=gaps")
+    expect(url.pathname).toBe("/m/invoices/all")
+    expect(url.searchParams.get("view")).toBe("gaps")
   })
-  it("sends Prices to the phone's price monitor", () => {
-    expect(onPhone("/dashboard/invoices/prices").pathname).toBe("/m/ingredients/prices")
+  it("sends Prices to the phone's Prices tab", () => {
+    expect(onPhone("/dashboard/invoices/prices").pathname).toBe("/m/invoices/prices")
   })
   it("still carries an invoice id to the phone's invoice page", () => {
     expect(onPhone("/dashboard/invoices/cabc123").pathname).toBe("/m/invoices/cabc123")

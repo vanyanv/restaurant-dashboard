@@ -10,7 +10,7 @@ import { render, screen, fireEvent } from "@testing-library/react"
 const push = vi.fn()
 // Table calls useRouter() on every render for a link row's navigation. Outside
 // a real App Router tree — which is what a plain RTL render is — that throws.
-vi.mock("next/navigation", () => ({ useRouter: () => ({ push }) }))
+vi.mock("next/navigation", () => ({ useRouter: () => ({ push }), usePathname: () => "/dashboard" }))
 
 import { Table, type Row } from "@/components/counter/surface/table"
 

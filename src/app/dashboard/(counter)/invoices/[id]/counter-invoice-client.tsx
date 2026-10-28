@@ -10,6 +10,7 @@ import {
   Table,
   useCounterTransition,
   usePageChrome,
+  useSurfaceHref,
   type Column,
   type SwitchableStore,
 } from "@/components/counter"
@@ -231,11 +232,12 @@ export function CounterInvoiceClient({
   usePageChrome({ leaf: title, askSuggestions: ASK_SUGGESTIONS })
 
   const { pending } = useCounterTransition()
+  const surface = useSurfaceHref()
 
   return (
     <>
       <nav className="iv-crumb" aria-label="Breadcrumb">
-        <Link href="/dashboard/invoices">Invoices</Link> / {vendor} · {title}
+        <Link href={surface("/dashboard/invoices")}>Invoices</Link> / {vendor} · {title}
       </nav>
 
       <PageHead title={`${vendor} · ${title}`} sub="One invoice, checked against its own PDF" />
