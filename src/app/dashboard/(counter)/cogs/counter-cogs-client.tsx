@@ -273,7 +273,7 @@ export function CounterCogsClient({
         <Section
           title="What moved"
           pending={pending}
-          // Names the thirty-day window and the unit prices are normalized to,
+          // Names the 120-day median basis and the unit prices are normalized to,
           // because neither follows the date control above.
           meta={(m) => m.meta}
           data={sections.moved}

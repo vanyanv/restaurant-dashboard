@@ -67,7 +67,7 @@ export default async function CogsPage({
 
   // NOT AWAITED — one promise per section, each unwrapped inside its own
   // Suspense boundary by `Section`. "What moved" is by far the slowest of the
-  // five: it walks the ingredient price monitor's own thirty-day comparison,
+  // five: it walks the shared price move (`@/lib/counter/price-move`),
   // which is a different query from the cost window and fails on its own. It
   // holds up the strip, the plan chart, the ring and the item table for
   // exactly as long as it holds up nothing.

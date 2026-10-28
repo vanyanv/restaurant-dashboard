@@ -2,6 +2,7 @@
 
 import { useCallback, useMemo, useState, useTransition} from "react"
 import Link from "next/link"
+import type { AdjustFormReason } from "@/lib/counter/waste-reasons"
 import { usePathname, useRouter } from "next/navigation"
 import {
   Chart,
@@ -130,7 +131,7 @@ function AdjustOnHand({ data }: { data: InventoryAdjust }) {
         storeId: data.storeId as string,
         ingredientId,
         qty: value,
-        reason: reason as "THEFT" | "EXPIRY" | "SUPPLIER_RETURN" | "DAMAGE" | "OTHER",
+        reason: reason as AdjustFormReason,
         note: note.trim() === "" ? null : note.trim(),
       })
       if (!result.ok) {

@@ -3,6 +3,7 @@ import { businessQueryDate } from "@/lib/counter/business-date"
 import { getScopedStores } from "@/lib/account-stores"
 import { batchRecipeCosts } from "@/lib/recipe-cost"
 import { normalizeVendorName } from "@/lib/vendor-normalize"
+import { HISTORY_DAYS, loadPriceMoves, movePctOf } from "@/lib/counter/price-move"
 import {
   MS_PER_DAY,
   convertDelivered,
@@ -207,7 +208,10 @@ interface Loaded {
   spendRange: number
   spendShare: number | null
   weekly: Array<{ week: string; vendor: string; price: number }>
+  /** Percent, latest vs trailing 120-day median — `@/lib/counter/price-move`. */
   move: number | null
+  /** Latest − baseline, per recipe unit, from the same function. */
+  perUnitMove: number | null
   skus: SkuRow[]
   uses: UseRow[]
   deliveries: DeliveryLineRow[]
@@ -250,8 +254,18 @@ async function loadIngredient(input: IngredientInput): Promise<Loaded | null> {
   const stores = await getScopedStores(accountId, storeId ?? null)
   const storeIds = stores.map((s) => s.id)
 
-  const [lines, weekly, skuMatches, recipeUses, costs, onHand, allCounts, spend, deliveries] =
-    await Promise.all([
+  const [
+    lines,
+    weekly,
+    skuMatches,
+    recipeUses,
+    costs,
+    onHand,
+    allCounts,
+    spend,
+    deliveries,
+    priceMoves,
+  ] = await Promise.all([
       prisma.$queryRaw<
         Array<{
           vendor: string
@@ -341,6 +355,13 @@ async function loadIngredient(input: IngredientInput): Promise<Loaded | null> {
           AND i."invoiceDate" IS NOT NULL
         ORDER BY i."invoiceDate" DESC, li.id DESC
         LIMIT ${DELIVERIES}`,
+      // The move: the one definition the list, COGS and the Prices page read.
+      loadPriceMoves({
+        accountId,
+        storeIds: storeId ? storeIds : null,
+        asOf: today,
+        ingredientIds: [ingredientId],
+      }),
     ])
 
   // Sold volume per recipe, over the reader's range.
@@ -369,22 +390,17 @@ async function loadIngredient(input: IngredientInput): Promise<Loaded | null> {
     `${normalizeVendorName(vendor).toLowerCase()} ${(sku ?? "").toUpperCase()}`
   const learned = new Map(skuMatches.map((m) => [matchKey(m.vendorName, m.sku), m]))
 
-  // Weekly medians, normalized vendor, oldest first — the move below and the
-  // chart above are the same series, so the cell and the picture agree.
+  // Weekly medians, normalized vendor, oldest first — the chart's series.
+  // The move is NOT read off it: it is `loadPriceMoves`, normalised per recipe
+  // unit, so this page prints the figure the catalogue and COGS print.
   const points = weekly.map((w) => ({
     week: w.wk.toISOString().slice(0, 10),
     vendor: normalizeVendorName(w.vendor),
     price: w.px,
   }))
-  const allWeeks = [...new Set(points.map((p) => p.week))].sort()
-  const overall = allWeeks.map((w) => {
-    const at = points.filter((p) => p.week === w)
-    return at.reduce((t, p) => t + p.price, 0) / at.length
-  })
-  const move =
-    overall.length >= 2 && overall[0] > 0
-      ? ((overall[overall.length - 1] - overall[0]) / overall[0]) * 100
-      : null
+  const priced = priceMoves.moves.get(ingredientId)
+  const move = movePctOf(priced)
+  const perUnitMove = priced && !priced.held ? priced.latest - priced.baseline : null
 
   const costOf = (recipeId: string): number | null => {
     const walked = costs.get(recipeId)
@@ -406,6 +422,7 @@ async function loadIngredient(input: IngredientInput): Promise<Loaded | null> {
       (spend[0]?.all ?? 0) > 0 ? ((spend[0]?.mine ?? 0) / (spend[0]?.all ?? 1)) * 100 : null,
     weekly: points,
     move,
+    perUnitMove,
     skus: foldSkus(lines, learned, matchKey),
     uses: recipeUses
       .map((r) => ({
@@ -630,7 +647,7 @@ function headOf(d: Loaded): IngredientHead {
       d.costNow === null
         ? "—"
         : `${unitCost(d.costNow)} / ${(d.recipeUnit ?? "unit").toLowerCase()}`,
-    delta: d.move === null ? "no prior weeks" : `${moveText(d.move)} in ${count(WEEKS)} weeks`,
+    delta: d.move === null ? "no prior" : `${moveText(d.move)} vs ${count(HISTORY_DAYS)}-day median`,
     // A price RISE is the bad one — this is what the restaurant pays.
     deltaTone: d.move === null ? "is-flat" : d.move > FLAT_PCT ? "is-down" : "is-flat",
   }
@@ -830,10 +847,10 @@ function skusOf(d: Loaded): IngredientSkus {
  * half of its own data.
  */
 function usedInOf(d: Loaded): IngredientUsedIn {
-  const perUnitMove =
-    d.move !== null && d.costNow !== null && d.move !== -100
-      ? d.costNow - d.costNow / (1 + d.move / 100)
-      : null
+  // Δ per recipe unit straight from the shared move — latest minus baseline,
+  // both normalised. This used to apply a RAW-unit-price percentage to the
+  // normalised cost, which is two different prices multiplied together.
+  const perUnitMove = d.perUnitMove
 
   const impactOf = (u: UseRow): number | null => {
     if (perUnitMove === null || u.lineCost === null || d.costNow === null || d.costNow === 0) {
@@ -883,11 +900,11 @@ function usedInOf(d: Loaded): IngredientUsedIn {
           `it, so the ${money(d.spendRange)} above lands in no plate cost — it is one of the ` +
           `items the Ingredients page counts as bought into no recipe.`
         : Math.abs(total) < 1
-          ? `The price has not moved enough over ${count(WEEKS)} weeks to change what these ` +
-            `recipes cost.`
-          : `${moveText(d.move)} over ${count(WEEKS)} weeks is about ` +
+          ? `The price has not moved enough against its ${count(HISTORY_DAYS)}-day median to ` +
+            `change what these recipes cost.`
+          : `${moveText(d.move)} against its ${count(HISTORY_DAYS)}-day median is about ` +
             `${money(Math.abs(total))} ${total > 0 ? "more than" : "less than"} these recipes ` +
-            `would have cost at the older price, across what they sold in ${d.rangeLabel}. ` +
+            `would have cost at the median price, across what they sold in ${d.rangeLabel}. ` +
             `${total > 0 ? "Spent." : "Saved — the column is signed, because this one fell."}`,
   }
 }

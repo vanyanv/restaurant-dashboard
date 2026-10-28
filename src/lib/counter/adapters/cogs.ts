@@ -1,9 +1,14 @@
 import { getStores } from "@/app/actions/store/crud-actions"
-import { getIngredientPriceMonitoringData } from "@/app/actions/ingredient-price-monitoring-actions"
-import type {
-  IngredientPriceMonitoringData,
-  IngredientPriceMonitorRow,
-} from "@/types/ingredient-price-monitor"
+import {
+  HISTORY_DAYS,
+  MIN_READINGS,
+  loadPriceMoves,
+  movePctOf,
+  type PriceMove,
+} from "@/lib/counter/price-move"
+import { counterToday } from "@/lib/counter/today"
+import { loadLoggedAdjustments } from "@/lib/counter/logged-waste"
+import type { AdjustmentTotals } from "@/lib/counter/waste-reasons"
 import { isOperational } from "@/lib/store-lifecycle"
 import { buildPeriods, TOTAL_SALES_CODE } from "@/lib/pnl"
 import {
@@ -138,10 +143,12 @@ import type { DeltaTone, FigureProps, MListRow, TagTone, Tone } from "@/componen
  *
  * ## C-R3 / C-R5 / C-R6 — what else is dropped, and what is re-aimed
  *
- * **Waste is dropped.** `InventoryAdjustment` has 0 rows in the whole table
- * and `StockCount` has 4. There is no waste series and no honest way to
- * invent one, so the desk strip is THREE cells on the group route (not the
- * prototype's four) and four on the store route.
+ * **Waste is logged waste.** It was dropped while `InventoryAdjustment` was
+ * empty. The Count & waste log and Inventory's "Adjust on hand" write it now,
+ * so the strip carries "Waste logged" — `loadLoggedAdjustments`, the figure
+ * Product usage and the count report read, grouped by the one reason
+ * taxonomy (`@/lib/counter/waste-reasons`). The desk strip is FOUR cells on
+ * the group route (the prototype's four) and five on the store route.
  *
  * **The donut draws MENU categories and is titled for what it shows.**
  * `DailyCogsItem.category` holds menu categories (On The Side, NFL Promo,
@@ -205,9 +212,9 @@ export interface CogsVerdict {
 /**
  * The head block and the strip, on both surfaces and both routes.
  *
- * `cells` is THREE on the group desk (C-R3 — Waste has no source and
- * Theoretical is not a second measure) and FOUR on the store desk, which adds
- * the dollar cost. `phoneCells` is TWO and is NOT a slice of `cells`: the
+ * `cells` is FOUR on the group desk (C-R3 — Theoretical is not a second
+ * measure; Waste is logged waste) and FIVE on the store desk, which adds the
+ * dollar cost. `phoneCells` is TWO and is NOT a slice of `cells`: the
  * "Unposted invoices" cell disappears entirely on a request where that
  * aggregate failed to load, so a page slicing by position would hand the
  * phone whatever happened to shift into the slot.
@@ -216,7 +223,7 @@ export interface CogsHeadline {
   /** The one lead figure. `LeadFigure`'s props, narrowed to strings so it crosses the RSC boundary. */
   figure: { label: string; value: string; detail: string; detailTone?: DeltaTone }
   verdict: CogsVerdict
-  /** Three on the group desk, four on the store desk — minus any cell whose loader failed. */
+  /** Four on the group desk, five on the store desk — minus any cell whose loader failed. */
   cells: StripCell[]
   /** Two. */
   phoneCells: StripCell[]
@@ -239,9 +246,9 @@ export interface PlanSection {
 export interface MovedRow {
   key: string
   ingredient: string
-  /** The normalized price per recipe unit thirty days ago. */
+  /** The trailing 120-day median normalized price per recipe unit — `PriceMove.baseline`. */
   then: string
-  /** The latest normalized price per recipe unit. */
+  /** The spike-guarded latest normalized price per recipe unit — `PriceMove.latest`. */
   now: string
   /** `delta()` — "▲ 31.0%". */
   change: string
@@ -373,17 +380,6 @@ const DONUT_COLORS = ["var(--mx-1)", "var(--mx-2)", "var(--mx-3)", "var(--mx-4)"
 
 /** The lightest wedge, for the aggregated remainder. */
 const DONUT_OTHER_COLOR = "var(--line-strong)"
-
-/**
- * The window `change30dPct` is measured over, in days.
- *
- * FIXED AT THIRTY, and deliberately not the page's own range: an ingredient
- * price moves on invoice cadence, not on the range a reader happens to have
- * selected, and a seven-day preset would report "nothing moved" on a week
- * that simply caught no second invoice. `MovedSection.note` says so out loud
- * rather than letting a reader assume the section follows the date control.
- */
-const MOVED_DAYS = 30
 
 /**
  * Below this many points, a figure has not moved against its plan — it is on
@@ -642,13 +638,12 @@ function buildVerdict(
 }
 
 /**
- * The group strip — THREE cells (C-R3).
+ * The group strip — FOUR cells (C-R3).
  *
  * The prototype writes four: Food cost, Theoretical, Waste, Unposted
- * invoices. Theoretical is not a second measure (C-R4) and Waste has no
- * source at all — `InventoryAdjustment` is empty — so two of the four are
- * gone and "Against plan" takes one of the freed slots, because it is the one
- * comparison this schema actually publishes.
+ * invoices. Theoretical is not a second measure (C-R4), so "Against plan"
+ * takes its slot, because it is the one comparison this schema actually
+ * publishes. Waste is the waste the log recorded in the range.
  *
  * EVERY qualifier goes in the DELTA slot with an explicit tone, and that is
  * not decoration: `.strip .d` with no tone class is `var(--good)`, so a delta
@@ -661,6 +656,7 @@ function buildStrip(
   w: CogsWindow,
   invoices: UnpostedInvoices | null,
   store: boolean,
+  waste: AdjustmentTotals | null = null,
 ): StripCell[] {
   const cells: StripCell[] = [
     {
@@ -698,6 +694,27 @@ function buildStrip(
     deltaTone: w.againstPlan !== null && w.againstPlan > ON_PLAN_WITHIN_PTS ? "is-down" : "is-flat",
   })
 
+  // The waste the Count & waste log and "Adjust on hand" wrote in the range,
+  // valued by the one reason taxonomy (`@/lib/counter/waste-reasons`) — the
+  // waste CLASS only, so theft and stock sent back are named, not added. It
+  // sits beside food cost rather than inside it: food cost here is recipes at
+  // invoice prices, and logged waste is part of why actual cost runs above it.
+  if (waste !== null) {
+    const elsewhere = waste.dollars.shrink + waste.dollars.return
+    cells.push({
+      label: "Waste logged",
+      value: money(waste.dollars.waste),
+      delta:
+        waste.entries.waste === 0
+          ? "nothing logged in this range"
+          : `${count(waste.entries.waste)} ${waste.entries.waste === 1 ? "entry" : "entries"}` +
+            (elsewhere > 0
+              ? ` · theft ${money(waste.dollars.shrink)} · sent back ${money(waste.dollars.return)}`
+              : ""),
+      deltaTone: "is-flat",
+    })
+  }
+
   // An aggregate that failed to load takes its own cell with it rather than
   // printing a zero — no backlog and no answer are different sentences.
   if (invoices !== null) {
@@ -716,8 +733,9 @@ function buildHeadline(input: {
   window: CogsWindow
   invoices: UnpostedInvoices | null
   store: boolean
+  waste?: AdjustmentTotals | null
 }): CogsHeadline {
-  const { window: w, invoices, store } = input
+  const { window: w, invoices, store, waste = null } = input
 
   return {
     figure: {
@@ -727,7 +745,7 @@ function buildHeadline(input: {
       detailTone: "is-flat",
     },
     verdict: buildVerdict(w, invoices),
-    cells: buildStrip(w, invoices, store),
+    cells: buildStrip(w, invoices, store, waste),
     // Two, and fixed: neither of these cells can be withheld by a loader
     // failing, so the phone's strip has the same two figures on every
     // request. Slicing `cells` by position would hand it the invoice backlog
@@ -970,27 +988,24 @@ function buildPlan(
 /* ── What moved ───────────────────────────────────────────────────────── */
 
 /**
- * The ingredient prices that moved, off the price monitor's own thirty-day
- * comparison.
+ * The ingredient prices that moved — `loadPriceMoves`
+ * (`@/lib/counter/price-move`), the one definition every page that prints a
+ * price move reads. `then` is its trailing median and `now` its spike-guarded
+ * latest, both per recipe unit, so the percentage beside them is exactly
+ * `(now − then) / then` and cannot disagree with either.
  *
- * `then` is not a second reading of the history: it is `now` divided by the
- * published change, which is the exact inverse of how `change30dPct` was
- * computed. Re-deriving the baseline here would mean re-deriving a thirty-day
- * boundary in a second place, and two boundaries computed from two clocks are
- * how a "then" comes to disagree with the percentage printed beside it.
- *
- * Only ingredients with a real movement are listed. One with a single priced
- * invoice in the window has no movement to report — not a movement of zero —
- * and appears nowhere, which is why the section can resolve `not_computed`
- * on a store whose invoices simply have not landed twice yet.
+ * Only ingredients with a real movement are listed. One without enough priced
+ * history has no movement to report — not a movement of zero — and appears
+ * nowhere, which is why the section can resolve `not_computed` on a store
+ * whose invoices simply have not landed often enough yet.
  */
-function movedRows(rows: IngredientPriceMonitorRow[]): Array<{
-  row: IngredientPriceMonitorRow
+function movedRows(moves: PriceMove[]): Array<{
+  row: PriceMove
   now: number
   then: number
   change: number
 }> {
-  return rows
+  return moves
     .flatMap((row) => {
       /*
        * AN INGREDIENT IN NO RECIPE CANNOT HAVE MOVED A RECIPE-WALKED COST.
@@ -1001,33 +1016,15 @@ function movedRows(rows: IngredientPriceMonitorRow[]): Array<{
        * nothing to that number, however violently its own price moved.
        *
        * Without this the table was five rows of packaging and disposables,
-       * led by `paper patty 5.5 x 5.5 dry wax` at $0.01 -> $11.41,
-       * **+107,949.2%** — the loudest figure on the page, about an item used
-       * in zero recipes. That is the pack-metadata mis-parse family this
-       * project already knows: `selectNonSpikeCostIndex` (an 8x median guard)
-       * protects `ingredient-cost.ts` and `canonical-ingredients.ts`, and
-       * `getIngredientPriceMonitoringData` is a THIRD path that has no guard
-       * at all — correctly, because surfacing bad extractions is what a
-       * monitoring page is for. It is the wrong feed to rank a food-cost
-       * table by, and the fix belongs here rather than in the monitor.
-       *
-       * Measured: 76 canonical ingredients, and `paper patty` is one of
-       * several Paper/Supplies rows at 0 recipes. Cups and lids survive this
-       * filter at 9 recipes each, which is right — a drink recipe includes
-       * its cup, so their price genuinely does move the food line.
+       * led by `paper patty 5.5 x 5.5 dry wax` at $0.01 -> $11.41. The shared
+       * move now runs the booked-cost spike guard, which would hold that row
+       * out on its own; the filter stays because it is about relevance, not
+       * about bad data.
        */
-      if (row.recipeUsageCount <= 0) return []
-      const change = row.change30dPct
+      if (row.recipes <= 0) return []
+      const change = movePctOf(row)
       if (change === null || !Number.isFinite(change)) return []
-      const priced = row.history.filter(
-        (p): p is (typeof row.history)[number] & { normalizedUnitPrice: number } =>
-          p.normalizedUnitPrice != null,
-      )
-      const now = priced.at(-1)?.normalizedUnitPrice
-      if (now === undefined || !(now > 0)) return []
-      const then = now / (1 + change / 100)
-      if (!Number.isFinite(then) || then <= 0) return []
-      return [{ row, now, then, change }]
+      return [{ row, now: row.latest, then: row.baseline, change }]
     })
     .sort((a, b) => Math.abs(b.change) - Math.abs(a.change))
 }
@@ -1045,12 +1042,13 @@ function toneOfMove(change: number): TagTone | undefined {
   return sign === 1 ? "bad" : sign === -1 ? "good" : undefined
 }
 
-function buildMoved(rows: IngredientPriceMonitorRow[]): MovedSection {
+/** Exported for the shared-move test (`tests/lib/counter/price-move.test.ts`). */
+export function buildMoved(rows: PriceMove[]): MovedSection {
   const all = movedRows(rows)
   const shown = all.slice(0, TABLE_ROWS)
 
   const view: MovedRow[] = shown.map(({ row, now, then, change }) => ({
-    key: row.canonicalIngredientId,
+    key: row.id,
     ingredient: row.name,
     then: priceText(then),
     now: priceText(now),
@@ -1060,15 +1058,15 @@ function buildMoved(rows: IngredientPriceMonitorRow[]): MovedSection {
     // it asks `deltaSign`, not the raw sign, so a movement `delta` printed as
     // "flat" cannot come out painted as a rise.
     changeTone: toneOfMove(change),
-    recipes: recipeText(row.recipeUsageCount),
+    recipes: recipeText(row.recipes),
   }))
 
   const phoneRows: MListRow[] = shown.slice(0, PHONE_ROWS).map(({ row, now, then, change }) => ({
-    key: row.canonicalIngredientId,
+    key: row.id,
     title: row.name,
     detail: `${priceText(then)} → ${priceText(now)}`,
     value: delta(change, { scaled: true }),
-    note: recipeText(row.recipeUsageCount),
+    note: recipeText(row.recipes),
     noteTone: toneOfMove(change) === "bad" ? "down" : undefined,
   }))
 
@@ -1077,11 +1075,11 @@ function buildMoved(rows: IngredientPriceMonitorRow[]): MovedSection {
 
   const sentence =
     top === null
-      ? "No ingredient carries two priced invoices thirty days apart, so nothing has a movement to report."
+      ? `No ingredient carries ${count(MIN_READINGS)} priced invoices in ${count(HISTORY_DAYS)} days, so nothing has a movement to report.`
       : `${top.row.name} moved most: ${priceText(top.then)} to ${priceText(top.now)}, ` +
-        `${delta(top.change, { scaled: true })} across ${count(MOVED_DAYS)} days` +
-        (top.row.recipeUsageCount > 0
-          ? `, and it is in ${recipeText(top.row.recipeUsageCount)}.`
+        `${delta(top.change, { scaled: true })} against its ${count(HISTORY_DAYS)}-day median` +
+        (top.row.recipes > 0
+          ? `, and it is in ${recipeText(top.row.recipes)}.`
           : ", and no recipe carries it yet.") +
         /*
          * "Of the 30 that moved, 5 got dearer" — NOT "5 of 30 moved
@@ -1105,17 +1103,17 @@ function buildMoved(rows: IngredientPriceMonitorRow[]): MovedSection {
       // "5 of 30 shown", not "5 of 30 moved" — the card is titled "What moved"
       // already, and the word was doing double duty against the sentence
       // below. See there.
-      `${count(shown.length)} of ${count(all.length)} shown · ${count(MOVED_DAYS)} days · ` +
+      `${count(shown.length)} of ${count(all.length)} shown · vs ${count(HISTORY_DAYS)}-day median · ` +
       "normalized price per recipe unit",
     note:
-      `A movement compares the newest normalized invoice price against the last one on or ` +
-      `before ${count(MOVED_DAYS)} days ago, per recipe unit, so two vendors quoting the same ` +
-      `ingredient in different pack sizes are compared on the same basis. That window is fixed ` +
-      `at ${count(MOVED_DAYS)} days and does NOT follow the date control above: an ingredient ` +
-      `price moves on invoice cadence, not on the range a reader happens to be looking at, and ` +
-      `a seven-day window would report that nothing moved on a week that simply caught no ` +
-      `second invoice. Ingredients with only one priced invoice in the window carry no movement ` +
-      `and are not listed at all.`,
+      `A movement compares the latest normalized invoice price — spike-guarded the way booked ` +
+      `costs are — against the median of that ingredient's own priced invoices over the last ` +
+      `${count(HISTORY_DAYS)} days, per recipe unit, so two vendors quoting the same ` +
+      `ingredient in different pack sizes are compared on the same basis. It is the same ` +
+      `figure the Ingredients and Prices pages print, and it does NOT follow the date control ` +
+      `above: an ingredient price moves on invoice cadence, not on the range a reader happens ` +
+      `to be looking at. Ingredients with fewer than ${count(MIN_READINGS)} priced invoices ` +
+      `carry no movement and are not listed at all.`,
   }
 }
 
@@ -1325,12 +1323,14 @@ function loadEverything(input: CogsSectionsInput) {
     retryAction: "retryInvoices",
   })
 
+  // Store-scoped on the store route; every account invoice on the group one.
   const movedP = classify(
     () =>
-      getIngredientPriceMonitoringData({
-        days: MOVED_DAYS,
-        ...(storeId ? { storeId } : {}),
-      }),
+      loadPriceMoves({
+        accountId,
+        storeIds: storeId ? [storeId] : null,
+        asOf: counterToday(),
+      }).then((set) => [...set.moves.values()]),
     { retryAction: "retryMoved" },
   )
 
@@ -1365,7 +1365,19 @@ function loadEverything(input: CogsSectionsInput) {
     }),
   )
 
-  return { scopeP, cogsP, invoicesP, movedP }
+  const { startDate, endDate } = toQueryBounds(range)
+  const wasteP = classify(
+    () =>
+      loadLoggedAdjustments({
+        accountId,
+        storeIds: storeId ? [storeId] : null,
+        from: startDate,
+        to: endDate,
+      }),
+    { retryAction: "retryCogs" },
+  )
+
+  return { scopeP, cogsP, invoicesP, movedP, wasteP }
 }
 
 /** The cost data a section needs, or the reasoned refusal that replaces it. */
@@ -1381,6 +1393,7 @@ function cogsSection<T>(
 function headlineSection(
   cogsSd: SectionData<CogsData>,
   invoiceSd: SectionData<UnpostedInvoices>,
+  wasteSd: SectionData<AdjustmentTotals>,
   store: boolean,
 ): SectionData<CogsHeadline> {
   return cogsSection(cogsSd, NO_COGS_OWED, (d) =>
@@ -1390,6 +1403,8 @@ function headlineSection(
       // shorter and the verdict one clause shorter — never a zero, which
       // would read as "nothing is waiting".
       invoices: dataOf(invoiceSd),
+      // Same rule: a waste figure that failed to load is no cell, not $0.
+      waste: dataOf(wasteSd),
       store,
     }),
   )
@@ -1406,16 +1421,16 @@ function planSection(
 
 /** "What moved", on either route. */
 function movedSection(
-  sd: SectionData<IngredientPriceMonitoringData>,
+  sd: SectionData<PriceMove[]>,
 ): SectionData<MovedSection> {
-  return mapReadyTo(sd, (data) =>
-    movedRows(data.rows).length === 0
+  return mapReadyTo(sd, (moves) =>
+    movedRows(moves).length === 0
       ? notComputed<MovedSection>(
-          `an ingredient price movement — no canonical ingredient carries two normalized ` +
-            `invoice prices ${count(MOVED_DAYS)} days apart, so there is nothing to compare a ` +
-            `price against`,
+          `an ingredient price movement — no recipe ingredient carries ${count(MIN_READINGS)} ` +
+            `normalized invoice prices in ${count(HISTORY_DAYS)} days, so there is nothing to ` +
+            `compare a price against`,
         )
-      : ready(buildMoved(data.rows)),
+      : ready(buildMoved(moves)),
   )
 }
 
@@ -1434,12 +1449,12 @@ export function getCogsSectionPromises(
 ): StreamedSections<CogsSections> {
   const { range } = input
   const granularity = granularityFor(range)
-  const { scopeP, cogsP, invoicesP, movedP } = loadEverything(input)
+  const { scopeP, cogsP, invoicesP, movedP, wasteP } = loadEverything(input)
 
   return {
     headline: guardSection(
-      Promise.all([cogsP, invoicesP]).then(([cogsSd, invoiceSd]) =>
-        headlineSection(cogsSd, invoiceSd, false),
+      Promise.all([cogsP, invoicesP, wasteP]).then(([cogsSd, invoiceSd, wasteSd]) =>
+        headlineSection(cogsSd, invoiceSd, wasteSd, false),
       ),
       "retryCogs",
     ),
@@ -1517,12 +1532,12 @@ export function getStoreCogsSectionPromises(
 ): StreamedSections<StoreCogsSections> {
   const { range } = input
   const granularity = granularityFor(range)
-  const { scopeP, cogsP, invoicesP, movedP } = loadEverything(input)
+  const { scopeP, cogsP, invoicesP, movedP, wasteP } = loadEverything(input)
 
   return {
     headline: guardSection(
-      Promise.all([cogsP, invoicesP]).then(([cogsSd, invoiceSd]) =>
-        headlineSection(cogsSd, invoiceSd, true),
+      Promise.all([cogsP, invoicesP, wasteP]).then(([cogsSd, invoiceSd, wasteSd]) =>
+        headlineSection(cogsSd, invoiceSd, wasteSd, true),
       ),
       "retryCogs",
     ),
