@@ -3,7 +3,8 @@
 import Link from "next/link"
 import { signOut } from "next-auth/react"
 import { useEffect, useState, useTransition } from "react"
-import { Logo, MHead, MList, Note, Section, ThemeRow, useCounterTransition } from "@/components/counter"
+import { Logo, MHead, MList, Note, Section, ThemeRow, useCounterTransition, type MListRow } from "@/components/counter"
+import { phoneHref } from "@/lib/phone-routes"
 import { saveNotificationPreferences } from "@/lib/counter/actions/settings"
 import type { SectionSources } from "@/lib/counter/adapters/types"
 import type { SettingsNotifications, SettingsSections } from "@/lib/counter/adapters/settings"
@@ -136,6 +137,14 @@ export function CounterPhoneMoreClient({
         <span className="mono">Operations</span>
       </div>
 
+      {/* The destinations first: they are why a reader opens More. Static,
+          so each group resolves with the shell. */}
+      {MORE_GROUPS.map((g) => (
+        <Section key={g.title} title={g.title} data={sections.account} pending={pending}>
+          {() => <MList rows={g.rows} />}
+        </Section>
+      ))}
+
       <MHead
         label="Signed in as"
         value={name}
@@ -161,11 +170,6 @@ export function CounterPhoneMoreClient({
         {() => <ThemeRow />}
       </Section>
 
-      {/* `P.settings.phone()`'s "More" list: the destinations the four other
-          tabs do not reach. Every one is a Counter page. */}
-      <Section title="More" meta={() => "everything not on the other four tabs"} data={sections.account} pending={pending}>
-        {() => <MList rows={MORE_ROWS} />}
-      </Section>
 
       {/* `P.settings.phone()`'s closing `.mbtn`, outside every section. */}
       <button className="mbtn" type="button" onClick={() => signOut({ callbackUrl: "/login" })}>
@@ -176,55 +180,80 @@ export function CounterPhoneMoreClient({
 }
 
 /**
- * Static, so it needs no query and resolves with the shell.
+ * More is the phone's way into everything the other four tabs do not reach,
+ * so it lists every desk rail destination. `e2e/mobile/reachability.spec.ts`
+ * fails when a gated phone page has no entrance, and
+ * `tests/lib/phone-routes.test.ts` when a desk page has neither a phone page
+ * nor a place on the desk-only list.
  *
- * `MList` rows carry an `href`, so each of these is a real link rather than
- * the prototype's `data-goto` delegate — middle-clickable and copyable, the
- * same call `Rail` and `SubNav` make.
- *
- * ## This list is the phone's ONLY way into most of the product
- *
- * It held six rows and the phone had twenty-one rebuilt pages.
- * `e2e/mobile/reachability.spec.ts` put a number on it: nine gated Counter
- * phone pages — Today's own alerts and decisions, Analytics, COGS, Labor,
- * Menu, Menu profit, Product mix and the Operations hub — were reachable only
- * by typing the URL. Built, gated, landmark-perfect, and with no entrance.
- * It is the same defect `/dashboard/stores/new` had, nine times over, and no
- * gate could see it: fidelity measures a page you navigate to, and the link
- * sweep asks whether a link resolves, not whether one exists.
- *
- * ## The order is the design's, not the sitemap's
- *
- * `P.more.phone()` groups its destinations — Money, Back of house, Account —
- * and `P.more.desk()` writes down the rule behind the grouping: "a tab is for
- * something you DO on your feet… everything you merely READ lives one tap
- * deeper." So this runs money first, then the back of house, then the
- * catalogue, then the developer's own tab, rather than alphabetically or in
- * the order the pages were built.
- *
- * Four destinations are deliberately NOT here and are one level further in:
- * packaging, product usage, vendors and stock counts all hang off Operations,
- * which the design calls "a hub of hubs". A flat list of everything is a
- * sitemap, and the reason this page is not one is that it has to be readable
- * at arm's length.
+ * It used to be one flat list of fourteen rows that left out Store checks,
+ * Shop, Count & waste, Menu items, Orders, Inventory and Vendors, so on a
+ * phone those were reachable only by typing the URL.
  */
-const MORE_ROWS = [
-  { key: "pnl", href: "/m/pnl", title: "P&L", detail: "The statement, line by line", value: "" },
-  { key: "labor", href: "/m/labor", title: "Labor", detail: "Hours and cost against the budget", value: "" },
-  { key: "cogs", href: "/m/cogs", title: "COGS", detail: "What the food actually cost", value: "" },
-  { key: "analytics", href: "/m/analytics", title: "Analytics", detail: "Channels, hours, days", value: "" },
-  { key: "productmix", href: "/m/product-mix", title: "Product mix", detail: "What sells with what", value: "" },
-  { key: "menuprofit", href: "/m/menu-profit", title: "Menu profit", detail: "Margin per item", value: "" },
-  { key: "decisions", href: "/m/decisions", title: "Needs you", detail: "Waiting on a decision", value: "" },
-  { key: "alerts", href: "/m/alerts", title: "Alerts", detail: "What tripped, and when", value: "" },
-  // Desk pages with no phone twin yet. They open on the desk shell, which
-  // keeps the bottom bar at phone width (`AppShell`'s `.ct-deskbar`).
-  { key: "checks", href: "/dashboard/checks", title: "Store checks", detail: "Today's checks, crew and PINs", value: "" },
-  { key: "shop", href: "/dashboard/shop", title: "Shop", detail: "Merch orders, products, pickup", value: "" },
-  { key: "operations", href: "/m/operations", title: "Operations", detail: "Counts, vendors, packaging, usage", value: "" },
-  { key: "stores", href: "/m/stores", title: "Stores", detail: "Rent, commissions, COGS targets", value: "" },
-  { key: "menu", href: "/m/menu", title: "Menu", detail: "The catalogue and what it earns", value: "" },
-  { key: "recipes", href: "/m/recipes", title: "Recipes", detail: "What each plate is made of", value: "" },
-  { key: "ingredients", href: "/m/ingredients", title: "Ingredients", detail: "The catalogue and its prices", value: "" },
-  { key: "monitoring", href: "/m/monitoring", title: "Monitoring", detail: "Developer-facing", value: "" },
+const r = (key: string, deskHref: string, title: string, detail: string): MListRow => ({
+  key,
+  href: phoneHref(deskHref),
+  title,
+  detail,
+  value: "",
+})
+
+/**
+ * The desk rail's own groups, in its order, so a reader who knows where a page
+ * lives on the desk finds it under the same heading here. Hrefs go through
+ * `phoneHref`: a page with a phone twin opens it, a desk-only page opens on
+ * the desk shell, which keeps the bottom bar at phone width.
+ */
+const MORE_GROUPS: ReadonlyArray<{ title: string; rows: MListRow[] }> = [
+  {
+    title: "Stores",
+    rows: [
+      r("checks", "/dashboard/checks", "Store checks", "Today, history, checklists, crew & PINs"),
+      r("shop", "/dashboard/shop", "Shop", "Merch orders, products, pickup"),
+    ],
+  },
+  {
+    title: "Today",
+    rows: [
+      r("alerts", "/dashboard/alerts", "Needs you", "What tripped, and when"),
+      r("decisions", "/dashboard/decisions", "The week ahead", "Waiting on a decision"),
+      r("orders", "/dashboard/orders", "Orders", "Every ticket, by channel"),
+    ],
+  },
+  {
+    title: "Money",
+    rows: [
+      r("pnl", "/dashboard/pnl", "P&L", "The statement, line by line"),
+      r("cogs", "/dashboard/cogs", "COGS", "What the food actually cost"),
+      r("labor", "/dashboard/labor", "Labor", "Hours and cost against the budget"),
+      r("analytics", "/dashboard/analytics", "Analytics", "Channels, hours, days"),
+    ],
+  },
+  {
+    title: "Menu",
+    rows: [
+      r("items", "/dashboard/menu/items", "Menu items", "Photos, food cost, new item"),
+      r("menu", "/dashboard/menu", "Menu", "The catalogue and what it earns"),
+      r("recipes", "/dashboard/recipes", "Recipes", "What each plate is made of"),
+      r("menuprofit", "/dashboard/menu-profit", "Menu profit", "Margin per item"),
+      r("productmix", "/dashboard/product-mix", "Product mix", "What sells with what"),
+    ],
+  },
+  {
+    title: "Stock and suppliers",
+    rows: [
+      r("count", "/dashboard/count", "Count & waste", "The weekly count, waste, report, setup"),
+      r("inventory", "/dashboard/operations/inventory", "Inventory", "Stock on hand and past counts"),
+      r("ingredients", "/dashboard/ingredients", "Ingredients", "The catalogue and its prices"),
+      r("vendors", "/dashboard/operations/vendors", "Vendors", "Who sells it, and for how much"),
+      r("operations", "/dashboard/operations", "Operations", "Packaging and product usage"),
+    ],
+  },
+  {
+    title: "Admin",
+    rows: [
+      r("stores", "/dashboard/stores", "Stores", "Rent, commissions, COGS targets"),
+      r("monitoring", "/dashboard/admin/monitoring", "Monitoring", "Developer-facing"),
+    ],
+  },
 ]

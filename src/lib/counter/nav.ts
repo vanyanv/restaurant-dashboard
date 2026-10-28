@@ -1,3 +1,5 @@
+import { phoneHref } from "@/lib/phone-routes"
+
 /**
  * The eighteen destinations the rail reaches, declared once.
  *
@@ -338,8 +340,11 @@ export function menuTab(label: "Catalog" | "Profit" | "Mix"): SubNavItem {
 }
 
 /** The same five bars on the phone. Derived, for the reason below. */
+// Through `phoneHref`, not a string swap: a tab whose page is desk-only
+// (Menu › Items) keeps its desk href rather than pointing at an `/m` route
+// that does not exist.
 const toPhone = (items: readonly SubNavItem[]): readonly SubNavItem[] =>
-  items.map((t) => ({ label: t.label, href: "/m" + t.href.slice("/dashboard".length) }))
+  items.map((t) => ({ label: t.label, href: phoneHref(t.href) }))
 
 export const PHONE_ALERT_TABS = toPhone(ALERT_TABS)
 export const PHONE_INGREDIENT_TABS = toPhone(INGREDIENT_TABS)
