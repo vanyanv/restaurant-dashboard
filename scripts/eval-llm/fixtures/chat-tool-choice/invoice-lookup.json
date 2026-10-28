@@ -1,6 +1,6 @@
 {
   "called": [
-    "getInvoiceSpend",
+    "searchInvoices",
     "getInvoiceSpend"
   ],
   "model": "gpt-5-mini",

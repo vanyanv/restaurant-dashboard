@@ -1,6 +1,7 @@
 {
   "called": [
-    "searchCanonicalIngredients"
+    "searchCanonicalIngredients",
+    "getIngredientPrices"
   ],
   "model": "gpt-5-mini",
   "pass": true,

@@ -36,11 +36,9 @@
     "model": "gpt-5-mini",
     "evaluatedAt": "2026-10-28",
     "cases": 16,
-    "passed": 0,
-    "passRate": 0,
-    "costUsd": 0,
-    "floor": 0.75,
-    "pendingReEval": true,
-    "pendingReason": "The chat prompt and tool catalogue changed on 2026-10-28: the paragraph and fileReturn are asked for in one response, and two tools were added (getLaborActuals, getCleaningChecks) with two golden cases awaiting fixtures. Still pending from 2026-09-19 as well. The live eval needs an OPENAI_API_KEY this session did not have; numbers stay zeroed. Run `npm run eval:llm -- --feature chat-tool-choice --record`."
+    "passed": 15,
+    "passRate": 0.9375,
+    "costUsd": 0.02224,
+    "floor": 0.75
   }
 }

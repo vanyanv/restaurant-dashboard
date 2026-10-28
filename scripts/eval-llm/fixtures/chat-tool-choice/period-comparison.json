@@ -1,6 +1,8 @@
 {
   "called": [
-    "compareSales"
+    "compareSales",
+    "getDailySales",
+    "getDailySales"
   ],
   "model": "gpt-5-mini",
   "pass": true,

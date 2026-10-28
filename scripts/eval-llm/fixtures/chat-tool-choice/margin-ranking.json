@@ -1,8 +1,8 @@
 {
-  "called": [],
+  "called": [
+    "rankRecipes"
+  ],
   "model": "gpt-5-mini",
-  "pass": false,
-  "failures": [
-    "answered without calling a tool; expected one of rankRecipes, getMenuMargin, getCogsByItem"
-  ]
+  "pass": true,
+  "failures": []
 }
