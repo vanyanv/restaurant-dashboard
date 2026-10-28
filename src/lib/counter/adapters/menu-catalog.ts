@@ -5,6 +5,12 @@ import { unitsSold } from "@/lib/inventory/usage-math"
 import { count, money, pct } from "@/lib/counter/format"
 import { toQueryBounds, type DateRange } from "@/lib/counter/date-range"
 import {
+  getItemDiscounts,
+  isDealRunning,
+  netOfDiscount,
+  type ItemDiscountEntry,
+} from "@/lib/counter/item-discounts"
+import {
   awaitSections,
   classify,
   guardSection,
@@ -79,7 +85,10 @@ export interface CatalogRow {
   isModifier: boolean
   /** `—` when nothing costed it. */
   plateCost: string
+  /** After discounts; ends ` · deal` when one is running. */
   margin: string
+  /** More than `DEAL_THRESHOLD` of what it rang up came back off. */
+  dealRunning: boolean
   href: string
 }
 
@@ -205,6 +214,8 @@ interface CatalogData {
   mappedItems: Set<string>
   mappedModifiers: Set<string>
   costs: Map<string, { cost: number; revenue: number; qty: number }>
+  /** Per item name — the deals that came off what it rang up (`item-discounts.ts`). */
+  discounts: Map<string, ItemDiscountEntry>
   categoryRevenue: Map<string, number>
   categoryItems: Map<string, Set<string>>
 }
@@ -231,6 +242,7 @@ async function loadCatalog(input: MenuCatalogInput): Promise<CatalogData> {
     mappedItems: new Set(),
     mappedModifiers: new Set(),
     costs: new Map(),
+    discounts: new Map(),
     categoryRevenue: new Map(),
     categoryItems: new Map(),
   }
@@ -244,7 +256,7 @@ async function loadCatalog(input: MenuCatalogInput): Promise<CatalogData> {
     tpTotalSales: true,
   } as const
 
-  const [rawItems, rawMods, itemMaps, modMaps, cogs] = await Promise.all([
+  const [rawItems, rawMods, itemMaps, modMaps, cogs, discounts] = await Promise.all([
     prisma.otterMenuItem.findMany({
       where: { ...where, isModifier: false },
       select: { itemName: true, category: true, ...sales },
@@ -266,6 +278,7 @@ async function loadCatalog(input: MenuCatalogInput): Promise<CatalogData> {
       where,
       _sum: { lineCost: true, salesRevenue: true, qtySold: true },
     }),
+    getItemDiscounts({ accountId, storeIds, startDate, endDate }),
   ])
 
   const items = new Map<string, Agg>()
@@ -314,6 +327,7 @@ async function loadCatalog(input: MenuCatalogInput): Promise<CatalogData> {
         },
       ]),
     ),
+    discounts,
     categoryRevenue,
     categoryItems,
   }
@@ -331,7 +345,11 @@ function rowsOf(data: CatalogData): CatalogRow[] {
     const cost = data.costs.get(name)
     const mapped = isModifier ? data.mappedModifiers.has(name) : data.mappedItems.has(name)
     const plate = cost && cost.qty > 0 ? cost.cost / cost.qty : null
-    const margin = cost && cost.revenue > 0 ? 100 - (cost.cost / cost.revenue) * 100 : null
+    // Over what was COLLECTED once the item's deals came off — on a BOGO the
+    // rung-up revenue is twice the money, and the margin read twice as fat.
+    const deal = isModifier ? undefined : data.discounts.get(name)
+    const collected = cost ? netOfDiscount(cost.revenue, deal) : 0
+    const margin = cost && collected > 0 ? 100 - (cost.cost / collected) * 100 : null
     return {
       key: `${isModifier ? "mod" : "item"}::${name}`,
       item: name,
@@ -345,7 +363,13 @@ function rowsOf(data: CatalogData): CatalogRow[] {
       mapped,
       isModifier,
       plateCost: plate === null ? "—" : money(plate, { cents: true }),
-      margin: margin === null ? "—" : pct(margin, { scaled: true }),
+      margin:
+        margin === null
+          ? "—"
+          : isDealRunning(deal)
+            ? `${pct(margin, { scaled: true })} · deal`
+            : pct(margin, { scaled: true }),
+      dealRunning: isDealRunning(deal),
       href: `/dashboard/menu/catalog/${slugOf(name)}`,
     }
   }

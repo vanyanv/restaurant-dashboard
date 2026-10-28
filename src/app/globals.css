@@ -29,6 +29,7 @@
 @import "../styles/counter-checks.css";
 @import "../styles/counter-shop.css";
 @import "../styles/counter-invoices.css";
+@import "../styles/counter-menu.css";
 
 @theme {
   --color-background: var(--ct-paper);
