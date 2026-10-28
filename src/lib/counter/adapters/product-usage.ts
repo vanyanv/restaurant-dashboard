@@ -1,6 +1,11 @@
 import { prisma } from "@/lib/prisma"
 import { getScopedStores } from "@/lib/account-stores"
 import { batchRecipeCosts } from "@/lib/recipe-cost"
+import {
+  purchaseSpendByDay,
+  purchaseSpendByIngredient,
+  type PurchaseScope,
+} from "@/lib/counter/purchases"
 import { count, money, pct, plural, titleCase } from "@/lib/counter/format"
 import { rangeLabel, toQueryBounds, type DateRange } from "@/lib/counter/date-range"
 import type { ChartSpec } from "@/lib/counter/chart-geometry"
@@ -165,6 +170,18 @@ async function loadUsage(input: ProductUsageInput): Promise<UsageData> {
 
   const stores = await getScopedStores(accountId, storeId ?? null)
   const storeIds = stores.map((s) => s.id)
+  // Both purchase queries — the table/headline and the chart — read ONE rule
+  // (`src/lib/counter/purchases.ts`), scoped to the same stores as the
+  // theoretical side. They used to filter on `accountId` alone, so one store's
+  // recipes were set against every store's deliveries, and the chart summed
+  // unmatched lines the headline left out.
+  const purchases: PurchaseScope = {
+    accountId,
+    storeIds,
+    allStores: !storeId,
+    from: startDate,
+    to: endDate,
+  }
 
   const [costs, sold, purchasedByIngredient, dailyTheoretical, dailyPurchased] =
     await Promise.all([
@@ -178,12 +195,7 @@ async function loadUsage(input: ProductUsageInput): Promise<UsageData> {
             WHERE "storeId" = ANY(${storeIds}) AND "recipeId" IS NOT NULL
               AND date >= ${startDate}::date AND date <= ${endDate}::date
             GROUP BY 1`,
-      prisma.$queryRaw<Array<{ cid: string; spend: number }>>`
-        SELECT li."canonicalIngredientId" AS cid, SUM(li."extendedPrice")::float AS spend
-        FROM "InvoiceLineItem" li JOIN "Invoice" i ON i.id = li."invoiceId"
-        WHERE i."accountId" = ${accountId} AND li."canonicalIngredientId" IS NOT NULL
-          AND i."invoiceDate" >= ${startDate} AND i."invoiceDate" <= ${endDate}
-        GROUP BY 1`,
+      purchaseSpendByIngredient(purchases),
       storeIds.length === 0
         ? Promise.resolve([])
         : prisma.$queryRaw<Array<{ d: Date; v: number }>>`
@@ -192,12 +204,7 @@ async function loadUsage(input: ProductUsageInput): Promise<UsageData> {
             WHERE "storeId" = ANY(${storeIds})
               AND date >= ${startDate}::date AND date <= ${endDate}::date
             GROUP BY 1 ORDER BY 1`,
-      prisma.$queryRaw<Array<{ d: Date; v: number }>>`
-        SELECT i."invoiceDate" AS d, SUM(li."extendedPrice")::float AS v
-        FROM "InvoiceLineItem" li JOIN "Invoice" i ON i.id = li."invoiceId"
-        WHERE i."accountId" = ${accountId} AND i."invoiceDate" IS NOT NULL
-          AND i."invoiceDate" >= ${startDate} AND i."invoiceDate" <= ${endDate}
-        GROUP BY 1 ORDER BY 1`,
+      purchaseSpendByDay(purchases),
     ])
 
   const memo = new Map<string, Map<string, { name: string; dollars: number }>>()

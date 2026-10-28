@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma"
+import { purchaseLineFilterSql, purchaseLineWhere } from "@/lib/counter/purchases"
 import { businessQueryDate } from "@/lib/counter/business-date"
 import { isNonIngredientRow } from "@/lib/invoice-charges"
 import { isCreditArtifact } from "@/lib/counter/ingredient-reach"
@@ -280,11 +281,9 @@ async function loadInventory(input: InventoryInput): Promise<InventoryData> {
     }),
     prisma.$queryRaw<Array<{ w: Date; v: number }>>`
       SELECT DATE_TRUNC('week', i."invoiceDate")::date AS w,
-             SUM(l."extendedPrice")::float AS v
-      FROM "InvoiceLineItem" l JOIN "Invoice" i ON i.id = l."invoiceId"
-      WHERE i."accountId" = ${accountId}
-        AND i."storeId" = ${store.id}
-        AND l."canonicalIngredientId" IS NOT NULL
+             SUM(li."extendedPrice")::float AS v
+      FROM "InvoiceLineItem" li JOIN "Invoice" i ON i.id = li."invoiceId"
+      WHERE ${purchaseLineFilterSql({ accountId, storeIds: [store.id], allStores: false })}
         AND i."invoiceDate" >= DATE_TRUNC('week', ${businessQueryDate(today)}::date) - MAKE_INTERVAL(weeks => ${WEEKS - 1})
       GROUP BY 1 ORDER BY 1`,
     // When each ingredient was last written down by a person. This is the ONLY
@@ -305,15 +304,15 @@ async function loadInventory(input: InventoryInput): Promise<InventoryData> {
   // The two settle figures, measured rather than reconstructed. Both are
   // scoped to the window and to this store, so they answer the same question.
   const [deliveredAgg, usedAgg] = await Promise.all([
+    // "Delivered" is a purchase in the sense Product usage uses — one rule,
+    // `src/lib/counter/purchases.ts` — so a rejected invoice is out of both.
     prisma.invoiceLineItem.aggregate({
-      where: {
-        canonicalIngredientId: { not: null },
-        invoice: {
-          accountId,
-          storeId: store.id,
-          ...(windowFrom ? { invoiceDate: { gte: windowFrom } } : {}),
-        },
-      },
+      where: purchaseLineWhere({
+        accountId,
+        storeIds: [store.id],
+        allStores: false,
+        from: windowFrom,
+      }),
       _sum: { extendedPrice: true },
     }),
     prisma.dailyCogsItem.aggregate({

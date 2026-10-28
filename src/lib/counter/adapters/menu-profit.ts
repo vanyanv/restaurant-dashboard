@@ -525,9 +525,14 @@ export function getMenuProfitSectionPromises(
   const dataP = classify(
     async () => {
       const [me, statement] = await Promise.all([
+        // `lookbackDays` is the gap from the window's first day to `asOf`, not
+        // the day count: the loader reads `[asOf − lookbackDays, asOf]`
+        // inclusive. Passing `days` read one day more than the page's range
+        // (31 for a 30-day range) while `loadStatement` beside it read exactly
+        // the range. Same convention as `adapters/analytics.ts`.
         getMenuEngineering({
           ...(storeId ? { storeId } : {}),
-          lookbackDays: days,
+          lookbackDays: Math.max(0, days - 1),
           asOf: range.end,
         }),
         loadStatement({ range, storeId, granularity: "daily" }),

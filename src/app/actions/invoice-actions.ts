@@ -716,6 +716,11 @@ export async function setInvoiceIsReturn(
  * status write is how a total starts disagreeing with itself. An owner who
  * wants a bad invoice out of the numbers marks it a return; rejection records
  * the judgement and takes it off the queue.
+ *
+ * The one exception is the usage comparison: `src/lib/counter/purchases.ts`
+ * (Product usage, Inventory's "delivered") leaves REJECTED invoices out of
+ * what was bought, because setting a disowned document against what the
+ * recipes used reports a gap the owner has already explained.
  */
 export async function setInvoiceReviewDecision(
   invoiceId: string,
