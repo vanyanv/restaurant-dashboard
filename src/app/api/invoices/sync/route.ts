@@ -8,7 +8,7 @@ import { extractInvoiceData } from "@/lib/gemini-invoice"
 import { matchInvoiceToStore } from "@/lib/address-matcher"
 import type { InvoiceSyncProgressEvent } from "@/types/invoice"
 import { isCronRequest, rateLimit, RATE_LIMIT_TIERS } from "@/lib/rate-limit"
-import { sanitizeInvoiceDate, findLineMathMismatches, findPackShapeAnomalies, findTotalReconciliationMismatch, findEmptyExtraction, composeReviewReasons, type ReviewReason } from "@/lib/invoice-sanity"
+import { sanitizeInvoiceDate, findLineMathMismatches, findPackShapeAnomalies, findTotalReconciliationMismatch, findEmptyExtraction, composeReviewReasons, describeMoneyProblems, moneyProblemScore, type ReviewReason } from "@/lib/invoice-sanity"
 import {
   applyPackShapePriors,
   buildPackShapePriors,
@@ -45,9 +45,34 @@ export const maxDuration = 120
 // took 104–116s end to end with extraction well inside a 45s budget — the
 // balance is Phase 3's per-invoice/per-line writes across regions. The
 // workflow's curl gives up at 115s, so a run must land nearer 60s. Six
-// emails per run still drains a week's ~11 invoices in two 6h cycles.
+// emails per run, hourly since 2026-10-28 (it was every 6h, and a week's
+// backlog took four days to drain — 13 emails were still waiting that day).
 const MAX_MESSAGES_PER_RUN = 6
 const EXTRACTION_BUDGET_MS = 30_000
+/**
+ * A second read is attempted only when the first took less than this, so
+ * both fit inside withConcurrency's 60s task timeout (reads run 10–25s).
+ */
+const REREAD_IF_FIRST_READ_UNDER_MS = 30_000
+
+/**
+ * The lookback the previous run used, from its JobRun.metadata, else 0. A
+ * backfill (`?lookbackDays=70`) only takes six emails per run; without this
+ * the runs after it fell back to 30 days and the older emails it had found
+ * aged out unread — which is how most of September went missing in 2026.
+ */
+function readLookback(metadata: unknown): number {
+  if (!metadata || typeof metadata !== "object") return 0
+  const v = (metadata as Record<string, unknown>).lookbackDays
+  return typeof v === "number" && Number.isFinite(v) ? v : 0
+}
+
+/** Emails the previous run failed to read, from its JobRun.metadata, else 0. */
+function readFailed(metadata: unknown): number {
+  if (!metadata || typeof metadata !== "object") return 0
+  const v = (metadata as Record<string, unknown>).failed
+  return typeof v === "number" && Number.isFinite(v) ? v : 0
+}
 
 /** `deferred` as the previous run left it on its JobRun.metadata, else 0. */
 function readDeferred(metadata: unknown): number {
@@ -122,6 +147,8 @@ interface SyncResult {
   errors: number
   /** New emails this run did not get to (batch cap or time budget). */
   deferred: number
+  /** Days back this run searched; carried forward while `deferred > 0`. */
+  lookbackDays: number
 }
 
 /**
@@ -286,8 +313,12 @@ async function runSync(
   // A run that hit its budget leaves `deferred > 0` on its JobRun row. Keep
   // the wide window until a run clears the backlog; otherwise the emails it
   // deferred age out of the 7-day window and are never synced.
-  const backlogPending = readDeferred(lastSync?.metadata) > 0
-  const lookbackDays = lookbackDaysOverride ?? (lastSync && !backlogPending ? 7 : 30)
+  // An email whose extraction failed is retried by the next run only while it
+  // is inside the window, so a failed read counts as backlog too.
+  const backlogPending = readDeferred(lastSync?.metadata) > 0 || readFailed(lastSync?.metadata) > 0
+  const lookbackDays =
+    lookbackDaysOverride ??
+    (lastSync && !backlogPending ? 7 : Math.max(30, backlogPending ? readLookback(lastSync?.metadata) : 0))
   const sinceDate = new Date()
   sinceDate.setDate(sinceDate.getDate() - lookbackDays)
 
@@ -322,7 +353,7 @@ async function runSync(
       phase: "complete", status: "done", totalProgress: 100,
       detail: "No emails with attachments found", counts,
     })
-    return { message: `Sync complete`, ...counts }
+    return { message: `Sync complete`, ...counts, lookbackDays }
   }
 
   // ─── Dedup: skip already-processed emails ───
@@ -352,7 +383,7 @@ async function runSync(
       phase: "complete", status: "done", totalProgress: 100,
       detail: `All ${counts.skipped} emails already synced`, counts,
     })
-    return { message: `Sync complete`, ...counts }
+    return { message: `Sync complete`, ...counts, lookbackDays }
   }
 
   // ─── Phase 2: Extract data from PDFs via OpenAI ───
@@ -382,7 +413,31 @@ async function runSync(
 
       // Process the first PDF
       const pdf = attachments[0]
-      const { extraction, model } = await extractInvoiceData(pdf.contentBytes, pdf.name)
+      const readStartedAt = Date.now()
+      let { extraction, model } = await extractInvoiceData(pdf.contentBytes, pdf.name)
+
+      // Self-heal: when the money does not add up, read the PDF once more —
+      // with the other model, told what the first read got wrong — and keep
+      // whichever read is better. Only when the first read left room inside
+      // the per-task timeout; otherwise the invoice goes to review as before.
+      const problems = describeMoneyProblems(extraction)
+      if (problems.length > 0 && Date.now() - readStartedAt < REREAD_IF_FIRST_READ_UNDER_MS) {
+        try {
+          const second = await extractInvoiceData(pdf.contentBytes, pdf.name, { rereadProblems: problems })
+          const before = moneyProblemScore(extraction)
+          const after = moneyProblemScore(second.extraction)
+          logger.warn(
+            `[invoice-sync] re-read "${msg.subject}" (${problems.length} problem(s)): score ${before} → ${after}` +
+              (after < before ? ", keeping the re-read" : ", keeping the first read")
+          )
+          if (after < before) {
+            extraction = second.extraction
+            model = `${second.model} (re-read)`
+          }
+        } catch (err) {
+          logger.error(`[invoice-sync] re-read failed for "${msg.subject}" — keeping the first read:`, err)
+        }
+      }
 
       let pdfUpload: InvoicePdfUpload | null = null
       try {
@@ -793,7 +848,7 @@ async function runSync(
     await bustTags(["invoices", `account:${accountId}`])
   }
 
-  return { message, ...counts }
+  return { message, ...counts, lookbackDays }
 }
 
 /**
@@ -805,12 +860,19 @@ async function runSync(
 async function recordDeferred(
   jobRunId: string,
   base: Record<string, unknown> | undefined,
-  deferred: number,
+  result: Pick<SyncResult, "deferred" | "errors" | "lookbackDays">,
 ): Promise<void> {
   try {
     await prisma.jobRun.update({
       where: { id: jobRunId },
-      data: { metadata: { ...(base ?? {}), deferred } as Prisma.InputJsonValue },
+      data: {
+        metadata: {
+          ...(base ?? {}),
+          deferred: result.deferred,
+          failed: result.errors,
+          lookbackDays: result.lookbackDays,
+        } as Prisma.InputJsonValue,
+      },
     })
   } catch (err) {
     logger.error("recordDeferred failed:", err)
@@ -843,10 +905,11 @@ export async function POST(request: NextRequest) {
     accountId = session.user.accountId
   }
 
-  // Optional ?lookbackDays=N override for owner-driven backfills (e.g. re-pulling
-  // a misclassified return after extractor improvements). Cron requests ignore it.
+  // Optional ?lookbackDays=N override for backfills (e.g. re-pulling a
+  // misclassified return, or a month the sync missed). Accepted from the cron
+  // secret too since 2026-10-28, so the workflow's manual run can take it.
   let lookbackDaysOverride: number | undefined
-  if (!fromCron) {
+  {
     const raw = new URL(request.url).searchParams.get("lookbackDays")
     if (raw) {
       const parsed = Number.parseInt(raw, 10)
@@ -876,7 +939,7 @@ export async function POST(request: NextRequest) {
           await withJobRun("invoices.email.sync", jobOpts, async ({ jobRunId, addRows }) => {
             const result = await runSync(emit, userId, accountId, lookbackDaysOverride)
             addRows(result.created)
-            await recordDeferred(jobRunId, jobOpts.metadata, result.deferred)
+            await recordDeferred(jobRunId, jobOpts.metadata, result)
             return result
           })
         } catch (error) {
@@ -908,7 +971,7 @@ export async function POST(request: NextRequest) {
     const result = await withJobRun("invoices.email.sync", jobOpts, async ({ jobRunId, addRows }) => {
       const r = await runSync(() => {}, userId, accountId, lookbackDaysOverride)
       addRows(r.created)
-      await recordDeferred(jobRunId, jobOpts.metadata, r.deferred)
+      await recordDeferred(jobRunId, jobOpts.metadata, r)
       return r
     })
     return NextResponse.json(result)

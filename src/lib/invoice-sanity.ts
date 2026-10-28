@@ -765,3 +765,93 @@ export function findPackShapeAnomalies(
   }
   return anomalies
 }
+
+// ─── Self-healing ───
+
+/**
+ * Drop a line the extractor read twice, when that alone makes the invoice add
+ * up.
+ *
+ * Premier Meats credit 2250793 printed one return line and a "Return/Cancelled
+ * Order" note under it; the model stored both as lines, so the $2,691.45
+ * credit read as $5,382.90 and sat in review with nothing the owner could do
+ * but reject it. A duplicate is the same SKU, quantity, unit price and amount,
+ * with one name the start of the other. It is only dropped when the tie-out
+ * fails with it and passes without it — two genuinely identical cases of
+ * something on one delivery are left alone.
+ */
+export function dropDuplicatedLines(extraction: InvoiceExtraction): {
+  extraction: InvoiceExtraction
+  dropped: number[]
+} {
+  const head = {
+    subtotal: extraction.subtotal,
+    taxAmount: extraction.taxAmount,
+    totalAmount: extraction.totalAmount,
+  }
+  let lines = extraction.lineItems
+  const dropped: number[] = []
+  if (tieOut(lines, head).reconciles) return { extraction, dropped }
+
+  const stem = (name: string) => name.trim().toLowerCase().slice(0, 20)
+  for (let j = 1; j < lines.length; j++) {
+    const b = lines[j]
+    const twin = lines.slice(0, j).find(
+      (a) =>
+        (a.sku ?? null) === (b.sku ?? null) &&
+        a.quantity === b.quantity &&
+        a.unitPrice === b.unitPrice &&
+        a.extendedPrice === b.extendedPrice &&
+        stem(b.productName).startsWith(stem(a.productName)) &&
+        stem(a.productName).length > 0,
+    )
+    if (!twin) continue
+    const without = lines.filter((_, k) => k !== j)
+    if (!tieOut(without, head).reconciles) continue
+    dropped.push(b.lineNumber)
+    lines = without
+    break
+  }
+  return dropped.length > 0
+    ? { extraction: { ...extraction, lineItems: lines }, dropped }
+    : { extraction, dropped }
+}
+
+/**
+ * What is wrong with an extraction's money, in words a second read can act on.
+ * Empty when the lines add up and every line's arithmetic holds — the problems
+ * that lock Approve. Pack shapes are not here: they are corrected from the
+ * SKU's history after extraction, not by reading the PDF again.
+ */
+export function describeMoneyProblems(extraction: InvoiceExtraction): string[] {
+  const problems: string[] = []
+  const empty = findEmptyExtraction(extraction)
+  if (empty) {
+    problems.push(
+      `No priced line items were read, but the invoice totals ${fmt(empty.totalAmount)}. Read every product line.`,
+    )
+    return problems
+  }
+  const total = findTotalReconciliationMismatch(extraction)
+  if (total) {
+    problems.push(
+      `The product lines add up to ${fmt(total.lineSum)} but the invoice prints a ${total.subtotal != null ? "subtotal" : "total less tax"} of ` +
+        `${fmt(total.closestReference)}. A line was probably missed, read twice, or had its quantity or price misread.`,
+    )
+  }
+  for (const m of findLineMathMismatches(extraction.lineItems)) {
+    problems.push(
+      `Line ${m.lineNumber} "${m.productName}": ${m.quantity} × ${fmt(m.unitPrice)} is ${fmt(m.computed)}, not the printed ${fmt(m.extendedPrice)}.`,
+    )
+  }
+  return problems
+}
+
+/** Lower is better: an empty read is worst, then a total that misses, then each bad line. */
+export function moneyProblemScore(extraction: InvoiceExtraction): number {
+  if (findEmptyExtraction(extraction)) return 1_000
+  return (
+    (findTotalReconciliationMismatch(extraction) ? 100 : 0) +
+    findLineMathMismatches(extraction.lineItems).length * 10
+  )
+}
