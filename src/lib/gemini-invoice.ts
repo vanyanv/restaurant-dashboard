@@ -6,6 +6,7 @@ import {
   dropDuplicatedLines,
   fixCreditLineSigns,
   normalizeCatchWeightMeatLines,
+  foldFractionalPackSizes,
   normalizeCountPackLines,
 } from "@/lib/invoice-sanity"
 
@@ -162,8 +163,10 @@ function applyKnownSkuPackProfiles(extraction: InvoiceExtraction): InvoiceExtrac
 }
 
 function normalizeExtraction(extraction: InvoiceExtraction): InvoiceExtraction {
-  const normalized = normalizeCountPackLines(
-    normalizeCatchWeightMeatLines(applyKnownSkuPackProfiles(extraction))
+  const normalized = foldFractionalPackSizes(
+    normalizeCountPackLines(
+      normalizeCatchWeightMeatLines(applyKnownSkuPackProfiles(extraction))
+    )
   )
   const { extraction: signed, flipped } = fixCreditLineSigns(normalized)
   if (flipped.length > 0) {

@@ -856,7 +856,7 @@ async function runSync(
           pdfSize: inv.pdfSize,
           pdfUploadedAt: inv.pdfUploadedAt,
           lineItems: {
-            create: inv.lineItems.map((li) => {
+            create: inv.lineItems.map((li, index) => {
               if (li.unit === "CS" && li.packSize == null) {
                 logger.warn(
                   `Line ${li.lineNumber} on ${inv.vendorName} #${inv.invoiceNumber} is unit=CS ` +
@@ -864,18 +864,20 @@ async function runSync(
                 )
               }
               return {
-                lineNumber: li.lineNumber,
+                // Int and required columns: a stray "3a" or a missing name on
+                // one line must not fail the whole invoice's save.
+                lineNumber: Number.isInteger(li.lineNumber) ? li.lineNumber : index + 1,
                 sku: li.sku,
-                productName: li.productName,
+                productName: li.productName?.trim() || li.description?.trim() || li.sku || "Unnamed item",
                 description: li.description,
                 category: li.category,
-                quantity: li.quantity,
+                quantity: Number.isFinite(li.quantity) ? li.quantity : 0,
                 unit: li.unit,
                 packSize: li.packSize,
                 unitSize: li.unitSize,
                 unitSizeUom: li.unitSizeUom,
-                unitPrice: li.unitPrice,
-                extendedPrice: li.extendedPrice,
+                unitPrice: Number.isFinite(li.unitPrice) ? li.unitPrice : 0,
+                extendedPrice: Number.isFinite(li.extendedPrice) ? li.extendedPrice : 0,
               }
             }),
           },
@@ -893,7 +895,10 @@ async function runSync(
       if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
         counts.skipped++
       } else {
-        logger.error(`Failed to save invoice ${inv.invoiceNumber}:`, err)
+        // Prisma prints the whole create before naming the bad field, and the
+        // log line is cut off long before that, so lead with the tail.
+        const detail = err instanceof Error ? err.message.slice(-800) : String(err)
+        logger.error(`Failed to save invoice ${inv.invoiceNumber}: ${detail}`)
         counts.errors++
       }
     }

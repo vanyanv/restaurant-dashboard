@@ -571,6 +571,64 @@ export function looksLikePaperCountPack(line: {
 }
 
 /**
+ * packSize is a whole count in the database. A read of "1.5" there failed the
+ * whole invoice's save (Sysco 145426990, 2026-10-28), so the email was retried
+ * every run. Keep the case total and move it into unitSize instead.
+ */
+export function foldFractionalPackSizes(extraction: InvoiceExtraction): InvoiceExtraction {
+  let changed = false
+  const lineItems = extraction.lineItems.map((line) => {
+    const { packSize } = line
+    if (packSize == null || !isFinite(packSize) || Number.isInteger(packSize)) return line
+    changed = true
+    const rounded = Math.round(packSize)
+    if (Math.abs(packSize - rounded) < 1e-6 && rounded > 0) return { ...line, packSize: rounded }
+    return {
+      ...line,
+      packSize: 1,
+      unitSize: Math.round(packSize * (line.unitSize ?? 1) * 1e6) / 1e6,
+    }
+  })
+  return changed ? { ...extraction, lineItems } : extraction
+}
+
+/** Every number printed in a name, with "1/2" read as 0.5. */
+function numbersInName(text: string): number[] {
+  const out: number[] = []
+  for (const m of text.matchAll(/(\d+)\s*\/\s*(\d+)|(\d*\.\d+|\d+)/g)) {
+    if (m[1] != null && m[2] != null) {
+      const den = Number(m[2])
+      if (den > 0) out.push(Number(m[1]) / den)
+    } else if (m[3] != null) {
+      out.push(Number(m[3]))
+    }
+  }
+  return out
+}
+
+/**
+ * A counted disposable whose case count landed in packSize while the size in
+ * its name ("TRAY FOOD 0.5LB", "CUP 20 OZ") was read as unitSize: IFS
+ * VBFTHRP came in as 1000 × 0.5 LB, a 500 lb case of paper trays. The case is
+ * the count alone, 1 × 1000 CT. Only when the size is printed in the name and
+ * the count is too large to be packs of anything.
+ */
+function isNameSizeReadAsPack(
+  line: InvoiceExtraction["lineItems"][number],
+  unit: string,
+  uom: string
+): boolean {
+  if (unit !== "CS" || uom === "" || uom === "CT") return false
+  const { packSize, unitSize } = line
+  if (packSize == null || unitSize == null || unitSize <= 0) return false
+  if (!Number.isInteger(packSize) || packSize <= 50 || packSize > ABSURD_PACK_SIZE) return false
+  if (convert(1, uom, "lb") == null && convert(1, uom, "fl oz") == null) return false
+  if (!isDisposable(line)) return false
+  const text = `${line.productName} ${line.description ?? ""}`
+  return numbersInName(text).some((n) => Math.abs(n - unitSize) < 1e-9)
+}
+
+/**
  * Fix count-pack lines where the model read a single visible count as
  * `packSize=N, unitSize=1` instead of one case containing N counted items.
  */
@@ -579,6 +637,10 @@ export function normalizeCountPackLines(extraction: InvoiceExtraction): InvoiceE
   const lineItems = extraction.lineItems.map((line) => {
     const unit = line.unit?.trim().toUpperCase() ?? ""
     const uom = line.unitSizeUom?.trim().toUpperCase() ?? ""
+    if (isNameSizeReadAsPack(line, unit, uom)) {
+      changed = true
+      return { ...line, packSize: 1, unitSize: line.packSize, unitSizeUom: "CT" }
+    }
     if (
       unit !== "CS" ||
       (uom !== "" && uom !== "CT") ||

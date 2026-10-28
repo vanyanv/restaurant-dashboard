@@ -8,6 +8,7 @@ import {
   findTotalReconciliationMismatch,
   normalizeCatchWeightMeatLines,
   normalizeCountPackLines,
+  foldFractionalPackSizes,
   parsePerCaseWeights,
 } from "@/lib/invoice-sanity"
 
@@ -353,6 +354,84 @@ describe("normalizeCountPackLines", () => {
       unitSize: 540,
       unitSizeUom: "CT",
     })
+  })
+})
+
+describe("normalizeCountPackLines: size in the name read as the pack", () => {
+  const tray = (over: Record<string, unknown> = {}) => ({
+    lineNumber: 4,
+    sku: "VBFTHRP",
+    productName: "VB TRAY FOOD 0.5LB RED PLAID PAPER",
+    description: null,
+    category: "Paper/Supplies",
+    quantity: 1,
+    unit: "CS",
+    packSize: 1000,
+    unitSize: 0.5,
+    unitSizeUom: "LB",
+    unitPrice: 36.16,
+    extendedPrice: 36.16,
+    ...over,
+  })
+
+  it("reads 1000 × 0.5 LB paper trays as one case of 1000", () => {
+    const result = normalizeCountPackLines(
+      extraction({ vendorName: "Individual FoodService", lineItems: [tray()] })
+    )
+    expect(result.lineItems[0]).toMatchObject({ packSize: 1, unitSize: 1000, unitSizeUom: "CT" })
+  })
+
+  it("matches a fraction printed in the name", () => {
+    const result = normalizeCountPackLines(
+      extraction({
+        vendorName: "Individual FoodService",
+        lineItems: [tray({ productName: "VB TRAY FOOD PPR #50 1/2LB WHT/RED CHECK" })],
+      })
+    )
+    expect(result.lineItems[0]).toMatchObject({ packSize: 1, unitSize: 1000, unitSizeUom: "CT" })
+  })
+
+  it("leaves the line when the size is not in the name", () => {
+    const line = tray({ productName: "VB TRAY FOOD RED PLAID PAPER" })
+    const result = normalizeCountPackLines(
+      extraction({ vendorName: "Individual FoodService", lineItems: [line] })
+    )
+    expect(result.lineItems[0]).toMatchObject({ packSize: 1000, unitSize: 0.5, unitSizeUom: "LB" })
+  })
+
+  it("leaves food sold by weight alone", () => {
+    const line = tray({ productName: "FRIES 1/4 CUT 4.5 LB", category: "Frozen", packSize: 60, unitSize: 4.5 })
+    const result = normalizeCountPackLines(
+      extraction({ vendorName: "Sysco", lineItems: [line] })
+    )
+    expect(result.lineItems[0]).toMatchObject({ packSize: 60, unitSize: 4.5, unitSizeUom: "LB" })
+  })
+})
+
+describe("foldFractionalPackSizes", () => {
+  const line = (packSize: number, unitSize: number | null) => ({
+    lineNumber: 1,
+    sku: "1",
+    productName: "THING",
+    description: null,
+    category: null,
+    quantity: 1,
+    unit: "CS",
+    packSize,
+    unitSize,
+    unitSizeUom: "LB",
+    unitPrice: 10,
+    extendedPrice: 10,
+  })
+
+  it("moves a fractional pack into unitSize, keeping the case total", () => {
+    const result = foldFractionalPackSizes(extraction({ lineItems: [line(1.5, 4)] }))
+    expect(result.lineItems[0]).toMatchObject({ packSize: 1, unitSize: 6 })
+  })
+
+  it("leaves whole packs untouched", () => {
+    const input = extraction({ lineItems: [line(6, 4.5)] })
+    expect(foldFractionalPackSizes(input)).toBe(input)
   })
 })
 
