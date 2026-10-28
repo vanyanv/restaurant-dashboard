@@ -31,11 +31,19 @@ export const CHAT_REASONING_EFFORT =
  * non-reasoning on purpose: it picks one to three names off a fixed list and
  * sits in front of a turn the reader is already waiting on, so its whole value
  * is being much cheaper than the 58 schemas it saves.
+ *
+ * gpt-4.1-mini, not gpt-4.1-nano. OpenAI retired nano: from at least
+ * 2026-10-28 every call returned 404 `model_not_found`, the classifier's
+ * catch turned that into "use all tools", and every Ask from the rail ran
+ * on the full ~25k-token menu instead of a 9-13k one. Mini is still
+ * non-reasoning (so `temperature` and `max_tokens` stay valid) and is the
+ * model invoice reading already runs on. The title model below was on nano
+ * too and failed the same way.
  */
 export const CHAT_CLASSIFIER_MODEL =
-  process.env.CHAT_CLASSIFIER_MODEL ?? "gpt-4.1-nano"
+  process.env.CHAT_CLASSIFIER_MODEL ?? "gpt-4.1-mini"
 
 export const CHAT_TITLE_MODEL =
-  process.env.CHAT_TITLE_MODEL ?? "gpt-4.1-nano"
+  process.env.CHAT_TITLE_MODEL ?? "gpt-4.1-mini"
 export const CHAT_EMBEDDING_MODEL = "text-embedding-3-small"
 export const CHAT_EMBEDDING_DIMS = 1536
