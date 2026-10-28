@@ -32,6 +32,7 @@ export function RowLine({
   columns,
   name,
   sub,
+  photo,
   children,
 }: {
   /** The inline `grid-template-columns`, e.g. `"minmax(0,1fr) 96px auto auto"`. */
@@ -39,12 +40,15 @@ export function RowLine({
   name: string
   /** `.nm span` — the mono line under the name, ellipsised by the sheet. */
   sub?: string
+  /** A small picture beside the name (a recipe line's ingredient). */
+  photo?: ReactNode
   /** Everything after the name: tags, buttons, figures. */
   children: ReactNode
 }) {
   return (
     <div className="rowline" style={{ gridTemplateColumns: columns } as CSSProperties}>
-      <span className="nm">
+      <span className={photo ? "nm nm--photo" : "nm"}>
+        {photo}
         {name}
         {sub ? <span>{sub}</span> : null}
       </span>

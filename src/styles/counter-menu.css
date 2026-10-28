@@ -81,3 +81,11 @@
 .mi-hero .mi-photo--full{width:280px;max-width:45%}
 .mi-hero__side{display:grid;gap:8px;min-width:0}
 @media (max-width:640px){.mi-hero{flex-direction:column;align-items:stretch}.mi-hero .mi-photo--full{width:100%;max-width:none}}
+
+/* ── ingredient pictures ──────────────────────────────────────────────── */
+/* A recipe line, a pantry pick and an Ingredients row carry a 48px shot. */
+.mi-photo--line{width:48px}
+.mi-photo--line.mi-photo--none{font-size:0}
+.rowline .nm--photo{display:grid;grid-template-columns:auto minmax(0,1fr);column-gap:10px;align-items:center}
+.rowline .nm--photo > .mi-photo{grid-row:1 / span 2;margin-top:0}
+.pickrow--photo{grid-template-columns:auto minmax(0,1fr) auto auto}

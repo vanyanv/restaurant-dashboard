@@ -6,6 +6,7 @@ import { usePathname, useRouter } from "next/navigation"
 import {
   Chart,
   DateControl,
+  MenuPhoto,
   Note,
   PageHead,
   Queue,
@@ -21,6 +22,7 @@ import {
   SubNav,
 } from "@/components/counter"
 import { INGREDIENT_TABS } from "@/lib/counter/nav"
+import { ingredientPhoto } from "@/lib/counter/ingredient-photos"
 import { readCounterParams, writeCounterParams } from "@/lib/counter/url-state"
 import { rangeLabel, stepRange } from "@/lib/counter/date-range"
 import type { SectionSources } from "@/lib/counter/adapters/types"
@@ -357,7 +359,7 @@ export function CounterIngredientsClient({
           pending={pending}
           pad={false}
         >
-          {(c) => <Table columns={CATALOGUE_COLUMNS} rows={c.rows} />}
+          {(c) => <Table columns={CATALOGUE_COLUMNS} rows={c.rows.map(withPhoto)} />}
         </Section>
 
         <Section title="Review inbox" meta={(i) => i.meta} data={sections.inbox} pending={pending}>
@@ -425,3 +427,25 @@ export function CounterIngredientsClient({
  * price; this writes the movement.
  */
 const PRICE = (v: number) => `${v >= 0 ? "+" : "−"}${Math.abs(v).toFixed(1)}%`
+
+/**
+ * The catalogue row with the ingredient's picture beside its name. Added here
+ * rather than in the adapter: the loader's rows cross the server boundary as
+ * data, and the name cell is the one string the photo map is keyed on.
+ */
+function withPhoto<R extends { cells: Record<string, unknown> }>(row: R): R {
+  const name = row.cells.item
+  if (typeof name !== "string") return row
+  return {
+    ...row,
+    cells: {
+      ...row.cells,
+      item: (
+        <span className="mi-dish">
+          <MenuPhoto frame={ingredientPhoto(name)} alt={name} className="mi-photo--line" />
+          <span>{name}</span>
+        </span>
+      ),
+    },
+  } as R
+}
