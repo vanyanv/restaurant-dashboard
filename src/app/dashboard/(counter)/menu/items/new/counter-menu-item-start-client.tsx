@@ -3,7 +3,7 @@
 import Link from "next/link"
 import { useMemo, useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
-import { MenuPhoto, PageHead, Section, SubNav, usePageChrome } from "@/components/counter"
+import { MenuPhoto, PageHead, Section, SubNav, usePageChrome, useSurfaceHref } from "@/components/counter"
 import { MENU_TABS } from "@/lib/counter/nav"
 import { count } from "@/lib/counter/format"
 import { linkSellingItem, startMenuItem } from "@/lib/counter/actions/menu-item"
@@ -33,15 +33,16 @@ export function CounterMenuItemStartClient({
   sections: SectionSources<MenuItemStartSections>
   focusPos: string | null
 }) {
+  const surface = useSurfaceHref()
   usePageChrome({ leaf: "New item", askSuggestions: ASK_SUGGESTIONS })
   return (
     <>
       <PageHead title="New menu item" sub="Same at every store · start from what you already sell">
-        <Link className="btn" href="/dashboard/menu/items">
+        <Link className="btn" href={surface("/dashboard/menu/items")}>
           Back to menu items
         </Link>
       </PageHead>
-      <SubNav items={MENU_TABS} label="Menu" />
+      <SubNav items={MENU_TABS.map((t) => ({ ...t, href: surface(t.href) }))} label="Menu" />
       <Section bare title="New menu item" data={sections.start}>
         {(d) => <Body data={d} focusPos={focusPos} />}
       </Section>
@@ -50,6 +51,7 @@ export function CounterMenuItemStartClient({
 }
 
 function Body({ data, focusPos }: { data: MenuItemStartData; focusPos: string | null }) {
+  const surface = useSurfaceHref()
   const router = useRouter()
   const [busy, startTransition] = useTransition()
   const [error, setError] = useState<string | null>(null)
@@ -65,7 +67,7 @@ function Body({ data, focusPos }: { data: MenuItemStartData; focusPos: string | 
           // A partial success still opens the recipe; the message rides along
           // so the dish page can say what is left to do.
           const warn = r.ok ? "" : `&warn=${encodeURIComponent(r.error ?? "Not every step finished.")}`
-          router.push(`/dashboard/recipes/${r.recipeId}?new=1${warn}`)
+          router.push(surface(`/dashboard/recipes/${r.recipeId}?new=1${warn}`))
           return
         }
         if (!r.ok) setError(r.error ?? "That did not save. Try again.")
@@ -140,13 +142,13 @@ function Body({ data, focusPos }: { data: MenuItemStartData; focusPos: string | 
                   ✕
                 </span>
                 <MenuPhoto frame={r.photo} alt={r.name} />
-                <Link className="who" href={`/dashboard/recipes/${r.id}`}>
+                <Link className="who" href={surface(`/dashboard/recipes/${r.id}`)}>
                   <b>{r.name}</b>
                   <span className="ck-mono">{r.category}</span>
                 </Link>
                 <span className="what">No lines and no typed-in cost</span>
                 <span className="amt">{r.sold > 0 ? `${count(r.sold)} sold` : "—"}</span>
-                <Link className="btn btn--primary" href={`/dashboard/recipes/${r.id}`}>
+                <Link className="btn btn--primary" href={surface(`/dashboard/recipes/${r.id}`)}>
                   Add lines
                 </Link>
               </div>

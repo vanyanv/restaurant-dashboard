@@ -50,8 +50,10 @@ describe("phone routes", () => {
     expect(stale).toEqual([])
   })
 
-  it("keeps a desk-only tab on its desk href", () => {
-    expect(phoneHref("/dashboard/menu/items")).toBe("/dashboard/menu/items")
+  it("keeps a path with no phone page on its desk href", () => {
+    // DESK_ONLY is empty now; any unmapped path behaves the way its entries did.
+    expect(phoneHref("/dashboard/not-a-page")).toBe("/dashboard/not-a-page")
+    expect(phoneHref("/dashboard/menu/items")).toBe("/m/menu/items")
     expect(phoneHref("/dashboard/menu")).toBe("/m/menu")
   })
 })
