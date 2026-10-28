@@ -100,6 +100,10 @@ describe("freshness stamps", () => {
       listStockCounts: "hand-edited catalogue",
       getRecentInventoryAdjustments: "hand-edited catalogue",
       getOpenAnomalies: "detector output, stamped by the alert inbox instead",
+      // A check goes from open to missed when its window closes, with no
+      // write anywhere to stamp, so a cached answer would keep saying "open".
+      getCleaningChecks: "statuses move with the clock, not with a sync",
+      getLaborActuals: "divides Harri by Otter sales, so no one sync stamps it",
     }
     const unstamped = Object.keys(chatTools).filter(
       (n) => !(n in TOOL_AS_OF) && !(n in EXEMPT),

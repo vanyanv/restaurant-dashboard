@@ -106,7 +106,9 @@ export const TOOL_GROUPS = {
   ],
   vendors: ["listVendorLeadTimes", "getVendorReliability", "compareVendorPrices"],
   orders: ["getOrderById", "listOrdersByDay", "getOrderItemFrequency"],
-  labor: ["getLaborStaffingForecast", "getOperationalCosts"],
+  labor: ["getLaborActuals", "getLaborStaffingForecast", "getOperationalCosts"],
+  /** The store cleaning checks and what the crew flagged on them. */
+  checks: ["getCleaningChecks"],
   anomalies: ["getOpenAnomalies", "getAlerts", "getLostSales"],
   /**
    * Guest ratings. Its own group rather than a member of `sales`, because
@@ -157,6 +159,7 @@ export const NAV_TOOL_GROUPS: Record<string, readonly ToolGroupName[]> = {
   pnl: ["pnl", "costs", "invoices"],
   cogs: ["costs", "recipes", "invoices"],
   labor: ["labor", "pnl"],
+  checks: ["checks", "labor"],
   menu: ["menu", "recipes", "elasticity", "ratings"],
   recipes: ["recipes", "costs", "menu"],
   invoices: ["invoices", "costs", "vendors"],
@@ -189,7 +192,8 @@ export const GROUP_HINTS: Record<ToolGroupName, string> = {
   inventory: "on-hand stock, counts, coverage, waste and shrink",
   vendors: "vendor reliability and delivery lead times",
   orders: "individual orders and order-level drilldown",
-  labor: "staffing and labour cost",
+  labor: "labour hours and cost actually worked, labour %, overtime, cost by role, clock-in/out problems, and future staffing",
+  checks: "store cleaning checks (morning, Transition, evening) — on time, late, missed, items the crew flagged",
   anomalies:
     "open alerts and the alert inbox, things that need attention, price/labour/quantity warnings, lost sales",
   ratings:

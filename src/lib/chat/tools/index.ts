@@ -69,6 +69,8 @@ import { listVendorLeadTimes } from "./vendors"
 import { getMenuItemElasticity, simulatePriceChange } from "./elasticity"
 import { describeSchema } from "./describe-schema"
 import { fileReturn } from "./file-return"
+import { getLaborActuals } from "./labor"
+import { getCleaningChecks } from "./checks"
 
 export type { ChatTool, ChatToolContext } from "./types"
 
@@ -144,6 +146,10 @@ export const chatTools = {
   getLaunchTrajectory: getLaunchTrajectoryTool,
   getChannelMix: getChannelMixTool,
   getWasteRootCauses: getWasteRootCausesTool,
+  // Labour actuals (Harri)
+  getLaborActuals,
+  // Store cleaning checks
+  getCleaningChecks,
   // Inventory
   getInventoryStatus,
   getInventoryCoverage,
