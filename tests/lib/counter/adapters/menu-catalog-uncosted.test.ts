@@ -29,21 +29,22 @@ import { getScopedStores } from "@/lib/account-stores"
 import { listMappingProposals } from "@/app/actions/mapping-proposal-actions"
 import { getItemDiscounts } from "@/lib/counter/item-discounts"
 import { getMenuCatalogSectionPromises } from "@/lib/counter/adapters/menu-catalog"
+import { cogsGroupBy, cogsRow } from "../fixtures/item-economics"
 
 const asMock = (fn: unknown) => fn as ReturnType<typeof vi.fn>
 
-/** DailyCogsItem rows; the groupBy mock applies the `status` filter it is given. */
+/** DailyCogsItem rows; the groupBy stand-in folds them the way Postgres would. */
 const COGS = [
-  { itemName: "Burger", status: "COSTED", lineCost: 40, salesRevenue: 100, qtySold: 10 },
+  cogsRow({ itemName: "Burger", lineCost: 40, salesRevenue: 100, qtySold: 10 }),
   // Unmapped for part of the range: 10 more sold at $0 cost.
-  { itemName: "Burger", status: "UNMAPPED", lineCost: 0, salesRevenue: 100, qtySold: 10 },
-  { itemName: "Fries", status: "UNMAPPED", lineCost: 0, salesRevenue: 50, qtySold: 10 },
-  { itemName: "Shake", status: "MISSING_COST", lineCost: 0, salesRevenue: 60, qtySold: 10 },
+  cogsRow({ itemName: "Burger", status: "UNMAPPED", recipeId: null, salesRevenue: 100, qtySold: 10 }),
+  cogsRow({ itemName: "Fries", status: "UNMAPPED", recipeId: null, salesRevenue: 50, qtySold: 10 }),
+  cogsRow({ itemName: "Shake", status: "MISSING_COST", salesRevenue: 60, qtySold: 10 }),
 ]
 
 beforeEach(() => {
   vi.clearAllMocks()
-  asMock(getScopedStores).mockResolvedValue([{ id: "holly" }])
+  asMock(getScopedStores).mockResolvedValue([{ id: "s1" }])
   asMock(listMappingProposals).mockResolvedValue([])
   asMock(getItemDiscounts).mockResolvedValue(new Map())
   asMock(prisma.otterMenuItem.findMany).mockImplementation(async (args: { where: { isModifier: boolean } }) =>
@@ -63,20 +64,7 @@ beforeEach(() => {
     { otterItemName: "Shake" },
   ])
   asMock(prisma.otterSubItemMapping.findMany).mockResolvedValue([])
-  asMock(prisma.dailyCogsItem.groupBy).mockImplementation(
-    async (args: { where: { status?: string } }) => {
-      const by = new Map<string, { lineCost: number; salesRevenue: number; qtySold: number }>()
-      for (const r of COGS) {
-        if (args.where.status && r.status !== args.where.status) continue
-        const s = by.get(r.itemName) ?? { lineCost: 0, salesRevenue: 0, qtySold: 0 }
-        s.lineCost += r.lineCost
-        s.salesRevenue += r.salesRevenue
-        s.qtySold += r.qtySold
-        by.set(r.itemName, s)
-      }
-      return [...by].map(([itemName, _sum]) => ({ itemName, _sum }))
-    },
-  )
+  asMock(prisma.dailyCogsItem.groupBy).mockImplementation(cogsGroupBy(COGS))
 })
 
 async function rows() {

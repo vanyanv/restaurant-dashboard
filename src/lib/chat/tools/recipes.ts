@@ -10,6 +10,7 @@ import {
 import type { ChatTool, ChatToolContext } from "./types"
 import { computeRecipeCost, type RecipeCostResult } from "@/lib/recipe-cost"
 import { batchRecipeCosts } from "@/lib/recipe-cost-batch"
+import { getItemEconomics, rollUpByRecipe } from "@/lib/counter/item-economics"
 
 /**
  * Recipe tools. Recipes are owner-level (not store-level) — `Recipe.ownerId`
@@ -309,6 +310,9 @@ export const getRecipeById: ChatTool<typeof byIdParams, RecipeResult | null> = {
   },
 }
 
+/** The last millisecond of a `YYYY-MM-DD` day: the rollup includes it whole, orders carry a time. */
+const endOfDay = (d: Date) => new Date(d.getTime() + 86_400_000 - 1)
+
 const marginParams = z
   .object({
     recipeId: z.string().min(1).describe("The Recipe id whose margin to compute."),
@@ -323,9 +327,10 @@ export type MenuMarginResult = {
   recipeId: string
   itemName: string
   category: string
-  /** Recipe food cost (override if set, else recursive sum). Null when unknown. */
+  /** Plate cost COGS booked for the window's costed sales (`item-economics.ts`);
+   *  with none, the recipe walk at today's prices. Null when unknown. */
   recipeCost: number | null
-  /** Avg implied selling price across mapped Otter items in the date window. */
+  /** What a plate collected after discounts — collected revenue over units. */
   avgSellingPrice: number | null
   marginDollars: number | null
   marginPct: number | null
@@ -400,30 +405,20 @@ export const getMenuMargin: ChatTool<typeof marginParams, MenuMarginResult> = {
     }
 
     const mappedNames = Array.from(new Set(mappings.map((m) => m.otterItemName)))
-    const sales = await ctx.prisma.otterMenuItem.findMany({
-      where: {
-        storeId: { in: storeIds },
-        isModifier: false,
-        date: { gte: range.from, lte: range.to },
-        OR: mappings.map((m) => ({
-          storeId: m.storeId,
-          itemName: m.otterItemName,
-        })),
-      },
-      select: {
-        fpQuantitySold: true,
-        fpTotalSales: true,
-        tpQuantitySold: true,
-        tpTotalSales: true,
-      },
+    // The shared per-item definition (`item-economics.ts`): units and what they
+    // COLLECTED after discounts, the plate cost COGS booked, and the margin
+    // between them — the same figures the recipe's own page prints. The price
+    // is collected over units (weighted), not a mean of line prices.
+    const { items } = await getItemEconomics({
+      accountId: ctx.accountId,
+      storeIds,
+      startDate: range.from,
+      endDate: args.dateRange ? endOfDay(range.to) : range.to,
+      db: ctx.prisma,
     })
-
-    let qty = 0
-    let revenue = 0
-    for (const s of sales) {
-      qty += (s.fpQuantitySold ?? 0) + (s.tpQuantitySold ?? 0)
-      revenue += (s.fpTotalSales ?? 0) + (s.tpTotalSales ?? 0)
-    }
+    const econ = rollUpByRecipe(items.values()).get(recipe.id) ?? null
+    const qty = econ?.units ?? 0
+    const revenue = econ?.collected ?? 0
 
     if (qty === 0) {
       return {
@@ -443,18 +438,19 @@ export const getMenuMargin: ChatTool<typeof marginParams, MenuMarginResult> = {
     }
 
     const avgSellingPrice = revenue / qty
+    // Booked where it sold costed; otherwise there is no margin to state.
+    const booked = econ?.plateCost ?? null
     const marginDollars =
-      recipeCost !== null ? avgSellingPrice - recipeCost : null
-    const marginPct =
-      marginDollars !== null && avgSellingPrice > 0
-        ? (marginDollars / avgSellingPrice) * 100
+      econ?.marginDollars != null && econ.costed && econ.costed.units > 0
+        ? econ.marginDollars / econ.costed.units
         : null
+    const marginPct = econ?.marginPct ?? null
 
     return {
       recipeId: recipe.id,
       itemName: recipe.itemName,
       category: recipe.category,
-      recipeCost,
+      recipeCost: booked ?? recipeCost,
       avgSellingPrice,
       marginDollars,
       marginPct,
@@ -463,9 +459,11 @@ export const getMenuMargin: ChatTool<typeof marginParams, MenuMarginResult> = {
       dateRange: { from: ymd(range.from), to: ymd(range.to) },
       mappedOtterItems: mappedNames,
       note:
-        recipeCost === null
-          ? "Selling price computed; recipe cost unknown (some ingredients lack a costPerRecipeUnit)."
-          : null,
+        booked !== null
+          ? "Selling price is what customers paid after discounts; recipe cost is the plate cost COGS booked for these sales."
+          : recipeCost === null
+            ? "Selling price computed; recipe cost unknown (some ingredients lack a costPerRecipeUnit)."
+            : "Selling price computed; no costed sales in the window, so no margin — recipe cost shown is at today's prices.",
     }
   },
 }
@@ -570,76 +568,38 @@ export const rankRecipes: ChatTool<typeof rankParams, RankRecipesRow[]> = {
           return { from, to }
         })()
 
-    const mappings = await ctx.prisma.otterItemMapping.findMany({
-      where: {
-        storeId: { in: storeIds },
-        recipeId: { in: recipes.map((r) => r.id) },
-      },
-      select: { recipeId: true, storeId: true, otterItemName: true },
+    // The shared per-item definition (`item-economics.ts`), rolled up by the
+    // recipe COGS booked each item against: units, what they COLLECTED after
+    // discounts, the booked plate cost, and the margin between them — the
+    // figures the Recipes page prints. A recipe that did not sell is dropped,
+    // as before; one that sold uncosted keeps its row with a null margin.
+    const { items } = await getItemEconomics({
+      accountId: ctx.accountId,
+      storeIds,
+      startDate: range.from,
+      endDate: args.dateRange ? endOfDay(range.to) : range.to,
+      db: ctx.prisma,
     })
-    if (mappings.length === 0) return []
-
-    const sales = await ctx.prisma.otterMenuItem.findMany({
-      where: {
-        storeId: { in: storeIds },
-        isModifier: false,
-        date: { gte: range.from, lte: range.to },
-        OR: mappings.map((m) => ({
-          storeId: m.storeId,
-          itemName: m.otterItemName,
-        })),
-      },
-      select: {
-        storeId: true,
-        itemName: true,
-        fpQuantitySold: true,
-        fpTotalSales: true,
-        tpQuantitySold: true,
-        tpTotalSales: true,
-      },
-    })
-
-    type Bucket = { qty: number; revenue: number }
-    const byMappingKey = new Map<string, Bucket>()
-    for (const s of sales) {
-      const key = `${s.storeId}|${s.itemName}`
-      const cur = byMappingKey.get(key) ?? { qty: 0, revenue: 0 }
-      cur.qty += (s.fpQuantitySold ?? 0) + (s.tpQuantitySold ?? 0)
-      cur.revenue += (s.fpTotalSales ?? 0) + (s.tpTotalSales ?? 0)
-      byMappingKey.set(key, cur)
-    }
-
-    const recipeAgg = new Map<string, Bucket>()
-    for (const m of mappings) {
-      const key = `${m.storeId}|${m.otterItemName}`
-      const b = byMappingKey.get(key)
-      if (!b) continue
-      const cur = recipeAgg.get(m.recipeId) ?? { qty: 0, revenue: 0 }
-      cur.qty += b.qty
-      cur.revenue += b.revenue
-      recipeAgg.set(m.recipeId, cur)
-    }
+    const byRecipe = rollUpByRecipe(items.values())
 
     const rows: RankRecipesRow[] = []
     for (const r of recipes) {
-      const agg = recipeAgg.get(r.id)
-      if (!agg || agg.qty === 0) continue
-      const cost = costs.get(r.id) ?? null
-      const avgPrice = agg.revenue / agg.qty
-      const marginDollars = cost !== null ? avgPrice - cost : null
-      const marginPct =
-        marginDollars !== null && avgPrice > 0
-          ? (marginDollars / avgPrice) * 100
+      const e = byRecipe.get(r.id)
+      if (!e || e.units === 0) continue
+      const avgPrice = e.collected / e.units
+      const marginDollars =
+        e.marginDollars !== null && e.costed && e.costed.units > 0
+          ? e.marginDollars / e.costed.units
           : null
       rows.push({
         recipeId: r.id,
         itemName: r.itemName,
         category: r.category,
-        recipeCost: cost,
+        recipeCost: e.plateCost ?? costs.get(r.id) ?? null,
         avgSellingPrice: avgPrice,
         marginDollars,
-        marginPct,
-        qtySold: agg.qty,
+        marginPct: e.marginPct,
+        qtySold: e.units,
       })
     }
     rows.sort((a, b) => {

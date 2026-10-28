@@ -449,6 +449,12 @@ const MOTION_ALLOWED = /[/\\]components[/\\]counter[/\\]motion[/\\]/
  * engineering action behind `menu-profit.ts`), so every per-item margin nets
  * its deals through one function.
  *
+ * `item-economics.ts` was named on 2026-10-28 as well: it is "the one
+ * function that owns" per-item price, discount, plate cost and margin, reads
+ * `DailyCogsItem` (grouped) at runtime, and is read by every menu adapter,
+ * `cogs.ts`, the menu engineering action and the chat menu tools, so a figure
+ * shown on two of those screens comes from it rather than two queries.
+ *
  * `purchases.ts` was named on the same two tests on 2026-10-28: it builds
  * `Prisma.sql` fragments and runs `@/lib/prisma` queries at runtime, and is
  * read by `adapters/product-usage.ts` and `adapters/inventory.ts`, so "what
@@ -463,7 +469,7 @@ const MOTION_ALLOWED = /[/\\]components[/\\]counter[/\\]motion[/\\]/
  * a fake Prisma import inside a hook is still caught.
  */
 const DATA_ALLOWED_TOP_LEVEL_FILES =
-  "channel-mix|cogs|item-discounts|labor-leaks|labor-week|purchases|run-out|service-profile|staffing-curve|statement|vendor-basket"
+  "channel-mix|cogs|item-discounts|item-economics|labor-leaks|labor-week|purchases|run-out|service-profile|staffing-curve|statement|vendor-basket"
 const DATA_ALLOWED = new RegExp(
   String.raw`[/\\]lib[/\\]counter[/\\](?:adapters|actions)[/\\]` +
     "|" +

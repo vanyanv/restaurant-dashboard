@@ -25,6 +25,11 @@ import { getServerSession } from "next-auth"
 import { prisma } from "@/lib/prisma"
 import { getMenuEngineering } from "@/app/actions/forecasts/menu-engineering-actions"
 import { getItemDiscounts } from "@/lib/counter/item-discounts"
+import { cogsGroupBy, cogsRow } from "../../../lib/counter/fixtures/item-economics"
+
+/** The aggregates these tests used to hand back, as the COSTED rows behind them. */
+const costed = (itemName: string, category: string, qtySold: number, salesRevenue: number, lineCost: number) =>
+  cogsRow({ itemName, category, qtySold, salesRevenue, lineCost })
 
 const sessionWith = (overrides: Record<string, unknown> = {}) => ({
   user: { id: "u1", accountId: "acct-A", ...overrides },
@@ -66,28 +71,14 @@ describe("getMenuEngineering", () => {
     //   Soda:    100 sold, $1 margin   → high vol, low margin  → PLOWHORSE
     //   Steak:    20 sold, $8 margin   → low vol,  high margin → PUZZLE
     //   Salad:    20 sold, $0.5 margin → low vol,  low margin  → DOG
-    vi.mocked(prisma.dailyCogsItem.groupBy).mockResolvedValue([
-      {
-        itemName: "Burger",
-        category: "Entree",
-        _sum: { qtySold: 100, salesRevenue: 1000, lineCost: 500 },
-      },
-      {
-        itemName: "Soda",
-        category: "Drinks",
-        _sum: { qtySold: 100, salesRevenue: 300, lineCost: 200 },
-      },
-      {
-        itemName: "Steak",
-        category: "Entree",
-        _sum: { qtySold: 20, salesRevenue: 400, lineCost: 240 },
-      },
-      {
-        itemName: "Salad",
-        category: "Sides",
-        _sum: { qtySold: 20, salesRevenue: 60, lineCost: 50 },
-      },
-    ] as never)
+    vi.mocked(prisma.dailyCogsItem.groupBy).mockImplementation(
+      cogsGroupBy([
+        costed("Burger", "Entree", 100, 1000, 500),
+        costed("Soda", "Drinks", 100, 300, 200),
+        costed("Steak", "Entree", 20, 400, 240),
+        costed("Salad", "Sides", 20, 60, 50),
+      ]) as never,
+    )
 
     const result = await getMenuEngineering({ storeId: "s1" })
     if (!result || !result.ok) throw new Error("expected ok")
@@ -106,9 +97,9 @@ describe("getMenuEngineering", () => {
     vi.mocked(prisma.store.findMany).mockResolvedValue([
       { id: "s1", name: "S1", accountId: "acct-A", isActive: true },
     ] as never)
-    vi.mocked(prisma.dailyCogsItem.groupBy).mockResolvedValue([
-      { itemName: "Slider", category: "Sliders", _sum: { qtySold: 100, salesRevenue: 1349, lineCost: 153 } },
-    ] as never)
+    vi.mocked(prisma.dailyCogsItem.groupBy).mockImplementation(
+      cogsGroupBy([costed("Slider", "Sliders", 100, 1349, 153)]) as never,
+    )
     vi.mocked(getItemDiscounts).mockResolvedValueOnce(
       new Map([["Slider", { gross: 1349, discount: 674.5, byPlatform: new Map() }]]),
     )
@@ -127,28 +118,14 @@ describe("getMenuEngineering", () => {
     vi.mocked(prisma.store.findMany).mockResolvedValue([
       { id: "s1", name: "S1", accountId: "acct-A", isActive: true },
     ] as never)
-    vi.mocked(prisma.dailyCogsItem.groupBy).mockResolvedValue([
-      {
-        itemName: "Burger",
-        category: "Entree",
-        _sum: { qtySold: 100, salesRevenue: 1000, lineCost: 500 },
-      },
-      {
-        itemName: "Soda",
-        category: "Drinks",
-        _sum: { qtySold: 100, salesRevenue: 300, lineCost: 200 },
-      },
-      {
-        itemName: "Steak",
-        category: "Entree",
-        _sum: { qtySold: 20, salesRevenue: 400, lineCost: 240 },
-      },
-      {
-        itemName: "Salad",
-        category: "Sides",
-        _sum: { qtySold: 20, salesRevenue: 60, lineCost: 50 },
-      },
-    ] as never)
+    vi.mocked(prisma.dailyCogsItem.groupBy).mockImplementation(
+      cogsGroupBy([
+        costed("Burger", "Entree", 100, 1000, 500),
+        costed("Soda", "Drinks", 100, 300, 200),
+        costed("Steak", "Entree", 20, 400, 240),
+        costed("Salad", "Sides", 20, 60, 50),
+      ]) as never,
+    )
     vi.mocked(prisma.menuItemElasticity.findMany).mockResolvedValue([
       // Strong fit, long series — quotable.
       {
@@ -205,22 +182,19 @@ describe("getMenuEngineering", () => {
     vi.mocked(prisma.store.findMany).mockResolvedValue([
       { id: "s1", name: "S1", accountId: "acct-A", isActive: true },
     ] as never)
-    vi.mocked(prisma.dailyCogsItem.groupBy).mockResolvedValue([
-      {
-        itemName: "BigSeller",
-        category: "X",
-        _sum: { qtySold: 100, salesRevenue: 1000, lineCost: 500 },
-      },
-      {
-        itemName: "SoldOnce",
-        category: "Y",
-        _sum: { qtySold: 1, salesRevenue: 8, lineCost: 3 },
-      },
-    ] as never)
+    vi.mocked(prisma.dailyCogsItem.groupBy).mockImplementation(
+      cogsGroupBy([
+        costed("BigSeller", "X", 100, 1000, 500),
+        costed("SoldOnce", "Y", 1, 8, 3),
+      ]) as never,
+    )
     const result = await getMenuEngineering({ storeId: "s1", minSoldQty: 5 })
     if (!result || !result.ok) throw new Error("expected ok")
     expect(result.data.rows).toHaveLength(1)
     expect(result.data.rows[0].itemName).toBe("BigSeller")
+    // The cut is a chart choice. The blended margin is over EVERY costed item,
+    // so it is the same figure the Menu hub and Product mix print.
+    expect(result.data.menu.marginPct).toBeCloseTo(100 - (503 / 1008) * 100)
   })
 
   it("rolls across all owned stores when no storeId is supplied", async () => {
@@ -229,7 +203,7 @@ describe("getMenuEngineering", () => {
       { id: "s1", name: "Store 1", isActive: true },
       { id: "s2", name: "Store 2", isActive: true },
     ] as never)
-    vi.mocked(prisma.dailyCogsItem.groupBy).mockResolvedValue([] as never)
+    vi.mocked(prisma.dailyCogsItem.groupBy).mockImplementation(cogsGroupBy([]) as never)
     await getMenuEngineering({})
     // One shared, whole-row store query per request — `@/lib/account-stores`.
     // The name/id projection and the `isActive` filter both moved into the
@@ -250,7 +224,7 @@ describe("getMenuEngineering", () => {
     vi.mocked(prisma.store.findMany).mockResolvedValue([
       { id: "s1", name: "S1", accountId: "acct-A", isActive: true },
     ] as never)
-    vi.mocked(prisma.dailyCogsItem.groupBy).mockResolvedValue([] as never)
+    vi.mocked(prisma.dailyCogsItem.groupBy).mockImplementation(cogsGroupBy([]) as never)
     const result = await getMenuEngineering({ storeId: "s1" })
     if (!result || !result.ok) throw new Error("expected ok")
     expect(result.data.rows).toHaveLength(0)
@@ -259,25 +233,14 @@ describe("getMenuEngineering", () => {
 })
 
 describe("getMenuEngineering — classification filter + coverage", () => {
-  const classifiedRow = (input: {
-    itemName: string
-    qty: number
-    revenue: number
-    cogs: number
-  }) => ({
-    itemName: input.itemName,
-    category: "Menu",
-    recipeId: `r-${input.itemName}`,
-    _sum: {
-      qtySold: input.qty,
-      salesRevenue: input.revenue,
-      lineCost: input.cogs,
-    },
-  })
-
   const FIXTURE = [
-    classifiedRow({ itemName: "Star", qty: 100, revenue: 1000, cogs: 200 }),
-    classifiedRow({ itemName: "Dog", qty: 10, revenue: 50, cogs: 40 }),
+    cogsRow({ itemName: "Star", qtySold: 100, salesRevenue: 1000, lineCost: 200 }),
+    cogsRow({ itemName: "Dog", qtySold: 10, salesRevenue: 50, lineCost: 40 }),
+    // Real revenue at $0 cost — would classify as a fake 100%-margin STAR.
+    cogsRow({ itemName: "Ghost", recipeId: null, status: "UNMAPPED", qtySold: 30, salesRevenue: 300 }),
+    cogsRow({ itemName: "Empty", status: "MISSING_COST", qtySold: 5, salesRevenue: 50 }),
+    // Cost against no revenue — a box, not an item.
+    cogsRow({ itemName: "Packaging - small", category: "Packaging", recipeId: null, qtySold: 200, lineCost: 20 }),
   ]
 
   const STATUS_ROLLUP = [
@@ -286,14 +249,19 @@ describe("getMenuEngineering — classification filter + coverage", () => {
     { status: "MISSING_COST", _sum: { salesRevenue: 50, qtySold: 5 } },
   ]
 
+  /** The item fold gets the rows; the coverage rollup (by status) gets its own answer. */
+  const groupByWith = (rollup: unknown[]) => {
+    const rows = cogsGroupBy(FIXTURE)
+    return (async (args: { by: string[] }) =>
+      args.by.length === 1 && args.by[0] === "status" ? rollup : rows(args as never)) as never
+  }
+
   beforeEach(() => {
     vi.mocked(getServerSession).mockResolvedValue(sessionWith() as never)
     vi.mocked(prisma.store.findMany).mockResolvedValue([
       { id: "s1", name: "S1", accountId: "acct-A", isActive: true },
     ] as never)
-    vi.mocked(prisma.dailyCogsItem.groupBy)
-      .mockResolvedValueOnce(FIXTURE as never)
-      .mockResolvedValueOnce(STATUS_ROLLUP as never)
+    vi.mocked(prisma.dailyCogsItem.groupBy).mockImplementation(groupByWith(STATUS_ROLLUP))
     vi.mocked(prisma.dailyCogsItem.aggregate).mockResolvedValue({
       _sum: { salesRevenue: 100 },
     } as never)
@@ -303,12 +271,12 @@ describe("getMenuEngineering — classification filter + coverage", () => {
     const result = await getMenuEngineering({ storeId: "s1" })
     if (!result || !result.ok) throw new Error("expected ok")
 
+    // The fold is `item-economics.ts`'s: it groups by status and recipe, and
+    // tenancy rides on the store's account as well as the store ids.
     const classifyArgs = vi.mocked(prisma.dailyCogsItem.groupBy).mock.calls[0][0]
-    expect(classifyArgs.where).toMatchObject({
-      status: "COSTED",
-      category: { not: "Packaging" },
-    })
     expect(classifyArgs.by).toContain("recipeId")
+    expect(classifyArgs.by).toContain("status")
+    expect(classifyArgs.where).toMatchObject({ store: { accountId: "acct-A" } })
 
     expect(result.data.rows.map((r) => r.recipeId).sort()).toEqual([
       "r-Dog",
@@ -330,19 +298,18 @@ describe("getMenuEngineering — classification filter + coverage", () => {
 
     // The status rollup must exclude Packaging pseudo-rows and not pre-filter
     // by status (it needs UNMAPPED + MISSING_COST to measure the gap).
-    const statusArgs = vi.mocked(prisma.dailyCogsItem.groupBy).mock.calls[1][0]
-    expect(statusArgs.by).toEqual(["status"])
+    const statusArgs = vi
+      .mocked(prisma.dailyCogsItem.groupBy)
+      .mock.calls.map((c) => c[0])
+      .find((a) => a.by.length === 1 && a.by[0] === "status")!
     expect(statusArgs.where).toMatchObject({ category: { not: "Packaging" } })
     expect(statusArgs.where?.status).toBeUndefined()
   })
 
   it("returns 100% coverage when every dollar sold is COSTED", async () => {
-    vi.mocked(prisma.dailyCogsItem.groupBy)
-      .mockReset()
-      .mockResolvedValueOnce(FIXTURE as never)
-      .mockResolvedValueOnce([
-        { status: "COSTED", _sum: { salesRevenue: 1050, qtySold: 110 } },
-      ] as never)
+    vi.mocked(prisma.dailyCogsItem.groupBy).mockImplementation(
+      groupByWith([{ status: "COSTED", _sum: { salesRevenue: 1050, qtySold: 110 } }]),
+    )
     vi.mocked(prisma.dailyCogsItem.aggregate).mockResolvedValue({
       _sum: { salesRevenue: 0 },
     } as never)

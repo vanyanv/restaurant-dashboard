@@ -6,6 +6,7 @@ import {
   storeIdsSchema,
 } from "./_shared"
 import type { ChatTool } from "./types"
+import { getItemEconomics } from "@/lib/counter/item-economics"
 
 const params = z
   .object({
@@ -26,9 +27,10 @@ export type CogsByItemRow = {
   menuItem: string
   category: string
   soldQty: number
+  /** What the costed sales collected, after discounts. */
   revenue: number
   cogs: number
-  /** Margin percent ((revenue - cogs) / revenue) * 100. Null when revenue is 0. */
+  /** Margin percent ((revenue - cogs) / revenue) * 100, after discounts. Null when not costed. */
   marginPct: number | null
 }
 
@@ -41,35 +43,40 @@ export const getCogsByItem: ChatTool<typeof params, CogsByItemRow[]> = {
     const storeIds = await resolveStoreIds(ctx, args.storeIds)
     const { from, to } = parseDateRange(args.dateRange)
 
+    // The shared per-item definition (`item-economics.ts`) — the figures the
+    // Catalog, Menu items and COGS pages print for the same item.
+    //
     // COSTED rows only, as the description promises. The materializer also
     // writes UNMAPPED and MISSING_COST rows with real revenue and $0
     // `lineCost`; summing those in returned an item nothing has costed at
-    // `cogs: 0, marginPct: 100`, and pulled a part-costed item's margin up by
-    // every sale made while it was unmapped. Uncosted items are
-    // `getTopMenuItems`' to report, which covers the full menu.
-    const grouped = await ctx.prisma.dailyCogsItem.groupBy({
-      by: ["itemName", "category"],
-      where: {
-        storeId: { in: storeIds },
-        date: { gte: from, lte: to },
-        status: "COSTED",
-      },
-      _sum: { qtySold: true, salesRevenue: true, lineCost: true },
-      orderBy: { _sum: { salesRevenue: "desc" } },
-      take: args.topN ?? 10,
+    // `cogs: 0, marginPct: 100`. Uncosted items are `getTopMenuItems`' to
+    // report, which covers the full menu.
+    //
+    // `revenue` is what the costed sales COLLECTED once the deals came off,
+    // and `marginPct` is over it: on the rung-up price a buy-one-get-one read
+    // as an 89% margin when it runs ~77%.
+    const { items } = await getItemEconomics({
+      accountId: ctx.accountId,
+      storeIds,
+      startDate: from,
+      // `to` is a date the rollup includes whole; orders carry a time.
+      endDate: new Date(to.getTime() + 86_400_000 - 1),
+      db: ctx.prisma,
     })
 
-    return grouped.map((row): CogsByItemRow => {
-      const revenue = row._sum.salesRevenue ?? 0
-      const cogs = row._sum.lineCost ?? 0
-      return {
-        menuItem: row.itemName,
-        category: row.category,
-        soldQty: row._sum.qtySold ?? 0,
-        revenue,
-        cogs,
-        marginPct: revenue > 0 ? ((revenue - cogs) / revenue) * 100 : null,
-      }
-    })
+    return [...items.values()]
+      .filter((i) => i.costed !== null)
+      .map(
+        (i): CogsByItemRow => ({
+          menuItem: i.itemName,
+          category: i.category,
+          soldQty: i.costed!.units,
+          revenue: i.costed!.collected,
+          cogs: i.costed!.cost,
+          marginPct: i.marginPct,
+        }),
+      )
+      .sort((a, b) => b.revenue - a.revenue || a.menuItem.localeCompare(b.menuItem))
+      .slice(0, args.topN ?? 10)
   },
 }

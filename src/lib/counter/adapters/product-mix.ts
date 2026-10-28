@@ -3,6 +3,7 @@ import { getScopedStores } from "@/lib/account-stores"
 import { isOperational } from "@/lib/store-lifecycle"
 import { count, pct } from "@/lib/counter/format"
 import { blendedMargin } from "@/lib/counter/blended-margin"
+import { getItemEconomics, menuMargin, type MenuMargin } from "@/lib/counter/item-economics"
 import { comparisonRange, toQueryBounds, type DateRange } from "@/lib/counter/date-range"
 import type { ChartSpec } from "@/lib/counter/chart-geometry"
 import { shortLabels } from "@/lib/counter/short-labels"
@@ -123,16 +124,39 @@ const LABEL_CHARS = 10
  */
 const DESK_LABEL_CHARS = 18
 
+/**
+ * One item in one window. `qty` is EVERY unit sold — the mix is a share of
+ * units and an uncosted item still takes its share. The margin terms are
+ * per COSTED unit, on what was collected after discounts (`item-economics.ts`),
+ * so `cost × costedQty` and `price × costedQty` reconstitute the booked cost
+ * and the collected revenue exactly.
+ */
 interface Unit {
-  cost: number
-  price: number
   qty: number
+  /** Units on COSTED rows; 0 when nothing costed it. */
+  costedQty: number
+  /** Booked cost on the costed rows. */
+  costTotal: number
+  /** Collected (after discounts) on the costed rows. */
+  collectedTotal: number
+  /**
+   * In the blend exactly when `menuMargin` counts it — a booked cost above $0
+   * over something collected. The bridge and the Blended margin cell use one
+   * test, so the bridge's "Now" line is the cell.
+   */
+  inBlend: boolean
 }
+
+/** Per costed unit, or `null` when there is no unit to divide by. */
+const perUnit = (u: Unit) =>
+  u.costedQty > 0 ? { cost: u.costTotal / u.costedQty, price: u.collectedTotal / u.costedQty } : null
 
 interface Window {
   units: Map<string, Unit>
   totalQty: number
   orders: number
+  /** `menuMargin` — the Blended margin cell, the same figure on every menu page. */
+  menu: MenuMargin
 }
 
 interface MixData {
@@ -158,21 +182,15 @@ interface MixData {
 }
 
 async function loadWindow(
+  accountId: string,
   storeIds: string[],
   range: DateRange,
 ): Promise<Window> {
   const { startDate, endDate } = toQueryBounds(range)
-  const [rows, orders] = await Promise.all([
-    prisma.dailyCogsItem.groupBy({
-      by: ["itemName"],
-      where: {
-        storeId: { in: storeIds },
-        date: { gte: startDate, lte: endDate },
-        // See the docblock: these are boxes, and they are the biggest rows.
-        category: { not: "Packaging" },
-      },
-      _sum: { lineCost: true, salesRevenue: true, qtySold: true },
-    }),
+  const [economics, orders] = await Promise.all([
+    // Packaging is already out (see the docblock: these are boxes, and they
+    // are the biggest rows) — `item-economics.ts` never counts it as an item.
+    getItemEconomics({ accountId, storeIds, startDate, endDate }),
     prisma.otterOrder.count({
       where: {
         storeId: { in: storeIds },
@@ -183,17 +201,22 @@ async function loadWindow(
 
   const units = new Map<string, Unit>()
   let totalQty = 0
-  for (const r of rows) {
-    const qty = Number(r._sum.qtySold ?? 0)
-    if (qty <= 0) continue
-    units.set(r.itemName, {
-      cost: Number(r._sum.lineCost ?? 0) / qty,
-      price: Number(r._sum.salesRevenue ?? 0) / qty,
-      qty,
+  for (const i of economics.items.values()) {
+    const c = i.costed
+    const inBlend = c !== null && c.cost > 0 && c.collected > 0
+    // Kept when it sold OR when the blend counts it: dropping a zero-unit
+    // item that carries booked cost made the bridge disagree with the cell.
+    if (i.units <= 0 && !inBlend) continue
+    units.set(i.itemName, {
+      qty: Math.max(0, i.units),
+      costedQty: c && c.units > 0 ? c.units : 0,
+      costTotal: c?.cost ?? 0,
+      collectedTotal: c?.collected ?? 0,
+      inBlend,
     })
-    totalQty += qty
+    totalQty += Math.max(0, i.units)
   }
-  return { units, totalQty, orders }
+  return { units, totalQty, orders, menu: economics.menu }
 }
 
 async function loadMix(input: ProductMixInput): Promise<MixData> {
@@ -202,7 +225,7 @@ async function loadMix(input: ProductMixInput): Promise<MixData> {
   const storeIds = stores.map((s) => s.id)
   if (storeIds.length === 0) {
     return {
-      now: { units: new Map(), totalQty: 0, orders: 0 },
+      now: { units: new Map(), totalQty: 0, orders: 0, menu: menuMargin([]) },
       prior: null,
       names: [],
       emptyBecause: "no_stores",
@@ -216,8 +239,8 @@ async function loadMix(input: ProductMixInput): Promise<MixData> {
   const priorRange = comparisonRange(range, "prev")
 
   const [now, prior] = await Promise.all([
-    loadWindow(storeIds, range),
-    priorRange ? loadWindow(storeIds, priorRange) : Promise.resolve(null),
+    loadWindow(accountId, storeIds, range),
+    priorRange ? loadWindow(accountId, storeIds, priorRange) : Promise.resolve(null),
   ])
 
   return {
@@ -236,22 +259,24 @@ async function loadMix(input: ProductMixInput): Promise<MixData> {
  * window the caller names. This is the whole bridge: every line is this
  * function with a different mixture of the two windows.
  *
- * `Unit.price` is `salesRevenue / qty` (`loadWindow`, above, around :190), so
- * `price × qty` reconstitutes recorded revenue exactly — this is the same
- * figure as `blendedMargin(cost, revenue)` elsewhere, decomposed by window
- * and delegated to it for the final ratio.
+ * Over COSTED units only, and `Unit.price` is COLLECTED per costed unit, so
+ * with all three factors from one window `price × costedQty` reconstitutes
+ * collected revenue exactly and this IS `menuMargin` — the "Now" line of the
+ * bridge equals the Blended margin cell on this page, the Menu hub and Menu
+ * profit. An uncosted item has no term (it used to enter at $0 cost and pull
+ * the blend toward 100%).
  */
 function bridgeMargin(
   names: string[],
-  pick: (name: string) => Unit | null,
+  pick: (name: string) => { cost: number; revenue: number } | null,
 ): number | null {
   let cost = 0
   let revenue = 0
   for (const name of names) {
-    const u = pick(name)
-    if (!u) continue
-    cost += u.cost * u.qty
-    revenue += u.price * u.qty
+    const t = pick(name)
+    if (!t) continue
+    cost += t.cost
+    revenue += t.revenue
   }
   return blendedMargin(cost, revenue)
 }
@@ -263,14 +288,14 @@ function headlineOf(d: MixData): MixHeadline {
   const perOrder = now.orders > 0 ? now.totalQty / now.orders : null
   const priorPerOrder = prior && prior.orders > 0 ? prior.totalQty / prior.orders : null
 
-  const ranked = [...now.units.entries()].sort((a, b) => b[1].qty - a[1].qty)
+  const ranked = [...now.units.entries()].filter(([, u]) => u.qty > 0).sort((a, b) => b[1].qty - a[1].qty)
   const top = ranked[0]
   const topShare = top && now.totalQty > 0 ? (top[1].qty / now.totalQty) * 100 : null
 
-  const margin = bridgeMargin(d.names, (n) => now.units.get(n) ?? null)
-  const priorMargin = prior
-    ? bridgeMargin(d.names, (n) => prior.units.get(n) ?? null)
-    : null
+  // `menuMargin`, read — not re-derived — so this cell is the same number as
+  // the Menu hub's and Menu profit's.
+  const margin = now.menu.marginPct
+  const priorMargin = prior ? prior.menu.marginPct : null
 
   const perOrderCell: FigureProps = {
     label: "Items per order",
@@ -290,7 +315,7 @@ function headlineOf(d: MixData): MixHeadline {
     delta:
       margin !== null && priorMargin !== null
         ? pts(margin - priorMargin)
-        : "of menu revenue",
+        : "of menu revenue, after discounts",
     deltaTone:
       margin !== null && priorMargin !== null && margin < priorMargin ? "is-down" : "is-flat",
   }
@@ -300,7 +325,7 @@ function headlineOf(d: MixData): MixHeadline {
       {
         label: "Items sold",
         value: count(now.totalQty),
-        delta: `across ${count(now.units.size)} items`,
+        delta: `across ${count(ranked.length)} items`,
         deltaTone: "is-flat",
       },
       perOrderCell,
@@ -317,7 +342,7 @@ function headlineOf(d: MixData): MixHeadline {
 }
 
 function unitsOf(d: MixData): MixUnits {
-  const ranked = [...d.now.units.entries()].sort((a, b) => b[1].qty - a[1].qty)
+  const ranked = [...d.now.units.entries()].filter(([, u]) => u.qty > 0).sort((a, b) => b[1].qty - a[1].qty)
   const build = (n: number, budget: number): ChartSpec => {
     const top = ranked.slice(0, n)
     return {
@@ -340,7 +365,7 @@ function unitsOf(d: MixData): MixUnits {
 
 function tableOf(d: MixData): MixTable {
   const { now, prior } = d
-  const ranked = [...now.units.entries()].sort((a, b) => b[1].qty - a[1].qty)
+  const ranked = [...now.units.entries()].filter(([, u]) => u.qty > 0).sort((a, b) => b[1].qty - a[1].qty)
   const shown = ranked.slice(0, TABLE_ROWS)
 
   const shareOf = (w: Window | null, name: string) => {
@@ -354,8 +379,9 @@ function tableOf(d: MixData): MixTable {
     const was = shareOf(prior, name)
     const change = was === null ? null : share - was
     // The item's OWN margin, which is what the prototype's own comment asks
-    // for: "the margin column is the menu's, not this page's".
-    const margin = u.price > 0 ? 100 - (u.cost / u.price) * 100 : null
+    // for: "the margin column is the menu's, not this page's" — so it is the
+    // menu's figure, after discounts, and an em dash when nothing costed it.
+    const margin = u.inBlend ? 100 - (u.costTotal / u.collectedTotal) * 100 : null
     return { name, share, was, change, margin }
   })
 
@@ -408,7 +434,7 @@ function tableOf(d: MixData): MixTable {
      * already looks to be told the section is share of units. `/dashboard/pnl`
      * states the identical rule under its cascade for the identical reason.
      */
-    meta: `${count(shown.length)} of ${count(now.units.size)} · share of units · change in pts`,
+    meta: `${count(shown.length)} of ${count(ranked.length)} · share of units · change in pts`,
   }
 }
 
@@ -429,13 +455,19 @@ function bridgeOf(d: MixData): MixBridge {
   ): number | null =>
     bridgeMargin(d.names, (n) => {
       const q = qtyFrom.units.get(n)
-      if (!q) return null
+      // The same membership test as `menuMargin`, on the window the
+      // quantities come from.
+      if (!q || !q.inBlend) return null
+      const own = perUnit(q)
+      // No costed unit to re-price: the term enters at its own totals.
+      if (!own) return { cost: q.costTotal, revenue: q.collectedTotal }
       // A term with no reading in the window a factor is taken from falls back
       // to the other window's, rather than to zero: a missing prior cost is
       // "we have no earlier reading", not "it used to be free".
-      const c = costFrom.units.get(n) ?? q
-      const p = priceFrom.units.get(n) ?? q
-      return { cost: c.cost, price: p.price, qty: q.qty }
+      const reading = (u: Unit | undefined) => (u && u.inBlend ? perUnit(u) : null)
+      const c = reading(costFrom.units.get(n)) ?? own
+      const p = reading(priceFrom.units.get(n)) ?? own
+      return { cost: c.cost * q.costedQty, revenue: p.price * q.costedQty }
     })
 
   const m0 = at(prior, prior, prior)

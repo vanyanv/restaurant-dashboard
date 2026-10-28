@@ -4,9 +4,9 @@ import {
   type MenuEngineeringRow,
 } from "@/app/actions/forecasts/menu-engineering-actions"
 import { count, money, pct } from "@/lib/counter/format"
-import { blendedMargin } from "@/lib/counter/blended-margin"
 import { dayCount, type DateRange } from "@/lib/counter/date-range"
 import { loadStatement } from "@/lib/counter/statement"
+import { getScopedStores } from "@/lib/account-stores"
 import { COGS_CODE } from "@/lib/pnl"
 import { rowValues } from "@/lib/counter/statement"
 import {
@@ -195,9 +195,12 @@ function headlineOf(
   totalSales: number,
   foodCost: number,
 ): MenuProfitHeadline {
-  const revenue = data.rows.reduce((t, r) => t + r.revenue, 0)
-  const cogs = data.rows.reduce((t, r) => t + r.cogs, 0)
-  const margin = blendedMargin(cogs, revenue)
+  // `menuMargin` — the one rule (`item-economics.ts`): every costed item,
+  // Packaging out, after discounts. NOT the sum of `rows`, which the
+  // classifier has already cut to items with five or more units: the Menu hub
+  // and Product mix print this same cell, and a margin that moved with a chart
+  // filter would read differently on each.
+  const margin = data.menu.marginPct
 
   const marginCell: FigureProps = {
     label: "Blended margin",
@@ -205,7 +208,7 @@ function headlineOf(
     // The denominator, in the cell. The COGS page divides the same cost by the
     // statement's Total Sales and gets a different answer; both are right and
     // neither may go unnamed.
-    delta: "of menu revenue",
+    delta: "of menu revenue, after discounts",
     deltaTone: "is-flat",
   }
   const coverageCell: FigureProps = {
@@ -242,12 +245,9 @@ function headlineOf(
 }
 
 function matrixOf(data: MenuEngineeringData, days: number): MatrixSection {
-  // `itemName` is NOT unique: `getMenuEngineering` returns a row per item per
-  // category, and this menu sells seven items under two categories each (the
-  // POS emits some with a category and some without — see the Menu hub's own
-  // note). Keying a dot by name alone collided on all seven and React dropped
-  // half of them silently, which is a chart quietly missing points rather than
-  // an error anyone would see.
+  // `getMenuEngineering` now returns ONE row per item (`item-economics.ts`),
+  // so the name is unique; the category stays in the key so a remapped item
+  // can never collide with an old dot and be dropped silently by React.
   const points: MatrixPoint[] = data.rows
     .filter((r) => r.marginPct !== null)
     .map((r) => ({
@@ -519,11 +519,21 @@ function ledgerOf(data: MenuEngineeringData): LedgerSection {
 export function getMenuProfitSectionPromises(
   input: MenuProfitInput,
 ): StreamedSections<MenuProfitSections> {
-  const { range, storeId } = input
+  const { range, storeId, accountId } = input
   const days = dayCount(range)
 
   const dataP = classify(
     async () => {
+      // THE SAME STORES the Menu hub and Product mix read: `getScopedStores`,
+      // which keeps only ACTIVE stores. `getMenuEngineering` resolves through
+      // `resolveStoreContext`, whose single-store branch accepts an inactive
+      // store — so a closed location picked in the switcher printed a Blended
+      // margin here and nothing on the other two pages. A store the shared
+      // scope does not return reads as empty here too.
+      if (storeId) {
+        const scoped = await getScopedStores(accountId, storeId)
+        if (scoped.length === 0) return { me: null, totalSales: 0, foodCost: 0 }
+      }
       const [me, statement] = await Promise.all([
         // `lookbackDays` is the gap from the window's first day to `asOf`, not
         // the day count: the loader reads `[asOf − lookbackDays, asOf]`
@@ -546,28 +556,32 @@ export function getMenuProfitSectionPromises(
         foodCost: -cogsRow.reduce((t, v) => t + v, 0),
       }
     },
-    { retryAction: "retryMenuProfit", isEmpty: (d) => d.me.rows.length === 0, emptyReason: "no_match" },
+    {
+      retryAction: "retryMenuProfit",
+      isEmpty: (d) => d.me === null || d.me.rows.length === 0,
+      emptyReason: "no_match",
+    },
   )
 
   return {
     headline: guardSection(
-      dataP.then((sd) => mapReady(sd, (d) => headlineOf(d.me, d.totalSales, d.foodCost))),
+      dataP.then((sd) => mapReady(sd, (d) => headlineOf(d.me!, d.totalSales, d.foodCost))),
       "retryMenuProfit",
     ),
     matrix: guardSection(
-      dataP.then((sd) => mapReady(sd, (d) => matrixOf(d.me, days))),
+      dataP.then((sd) => mapReady(sd, (d) => matrixOf(d.me!, days))),
       "retryMenuProfit",
     ),
     opportunities: guardSection(
-      dataP.then((sd) => mapReady(sd, (d) => opportunitiesOf(d.me))),
+      dataP.then((sd) => mapReady(sd, (d) => opportunitiesOf(d.me!))),
       "retryMenuProfit",
     ),
     coverage: guardSection(
-      dataP.then((sd) => mapReady(sd, (d) => coverageOf(d.me))),
+      dataP.then((sd) => mapReady(sd, (d) => coverageOf(d.me!))),
       "retryMenuProfit",
     ),
     ledger: guardSection(
-      dataP.then((sd) => mapReady(sd, (d) => ledgerOf(d.me))),
+      dataP.then((sd) => mapReady(sd, (d) => ledgerOf(d.me!))),
       "retryMenuProfit",
     ),
   }

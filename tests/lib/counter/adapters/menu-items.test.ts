@@ -10,17 +10,22 @@ import { describe, it, expect, vi, beforeEach } from "vitest"
 vi.mock("@/lib/prisma", () => ({
   prisma: {
     recipe: { findMany: vi.fn() },
-    dailyCogsItem: { findMany: vi.fn() },
+    dailyCogsItem: { findMany: vi.fn(), groupBy: vi.fn() },
     otterItemMapping: { findMany: vi.fn() },
     $queryRaw: vi.fn(),
   },
 }))
 vi.mock("@/lib/account-stores", () => ({ getScopedStores: vi.fn() }))
+vi.mock("@/lib/counter/item-discounts", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/counter/item-discounts")>()),
+  getItemDiscounts: vi.fn(async () => new Map()),
+}))
 
 import { prisma } from "@/lib/prisma"
 import { getScopedStores } from "@/lib/account-stores"
 import { loadMenuItems } from "@/lib/counter/adapters/menu-items"
 import { loadMenuItemStart } from "@/lib/counter/adapters/menu-item-start"
+import { cogsGroupBy, type FixtureCogsRow } from "../fixtures/item-economics"
 
 const asMock = (fn: unknown) => fn as ReturnType<typeof vi.fn>
 const NOW = new Date("2026-10-28T12:00:00Z")
@@ -61,6 +66,8 @@ const RECIPES = [
 
 function cogs(itemName: string, recipeId: string | null, qty: number, rev: number, cost: number, extra = {}) {
   return {
+    storeId: "s_hw",
+    date: new Date("2026-10-01T00:00:00Z"),
     recipeId,
     itemName,
     category: recipeId ? "Sliders" : "Desserts",
@@ -78,14 +85,16 @@ beforeEach(() => {
   vi.clearAllMocks()
   asMock(getScopedStores).mockResolvedValue([{ id: "s_hw", name: "Hollywood" }])
   asMock(prisma.recipe.findMany).mockResolvedValue(RECIPES)
-  asMock(prisma.dailyCogsItem.findMany).mockResolvedValue([
+  const rows = [
     cogs("Double Slider", "r_double", 100, 800, 150),
     cogs("Chris N Eddy's Slider", "r_double", 50, 400, 75),
     cogs("The Reverse Bun", "r_reverse", 10, 90, 0, { status: "MISSING_COST" }),
     cogs("CVT Ice Cream - Vanilla", null, 2, 10, 0),
     cogs("Shake Special", null, 4, 30, 0),
     cogs("Open item 4.99", null, 1, 5, 0),
-  ])
+  ]
+  asMock(prisma.dailyCogsItem.findMany).mockResolvedValue(rows)
+  asMock(prisma.dailyCogsItem.groupBy).mockImplementation(cogsGroupBy(rows as FixtureCogsRow[]))
   asMock(prisma.otterItemMapping.findMany).mockResolvedValue([
     { recipeId: "r_double", otterItemName: "Double Slider" },
     { recipeId: "r_double", otterItemName: "Chris N Eddy's Slider" },
@@ -105,6 +114,11 @@ describe("loadMenuItems", () => {
     expect(double.sold).toBe(150)
     expect(double.posNames).toBe(3)
     expect(double.plateCost).toBe("$1.50") // (150 + 75) / 150, as booked
+    // Collected over units, weighted: (800 + 400) / 150 — no deals here.
+    expect(double.avgPrice).toBe("$8.00")
+    expect(double.keep).toBe("$6.50")
+    // A recipe that walks to nothing has no food cost — never 0%.
+    expect(d.items.find((i) => i.id === "r_reverse")!.foodCostPct).toBeNull()
     expect(double.photo?.thumb).toContain("chris-n-eddy-s-slider-chris")
     // Modifiers are add-ons, not dishes on the menu.
     expect(d.items.map((i) => i.id)).not.toContain("r_mod")
@@ -130,6 +144,10 @@ describe("loadMenuItems", () => {
     expect(getScopedStores).toHaveBeenCalledWith("acc_1", null)
     expect(asMock(prisma.recipe.findMany).mock.calls[0][0].where).toMatchObject({ accountId: "acc_1" })
     expect(asMock(prisma.dailyCogsItem.findMany).mock.calls[0][0].where.storeId).toEqual({ in: ["s_hw"] })
+    expect(asMock(prisma.dailyCogsItem.groupBy).mock.calls[0][0].where).toMatchObject({
+      storeId: { in: ["s_hw"] },
+      store: { accountId: "acc_1" },
+    })
     expect(asMock(prisma.otterItemMapping.findMany).mock.calls[0][0].where.recipe).toEqual({ accountId: "acc_1" })
     const sql = asMock(prisma.$queryRaw).mock.calls[0]
     expect(sql[0].join("?")).toContain('i."accountId" =')

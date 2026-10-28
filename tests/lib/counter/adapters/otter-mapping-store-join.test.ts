@@ -7,8 +7,16 @@
 // name — counted once per store that maps it. With two stores mapping "Double
 // Slider", every Double Slider sold read twice in `sold` and `revenue`.
 //
-// The fix is `o."storeId" = m."storeId"` on the join. These tests hold it on
-// all three queries by reading the SQL text each adapter sent.
+// The fix is `o."storeId" = m."storeId"` on the join. The ingredient test
+// holds it by reading the SQL text the adapter sent.
+//
+// The recipes list and the recipe detail no longer join the order feed to
+// mappings at all: their sold, collected and margin figures come from
+// `item-economics.ts`, which reads `DailyCogsItem` — one row per store, day
+// and POS name, already resolved to the recipe COGS booked it against — so
+// there is no mapping fan-out to double a line through. Those two tests hold
+// that instead: no mapping join, and two stores mapping the same name count
+// each store's sales once.
 
 import { describe, it, expect, vi, beforeEach } from "vitest"
 
@@ -19,6 +27,7 @@ vi.mock("@/lib/prisma", () => ({
     ingredientSkuMatch: { findMany: vi.fn() },
     recipeIngredient: { findMany: vi.fn() },
     stockCountLine: { count: vi.fn() },
+    dailyCogsItem: { groupBy: vi.fn() },
     $queryRaw: vi.fn(),
   },
 }))
@@ -31,6 +40,7 @@ import { batchRecipeCosts } from "@/lib/recipe-cost"
 import { getRecipesSectionPromises } from "@/lib/counter/adapters/recipes"
 import { getRecipeSectionPromises } from "@/lib/counter/adapters/recipe"
 import { getIngredientSectionPromises } from "@/lib/counter/adapters/ingredient"
+import { cogsGroupBy, cogsRow } from "../fixtures/item-economics"
 
 const asMock = (fn: unknown) => fn as ReturnType<typeof vi.fn>
 
@@ -94,19 +104,41 @@ beforeEach(() => {
     },
   ])
   asMock(prisma.stockCountLine.count).mockResolvedValue(0)
+  // Both stores map "Double Slider" to the recipe; each sold 10 at $8.
+  asMock(prisma.dailyCogsItem.groupBy).mockImplementation(
+    cogsGroupBy(
+      ["store_a", "store_b"].map((storeId) =>
+        cogsRow({
+          storeId,
+          itemName: "Double Slider",
+          category: "Slider",
+          recipeId: "r_slider",
+          qtySold: 10,
+          salesRevenue: 80,
+          lineCost: 20,
+        }),
+      ),
+    ),
+  )
 })
 
 describe("OtterItemMapping joins match the order's own store", () => {
   it("recipes list", async () => {
-    await getRecipesSectionPromises({
+    const sections = getRecipesSectionPromises({
       storeId: null,
       accountId: "acct_ours",
       range: RANGE,
       today: TODAY,
-    }).headline
-    const joins = mappingJoins()
-    expect(joins).toHaveLength(1)
-    expect(joins[0]).toContain('o."storeId" = m."storeId"')
+    })
+    const components = await sections.catalogue
+    expect(mappingJoins()).toHaveLength(0)
+    if (components.status !== "ready") throw new Error(components.status)
+    const row = components.data.rows.find((r) => r.key === "r_slider")!
+    // $160 over 20 plates: each store's ten once, not twice.
+    expect(row.cells.price).toBe("$8.00")
+    expect(asMock(prisma.dailyCogsItem.groupBy).mock.calls[0][0].where).toMatchObject({
+      store: { accountId: "acct_ours" },
+    })
   })
 
   it("recipe detail", async () => {
@@ -117,10 +149,11 @@ describe("OtterItemMapping joins match the order's own store", () => {
       range: RANGE,
       today: TODAY,
     })
-    await Promise.all(Object.values(sections))
-    const joins = mappingJoins()
-    expect(joins).toHaveLength(1)
-    expect(joins[0]).toContain('o."storeId" = m."storeId"')
+    const [head] = await Promise.all([sections.head, ...Object.values(sections)])
+    expect(mappingJoins()).toHaveLength(0)
+    if (head.status !== "ready") throw new Error(head.status)
+    const sold = head.data.cells.find((c) => c.label === "Sold in range")!
+    expect(sold.value).toBe("20")
   })
 
   it("ingredient detail", async () => {

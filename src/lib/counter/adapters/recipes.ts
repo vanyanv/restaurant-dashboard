@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma"
 import { getScopedStores } from "@/lib/account-stores"
 import { batchRecipeCosts } from "@/lib/recipe-cost"
+import { getItemEconomics, rollUpByRecipe } from "@/lib/counter/item-economics"
 import { count, money, pct, plural, unitCost } from "@/lib/counter/format"
 import { rangeLabel, toQueryBounds, type DateRange } from "@/lib/counter/date-range"
 import {
@@ -25,12 +26,15 @@ import type { FigureProps, MListRow, QueueItem, Row } from "@/components/counter
  *
  * ## The two windows
  *
- * A recipe's COST is current — it is whatever its ingredients cost on the
- * latest invoice — and its confirmation state has no date at all. Neither is a
- * question the date control can ask. What the control does govern is the
- * PRICE side: what a plate sold for and how many went out, which is why the
- * catalogue's `Sells at`, `Margin` and the unconfirmed-revenue cell move with
- * the range and nothing else on the page does.
+ * A recipe's WALKED cost is current — whatever its ingredients cost on the
+ * latest invoice — and its confirmation state has no date at all. What the
+ * date control governs is everything `item-economics.ts` owns: how many
+ * plates went out, what they COLLECTED after discounts (weighted over units,
+ * never a mean of line prices), the cost COGS booked for them, and the margin
+ * between the two. So the catalogue's Cost is the booked plate cost wherever
+ * the recipe sold in the range, and the walked cost "at today's prices" only
+ * where it did not — the one place this page needs a cost with no sale behind
+ * it. Margin is only ever over a booked cost.
  *
  * That split is the Invoices page's, for the same reason: a worklist that
  * emptied itself at every date change would be a worklist you could not work.
@@ -108,15 +112,22 @@ interface RecipeRow {
   lines: number
   /** How many OTHER recipes use this one as a component. */
   usedIn: number
-  /** Cost per serving, from the batched walk. Null when it could not cost. */
+  /** Cost per serving AT TODAY'S PRICES, from the batched walk. Null when it could not cost. */
   cost: number | null
+  /** Booked plate cost over the range (`item-economics.ts`). Null with no costed sale. */
+  plate: number | null
+  /** Booked cost of the range's costed plates, in dollars. */
+  bookedCost: number
+  /** Margin over what was collected, on the booked cost. Null with no costed sale. */
+  margin: number | null
   /** At least one line could not be priced. */
   partial: boolean
   /** No line produced any cost — see `RecipeCostResult.emptyWalk`. */
   emptyWalk: boolean
-  /** Mean observed POS price in the range. Null when nothing sold. */
+  /** Collected revenue over units sold in the range. Null when nothing sold. */
   price: number | null
   soldQty: number
+  /** Collected — after discounts. */
   revenue: number
   /** Days in `DailyCogsItem` the cost walk flagged as an understatement. */
   partialDays: number
@@ -139,7 +150,7 @@ async function loadRecipes(input: RecipesInput): Promise<RecipeData> {
   const d30 = new Date(today)
   d30.setDate(d30.getDate() - 30)
 
-  const [recipes, costs, addedRecently, sold, partialDays] = await Promise.all([
+  const [recipes, costs, addedRecently, economics, partialDays] = await Promise.all([
     prisma.recipe.findMany({
       where: { accountId },
       select: {
@@ -157,25 +168,8 @@ async function loadRecipes(input: RecipesInput): Promise<RecipeData> {
     // shared component; this takes 0.8 and returns the same numbers.
     batchRecipeCosts(accountId),
     prisma.recipe.count({ where: { accountId, createdAt: { gte: d30 } } }),
-    storeIds.length === 0
-      ? Promise.resolve([] as Array<{ recipe_id: string; qty: number; revenue: number; price: number | null }>)
-      : prisma.$queryRaw<
-          Array<{ recipe_id: string; qty: number; revenue: number; price: number | null }>
-        >`
-          SELECT m."recipeId" AS recipe_id,
-                 SUM(oi.quantity)::int AS qty,
-                 SUM(oi.quantity * oi.price)::float AS revenue,
-                 AVG(NULLIF(oi.price, 0))::float AS price
-          FROM "OtterItemMapping" m
-          JOIN "OtterOrderItem" oi ON oi.name = m."otterItemName"
-          JOIN "OtterOrder" o ON o.id = oi."orderId"
-            -- A mapping is per store: (storeId, otterItemName) is its key. Without
-            -- this a line counted once per store that maps the same POS name.
-            AND o."storeId" = m."storeId"
-          WHERE o."storeId" = ANY(${storeIds})
-            AND o."referenceTimeLocal" >= ${startDate}
-            AND o."referenceTimeLocal" <= ${endDate}
-          GROUP BY 1`,
+    // Sold, collected, booked cost and margin — the shared definition.
+    getItemEconomics({ accountId, storeIds, startDate, endDate }),
     // Not range-bound: "how long has this been wrong" is the question, and a
     // day inside the reader's range does not answer it.
     storeIds.length === 0
@@ -188,7 +182,7 @@ async function loadRecipes(input: RecipesInput): Promise<RecipeData> {
           GROUP BY 1`,
   ])
 
-  const soldById = new Map(sold.map((s) => [s.recipe_id, s]))
+  const soldById = rollUpByRecipe(economics.items.values())
   const partialById = new Map(partialDays.map((p) => [p.recipe_id, p.days]))
 
   // How many OTHER recipes use each one as a component, counted from the
@@ -216,9 +210,12 @@ async function loadRecipes(input: RecipesInput): Promise<RecipeData> {
         cost: cost ? cost.totalCost : null,
         partial: cost?.partial ?? false,
         emptyWalk: cost?.emptyWalk ?? false,
-        price: s?.price ?? null,
-        soldQty: s?.qty ?? 0,
-        revenue: s?.revenue ?? 0,
+        plate: s?.plateCost ?? null,
+        bookedCost: s?.costed?.cost ?? 0,
+        margin: s?.marginPct ?? null,
+        price: s && s.units > 0 ? s.collectedUnitPrice : null,
+        soldQty: s?.units ?? 0,
+        revenue: s?.collected ?? 0,
         partialDays: partialById.get(r.id) ?? 0,
       }
     }),
@@ -244,10 +241,15 @@ async function loadRecipes(input: RecipesInput): Promise<RecipeData> {
 const costsNothing = (r: RecipeRow) =>
   r.emptyWalk && (r.cost === null || Math.abs(r.cost) < ZERO_COST)
 
-const marginOf = (r: RecipeRow): number | null => {
-  if (r.price === null || r.price <= 0 || r.cost === null) return null
-  return ((r.price - r.cost) / r.price) * 100
-}
+/** `item-economics.ts`'s margin: booked cost over collected. Never today's walk. */
+const marginOf = (r: RecipeRow): number | null => r.margin
+
+/**
+ * The Cost cell: the booked plate cost where the recipe sold in range, else
+ * the walk at today's prices — labelled, because it is a different figure.
+ */
+const costCell = (r: RecipeRow): string =>
+  r.plate !== null ? unitCost(r.plate) : r.cost === null ? "—" : `${unitCost(r.cost)} today`
 
 /* -- sections --------------------------------------------------------- */
 
@@ -374,7 +376,7 @@ function catalogueOf(d: RecipeData): RecipeCatalogue {
         cells: {
           recipe: r.name,
           category: r.category,
-          cost: zero ? { v: "$0.00", cls: "hot" } : unitCost(r.cost ?? 0),
+          cost: zero ? { v: "$0.00", cls: "hot" } : costCell(r),
           // An em-dash, never a zero. A recipe with no observed sale in the
           // range has no price — printing $0.00 would read as "given away".
           price: r.price === null ? "—" : unitCost(r.price),
@@ -426,6 +428,9 @@ function catalogueOf(d: RecipeData): RecipeCatalogue {
     meta: `${count(sellable.length)} sellable · ${count(shown.length)} shown`,
     note:
       `Sorted by what is wrong with it, then by what it sold. ` +
+      `Cost is what COGS booked per plate over ${d.rangeLabel}, and price is what a plate ` +
+      `collected after discounts; a plate that did not sell shows its recipe at today's prices, ` +
+      `marked "today", and no margin. ` +
       `${count(priced)} of ${count(sellable.length)} carry an observed price over ${d.rangeLabel}; ` +
       `the rest show an em-dash rather than a zero, because a plate nobody bought has no margin ` +
       `rather than a margin of nothing. A plate with no lines shows one too: its $0.00 is an ` +
@@ -486,9 +491,8 @@ function workOf(d: RecipeData): RecipeWork {
   const unconfirmed = sellable.filter((r) => !r.confirmed)
   const unconfirmedRevenue = unconfirmed.reduce((t, r) => t + r.revenue, 0)
   // What those recipes put INTO cost of goods, which is the half the revenue
-  // figure does not say. `cost` is per serving and `soldQty` is the range's
-  // own count, so the product is this window's COGS off unconfirmed lines.
-  const unconfirmedCogs = unconfirmed.reduce((t, r) => t + (r.cost ?? 0) * r.soldQty, 0)
+  // figure does not say — the cost COGS actually booked for them in range.
+  const unconfirmedCogs = unconfirmed.reduce((t, r) => t + r.bookedCost, 0)
   if (unconfirmed.length > 0) {
     const biggest = [...unconfirmed].sort((a, b) => b.revenue - a.revenue).slice(0, 3)
     items.push({
@@ -601,7 +605,7 @@ function recentOf(d: RecipeData): RecipeRecent {
         detail: zero
           ? "no lines · costed at nothing"
           : `${r.category} · ${r.confirmed ? "confirmed" : "unconfirmed"}`,
-        value: zero ? "$0.00" : unitCost(r.cost ?? 0),
+        value: zero ? "$0.00" : costCell(r),
         note: margin === null ? "no sale in range" : `${pct(margin, { scaled: true })} margin`,
         noteTone: zero ? "down" : "up",
       }

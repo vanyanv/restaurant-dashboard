@@ -59,7 +59,7 @@ export type CounterCatalogSections = SectionSources<MenuCatalogSections>
 const COLUMNS: Column[] = [
   { key: "item", label: "Item" },
   { key: "category", label: "Category" },
-  { key: "price", label: "Price", numeric: true },
+  { key: "price", label: "Paid", numeric: true },
   { key: "sold", label: "Sold", numeric: true },
   { key: "recipe", label: "Recipe" },
   { key: "plate", label: "Plate cost", numeric: true },

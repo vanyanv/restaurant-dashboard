@@ -9,12 +9,8 @@ import {
   commissionRateFor,
 } from "@/lib/counter/channel-mix"
 import { channelById, type ChannelId } from "@/lib/counter/channels"
-import {
-  discountShare,
-  getItemDiscounts,
-  isDealRunning,
-  netOfDiscount,
-} from "@/lib/counter/item-discounts"
+import { discountShare } from "@/lib/counter/item-discounts"
+import { getItemEconomics } from "@/lib/counter/item-economics"
 import type { ChartSpec } from "@/lib/counter/chart-geometry"
 import {
   awaitSections,
@@ -270,12 +266,13 @@ async function loadItem(input: MenuItemInput): Promise<ItemData | null> {
     daily.set(key, (daily.get(key) ?? 0) + q)
   }
 
-  const [cost, mapping, channelRows, modifierRows, feeCount, nameSpread, recipeList, discounts] =
+  const [economics, mapping, channelRows, modifierRows, feeCount, nameSpread, recipeList] =
     await Promise.all([
-    prisma.dailyCogsItem.aggregate({
-      where: { ...where, itemName: name },
-      _sum: { lineCost: true, salesRevenue: true, qtySold: true },
-    }),
+    // Plate cost, discount and margin — the shared definition, the same
+    // figures the catalog row for this item prints. COSTED rows only: this
+    // summed every status, so units sold while the item was unmapped pulled
+    // its plate cost down at $0 apiece.
+    getItemEconomics({ accountId, storeIds, startDate, endDate, itemName: name }),
     prisma.otterItemMapping.findFirst({
       where: { storeId: { in: storeIds }, otterItemName: name },
       select: { recipeId: true },
@@ -337,9 +334,9 @@ async function loadItem(input: MenuItemInput): Promise<ItemData | null> {
       select: { id: true, itemName: true },
       orderBy: { itemName: "asc" },
     }),
-    getItemDiscounts({ accountId, storeIds, startDate, endDate, itemName: name }),
   ])
-  const discount = discounts.get(name) ?? null
+  const econ = economics.items.get(name) ?? null
+  const discount = economics.discounts.get(name) ?? null
 
   const mappedModifiers = new Set(
     (
@@ -352,10 +349,6 @@ async function loadItem(input: MenuItemInput): Promise<ItemData | null> {
       })
     ).map((m) => m.otterSubItemName),
   )
-
-  const lineCost = Number(cost._sum.lineCost ?? 0)
-  const costRevenue = Number(cost._sum.salesRevenue ?? 0)
-  const costQty = Number(cost._sum.qtySold ?? 0)
 
   // Channels the map does not name are LEFT OUT, not folded into house — the
   // rule `channel-mix.ts` states: folding a marketplace into the house channel
@@ -406,15 +399,12 @@ async function loadItem(input: MenuItemInput): Promise<ItemData | null> {
     categories: [...categories].sort(),
     qty,
     revenue,
-    discountShare: discountShare(discount),
-    dealRunning: isDealRunning(discount),
+    discountShare: econ?.discountShare ?? discountShare(discount),
+    dealRunning: econ?.dealRunning ?? false,
     daily: [...daily.entries()].sort().map(([date, q]) => ({ date, qty: q })),
-    plateCost: costQty > 0 ? lineCost / costQty : null,
+    plateCost: econ?.plateCost ?? null,
     // Over what was COLLECTED: on a BOGO the rung-up revenue is twice the money.
-    margin:
-      costRevenue > 0 && netOfDiscount(costRevenue, discount) > 0
-        ? 100 - (lineCost / netOfDiscount(costRevenue, discount)) * 100
-        : null,
+    margin: econ?.marginPct ?? null,
     mapped: mapping !== null,
     recipeLines: null,
     byChannel: [...byChannel.entries()]
