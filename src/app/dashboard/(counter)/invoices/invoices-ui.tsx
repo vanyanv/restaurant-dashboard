@@ -3,7 +3,7 @@
 import { useCallback, useMemo, type ReactNode } from "react"
 import Link from "next/link"
 import { useSearchParams } from "next/navigation"
-import { PageHead, SubNav, type FigureProps } from "@/components/counter"
+import { PageHead, SubNav, useSurfaceHref, type FigureProps } from "@/components/counter"
 import { INVOICES_TABS } from "@/lib/counter/nav"
 import { scopeQuery } from "@/lib/counter/url-state"
 import type { InvoiceListRow } from "@/lib/counter/adapters/invoices"
@@ -18,13 +18,17 @@ import type { InvoiceListRow } from "@/lib/counter/adapters/invoices"
  * Carries the store and date selection onto an in-section link, the way the
  * rail does (`scopeQuery`). Without it a tile read for Van Nuys opened All
  * invoices on every store, and the two screens printed different counts.
+ *
+ * It also keeps a phone on the phone: the desk and `/m/invoices` routes draw
+ * the same clients, so a desk path is mapped to its phone page there.
  */
 export function useScoped(): (href: string) => string {
   const params = useSearchParams()
+  const surface = useSurfaceHref()
   const scope = useMemo(() => scopeQuery(new URLSearchParams(params?.toString() ?? "")), [params])
   return useCallback(
-    (href: string) => (scope ? `${href}${href.includes("?") ? "&" : "?"}${scope}` : href),
-    [scope],
+    (href: string) => surface(scope ? `${href}${href.includes("?") ? "&" : "?"}${scope}` : href),
+    [scope, surface],
   )
 }
 

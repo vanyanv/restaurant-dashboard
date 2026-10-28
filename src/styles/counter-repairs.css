@@ -3376,3 +3376,39 @@ html[data-theme-switching] .ct-root *::after {
     white-space: nowrap;
   }
 }
+
+/* A desk `Table` drawn inside the phone shell (the Invoices tabs, the invoice
+   page, an Ask answer) is one card per row: the first column as the card's
+   title, every other cell under its column's name (`td[data-label]`). A
+   six-column table at 390px was a sideways scroll inside the page. */
+.ct-phone .tbl thead { display: none; }
+.ct-phone .tbl tbody tr {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  justify-items: end;
+  gap: 2px 12px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--line);
+}
+.ct-phone .tbl tbody tr:last-child { border-bottom: 0; }
+.ct-phone .tbl tbody td { display: contents; }
+.ct-phone .tbl tbody td:first-child {
+  display: block;
+  grid-column: 1 / -1;
+  justify-self: stretch;
+  padding: 0 0 2px;
+  border: 0;
+  font-weight: 600;
+  text-align: left;
+}
+.ct-phone .tbl tbody td:not(:first-child)[data-label]::before {
+  content: attr(data-label);
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  align-self: center;
+  justify-self: start;
+}
+.ct-phone .tbl tbody td[colspan] { display: block; grid-column: 1 / -1; }

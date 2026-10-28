@@ -24,13 +24,12 @@ export const DESKTOP_TO_MOBILE: Record<string, string> = {
   "/dashboard/decisions": "/m/decisions",
   "/dashboard/ingredients": "/m/ingredients",
   "/dashboard/invoices": "/m/invoices",
-  // The desk's two list tabs sit under the `[id]` prefix below, so without an
-  // exact entry the prefix carried them to `/m/invoices/all` and
-  // `/m/invoices/prices`, which the phone resolved as invoice ids and 404'd.
-  // The phone's Invoices is already its list; its price monitor lives under
-  // Ingredients.
-  "/dashboard/invoices/all": "/m/invoices",
-  "/dashboard/invoices/prices": "/m/ingredients/prices",
+  // All three Invoices tabs have phone routes now (the desk clients in the
+  // phone shell). They are exact entries because the `[id]` prefix below
+  // would carry them anyway, and did, back when the phone had no such pages
+  // and resolved `all` and `prices` as invoice ids.
+  "/dashboard/invoices/all": "/m/invoices/all",
+  "/dashboard/invoices/prices": "/m/invoices/prices",
   "/dashboard/labor": "/m/labor",
   "/dashboard/menu": "/m/menu",
   "/dashboard/menu/catalog": "/m/menu/catalog",

@@ -14,7 +14,7 @@ import { render, screen } from "@testing-library/react"
 // Table calls useRouter() for a link row's navigation; none of these rows
 // carry an href, but the hook runs on every render and throws outside a real
 // App Router tree.
-vi.mock("next/navigation", () => ({ useRouter: () => ({ push: () => {} }) }))
+vi.mock("next/navigation", () => ({ useRouter: () => ({ push: () => {} }), usePathname: () => "/dashboard" }))
 import { Section } from "@/components/counter/surface/section"
 import { Strip } from "@/components/counter/surface/strip"
 import { Table } from "@/components/counter/surface/table"

@@ -6,6 +6,7 @@ import {
   Table,
   useCounterTransition,
   usePageChrome,
+  useSurfaceHref,
   type Column,
 } from "@/components/counter"
 import type { SectionSources } from "@/lib/counter/adapters/types"
@@ -60,6 +61,7 @@ export function CounterInvoicesClient({
   prices: InvoicePriceSections
 }) {
   usePageChrome({ leaf: "Invoices", askSuggestions: ASK_SUGGESTIONS })
+  const surface = useSurfaceHref()
   const { pending } = useCounterTransition()
 
   return (
@@ -97,7 +99,7 @@ export function CounterInvoicesClient({
           <>
             <Table columns={PRICE_COLUMNS} rows={m.rows.slice(0, PRICE_ROWS)} />
             <p className="sh-empty">
-              <Link href="/dashboard/invoices/prices">Every price that moved</Link>
+              <Link href={surface("/dashboard/invoices/prices")}>Every price that moved</Link>
             </p>
           </>
         )}
@@ -133,6 +135,7 @@ function Alert({ desk }: { desk: InvoiceDesk }) {
 }
 
 function Queue({ items }: { items: DeskItem[] }) {
+  const surface = useSurfaceHref()
   if (items.length === 0) {
     return <p className="sh-empty">Nothing needs you. Every invoice ties out and none is held for review.</p>
   }
@@ -141,7 +144,7 @@ function Queue({ items }: { items: DeskItem[] }) {
       {items.map((it) => (
         <div className="sh-order" key={it.key}>
           <InvoiceGlyph kind={it.glyph} />
-          <Link href={it.href} className="who" style={{ color: "inherit", textDecoration: "none" }}>
+          <Link href={surface(it.href)} className="who" style={{ color: "inherit", textDecoration: "none" }}>
             <b>
               {it.vendor} · {it.number}
             </b>
@@ -152,7 +155,7 @@ function Queue({ items }: { items: DeskItem[] }) {
           </span>
           <span className="amt">{it.total}</span>
           <span className="act">
-            <Link className="btn btn--primary" href={it.href}>
+            <Link className="btn btn--primary" href={surface(it.href)}>
               {it.act}
             </Link>
           </span>

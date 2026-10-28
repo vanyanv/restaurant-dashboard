@@ -2,24 +2,20 @@
 
 import { Section } from "@/components/counter"
 import { loading } from "@/lib/counter/section-data"
+import { InvoicesHead } from "@/app/dashboard/(counter)/invoices/invoices-ui"
 
-/** The phone's invoice loading boundary — the four entries the client renders. */
-export default function MobileInvoicesLoading() {
+/** Needs you's loading boundary: the tabs stay put while the queue loads. */
+export default function InvoicesLoading() {
   return (
     <>
-      <Section bare title="Invoices" data={loading()}>
-        {() => null}
-      </Section>
+      <InvoicesHead sub="Loading" />
       <Section bare title="The figures" data={loading()}>
         {() => null}
       </Section>
-      <Section title="Needs a look" data={loading()}>
+      <Section title="To review" data={loading()} pad={false}>
         {() => null}
       </Section>
-      <Section title="Settled" data={loading()}>
-        {() => null}
-      </Section>
-      <Section bare title="Invoices that need you" data={loading()}>
+      <Section title="Prices that moved" data={loading()} pad={false}>
         {() => null}
       </Section>
     </>

@@ -12,6 +12,7 @@ import {
   Tag,
   useCounterTransition,
   usePageChrome,
+  useSurfaceHref,
   type Column,
   type Row,
   type SwitchableStore,
@@ -167,6 +168,7 @@ export function AllInvoicesClient({
 }
 
 function InvoiceTable({ list, initialView }: { list: InvoiceList; initialView: View }) {
+  const surface = useSurfaceHref()
   const [view, setView] = useState<View>(initialView)
   const [search, setSearch] = useState("")
   const query = useDeferredValue(search)
@@ -186,7 +188,7 @@ function InvoiceTable({ list, initialView }: { list: InvoiceList; initialView: V
 
   const rows: Row[] = shown.map((r) => ({
     key: r.id,
-    href: `/dashboard/invoices/${r.id}`,
+    href: surface(`/dashboard/invoices/${r.id}`),
     cells: {
       invoice: {
         v: (
