@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache"
 import { mapOtterItemToRecipe } from "@/app/actions/menu-item-actions"
 import { getAuthScope } from "@/lib/auth-scope"
 import { prisma } from "@/lib/prisma"
-import { createRecipe, saveRecipeLines } from "@/lib/counter/actions/recipe"
+import { createRecipe, saveRecipeLines, type SaveLine } from "@/lib/counter/actions/recipe"
 
 /**
  * Connect a sold menu item to the recipe that makes it.
@@ -58,10 +58,10 @@ export async function mapItemToRecipe(input: {
  * - neither: a blank recipe.
  *
  * Creating, copying and mapping go through the existing actions, which scope
- * by account and validate the lines. If the recipe was created but a later
- * step failed, the id comes back WITH the error, so the screen can still open
- * the recipe and say what is left to do instead of leaving an orphan behind
- * a failure message.
+ * by account and validate the lines. The copy source is read first, so a bad
+ * one creates nothing. If the recipe was created but a later step failed,
+ * the id comes back WITH the error, and the screen opens the recipe with
+ * that message on it rather than leaving an orphan behind a failure.
  */
 export async function startMenuItem(input: {
   itemName: string
@@ -69,37 +69,50 @@ export async function startMenuItem(input: {
   copyFrom?: string | null
   posName?: string | null
 }): Promise<{ ok: boolean; recipeId: string | null; error: string | null }> {
-  const created = await createRecipe({ itemName: input.itemName, category: input.category })
-  if (!created.ok || !created.recipeId) return created
-  const recipeId = created.recipeId
-
-  if (input.copyFrom) {
-    const scope = await getAuthScope()
-    const source = scope
-      ? await prisma.recipe.findFirst({
-          where: { id: input.copyFrom, accountId: scope.accountId },
-          select: {
-            ingredients: {
-              select: { canonicalIngredientId: true, componentRecipeId: true, ingredientName: true, quantity: true, unit: true },
-              orderBy: { createdAt: "asc" },
+  let recipeId: string | null = null
+  try {
+    // Resolve the dish to copy BEFORE creating anything, so a stale or
+    // foreign id fails cleanly instead of leaving an empty recipe behind.
+    let lines: SaveLine[] = []
+    if (input.copyFrom) {
+      const scope = await getAuthScope()
+      const source = scope
+        ? await prisma.recipe.findFirst({
+            where: { id: input.copyFrom, accountId: scope.accountId },
+            select: {
+              ingredients: {
+                select: { canonicalIngredientId: true, componentRecipeId: true, ingredientName: true, quantity: true, unit: true },
+                orderBy: { createdAt: "asc" },
+              },
             },
-          },
-        })
-      : null
-    if (!source) return { ok: false, recipeId, error: "The dish to copy was not found, so the new item starts empty." }
-    if (source.ingredients.length > 0) {
-      const saved = await saveRecipeLines({ recipeId, lines: source.ingredients })
+          })
+        : null
+      if (!source) return { ok: false, recipeId: null, error: "The dish to copy was not found. Nothing was created." }
+      lines = source.ingredients
+    }
+
+    const created = await createRecipe({ itemName: input.itemName, category: input.category })
+    if (!created.ok || !created.recipeId) return created
+    recipeId = created.recipeId
+
+    if (lines.length > 0) {
+      const saved = await saveRecipeLines({ recipeId, lines })
       if (!saved.ok) return { ok: false, recipeId, error: `Created, but the lines were not copied: ${saved.error}` }
     }
-  }
 
-  if (input.posName?.trim()) {
-    const mapped = await mapItemToRecipe({ otterItemName: input.posName.trim(), recipeId })
-    if (!mapped.ok) return { ok: false, recipeId, error: `Created, but not linked to the POS item: ${mapped.error}` }
-  }
+    if (input.posName?.trim()) {
+      const mapped = await mapItemToRecipe({ otterItemName: input.posName.trim(), recipeId })
+      if (!mapped.ok) {
+        return { ok: false, recipeId, error: `Created, but not linked to the POS item yet: ${mapped.error}` }
+      }
+    }
 
-  revalidatePath("/dashboard/menu/items")
-  return { ok: true, recipeId, error: null }
+    revalidatePath("/dashboard/menu/items")
+    return { ok: true, recipeId, error: null }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    return { ok: false, recipeId, error: recipeId ? `Created, but not finished: ${message}` : message }
+  }
 }
 
 /**

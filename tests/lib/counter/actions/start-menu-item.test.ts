@@ -45,11 +45,18 @@ describe("startMenuItem", () => {
     expect(saveRecipeLines).toHaveBeenCalledWith({ recipeId: "r_new", lines: LINES })
   })
 
-  it("does not copy a recipe from another account, but still returns the new id", async () => {
+  it("creates nothing when the dish to copy is not in the caller's account", async () => {
     asMock(prisma.recipe.findFirst).mockResolvedValue(null)
     const r = await startMenuItem({ itemName: "X", category: "Sliders", copyFrom: "r_other" })
+    expect(r).toMatchObject({ ok: false, recipeId: null })
+    expect(createRecipe).not.toHaveBeenCalled()
+  })
+
+  it("returns the new id with the error when a later step fails", async () => {
+    asMock(mapOtterItemToRecipe).mockRejectedValue(new Error("db down"))
+    const r = await startMenuItem({ itemName: "Y", category: "Sliders", posName: "Y" })
     expect(r).toMatchObject({ ok: false, recipeId: "r_new" })
-    expect(saveRecipeLines).not.toHaveBeenCalled()
+    expect(r.error).toContain("not linked")
   })
 
   it("maps the POS name when starting from something already selling", async () => {

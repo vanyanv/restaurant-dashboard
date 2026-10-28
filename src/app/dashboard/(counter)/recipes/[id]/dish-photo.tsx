@@ -1,6 +1,7 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
+import { usePathname, useRouter } from "next/navigation"
 import { MenuPhoto } from "@/components/counter"
 import { menuPhotoFor, photoFrame, type MenuWay } from "@/lib/counter/menu-photos"
 
@@ -10,15 +11,37 @@ import { menuPhotoFor, photoFrame, type MenuWay } from "@/lib/counter/menu-photo
  * Way) gets a switch between the two shots; the recipe below is the same
  * either way, the Ways being add-ons on the POS.
  *
- * `justCreated` is the New menu item screen's hand-off: a recipe that was
+ * `justCreated` (and `warn`, when a step after the create failed) is the
+ * New menu item screen's hand-off: a recipe that was
  * made a moment ago says what to do next instead of opening on an empty page
  * with no instructions.
  */
-export function DishPhoto({ name, justCreated }: { name: string; justCreated: boolean }) {
+export function DishPhoto({
+  name,
+  justCreated,
+  warn,
+}: {
+  name: string
+  justCreated: boolean
+  warn: string | null
+}) {
   const [way, setWay] = useState<MenuWay>("chris")
+  // The hand-off is shown once: it is held here and dropped from the URL, so
+  // a reload or a later visit does not say "Created" again.
+  const [handoff] = useState(() => (justCreated ? { warn } : null))
+  const router = useRouter()
+  const pathname = usePathname()
+  useEffect(() => {
+    if (!justCreated) return
+    const qs = new URLSearchParams(window.location.search)
+    qs.delete("new")
+    qs.delete("warn")
+    const rest = qs.toString()
+    router.replace(rest ? `${pathname}?${rest}` : pathname, { scroll: false })
+  }, [justCreated, pathname, router])
   const shots = menuPhotoFor(name)
   const frame = photoFrame(name, way)
-  if (!frame && !justCreated) return null
+  if (!frame && !handoff) return null
 
   return (
     <div className="mi-hero">
@@ -34,7 +57,11 @@ export function DishPhoto({ name, justCreated }: { name: string; justCreated: bo
             </button>
           </div>
         ) : null}
-        {justCreated ? (
+        {handoff?.warn ? (
+          <p className="ct-note ct-note--bad ct-note--bare" role="status">
+            {handoff.warn}
+          </p>
+        ) : handoff ? (
           <p className="ct-note ct-note--good ct-note--bare" role="status">
             Created, and the same at every store. Check its lines under &ldquo;The recipe&rdquo;, add anything missing
             from &ldquo;Add an ingredient&rdquo;, then Save.

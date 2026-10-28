@@ -312,7 +312,7 @@ export function CounterRecipeClient({
         />
       </PageHead>
 
-      <DishPhoto name={title} justCreated={params.get("new") === "1"} />
+      <DishPhoto name={title} justCreated={params.get("new") === "1"} warn={params.get("warn")} />
 
       <Section bare title="The figures" data={sections.head} pending={pending}>
         {(h) => (

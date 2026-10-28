@@ -129,9 +129,9 @@ function Body({ data }: { data: MenuItemsData }) {
         <a className="sh-tile" href="#all">
           <span className="k">Fully costed</span>
           <span className="v">
-            {count(c.fullyCosted)} of {count(c.dishes)}
+            {count(c.fullyCosted)} of {count(c.sellingDishes)}
           </span>
-          <span className="s">Every line priced</span>
+          <span className="s">Dishes that sold with every line priced</span>
         </a>
         <div className="sh-tile">
           <span className="k">Food cost</span>

@@ -86,6 +86,8 @@ export interface NeedRow {
 export interface MenuItemsData {
   counts: {
     dishes: number
+    /** Dishes that sold in the range: the denominator of `fullyCosted`. */
+    sellingDishes: number
     fullyCosted: number
     notCosted: number
     notCostedSold: number
@@ -282,7 +284,9 @@ export async function loadMenuItems(input: MenuItemsInput): Promise<MenuItemsDat
           ? "Some days had a line with no price"
           : "Uses an ingredient with an old price"
     }
-    if (glyph === "ok" || (glyph === "up" && !empty && d.foodCostOverride == null)) fullyCosted += 1
+    // Only a dish that sold can be vouched for: the stale-price check runs on
+    // selling dishes, so an unsold one is not counted either way.
+    if (glyph === "ok") fullyCosted += 1
 
     const sold = a?.sold ?? 0
     const avg = sold > 0 ? a!.revenue / sold : null
@@ -388,6 +392,7 @@ export async function loadMenuItems(input: MenuItemsInput): Promise<MenuItemsDat
   return {
     counts: {
       dishes: dishes.length,
+      sellingDishes: selling.length,
       fullyCosted,
       notCosted: notCostedRows.length,
       notCostedSold:

@@ -59,14 +59,20 @@ function Body({ data, focusPos }: { data: MenuItemStartData; focusPos: string | 
   const run = (fn: () => Promise<{ ok: boolean; recipeId?: string | null; error: string | null }>) => {
     setError(null)
     startTransition(async () => {
-      const r = await fn()
-      if (r.recipeId) {
-        router.push(`/dashboard/recipes/${r.recipeId}${r.ok ? "?new=1" : ""}`)
-        if (!r.ok) setError(r.error)
-        return
+      try {
+        const r = await fn()
+        if (r.recipeId) {
+          // A partial success still opens the recipe; the message rides along
+          // so the dish page can say what is left to do.
+          const warn = r.ok ? "" : `&warn=${encodeURIComponent(r.error ?? "Not every step finished.")}`
+          router.push(`/dashboard/recipes/${r.recipeId}?new=1${warn}`)
+          return
+        }
+        if (!r.ok) setError(r.error ?? "That did not save. Try again.")
+        else router.refresh()
+      } catch {
+        setError("That did not reach the server. Check the connection and try again.")
       }
-      if (!r.ok) setError(r.error ?? "That did not save. Try again.")
-      else router.refresh()
     })
   }
 
