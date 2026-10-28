@@ -7,7 +7,10 @@ import { getAccountStoreRows } from "@/lib/account-stores"
 import { cached, stableKey } from "@/lib/cache/cached"
 import { otterRangeTags, rangeTtl } from "@/lib/cache/range"
 import { todayInLA } from "@/lib/dashboard-utils"
-import { Prisma } from "@/generated/prisma/client"
+import { getAllStoresPnL } from "@/app/actions/store/pnl-actions"
+import { TOTAL_SALES_CODE } from "@/lib/pnl"
+import { rowValues } from "@/lib/counter/statement"
+import { loadLaborCost } from "@/lib/counter/labor-cost"
 import {
   buildSplhSeries,
   buildSplhSeriesRolling,
@@ -89,8 +92,9 @@ function calendarDay(d: Date): string {
 
 /**
  * SPLH for the owner's stores. Labor hours come from HarriPositionDaily
- * (`actualSeconds`), sales from OtterHourlySummary — both are LA-calendar
- * daily grain, so they join on (storeId, date) directly.
+ * (`actualSeconds`), labor dollars from `loadLaborCost`, and sales from the
+ * statement's Net Sales (the P&L's figure) — all LA-calendar daily grain, so
+ * they join on (storeId, date) directly.
  *
  * Returns one series per store that has any labor hours at all; stores still
  * in construction have no Harri rows and are omitted rather than rendered as
@@ -136,7 +140,7 @@ export async function getSplhSeries(
     // Without a range the window is "trailing, ending now", so the key must
     // carry the day — or this morning's reader would be served last night's
     // window until the TTL ran out. With a range the bounds ARE the key.
-    `splh:account:${accountId}:${stableKey({
+    `splh2:account:${accountId}:${stableKey({
       g: granularity,
       s: range?.startDate ?? null,
       e: range?.endDate ?? null,
@@ -175,28 +179,55 @@ async function loadSplhSeries(input: {
 
   const storeIds = stores.map((s) => s.id)
 
-  // One pass: labor hours + cost per (store, day) joined to net sales.
-  // OtterHourlySummary is the sales side because it is already LA-calendar
-  // bucketed; its netSales reconciles with OtterDailySummary to ~0.1%.
-  const salesUpper = until ? Prisma.sql`AND "date" <= ${until}` : Prisma.empty
-  const laborUpper = until ? Prisma.sql`AND h."date" <= ${until}` : Prisma.empty
-  const rows = await prisma.$queryRaw<Array<JoinedRow & { storeId: string }>>(Prisma.sql`
-    SELECT h."storeId",
-           h."date",
-           SUM(h."actualSeconds") / 3600.0            AS hours,
-           SUM(COALESCE(h."totalLabor", 0))           AS cost,
-           s.net                                      AS net
-      FROM "HarriPositionDaily" h
-      LEFT JOIN (
-        SELECT "storeId", "date", SUM("netSales") AS net
-          FROM "OtterHourlySummary"
-         WHERE "storeId" IN (${Prisma.join(storeIds)}) AND "date" >= ${since} ${salesUpper}
-         GROUP BY "storeId", "date"
-      ) s ON s."storeId" = h."storeId" AND s."date" = h."date"
-     WHERE h."storeId" IN (${Prisma.join(storeIds)}) AND h."date" >= ${since} ${laborUpper}
-     GROUP BY h."storeId", h."date", s.net
-     ORDER BY h."date" ASC
-  `)
+  // Per (store, day): hours from HarriPositionDaily (the base table — a day
+  // with no position row is not a day worked), labor DOLLARS from
+  // `loadLaborCost`, and net sales from the statement's Net Sales — the same
+  // figure the P&L and the Labor page print. This used to read
+  // `OtterHourlySummary.netSales`, a different "net sales" (~6% higher at
+  // Hollywood), so the Overview's SPLH and the Labor page's disagreed.
+  const endDate = until ?? new Date(`${todayInLA()}T00:00:00.000Z`)
+  const [hourRows, laborCost, pnl] = await Promise.all([
+    prisma.harriPositionDaily.groupBy({
+      by: ["storeId", "date"],
+      where: {
+        storeId: { in: storeIds },
+        store: { accountId },
+        date: { gte: since, lte: endDate },
+      },
+      _sum: { actualSeconds: true },
+    }),
+    loadLaborCost({ accountId, storeIds, startDate: since, endDate }),
+    getAllStoresPnL({ startDate: since, endDate, granularity: "daily" }),
+  ])
+
+  // Net Sales per store and day. A day the statement does not price (no sales
+  // row, or $0) is UNKNOWN here, not a day of $0: with staff on the clock a $0
+  // would score as the chart's worst day. It is counted in `daysMissingSales`.
+  const netBy = new Map<string, number>()
+  if (!("error" in pnl)) {
+    for (const st of pnl.perStore) {
+      const net = rowValues(st.rows, TOTAL_SALES_CODE) ?? []
+      pnl.periods.forEach((p, i) => {
+        const v = net[i]
+        if (typeof v === "number" && Number.isFinite(v) && v > 0) {
+          netBy.set(`${st.storeId}|${calendarDay(p.startDate)}`, v)
+        }
+      })
+    }
+  }
+
+  const rows: Array<JoinedRow & { storeId: string }> = hourRows
+    .map((r) => {
+      const day = calendarDay(r.date)
+      return {
+        storeId: r.storeId,
+        date: r.date,
+        hours: (r._sum.actualSeconds ?? 0) / 3600,
+        cost: laborCost.stores[r.storeId]?.byDay[day]?.amount ?? 0,
+        net: netBy.get(`${r.storeId}|${day}`) ?? null,
+      }
+    })
+    .sort((x, y) => x.date.getTime() - y.date.getTime())
 
   // A day whose sales side of the LEFT JOIN missed has `net` NULL, and NULL is
   // not zero here. Reading it as $0 of sales on a full roster gives that day

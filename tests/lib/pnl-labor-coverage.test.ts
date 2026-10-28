@@ -107,3 +107,48 @@ describe("labour coverage — what the blend admits to", () => {
     expect(value).toBeGreaterThan(2_400)
   })
 })
+
+describe("a stored fixedMonthlyLabor of 0 is not a budget", () => {
+  const ZERO_BUDGET: StoreFixedInputs = { ...BUDGETED, fixedMonthlyLabor: 0 }
+
+  it("reads as unknown, like null, when Harri covers only part of the period", () => {
+    const zero = laborRow(ZERO_BUDGET, 3, 2_400)
+    const none = laborRow(NO_BUDGET, 3, 2_400)
+    expect(zero).toEqual(none)
+    expect(zero.unknown).toBe(true)
+  })
+
+  it("is not labelled a fixed figure when nothing is covered", () => {
+    expect(laborRow(ZERO_BUDGET, 0, 0).label).toBe("Labor (estimated)")
+    expect(laborRow(ZERO_BUDGET, 0, 0).unknown).toBe(true)
+  })
+
+  it("still uses a real budget", () => {
+    expect(laborRow(BUDGETED, 0, 0).label).toBe("Labor (fixed)")
+  })
+})
+
+describe("a pre-open store: no sales and no labor reading", () => {
+  function preOpen(store: StoreFixedInputs) {
+    const computed = computeStorePnL({
+      bucketed: [[]],
+      periods: week,
+      store,
+      harriLaborByPeriod: [{ actualUsd: 0, coveredDays: 0 }],
+    })
+    const row = computed.rows.find((r) => r.code === LABOR_CODE)!
+    return { value: computed.laborValues[0], unknown: row.isUnknown?.[0] ?? false }
+  }
+
+  it("is charged no fixed labor and is not flagged unknown", () => {
+    expect(preOpen(BUDGETED)).toEqual({ value: 0, unknown: false })
+  })
+
+  it("is not flagged unknown without a budget either", () => {
+    expect(preOpen(NO_BUDGET)).toEqual({ value: 0, unknown: false })
+  })
+
+  it("an open store with sales and no reading still falls back to the budget", () => {
+    expect(laborRow(BUDGETED, 0, 0).value).toBeGreaterThan(0)
+  })
+})

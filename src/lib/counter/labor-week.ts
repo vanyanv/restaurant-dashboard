@@ -3,6 +3,8 @@ import { prisma } from "@/lib/prisma"
 import { getScopedStores } from "@/lib/account-stores"
 import { cached, stableKey } from "@/lib/cache/cached"
 import { otterRangeTags, rangeTtl } from "@/lib/cache/range"
+import { loadLaborCost } from "@/lib/counter/labor-cost"
+import { missingLaborByDay, missingStoresByDay } from "@/lib/counter/labor-cost-core"
 import {
   dayCount,
   isoDay,
@@ -16,89 +18,23 @@ import {
  * The labour week: hours, cost, sales-per-labour-hour and labour percent,
  * the role split, and a twelve-week trend.
  *
- * ## The central ruling: two sales figures, on purpose
+ * ## One sales figure, one labor-dollar function
  *
- * This module reads TWO different sales figures, for two different
- * questions, and neither may leak into the other's answer:
- *
- * - **`laborPct` is taken on TOTAL SALES** — the same figure the P&L prints
- *   (`getAllStoresPnL`'s `grossSales`, `TOTAL_SALES_CODE` on the statement).
- *   That figure is NOT queried here: `loadLaborWeek` takes it in as
- *   `salesByDay`, off the daily statement the page already loaded. A loader
- *   that queried its own Total Sales would be a second place that number
- *   could drift from the P&L's, and two pages printing two labour percentages
- *   for the same week is the exact defect this module exists to close.
- * - **`splh` is taken on PLATFORM sales** (`OtterHourlySummary.netSales`) —
- *   the same source every existing SPLH view in this codebase already reads
- *   (`src/app/actions/labor-productivity-actions.ts`, `src/app/actions/
- *   splh-actions.ts`, `src/lib/splh.ts`). SPLH answers "how much business did
- *   an hour of labour produce", which is not a question about the P&L's
- *   revenue line, and switching its denominator to Total Sales would make
- *   this page's SPLH disagree with the SPLH already shown everywhere else
- *   in the product.
- *
- * **`laborPct` is ALWAYS on Total Sales — the current week's and the
- * twelve-week trend's.** An earlier version of this module read the trend's
- * `laborPct` on platform sales, for a real reason (platform sales is the only
- * per-day figure that reached back twelve weeks without a second rollup), and
- * mitigated the resulting five-to-eight-point gap with a footnote. That
- * shipped a correct description of a wrong number: one page printing 17.9% a
- * few hundred pixels above a chart printing 12.9% for the SAME week. The fix
- * (task 4b) is not a footnote — it is `loadLaborTrend` taking a per-week Total
- * Sales figure, on the same contract as `loadLaborWeek`'s `salesByDay`: the
- * adapter loads a daily statement over the trend's OWN twelve-week range,
- * reads `TOTAL_SALES_CODE` off it exactly as `salesByDayOf` does for the
- * headline, and folds the days into `trailingWeeks`' own Monday-start weeks.
- * `splh` keeps reading platform sales on both the week and the trend — that
- * split was never the defect; the trend's `laborPct` reading a DIFFERENT sales
- * figure than the headline's `laborPct` was.
- *
- * `loadLaborWeek` therefore queries `OtterHourlySummary` itself for SPLH's
- * sales even though Total Sales is handed in — that is not the "second
- * query" the interface note warns against, because it is answering a
- * question (platform sales per day) the statement never answered in the
- * first place.
- *
- * ## Why this queries the table instead of calling `getSplhSeries`
- *
- * `src/app/actions/splh-actions.ts`'s `getSplhSeries` is this app's actual
- * OWNER of the sales-per-labour-hour figure — the Overview page prints it,
- * and this module's SPLH must never drift from it. It was evaluated and
- * rejected as a call target here, for reasons that are structural, not
- * stylistic:
- *
- * - It calls `getServerSession` and gates on `hasOwnerAccess` ITSELF. This
- *   module's own scoping section (below) explains why it deliberately does
- *   NOT import `@/lib/auth` — that pulls in `@/lib/prisma` at module load and
- *   takes every importer down without `DATABASE_URL`, tests included. Calling
- *   `getSplhSeries` would reintroduce that exact import, plus a second,
- *   redundant session fetch, plus a hidden behavioural change: a non-OWNER
- *   viewer of the labour page would silently get an empty SPLH (`[]`) even
- *   though `loadLaborWeek` itself has no such role gate.
- * - It takes no `storeId`. It always returns one series per active store on
- *   the account; a caller wanting a SINGLE store's SPLH (this module's
- *   `storeId: string | null` contract) would have to re-filter and re-sum its
- *   per-store output client-side — which is re-deriving the join this module
- *   already does directly, not avoiding it.
- * - Its `range` is `{ startDate, endDate }` (inclusive `endDate`, the
- *   `_shared/date-range.ts` shape), not this module's `DateRange`, AND it
- *   widens the query by `TARGET_HISTORY_DAYS` (56 days) on top of whatever
- *   range is passed, to score each day against its weekday's trailing
- *   median — work this module has no use for and would pay for on every
- *   call.
- * - Its `SplhPoint` output is a variance-scored chart point (`targetSplh`,
- *   `earnedHours`, `varianceDollars`, `status`), built by joining
- *   `HarriPositionDaily` as the base table (a day with sales but zero labour
- *   rows would not appear at all) — a different null contract than this
- *   module's "platform sales `null` only when the table truly has no row for
- *   that day", regardless of whether hours were worked.
- *
- * None of that rules out a future shared low-level query for "net sales per
- * (store, day) over a range" that both this module and `getSplhSeries` call
- * — but that is a refactor of `splh-actions.ts`, out of scope here. Until
- * then, this file queries `OtterHourlySummary.netSales` directly, and
- * `splh-actions.ts` remains the figure's owner for every purpose
- * `getSplhSeries` already serves (the Overview page, the variance charts).
+ * - **`laborPct` and `splh` are both taken on TOTAL SALES** — the P&L's Net
+ *   Sales (`TOTAL_SALES_CODE` on the statement). That figure is NOT queried
+ *   here: `loadLaborWeek` takes it in as `salesByDay`, off the daily statement
+ *   the page already loaded, and `loadLaborTrend` takes it per week. A loader
+ *   that queried its own sales would be a second place the number could drift
+ *   from the P&L's. SPLH used to divide `OtterHourlySummary.netSales` (a
+ *   different "net sales", ~6% higher at Hollywood); that made the page print
+ *   two, and is gone.
+ * - **Labor DOLLARS come from `loadLaborCost`** (`labor-cost.ts`), the same
+ *   rule the P&L reads: `HarriDailyLabor.actualCost` when it is a real
+ *   reading, else the day's `HarriPositionDaily.totalLabor`, else the day is
+ *   MISSING (`LaborDay.costMissing`) — not $0. Hours, the schedule gap and the
+ *   role split stay on `HarriPositionDaily` / `HarriShift`: they are not
+ *   dollars of the day. So the role split's costs can differ from the day
+ *   total on a day the daily table won; the headline never uses them.
  *
  * ## Scoping
  *
@@ -138,7 +74,21 @@ export interface LaborDay {
   /** Hours published, from `HarriShift.minutes`. `null` when no schedule was published. */
   scheduledHours: number | null
   cost: number
-  /** Sales over hours worked. `null` with no hours — never `0`. */
+  /**
+   * Store-days that SOLD on this day and have no labor reading in either Harri
+   * table (`loadLaborCost`'s MISSING). `cost` leaves them out — they were not
+   * free, they were not synced — and so do `laborPct` and `splh`.
+   */
+  missingStoreDays: number
+  /** `missingStoreDays > 0`. */
+  costMissing: boolean
+  /**
+   * The day's Total Sales less the sales on its missing store-days: what
+   * `laborPct` and `splh` divide by, so neither has a numerator short of a
+   * store the denominator still counts. `null` with no sales figure.
+   */
+  ratedSales: number | null
+  /** Rated sales over hours worked. `null` with no hours or no sales — never `0`. */
   splh: number | null
   /** This day's labour over this day's Total Sales, 0..100. `null` with no sales. */
   laborPct: number | null
@@ -168,10 +118,12 @@ export interface LaborWeek {
   actualHours: number
   scheduledHours: number | null
   cost: number
+  /** Store-days that sold and have no labor reading — the week's labor total is short by them. */
+  missingStoreDays: number
   /** `cost / actualHours`. The rate the leak ledger costs its hours at. */
   blendedRate: number | null
   splh: number | null
-  /** Over TOTAL SALES, not platform sales (L-R2). */
+  /** Over TOTAL SALES (L-R2). */
   laborPct: number | null
   overtimeCost: number
 }
@@ -198,8 +150,10 @@ export interface LaborTrendWeek {
    * for the week.
    */
   laborPct: number | null
-  /** Over PLATFORM sales — see the module comment. `null` with no sales data. */
+  /** Over the same TOTAL SALES as `laborPct`. `null` with no sales or no hours. */
   splh: number | null
+  /** Store-days that sold with no labor reading inside the week. */
+  missingStoreDays: number
   /** Fewer days than a full week fell inside the data (L-R11). */
   isPartial: boolean
 }
@@ -278,19 +232,28 @@ export function laborDay(input: {
   /** `null` when `HarriShift` published no shift at all for this day. */
   scheduledMinutes: number | null
   cost: number
-  /** Off `OtterHourlySummary` — SPLH's sales figure. NOT Total Sales. */
-  platformSales: number | null
-  /** Off the statement's Total Sales row — `laborPct`'s ONLY denominator. */
+  /** Store-days that sold with no labor reading (see `LaborDay.missingStoreDays`). */
+  missingStoreDays?: number
+  /** Net Sales on those store-days; left out of the ratios' denominator. */
+  missingSales?: number
+  /** Off the statement's Total Sales row — what the page prints as the day's sales. */
   totalSales: number | null
 }): LaborDay {
   const actualHours = input.actualSeconds / 3600
   const scheduledHours =
     input.scheduledMinutes === null ? null : input.scheduledMinutes / 60
+  const missingStoreDays = input.missingStoreDays ?? 0
+  const ratedSales =
+    input.totalSales === null || !Number.isFinite(input.totalSales)
+      ? input.totalSales
+      : Math.max(0, input.totalSales - (input.missingSales ?? 0))
   const splh =
-    input.platformSales === null || actualHours === 0
+    ratedSales === null || !Number.isFinite(ratedSales) || actualHours === 0
       ? null
-      : input.platformSales / actualHours
-  const laborPct = pctOfSales(input.cost, input.totalSales)
+      : ratedSales / actualHours
+  // A day whose labor is missing has a rated denominator of 0 (single store),
+  // so its percentage is "no reading", never 0.0%.
+  const laborPct = pctOfSales(input.cost, ratedSales)
 
   return {
     key: input.key,
@@ -298,6 +261,9 @@ export function laborDay(input: {
     actualHours,
     scheduledHours,
     cost: input.cost,
+    missingStoreDays,
+    costMissing: missingStoreDays > 0,
+    ratedSales,
     splh,
     laborPct,
     totalSales: input.totalSales,
@@ -338,8 +304,8 @@ export function laborWeek(days: LaborDay[], overtimeCost: number): LaborWeek {
 
   const splhKnown = days.filter((d) => d.splh !== null)
   const splhHours = sum(splhKnown.map((d) => d.actualHours))
-  const platformSales = sum(splhKnown.map((d) => (d.splh as number) * d.actualHours))
-  const splh = splhHours > 0 ? platformSales / splhHours : null
+  const splhSales = sum(splhKnown.map((d) => d.ratedSales as number))
+  const splh = splhHours > 0 ? splhSales / splhHours : null
 
   /*
    * SUMMED, not reconstructed. See `LaborDay.totalSales` for what inverting
@@ -355,13 +321,25 @@ export function laborWeek(days: LaborDay[], overtimeCost: number): LaborWeek {
   // making the week's denominator NaN — one bad row must not take the other
   // six with it, which is the failure this whole block exists to prevent.
   const salesKnown = days.filter(
-    (d) => d.totalSales !== null && Number.isFinite(d.totalSales),
+    (d) => d.ratedSales !== null && Number.isFinite(d.ratedSales),
   )
   const totalSales =
-    salesKnown.length === 0 ? null : sum(salesKnown.map((d) => d.totalSales as number))
+    salesKnown.length === 0 ? null : sum(salesKnown.map((d) => d.ratedSales as number))
   const laborPct = pctOfSales(cost, totalSales)
 
-  return { days, actualHours, scheduledHours, cost, blendedRate, splh, laborPct, overtimeCost }
+  const missingStoreDays = sum(days.map((d) => d.missingStoreDays))
+
+  return {
+    days,
+    actualHours,
+    scheduledHours,
+    cost,
+    missingStoreDays,
+    blendedRate,
+    splh,
+    laborPct,
+    overtimeCost,
+  }
 }
 
 /**
@@ -396,9 +374,11 @@ export function laborRole(
 interface TrendDayInput {
   cost: number
   hours: number
-  /** Off `OtterHourlySummary` — `splh`'s sales figure ONLY. NOT `laborPct`'s
-   *  denominator any more (task 4b) — see the module comment. */
-  platformSales: number | null
+  /** The day's Total Sales; `null` when the statement has no figure for it. */
+  sales: number | null
+  /** Store-days that sold with no labor reading, and the sales on them. */
+  missingStoreDays: number
+  missingSales: number
 }
 
 /**
@@ -422,20 +402,31 @@ export function laborTrendWeek(
   weekStart: Date,
   isPartial: boolean,
   days: TrendDayInput[],
-  totalSales: number | null,
 ): LaborTrendWeek {
   const cost = sum(days.map((d) => d.cost))
   const hours = sum(days.map((d) => d.hours))
-  const known = days.filter((d) => d.platformSales !== null)
-  const sales = known.length > 0 ? sum(known.map((d) => d.platformSales as number)) : null
+
+  // Both ratios divide RATED sales — the day's sales less the store-days with
+  // no labor reading — so a missing day cannot dilute them. SPLH pairs a day's
+  // sales with that day's hours, as `laborWeek` does: sales on a day with no
+  // hours are not a rate.
+  const rated = days.map((d) =>
+    d.sales === null || !Number.isFinite(d.sales) ? null : Math.max(0, d.sales - d.missingSales),
+  )
+  const known = rated.filter((r): r is number => r !== null)
+  const ratedTotal = known.length === 0 ? null : sum(known)
+  const paired = days.filter((d, i) => rated[i] !== null && d.hours > 0)
+  const pairedHours = sum(paired.map((d) => d.hours))
+  const pairedSales = sum(paired.map((d) => rated[days.indexOf(d)] as number))
 
   return {
     key: isoDay(weekStart),
     label: monthDay(weekStart),
     cost,
     hours,
-    laborPct: pctOfSales(cost, totalSales),
-    splh: sales !== null && hours > 0 ? sales / hours : null,
+    laborPct: pctOfSales(cost, ratedTotal),
+    splh: pairedHours > 0 ? pairedSales / pairedHours : null,
+    missingStoreDays: sum(days.map((d) => d.missingStoreDays)),
     isPartial,
   }
 }
@@ -456,8 +447,10 @@ export async function loadLaborWeek(input: {
   accountId: string
   /** Per-day Total Sales, keyed `YYYY-MM-DD`, off the statement the page already loaded. */
   salesByDay: Map<string, number>
+  /** The same Net Sales per store and day, off the same statement — see `salesByStoreDayOf`. */
+  salesByStoreDay: Map<string, Map<string, number>>
 }): Promise<{ days: LaborDay[]; roles: LaborRole[]; overtimeCost: number }> {
-  const { range, storeId, accountId, salesByDay } = input
+  const { range, storeId, accountId, salesByDay, salesByStoreDay } = input
   const { startDate, endDate } = toQueryBounds(range)
 
   const stores = await getScopedStores(accountId, storeId ?? null)
@@ -472,14 +465,16 @@ export async function loadLaborWeek(input: {
   // under its own key, and it only enters at `laborDay` below. Folding it in
   // would make this key move with the statement instead of with labour.
   const fold = await cached(
-    `counter:laborweek:${stableKey({ ids: [...storeIds].sort(), from: startDate, to: endDate })}`,
+    `counter:laborweek2:${stableKey({ a: accountId, ids: [...storeIds].sort(), from: startDate, to: endDate })}`,
     rangeTtl(endDate),
     // Three tables, two writers: `/api/cron/harri` busts `harri` (positions
     // AND shifts come from that one run) and `/api/cron/otter/hourly` busts
     // `otter`; both bust `dash` and the months they wrote.
     ["harri", ...otterRangeTags(startDate, endDate)],
-    () => foldLaborWeekRows({ storeIds, startDate, endDate }),
+    () => foldLaborWeekRows({ accountId, storeIds, startDate, endDate }),
   )
+
+  const missing = missingLaborByDay(fold.missingByDay, salesByStoreDay)
 
   const days: LaborDay[] = []
   const n = dayCount(range)
@@ -493,8 +488,9 @@ export async function loadLaborWeek(input: {
         label: dayLabel(d),
         actualSeconds: hb?.seconds ?? 0,
         scheduledMinutes: key in fold.scheduledByDate ? fold.scheduledByDate[key] : null,
-        cost: hb?.cost ?? 0,
-        platformSales: key in fold.platformByDate ? fold.platformByDate[key] : null,
+        cost: fold.costByDate[key] ?? 0,
+        missingStoreDays: missing[key]?.storeDays ?? 0,
+        missingSales: missing[key]?.sales ?? 0,
         totalSales: salesByDay.has(key) ? (salesByDay.get(key) as number) : null,
       }),
     )
@@ -511,19 +507,23 @@ export async function loadLaborWeek(input: {
  * a `Map` serialises to `{}` and would fold to a week that cost nothing.
  */
 async function foldLaborWeekRows(input: {
+  accountId: string
   storeIds: string[]
   startDate: Date
   endDate: Date
 }): Promise<{
-  hoursByDate: Record<string, { seconds: number; cost: number }>
+  hoursByDate: Record<string, { seconds: number }>
+  /** `loadLaborCost`'s decided days, summed over stores. A day not in here is missing. */
+  costByDate: Record<string, number>
+  /** Per day, the stores with no labor reading (whether or not they sold). */
+  missingByDay: Record<string, string[]>
   scheduledByDate: Record<string, number>
-  platformByDate: Record<string, number>
   roles: Array<{ position: string; payType: "HOURLY" | "SALARIED"; hours: number; cost: number }>
   overtimeCost: number
 }> {
-  const { storeIds, startDate, endDate } = input
+  const { accountId, storeIds, startDate, endDate } = input
 
-  const [positionRows, shiftRows, platformRows] = await Promise.all([
+  const [positionRows, shiftRows, laborCost] = await Promise.all([
     prisma.harriPositionDaily.findMany({
       where: { storeId: { in: storeIds }, date: { gte: startDate, lte: endDate } },
       select: {
@@ -546,13 +546,19 @@ async function foldLaborWeekRows(input: {
       },
       select: { date: true, minutes: true },
     }),
-    prisma.otterHourlySummary.findMany({
-      where: { storeId: { in: storeIds }, date: { gte: startDate, lte: endDate } },
-      select: { date: true, netSales: true },
-    }),
+    // Labor DOLLARS: the one rule shared with the P&L. The position rows above
+    // still give hours and the role split.
+    loadLaborCost({ accountId, storeIds, startDate, endDate }),
   ])
 
-  const hoursByDate: Record<string, { seconds: number; cost: number }> = {}
+  const costByDate: Record<string, number> = {}
+  for (const store of Object.values(laborCost.stores)) {
+    for (const [day, v] of Object.entries(store.byDay)) {
+      costByDate[day] = (costByDate[day] ?? 0) + v.amount
+    }
+  }
+
+  const hoursByDate: Record<string, { seconds: number }> = {}
   const roleAgg = new Map<
     string,
     { position: string; payType: "HOURLY" | "SALARIED"; hours: number; cost: number }
@@ -561,9 +567,8 @@ async function foldLaborWeekRows(input: {
 
   for (const r of positionRows) {
     const key = dbDay(r.date)
-    const bucket = hoursByDate[key] ?? { seconds: 0, cost: 0 }
+    const bucket = hoursByDate[key] ?? { seconds: 0 }
     bucket.seconds += r.actualSeconds ?? 0
-    bucket.cost += r.totalLabor ?? 0
     hoursByDate[key] = bucket
 
     overtimeCost += r.overtimeAmount ?? 0
@@ -587,13 +592,7 @@ async function foldLaborWeekRows(input: {
     scheduledByDate[key] = (scheduledByDate[key] ?? 0) + s.minutes
   }
 
-  const platformByDate: Record<string, number> = {}
-  for (const p of platformRows) {
-    const key = dbDay(p.date)
-    platformByDate[key] = (platformByDate[key] ?? 0) + (p.netSales ?? 0)
-  }
-
-  return { hoursByDate, scheduledByDate, platformByDate, roles: [...roleAgg.values()], overtimeCost }
+  return { hoursByDate, costByDate, missingByDay: missingStoresByDay(laborCost), scheduledByDate, roles: [...roleAgg.values()], overtimeCost }
 }
 
 /**
@@ -621,10 +620,12 @@ export async function loadLaborTrend(input: {
   /** How many weeks back from the range's end. Twelve on both pages. */
   weeks: number
   endingOn: Date
-  /** This week's Total Sales, keyed `isoDay(week.start)`. See above. */
-  weeklyTotalSales: Map<string, number>
+  /** Per-day Total Sales over the trend's span, keyed `YYYY-MM-DD`. See above. */
+  salesByDay: Map<string, number>
+  /** The same per store and day — see `salesByStoreDayOf`. */
+  salesByStoreDay: Map<string, Map<string, number>>
 }): Promise<LaborTrendWeek[]> {
-  const { storeId, accountId, weeks, endingOn, weeklyTotalSales } = input
+  const { storeId, accountId, weeks, endingOn, salesByDay, salesByStoreDay } = input
 
   const stores = await getScopedStores(accountId, storeId ?? null)
   if (stores.length === 0) return []
@@ -639,12 +640,14 @@ export async function loadLaborTrend(input: {
 
   // Same rule as `loadLaborWeek`: the fold is cached, `weeklyTotalSales` is
   // the statement's and stays outside.
-  const { costByDate, hoursByDate, salesByDate } = await cached(
-    `counter:labortrend:${stableKey({ ids: [...storeIds].sort(), from: startDate, to: endDate })}`,
+  const { costByDate, hoursByDate, missingByDay } = await cached(
+    `counter:labortrend3:${stableKey({ a: accountId, ids: [...storeIds].sort(), from: startDate, to: endDate })}`,
     rangeTtl(endDate),
     ["harri", ...otterRangeTags(startDate, endDate)],
-    () => foldLaborTrendRows({ storeIds, startDate, endDate }),
+    () => foldLaborTrendRows({ accountId, storeIds, startDate, endDate }),
   )
+
+  const missing = missingLaborByDay(missingByDay, salesByStoreDay)
 
   return windows.map((w) => {
     const days: TrendDayInput[] = []
@@ -654,51 +657,48 @@ export async function loadLaborTrend(input: {
       days.push({
         cost: costByDate[key] ?? 0,
         hours: hoursByDate[key] ?? 0,
-        platformSales: key in salesByDate ? salesByDate[key] : null,
+        sales: salesByDay.has(key) ? (salesByDay.get(key) as number) : null,
+        missingStoreDays: missing[key]?.storeDays ?? 0,
+        missingSales: missing[key]?.sales ?? 0,
       })
     }
-    const weekKey = isoDay(w.start)
-    const totalSales = weeklyTotalSales.has(weekKey) ? (weeklyTotalSales.get(weekKey) as number) : null
-    return laborTrendWeek(w.start, w.partial, days, totalSales)
+    return laborTrendWeek(w.start, w.partial, days)
   })
 }
 
 /** The two row reads behind the trend, as plain records for the same reason as `foldLaborWeekRows`. */
 async function foldLaborTrendRows(input: {
+  accountId: string
   storeIds: string[]
   startDate: Date
   endDate: Date
 }): Promise<{
+  /** `loadLaborCost`'s decided days, summed over stores. A day not in here is missing. */
   costByDate: Record<string, number>
   hoursByDate: Record<string, number>
-  salesByDate: Record<string, number>
+  missingByDay: Record<string, string[]>
 }> {
-  const { storeIds, startDate, endDate } = input
+  const { accountId, storeIds, startDate, endDate } = input
 
-  const [positionRows, platformRows] = await Promise.all([
+  const [positionRows, laborCost] = await Promise.all([
     prisma.harriPositionDaily.findMany({
       where: { storeId: { in: storeIds }, date: { gte: startDate, lte: endDate } },
-      select: { date: true, totalLabor: true, actualSeconds: true },
+      select: { date: true, actualSeconds: true },
     }),
-    prisma.otterHourlySummary.findMany({
-      where: { storeId: { in: storeIds }, date: { gte: startDate, lte: endDate } },
-      select: { date: true, netSales: true },
-    }),
+    loadLaborCost({ accountId, storeIds, startDate, endDate }),
   ])
 
   const costByDate: Record<string, number> = {}
+  for (const store of Object.values(laborCost.stores)) {
+    for (const [day, v] of Object.entries(store.byDay)) {
+      costByDate[day] = (costByDate[day] ?? 0) + v.amount
+    }
+  }
   const hoursByDate: Record<string, number> = {}
   for (const r of positionRows) {
     const key = dbDay(r.date)
-    costByDate[key] = (costByDate[key] ?? 0) + (r.totalLabor ?? 0)
     hoursByDate[key] = (hoursByDate[key] ?? 0) + (r.actualSeconds ?? 0) / 3600
   }
 
-  const salesByDate: Record<string, number> = {}
-  for (const p of platformRows) {
-    const key = dbDay(p.date)
-    salesByDate[key] = (salesByDate[key] ?? 0) + (p.netSales ?? 0)
-  }
-
-  return { costByDate, hoursByDate, salesByDate }
+  return { costByDate, hoursByDate, missingByDay: missingStoresByDay(laborCost) }
 }

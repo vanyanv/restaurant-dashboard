@@ -92,6 +92,7 @@ const ctx: ChatToolContext = {
     },
     dailyCogsItem: { findMany: vi.fn(async () => []) },
     harriDailyLabor: { findMany: vi.fn(async () => []) },
+    harriPositionDaily: { groupBy: vi.fn(async () => []) },
     storeFixedExpense: { findMany: vi.fn(async () => FIXED_EXPENSES) },
     // The commission groups — no order rows, so each line falls to the store's rate.
     $queryRaw: vi.fn(async () => []),

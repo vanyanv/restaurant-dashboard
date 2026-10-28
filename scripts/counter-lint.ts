@@ -475,6 +475,12 @@ const MOTION_ALLOWED = /[/\\]components[/\\]counter[/\\]motion[/\\]/
  * cut through one function. Its rules live in the Prisma-free
  * `commission-core.ts`, which needs no exemption.
  *
+ * `labor-cost.ts` was named on 2026-10-28: it runs the two Harri reads
+ * (`HarriDailyLabor`, `HarriPositionDaily`) behind every labor-dollar figure
+ * and is read by the P&L rollup, the chat P&L tool and `labor-week.ts`, so a
+ * week costs the same on the P&L, Overview and Labor pages. Its rule lives in
+ * the Prisma-free `labor-cost-core.ts`, which needs no exemption.
+ *
  * Confirmed empirically: extending rule 4 to `.ts` with no exemption beyond
  * `adapters/` produced 25 violations across 20 files (12 under `actions/`,
  * 8 top-level); this allowance, `(adapters|actions)/` plus these eight
@@ -484,7 +490,7 @@ const MOTION_ALLOWED = /[/\\]components[/\\]counter[/\\]motion[/\\]/
  * a fake Prisma import inside a hook is still caught.
  */
 const DATA_ALLOWED_TOP_LEVEL_FILES =
-  "channel-mix|cogs|commission|item-discounts|item-economics|labor-leaks|labor-week|logged-waste|price-move|purchases|run-out|service-profile|staffing-curve|statement|vendor-basket"
+  "channel-mix|cogs|commission|item-discounts|item-economics|labor-cost|labor-leaks|labor-week|logged-waste|price-move|purchases|run-out|service-profile|staffing-curve|statement|vendor-basket"
 const DATA_ALLOWED = new RegExp(
   String.raw`[/\\]lib[/\\]counter[/\\](?:adapters|actions)[/\\]` +
     "|" +

@@ -23,6 +23,7 @@ import type { UnmappedMenuItem } from "@/types/cogs"
 import { recomputeDailyCogsForRange } from "@/lib/cogs-materializer"
 import { CogsStatus } from "@/generated/prisma/client"
 import { cached, monthTags, stableKey } from "@/lib/cache/cached"
+import { loadLaborCost, laborByPeriods, hasFixedLabor } from "@/lib/counter/labor-cost"
 import {
   addCommission,
   bucketCommission,
@@ -387,7 +388,7 @@ export async function getStorePnL(input: {
         storeName: store.name,
         periods: [],
         rows: [],
-        fixedLaborConfigured: store.fixedMonthlyLabor != null,
+        fixedLaborConfigured: hasFixedLabor(store.fixedMonthlyLabor),
         fixedRentConfigured: store.fixedMonthlyRent != null,
         kpis: {
           grossSales: 0,
@@ -466,28 +467,17 @@ export async function getStorePnL(input: {
     })
     const cogs = summarizeDailyCogs(cogsRows, periods)
 
-    // Harri labor actuals (LiveWire). Bucket per-period; computeStorePnL
-    // uses these to override the fixed-monthly labor line when coverage
-    // is high, with proportional fixed-cost fallback for uncovered days.
-    const harriDaily = await prisma.harriDailyLabor.findMany({
-      where: {
-        storeId: store.id,
-        date: { gte: overallStart, lte: overallEnd },
-        actualCost: { not: null },
-      },
-      select: { date: true, actualCost: true },
+    // Labor dollars: `loadLaborCost` is the one rule (daily actual, else the
+    // position sum, else the day is missing), shared with the Labor page.
+    // computeStorePnL uses the result to override the fixed-monthly labor line
+    // by coverage, with proportional fixed-cost fallback for missing days.
+    const laborCost = await loadLaborCost({
+      accountId: session.user.accountId,
+      storeIds: [store.id],
+      startDate: overallStart,
+      endDate: overallEnd,
     })
-    const harriLaborByPeriod = periods.map((p) => {
-      let actualUsd = 0
-      let coveredDays = 0
-      for (const r of harriDaily) {
-        if (r.date >= p.startDate && r.date <= p.endDate && r.actualCost != null) {
-          actualUsd += r.actualCost
-          coveredDays += 1
-        }
-      }
-      return { actualUsd, coveredDays }
-    })
+    const harriLaborByPeriod = laborByPeriods(laborCost.stores[store.id], periods)
 
     const computed = computeStorePnL({
       bucketed,
@@ -556,7 +546,7 @@ export async function getStorePnL(input: {
       storeName: store.name,
       periods,
       rows: computed.rows,
-      fixedLaborConfigured: store.fixedMonthlyLabor != null,
+      fixedLaborConfigured: hasFixedLabor(store.fixedMonthlyLabor),
       fixedRentConfigured: store.fixedMonthlyRent != null,
       kpis: {
         grossSales,
@@ -613,9 +603,10 @@ export async function getAllStoresPnL(input: {
   const accountId = session.user.accountId
 
   return cached(
-    // `pnl2:` since 2026-10-28: the answer's shape grew the sales cascade and
+    // `pnl3:` since 2026-10-28 (`pnl2:` before it grew the sales cascade; pnl3 moved labor
+    // dollars to `loadLaborCost`): the answer's shape grew the sales cascade and
     // the commission basis, and a pre-change entry would lack both.
-    `pnl2:account:${accountId}:${stableKey({
+    `pnl3:account:${accountId}:${stableKey({
       s: input.startDate.toISOString(),
       e: input.endDate.toISOString(),
       g: input.granularity,
@@ -743,23 +734,15 @@ export async function getAllStoresPnL(input: {
       expensesByStore.set(e.storeId, arr)
     }
 
-    // Harri labor actuals (LiveWire), batched across stores. Mirrors the
-    // per-store fetch in getStorePnL so the all-stores roll-up reflects actual
-    // labor instead of falling back to the (often unset) fixed-monthly estimate.
-    const allHarriLabor = await prisma.harriDailyLabor.findMany({
-      where: {
-        storeId: { in: storeIds },
-        date: { gte: overallStart, lte: overallEnd },
-        actualCost: { not: null },
-      },
-      select: { storeId: true, date: true, actualCost: true },
+    // Labor dollars, batched across stores through the same `loadLaborCost`
+    // rule `getStorePnL` uses, so the all-stores roll-up and a store's own P&L
+    // cannot price a week differently.
+    const laborCost = await loadLaborCost({
+      accountId: session.user.accountId,
+      storeIds,
+      startDate: overallStart,
+      endDate: overallEnd,
     })
-    const harriByStore = new Map<string, typeof allHarriLabor>()
-    for (const r of allHarriLabor) {
-      const arr = harriByStore.get(r.storeId) ?? []
-      arr.push(r)
-      harriByStore.set(r.storeId, arr)
-    }
 
     const perStoreComputed: Array<ReturnType<typeof computeStorePnL>> = []
 
@@ -767,18 +750,7 @@ export async function getAllStoresPnL(input: {
       const storeSummaries = byStore.get(store.id) ?? []
       const bucketed = bucketSummariesByPeriod(storeSummaries, periods)
       const storeCogs = summarizeDailyCogs(cogsByStore.get(store.id) ?? [], periods)
-      const storeHarri = harriByStore.get(store.id) ?? []
-      const harriLaborByPeriod = periods.map((p) => {
-        let actualUsd = 0
-        let coveredDays = 0
-        for (const r of storeHarri) {
-          if (r.date >= p.startDate && r.date <= p.endDate && r.actualCost != null) {
-            actualUsd += r.actualCost
-            coveredDays += 1
-          }
-        }
-        return { actualUsd, coveredDays }
-      })
+      const harriLaborByPeriod = laborByPeriods(laborCost.stores[store.id], periods)
       const computed = computeStorePnL({
         bucketed,
         periods,
@@ -838,7 +810,7 @@ export async function getAllStoresPnL(input: {
         rentPct: ratio(rentValue),
         channelMix: channelMix(totalChannelVals),
         fixedCostsConfigured:
-          store.fixedMonthlyLabor != null && store.fixedMonthlyRent != null,
+          hasFixedLabor(store.fixedMonthlyLabor) && store.fixedMonthlyRent != null,
         rows: computed.rows,
         // This store's own periods, by the same route `perPeriod` takes for
         // the account. See `periodLines`.

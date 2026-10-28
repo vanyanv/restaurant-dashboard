@@ -17,7 +17,26 @@ import { dayCount, isoDay, type DateRange } from "@/lib/counter/date-range"
  * time off a UTC-floored cursor, and a reader's day is the restaurant's day.
  */
 export function salesByDayOf(daily: Statement, range: DateRange): Map<string, number> {
-  const net = rowValues(daily.rows, TOTAL_SALES_CODE) ?? []
+  return dayMap(rowValues(daily.rows, TOTAL_SALES_CODE) ?? [], range)
+}
+
+/**
+ * The same Net Sales, per store and day: `store.rows` off the one daily
+ * statement. Labor needs it to know which store-days SOLD but have no labor
+ * reading, so their sales can be left out of the labor % and SPLH denominators.
+ */
+export function salesByStoreDayOf(
+  daily: Statement,
+  range: DateRange,
+): Map<string, Map<string, number>> {
+  const out = new Map<string, Map<string, number>>()
+  for (const s of daily.perStore) {
+    out.set(s.storeId, dayMap(rowValues(s.rows, TOTAL_SALES_CODE) ?? [], range))
+  }
+  return out
+}
+
+function dayMap(net: number[], range: DateRange): Map<string, number> {
   const out = new Map<string, number>()
   for (let i = 0; i < dayCount(range); i++) {
     const d = new Date(
@@ -61,6 +80,7 @@ export async function loadLaborFigures(input: {
     storeId,
     accountId,
     salesByDay: salesByDayOf(statement, range),
+    salesByStoreDay: salesByStoreDayOf(statement, range),
   })
   const week = laborWeek(raw.days, raw.overtimeCost)
   const leaks =

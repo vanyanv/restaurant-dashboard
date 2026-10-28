@@ -1316,7 +1316,7 @@ export function getOverviewSectionPromises(
    * and the whole reason Task 3 unpicked the awaits.
    */
   const laborP = classify(
-    () => loadLaborWeek({ range, storeId, accountId, salesByDay: new Map<string, number>() }),
+    () => loadLaborWeek({ range, storeId, accountId, salesByDay: new Map<string, number>(), salesByStoreDay: new Map() }),
     { retryAction: "retryLabor", isEmpty: (d) => d.days.every((x) => x.actualHours === 0) },
   )
 

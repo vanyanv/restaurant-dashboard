@@ -212,7 +212,7 @@ function linesFrom(k: RollupLines): StatementLines {
   // rollup's shape; a rollup without them (a hand-built fixture) reads as
   // "no discounts, nothing known about how commission was priced", never a
   // crash. Production rollups always carry them — the cache key moved with
-  // the shape (`pnl2:` in pnl-actions).
+  // the shape (`pnl3:` in pnl-actions).
   return {
     grossSales: k.grossSales,
     salesBeforeDiscounts: k.salesBeforeDiscounts ?? k.grossSales,
