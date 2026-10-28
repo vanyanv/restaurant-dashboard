@@ -20,6 +20,7 @@ import {
 } from "@/lib/counter/labor-week"
 import { hoursText, scheduleHeld } from "@/lib/counter/schedule-hold"
 import { loadLeakLedger, type LeakLedger } from "@/lib/counter/labor-leaks"
+import { salesByDayOf } from "@/lib/counter/labor-figures"
 import { loadScheduleGap, loadStaffingCurve, type StaffingCurve } from "@/lib/counter/staffing-curve"
 import { count, money, pct, plural, points } from "@/lib/counter/format"
 import {
@@ -532,31 +533,8 @@ function scopeReason(
   return null
 }
 
-/**
- * The statement's Total Sales, one reading per calendar day, keyed
- * `YYYY-MM-DD`.
- *
- * This is L-R2's whole mechanism: `loadLaborWeek` takes this map and computes
- * `laborPct` on it, so the labour percentage on this page and the labour line
- * on the P&L are the same division of the same two numbers.
- *
- * The key comes from the RANGE's own calendar (`range.start + i`), not from a
- * bucket's label: `buildPeriods` formats its daily labels in the server's local
- * time off a UTC-floored cursor, and a reader's day is the restaurant's day.
- */
-function salesByDayOf(daily: Statement, range: DateRange): Map<string, number> {
-  const net = rowValues(daily.rows, TOTAL_SALES_CODE) ?? []
-  const out = new Map<string, number>()
-  for (let i = 0; i < dayCount(range); i++) {
-    const d = new Date(
-      range.start.getFullYear(),
-      range.start.getMonth(),
-      range.start.getDate() + i,
-    )
-    out.set(isoDay(d), net[i] ?? 0)
-  }
-  return out
-}
+// `salesByDayOf` lives in `labor-figures.ts`, which the chat's labour tool
+// shares, so the page and the chat divide the same two numbers.
 
 /**
  * `salesByDayOf`'s per-day map, summed into the TREND's own Monday-start

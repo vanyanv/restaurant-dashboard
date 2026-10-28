@@ -79,6 +79,16 @@ export const TOOL_LABELS: Record<
     done: "Read the food-cost forecast",
     short: "food-cost forecast",
   },
+  getLaborActuals: {
+    running: "Reading labour hours and cost",
+    done: "Read labour hours and cost",
+    short: "labour actuals",
+  },
+  getCleaningChecks: {
+    running: "Reading the store checks",
+    done: "Read the store checks",
+    short: "store checks",
+  },
   getLaborStaffingForecast: {
     running: "Reading the staffing forecast",
     done: "Read the staffing forecast",

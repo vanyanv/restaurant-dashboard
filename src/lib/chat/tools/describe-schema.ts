@@ -24,6 +24,7 @@ const params = z
         "invoices",
         "cogs",
         "pnl",
+        "labor",
         "inventory",
         "vendors",
         "forecasts",
@@ -133,6 +134,14 @@ const CATALOG: SchemaDomain[] = [
     tools: [
       { name: "getPnlSummary", useFor: "current-period P&L by store and total" },
       { name: "searchPnlHistory", useFor: "vector search over weekly P&L narratives — 'when was margin last this bad?'" },
+    ],
+  },
+  {
+    domain: "labor",
+    summary: "Labour actually worked, from Harri, and the store cleaning checks.",
+    tools: [
+      { name: "getLaborActuals", useFor: "hours worked vs scheduled, labour cost and % of Total Sales, sales per labour hour, overtime, cost by role, clock-in/out drift" },
+      { name: "getCleaningChecks", useFor: "morning / Transition / evening cleaning checks: on time, late, missed, and items the crew flagged" },
     ],
   },
   {

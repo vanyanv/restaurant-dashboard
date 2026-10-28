@@ -497,6 +497,20 @@ export const TOOL_CHOICE_CASES: ToolChoiceCase[] = [
     why: "Distinct from getRevenueForecast. Asking how good the model is must not be answered with the model's own prediction interval, which is its opinion of itself rather than its record.",
   },
   {
+    id: "labor-actuals",
+    question: "How many labor hours did Van Nuys work last week, and how much overtime?",
+    expectedTools: ["getLaborActuals"],
+    awaitingFixture: true,
+    why: "Added 2026-10-28 with the tool. Before it, labour reached the chat only as one P&L line and a staffing forecast; the failure to catch is answering hours from getLaborStaffingForecast, which is a plan, not what was worked.",
+  },
+  {
+    id: "cleaning-checks",
+    question: "Did any store miss its closing check this week?",
+    expectedTools: ["getCleaningChecks"],
+    awaitingFixture: true,
+    why: "Added 2026-10-28 with the tool. The failure to catch is a refusal, or a reach for getAlerts, when the check grid itself answers it.",
+  },
+  {
     id: "refunds",
     question: "How much did we refund last month?",
     expectedTools: ["getRefunds"],

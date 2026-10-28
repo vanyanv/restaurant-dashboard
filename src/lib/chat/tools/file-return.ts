@@ -20,6 +20,8 @@ export const RETURN_DEPARTMENTS = [
   "Forecast",
   "Inventory",
   "Orders",
+  "Labor",
+  "Checks",
   "No data",
 ] as const
 
