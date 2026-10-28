@@ -3,6 +3,7 @@ import { businessCalendarDate } from "@/lib/counter/business-date"
 import type { LifecycleStage } from "@/generated/prisma/enums"
 import { isOperational } from "@/lib/store-lifecycle"
 import { loadChannelMix, type ChannelReading } from "@/lib/counter/channel-mix"
+import { commissionBasis, commissionIsEstimated } from "@/lib/counter/commission-core"
 import { loadStripTargets, type StripTargets, type Target } from "@/lib/counter/targets"
 import {
   granularityFor,
@@ -46,6 +47,7 @@ import type { Reference } from "@/lib/counter/bullet-state"
 import type {
   CascadeCut,
   CascadeEnd,
+  CascadeLead,
   CascadeStart,
   FigureProps,
   WeekRow,
@@ -155,6 +157,8 @@ export interface PnlHeadline {
 
 /** Exactly `Cascade`'s props. The end carries no figure — `Cascade` derives it. */
 export interface PnlCascade {
+  /** Gross sales, then discounts and refunds — the lines above Net sales. */
+  lead?: CascadeLead
   start: CascadeStart
   cuts: CascadeCut[]
   end: CascadeEnd
@@ -483,6 +487,12 @@ function buildStrip(
     label: "Bottom line",
     value: money(p.bottomLine),
     delta: margin === null ? undefined : `${pct(margin, { scaled: true })} of sales`,
+    // The bottom line is after commission; when any of that commission is an
+    // estimate (a rate, or a day priced off sales because its order rows are
+    // missing), the cell says so in the statement's own words.
+    caption: commissionIsEstimated(p.commission)
+      ? `Commission ${commissionBasis(p.commission)}`
+      : undefined,
     // The prototype compares the two bottom lines RAW (line 5266), which reads
     // a four-occurrence weekday window as four times the money. The divisor
     // belongs on every comparison of dollars, including this one.
@@ -560,7 +570,7 @@ function buildStrip(
 
   const sales = comparisonPhrase(p.grossSales, cmp, cmp.scope?.grossSales ?? null)
   cells.push({
-    label: "Gross sales",
+    label: "Net sales",
     value: money(p.grossSales),
     delta: sales.text,
     deltaTone: sales.tone,
@@ -797,22 +807,33 @@ function buildCascade(
   const margin = marginPoints(p)
 
   return {
-    start: {
+    // Gross → discounts → refunds → net sales. Tax is not on this cascade at
+    // all: Otter's gross already excludes it (see `GL_ROWS` in `@/lib/pnl`).
+    lead: {
       name: "Gross sales",
       sub: orders === null ? undefined : plural(orders, "order"),
+      amount: p.salesBeforeDiscounts,
+      cuts: [
+        { name: "Discounts", amount: p.discounts },
+        { name: "Refunds", sub: "and marketplace adjustments", amount: p.refunds },
+      ],
+    },
+    start: {
+      name: "Net sales",
+      sub: p.taxCollected > 0 ? `plus ${money(p.taxCollected)} sales tax, not counted` : undefined,
       amount: p.grossSales,
     },
     cuts: [
       {
         name: "Marketplace commissions",
-        // The prototype names three platforms and their rates. `Store` carries
-        // a rate column for two of them (note the null Grubhub commission in
-        // `channel-mix.ts`), so the honest sub is how many marketplaces took a
-        // share, not a list of rates two of which would be invented.
+        // How the figure was arrived at — recorded fees, and the share of
+        // orders priced at the store's own rate — before how many took one.
         sub:
-          marketplaces === null
-            ? undefined
-            : `${count(marketplaces)} marketplace${marketplaces === 1 ? "" : "s"}`,
+          p.commission.orders > 0
+            ? commissionBasis(p.commission)
+            : marketplaces === null
+              ? undefined
+              : `${count(marketplaces)} marketplace${marketplaces === 1 ? "" : "s"}`,
         amount: p.commissions,
       },
       {
@@ -923,10 +944,27 @@ function buildStatement(
   // of this figure; the cell version has to agree with it.
   const grossMove =
     thenGross === null || thenGross <= 0 ? null : (p.grossSales - thenGross) / thenGross
+  /** A sales line ABOVE net sales: dollars, and its share of net sales. */
+  const salesLine = (key: string, name: string, value: number, negative: boolean, sub?: string): StatementLine => ({
+    key,
+    name,
+    sub,
+    // A "negative" line holding a negative value (refunds that net positive —
+    // a reversal) prints as an addition, never "−−$12".
+    amount: negative && value < 0 ? `+${money(-value)}` : `${negative ? "−" : ""}${money(value)}`,
+    share: pct(sharePct(value, p), { scaled: true }),
+    comparison: DASH,
+    change: DASH,
+    loud: false,
+    worth: DASH,
+  })
   const lines: StatementLine[] = [
+    salesLine("sales-gross", "Gross sales", p.salesBeforeDiscounts, false, "before discounts"),
+    salesLine("discounts", "Discounts", p.discounts, true),
+    salesLine("refunds", "Refunds", p.refunds, true, "and marketplace adjustments"),
     {
       key: "gross",
-      name: "Gross sales",
+      name: "Net sales",
       sub: orders === null ? undefined : plural(orders, "order"),
       strong: true,
       amount: money(p.grossSales),
@@ -944,7 +982,7 @@ function buildStatement(
     },
     line("commissions", "Marketplace commissions", p.commissions, sharePct(p.commissions, p), sharePct(c?.commissions, c), {
       negative: true,
-      sub: "what the marketplaces kept",
+      sub: p.commission.orders > 0 ? commissionBasis(p.commission) : "what the marketplaces kept",
       href: "/dashboard/analytics",
     }),
     line("net", "Net revenue", p.grossSales - p.commissions, sharePct(p.grossSales - p.commissions, p), c ? sharePct(c.grossSales - c.commissions, c) : null, {

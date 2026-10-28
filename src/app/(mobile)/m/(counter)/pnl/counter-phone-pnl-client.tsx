@@ -172,7 +172,7 @@ export function CounterPhonePnlClient({
       </Section>
 
       <Section title="Where it went" meta={windowLabel} data={sections.cascade} pending={pending}>
-        {(c) => <Cascade start={c.start} cuts={c.cuts} end={c.end} />}
+        {(c) => <Cascade lead={c.lead} start={c.start} cuts={c.cuts} end={c.end} />}
       </Section>
 
       {/* SIX weeks, not the desk's eight, and the most recent six — the
@@ -256,7 +256,7 @@ function toWeekRow(row: WeekRow, href: (range: DateRange) => string): MListRow {
 }
 
 /**
- * The seven lines the phone's statement prints, and what it calls each of them.
+ * The lines the phone's statement prints, and what it calls each of them.
  *
  * The desk prints NINE: it keeps "Net revenue" and "Prime cost", the two
  * subtotals that only mean something beside a change column. The phone drops
@@ -269,7 +269,10 @@ function toWeekRow(row: WeekRow, href: (range: DateRange) => string): MListRow {
  * the amount comes from the adapter either way.
  */
 const PHONE_LINES: ReadonlyArray<readonly [key: string, label: string]> = [
-  ["gross", "Gross sales"],
+  ["sales-gross", "Gross sales"],
+  ["discounts", "Discounts"],
+  ["refunds", "Refunds"],
+  ["gross", "Net sales"],
   ["commissions", "Commissions"],
   ["food", "Food"],
   ["labor", "Labor"],

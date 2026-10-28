@@ -308,7 +308,7 @@ export function CounterPnlClient({
         data={sections.cascade}
         askAbout="where the money went"
       >
-        {(c) => <Cascade start={c.start} cuts={c.cuts} end={c.end} />}
+        {(c) => <Cascade lead={c.lead} start={c.start} cuts={c.cuts} end={c.end} />}
       </Section>
 
       {/* Note 53. Pressing a row writes `?from=…&to=…`, which moves the date

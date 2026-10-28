@@ -450,6 +450,9 @@ describe("getOverviewSections", () => {
      */
     expect(fees?.delta).toBe("$500 to marketplaces")
     expect(fees?.caption).toBe("excludes grubhub")
+    // MARKETPLACE sales only: (2000 − 500) / 2000. Counting in-house's $4,000
+    // at a commission of 0 diluted this to (6000 − 500) / 6000 = 91.7%.
+    expect(fees?.value).toBe("75.0%")
     // `.strip .band` is a 9px mono line with `white-space:nowrap` and a
     // six-track strip cell holds about 31 characters. A caption that
     // overflows its own cell is not a caption.

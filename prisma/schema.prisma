@@ -145,9 +145,18 @@ model Store {
   // Additive to the four hardcoded fixed costs above; each becomes an FX_<id>
   // line on the P&L. See StoreFixedExpense.
 
-  // Platform commission rates (decimal, e.g. 0.21 = 21%). Applied to tpGrossSales on the P&L.
-  uberCommissionRate     Float @default(0.21)
-  doordashCommissionRate Float @default(0.25)
+  // Marketplace commission rates (decimal, e.g. 0.25 = 25%), owner-edited on
+  // the store file. Each is charged on the price AFTER discounts
+  // (`subtotal + discount` on OtterOrder) and is used ONLY for an order Otter
+  // sent without a recorded fee — a recorded fee always wins. See
+  // src/lib/counter/commission-core.ts. `uberCommissionRate` and
+  // `doordashCommissionRate` keep their names and are the DELIVERY rates. A
+  // null rate is "not known": the P&L flags the line, it never charges 0.
+  uberCommissionRate           Float  @default(0.27)
+  doordashCommissionRate       Float  @default(0.25)
+  uberPickupCommissionRate     Float? @default(0.10)
+  doordashPickupCommissionRate Float? @default(0.06)
+  grubhubCommissionRate        Float? @default(0.25)
 
   // Per-store COGS target as a percent (e.g. 28.5 for 28.5%). Drives the
   // /dashboard/cogs target band and the "vs target" KPI. Nullable so existing

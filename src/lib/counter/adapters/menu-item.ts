@@ -9,7 +9,10 @@ import {
   commissionRateFor,
 } from "@/lib/counter/channel-mix"
 import { channelById, type ChannelId } from "@/lib/counter/channels"
-import { discountShare } from "@/lib/counter/item-discounts"
+import { loadOrderFeeGroups, totalCommission } from "@/lib/counter/commission"
+import {
+  discountShare,
+} from "@/lib/counter/item-discounts"
 import { getItemEconomics } from "@/lib/counter/item-economics"
 import type { ChartSpec } from "@/lib/counter/chart-geometry"
 import {
@@ -49,14 +52,13 @@ import type { FigureProps, MListRow } from "@/components/counter"
  *
  * This page went further, and the paragraph above described only the first
  * half of the answer until the figure was corrected. Commission and Net are
- * priced at the store's CONTRACT rate — `commissionRateFor`, the same rule
- * `computeStorePnL` charges its `COM_UBER` and `COM_DD` lines at — so the fee
- * shown against an item and the fee shown against the range come from one
- * place. `OtterOrder.commission` is not consulted for these columns at all,
- * which is why the gap measured above no longer empties them. What a contract
- * rate cannot price is a channel the schema holds no rate for — Grubhub,
- * ChowNow, Caviar — and those read "no rate on file", never zero, and poison
- * the Kept total rather than shrinking it.
+ * priced by the one commission function (`@/lib/counter/commission`): the
+ * rate this store's marketplace actually took on the channel over the range —
+ * recorded fees plus the store-rate estimate for orders sent without one,
+ * over the after-discount ticket — applied to the item's after-discount
+ * revenue. That is the same total the P&L's commission lines print, spread
+ * over items. A channel with orders no rate covers reads "no rate on file",
+ * never zero, and poisons the Kept total rather than shrinking it.
  *
  * ## What the channel table CAN say
  *
@@ -358,6 +360,37 @@ async function loadItem(input: MenuItemInput): Promise<ItemData | null> {
     { qty: number; revenue: number; discount: number; commission: number | null }
   >()
   const ratesByStore = new Map(stores.map((st) => [st.id, st]))
+  const feeGroups = await loadOrderFeeGroups({ accountId, storeIds, startDate, endDate })
+  /*
+   * The rate this store's marketplace ACTUALLY took on this channel over the
+   * range — the one commission function's total (recorded fees plus the
+   * store-rate estimate) over the after-discount ticket it was charged on.
+   * Applied to the item's after-discount revenue, so an item's fees summed
+   * over every item land on the P&L's commission line for the same range.
+   *
+   * No marketplace orders in the range: the store's delivery rate, as set on
+   * the store file. Any order on the channel that could not be priced: null,
+   * because a commission that is partly unknown is not a smaller commission.
+   */
+  const rateCache = new Map<string, number | null>()
+  const effectiveRate = (storeId: string, channel: ChannelId): number | null => {
+    if (channel === "house") return 0
+    const key = `${storeId}:${channel}`
+    if (rateCache.has(key)) return rateCache.get(key) ?? null
+    const t = totalCommission(
+      feeGroups,
+      ratesByStore,
+      (g) => g.storeId === storeId && CHANNEL_FOR_PLATFORM[g.platform] === channel,
+    )
+    const rate =
+      t.orders === 0
+        ? commissionRateFor(channel, ratesByStore.get(storeId) ?? null)
+        : t.amount === null || t.unknownOrders > 0 || t.ticket <= 0
+          ? null
+          : t.amount / t.ticket
+    rateCache.set(key, rate)
+    return rate
+  }
   for (const r of channelRows) {
     const channel = CHANNEL_FOR_PLATFORM[r.platform]
     if (!channel) continue
@@ -372,25 +405,13 @@ async function loadItem(input: MenuItemInput): Promise<ItemData | null> {
     acc.revenue += revenue
     // At the PLATFORM's share, not the item's: a BOGO that runs on Uber Eats
     // only must not discount the in-house price.
-    acc.discount += revenue * discountShare(discount?.byPlatform.get(r.platform))
-    /*
-     * The marketplace's cut, at the rate the P&L charges it at.
-     *
-     * `commissionRateFor` returns null where the schema publishes no rate —
-     * Grubhub, ChowNow, Caviar — and a null anywhere in a channel poisons that
-     * channel's total, because a commission that is partly unknown is not a
-     * smaller commission. Same rule `channel-mix.ts` applies to the same gap.
-     *
-     * This is the store's CONTRACT rate rather than `OtterOrder.commission`,
-     * deliberately: `computeStorePnL` prices the `COM_UBER` and `COM_DD` lines
-     * the same way, so the fee this page shows against an item and the fee the
-     * P&L shows against the range come from one rule. The recorded figure is
-     * per-order and would have to be prorated across an order's items to land
-     * here at all, and its coverage is documented in `adapters/orders.ts` as
-     * running 0% for whole months.
-     */
-    const rate = commissionRateFor(channel, ratesByStore.get(r.storeId) ?? null)
-    acc.commission = acc.commission === null || rate === null ? null : acc.commission + revenue * rate
+    const share = discountShare(discount?.byPlatform.get(r.platform))
+    acc.discount += revenue * share
+    // The marketplace's cut, at the rate `effectiveRate` reads off the one
+    // commission function, on the price AFTER this platform's discount.
+    const rate = effectiveRate(r.storeId, channel)
+    acc.commission =
+      acc.commission === null || rate === null ? null : acc.commission + revenue * (1 - share) * rate
     byChannel.set(channel, acc)
   }
 

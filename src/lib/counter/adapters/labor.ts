@@ -600,7 +600,7 @@ function buildVerdict(week: LaborWeek, ledger: LeakLedger | null): LaborVerdict 
   if (week.laborPct !== null) {
     say(" — ")
     strong(pct(week.laborPct, { scaled: true }))
-    say(" of Total Sales")
+    say(" of net sales")
   }
   if (week.splh !== null) {
     say(`${week.laborPct === null ? " — " : ", and "}`)
@@ -674,7 +674,7 @@ function buildStrip(
     {
       label: "Hourly labor",
       value: pct(week.laborPct, { scaled: true }),
-      delta: `${money(week.cost)} of ${money(totalSales)} Total Sales`,
+      delta: `${money(week.cost)} of ${money(totalSales)} net sales`,
       deltaTone: "is-flat",
     },
     {
@@ -770,7 +770,7 @@ function buildHeadline(input: {
   const laborCell: StripCell = {
     label: store ? "Labor" : "Hourly labor",
     value: pct(week.laborPct, { scaled: true }),
-    delta: "of Total Sales",
+    delta: "of net sales",
     deltaTone: "is-flat",
   }
   const phoneCells: StripCell[] = [laborCell]
@@ -794,7 +794,7 @@ function buildHeadline(input: {
     figure: {
       label: "Hourly labor",
       value: pct(week.laborPct, { scaled: true }),
-      detail: "of Total Sales · the P&L's own denominator",
+      detail: "of net sales · the P&L's own denominator",
       detailTone: "is-flat",
     },
     verdict: buildVerdict(week, ledger),
@@ -1319,7 +1319,7 @@ function buildTrend(weeks: LaborTrendWeek[]): TrendSection {
     labels: weeks.map((w) => w.label),
     series: [
       {
-        name: "Labor % of Total Sales",
+        name: "Labor % of net sales",
         color: "var(--ink)",
         data: weeks.map((w) => w.laborPct),
       },
@@ -1328,7 +1328,7 @@ function buildTrend(weeks: LaborTrendWeek[]): TrendSection {
       (w) =>
         `${money(w.cost)} · ${hoursText(w.hours, 0)}${w.isPartial ? " · part week" : ""}`,
     ),
-    alt: "Labor as a share of Total Sales, twelve weeks",
+    alt: "Labor as a share of net sales, twelve weeks",
   }
 
   const full = weeks.filter((w) => !w.isPartial && w.laborPct !== null)
@@ -1341,10 +1341,10 @@ function buildTrend(weeks: LaborTrendWeek[]): TrendSection {
   } else if (newest.key === oldest.key) {
     sentence =
       `One full week in this window has a reading: ${newest.label}, at ` +
-      `${pct(newest.laborPct, { scaled: true })} of Total Sales. Twelve of them is what makes a trend.`
+      `${pct(newest.laborPct, { scaled: true })} of net sales. Twelve of them is what makes a trend.`
   } else {
     sentence =
-      `Labor ran ${pct(newest.laborPct, { scaled: true })} of Total Sales in the week of ` +
+      `Labor ran ${pct(newest.laborPct, { scaled: true })} of net sales in the week of ` +
       `${newest.label}, against ${pct(oldest.laborPct, { scaled: true })} in the week of ` +
       `${oldest.label} — ${points((newest.laborPct as number) - (oldest.laborPct as number))} ` +
       "across the window."
@@ -1364,12 +1364,12 @@ function buildTrend(weeks: LaborTrendWeek[]): TrendSection {
     chart,
     phoneChart: { ...chart, h: 116, ticks: false },
     sentence,
-    meta: `${count(weeks.length)} weeks · Monday to Sunday · share of Total Sales`,
+    meta: `${count(weeks.length)} weeks · Monday to Sunday · share of net sales`,
     // The denominator disclaimer this note used to carry described a defect
     // that no longer exists (task 4b) and nothing else was in it worth
     // keeping, so it now states the fact that replaced the disclaimer: this
     // chart and the headline above it read the same denominator.
-    note: "Same denominator as the headline above — Total Sales, off the same statement.",
+    note: "Same denominator as the headline above — net sales, off the same statement.",
   }
 }
 

@@ -1,4 +1,5 @@
 import type { Period, PnLRow } from "@/lib/pnl"
+import type { CommissionTotals } from "@/lib/counter/commission-core"
 import type { UnmappedMenuItem } from "@/types/cogs"
 
 export type PnLMover = {
@@ -46,7 +47,22 @@ export type StorePnLResult =
 
 /** The rollup's cascade for one scope over one window. */
 export type PnLPeriodLines = {
+  /**
+   * NET SALES — gross less discounts and refunds; tax is not in it. The
+   * statement's Total Sales and the denominator of every ratio here. The
+   * field name is historical; every surface labels it "Net sales".
+   */
   grossSales: number
+  /** Gross sales before discounts and refunds: channel sales plus service charges. */
+  salesBeforeDiscounts: number
+  /** Signed negative. */
+  discounts: number
+  /** Signed: negative is money given back. */
+  refunds: number
+  /** Sales tax collected. Informational; in no total. */
+  taxCollected: number
+  /** The commission behind `grossSales − netAfterCommissions`, with its coverage. */
+  commission: CommissionTotals
   netAfterCommissions: number
   fixedCosts: number
   bottomLine: number

@@ -28,6 +28,7 @@ import {
   saveStoreFile,
 } from "@/lib/counter/actions/store"
 import { storesViewTabs } from "@/lib/counter/nav"
+import { parseRatePercent } from "@/lib/counter/commission-rate-input"
 import type { SectionSources } from "@/lib/counter/adapters/types"
 import type {
   StoreFileEditable,
@@ -61,6 +62,28 @@ function numberOf(raw: string): number | null {
   const n = Number(trimmed)
   return Number.isFinite(n) ? n : null
 }
+
+/** A stored fraction as the percent the form edits; blank for "not known". */
+const pctField = (v: number | null): string => (v === null ? "" : String(Math.round(v * 1000) / 10))
+
+/**
+ * The five commission settings, in the order the Delivery commission table
+ * lists them. Delivery rates are required columns (a blank is an error); the pickup and Grubhub rates may be cleared, which the P&L reads as
+ * "not known" rather than free.
+ */
+const RATE_FIELDS = [
+  { key: "doordash" as const, label: "DoorDash delivery", required: true },
+  { key: "doordashPickup" as const, label: "DoorDash pickup", required: false },
+  { key: "uber" as const, label: "Uber Eats delivery", required: true },
+  { key: "uberPickup" as const, label: "Uber Eats pickup", required: false },
+  { key: "grubhub" as const, label: "Grubhub", required: false },
+]
+
+const STAGES = [
+  { value: "pre_open" as const, label: "Pre-open" },
+  { value: "warming_up" as const, label: "Warming up" },
+  { value: "ready" as const, label: "Open" },
+]
 
 const MONEY_FIELDS = [
   { key: "rent" as const, label: "Monthly rent", hint: "Prorates into every P&L period" },
@@ -98,14 +121,19 @@ function StoreFileForm({
 }) {
   const surface = useSurfaceHref()
   const router = useRouter()
-  const [form, setForm] = useState({
-    rent: fieldOf(data.rent),
-    labor: fieldOf(data.labor),
-    cleaning: fieldOf(data.cleaning),
-    towels: fieldOf(data.towels),
-    uber: String(Math.round(data.uber * 1000) / 10),
-    doordash: String(Math.round(data.doordash * 1000) / 10),
+  const formOf = (d: StoreFileEditable) => ({
+    rent: fieldOf(d.rent),
+    labor: fieldOf(d.labor),
+    cleaning: fieldOf(d.cleaning),
+    towels: fieldOf(d.towels),
+    uber: pctField(d.uber),
+    doordash: pctField(d.doordash),
+    uberPickup: pctField(d.uberPickup),
+    doordashPickup: pctField(d.doordashPickup),
+    grubhub: pctField(d.grubhub),
+    stage: d.stage,
   })
+  const [form, setForm] = useState(() => formOf(data))
   // Its own field, because it has its own action. See `saveTargetCogsPct`.
   const [target, setTarget] = useState(
     data.cogsTarget === null ? "" : String(data.cogsTarget),
@@ -115,15 +143,11 @@ function StoreFileForm({
   const [said, setSaid] = useState<{ ok: boolean; text: string } | null>(null)
 
   useEffect(() => {
-    setForm({
-      rent: fieldOf(data.rent),
-      labor: fieldOf(data.labor),
-      cleaning: fieldOf(data.cleaning),
-      towels: fieldOf(data.towels),
-      uber: String(Math.round(data.uber * 1000) / 10),
-      doordash: String(Math.round(data.doordash * 1000) / 10),
-    })
-  }, [data.rent, data.labor, data.cleaning, data.towels, data.uber, data.doordash])
+    setForm(formOf(data))
+  }, [
+    data.rent, data.labor, data.cleaning, data.towels, data.uber, data.doordash,
+    data.uberPickup, data.doordashPickup, data.grubhub, data.stage,
+  ])
 
   useEffect(() => {
     setTarget(data.cogsTarget === null ? "" : String(data.cogsTarget))
@@ -131,6 +155,17 @@ function StoreFileForm({
 
   function save() {
     setSaid(null)
+    // Every rate checked before anything is sent: a typo is an error on the
+    // page, never a silently cleared or rescaled rate.
+    const rates = {} as Record<(typeof RATE_FIELDS)[number]["key"], number | null>
+    for (const f of RATE_FIELDS) {
+      const r = parseRatePercent(form[f.key], f.label, { required: f.required })
+      if (!r.ok) {
+        setSaid({ ok: false, text: `${r.error}.` })
+        return
+      }
+      rates[f.key] = r.value
+    }
     startSaving(async () => {
       const result = await saveStoreFile(data.storeId, {
         name: data.name,
@@ -140,8 +175,13 @@ function StoreFileForm({
         fixedMonthlyLabor: numberOf(form.labor),
         fixedMonthlyTowels: numberOf(form.towels),
         fixedMonthlyCleaning: numberOf(form.cleaning),
-        uberCommissionRate: numberOf(form.uber) ?? data.uber * 100,
-        doordashCommissionRate: numberOf(form.doordash) ?? data.doordash * 100,
+        // Required fields: `parseRatePercent` has already refused a blank.
+        uberCommissionRate: rates.uber ?? data.uber * 100,
+        doordashCommissionRate: rates.doordash ?? data.doordash * 100,
+        uberPickupCommissionRate: rates.uberPickup,
+        doordashPickupCommissionRate: rates.doordashPickup,
+        grubhubCommissionRate: rates.grubhub,
+        ...(form.stage !== data.stage ? { lifecycleStage: form.stage } : {}),
       })
       if (!result.ok) {
         setSaid({ ok: false, text: `Could not save: ${result.error}.` })
@@ -213,40 +253,49 @@ function StoreFileForm({
         </div>
       ))}
 
-      <div className="setrow">
-        <div className="tx">
-          <b>Uber Eats commission</b>
-          <span>Applied to third-party gross on the P&amp;L</span>
+      {RATE_FIELDS.map((f) => (
+        <div className="setrow" key={f.key}>
+          <div className="tx">
+            <b>{f.label} commission</b>
+            <span>
+              Charged on the price after discounts · {data.observed[f.key]}
+            </span>
+          </div>
+          <input
+            className="inp"
+            type="number"
+            min="0"
+            max="100"
+            step="0.1"
+            inputMode="decimal"
+            aria-label={`${f.label} commission percent`}
+            placeholder={f.required ? undefined : "Not known"}
+            value={form[f.key]}
+            onChange={(e) => setForm((p) => ({ ...p, [f.key]: e.target.value }))}
+          />
         </div>
-        <input
-          className="inp"
-          type="number"
-          min="0"
-          max="100"
-          step="0.1"
-          inputMode="decimal"
-          aria-label="Uber Eats commission percent"
-          value={form.uber}
-          onChange={(e) => setForm((p) => ({ ...p, uber: e.target.value }))}
-        />
-      </div>
+      ))}
 
+      {/* Lifecycle: what the nightly model and every "trading" badge read. */}
       <div className="setrow">
         <div className="tx">
-          <b>DoorDash commission</b>
-          <span>Applied to third-party gross on the P&amp;L</span>
+          <b>Lifecycle</b>
+          <span>Pre-open skips forecasts; warming up borrows them; open is a trading store</span>
         </div>
-        <input
-          className="inp"
-          type="number"
-          min="0"
-          max="100"
-          step="0.1"
-          inputMode="decimal"
-          aria-label="DoorDash commission percent"
-          value={form.doordash}
-          onChange={(e) => setForm((p) => ({ ...p, doordash: e.target.value }))}
-        />
+        <select
+          className="fld"
+          value={form.stage}
+          aria-label="Lifecycle stage"
+          onChange={(e) =>
+            setForm((p) => ({ ...p, stage: e.target.value as StoreFileEditable["stage"] }))
+          }
+        >
+          {STAGES.map((st) => (
+            <option key={st.value} value={st.value}>
+              {st.label}
+            </option>
+          ))}
+        </select>
       </div>
 
       {/*
@@ -310,7 +359,8 @@ function StoreFileForm({
 
       <Note live={said !== null} tone={said === null ? undefined : said.ok ? "good" : "bad"}>
         {said?.text ??
-          `Commissions are percentages \u2014 21 and 0.21 both mean 21%. The food-cost target is ` +
+          `Commissions are percents \u2014 type 25 for 25% \u2014 charged on the price ` +
+            `after discounts; a blank pickup or Grubhub rate means not known. The food-cost target is ` +
             `the line every food-cost chart for this store is drawn against; leave it blank for ` +
             `no plan, which is not the same as a plan of zero.`}
       </Note>
@@ -735,8 +785,8 @@ export function CounterStoreFileClient({
 
       <div className="tri">
         <Section
-          title="Platform commissions"
-          meta={() => "applied to 3P gross"}
+          title="Delivery commission"
+          meta={() => "charged on the price after discounts"}
           data={sections.commissions}
           pending={pending}
         >

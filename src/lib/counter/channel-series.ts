@@ -3,9 +3,11 @@ import {
   SALES_CREDIT_CARDS_CODE,
   SALES_DOORDASH_CODE,
   SALES_GRUBHUB_CODE,
+  SALES_PREPAID_CODE,
   SALES_UBER_CODE,
   UBER_COMMISSION_CODE,
   DOORDASH_COMMISSION_CODE,
+  GRUBHUB_COMMISSION_CODE,
 } from "@/lib/pnl"
 import { CHANNELS, type ChannelId } from "@/lib/counter/channels"
 import { rowValues, type Statement } from "@/lib/counter/statement"
@@ -16,15 +18,15 @@ import { rowValues, type Statement } from "@/lib/counter/statement"
  * A-R1: the strip's "Net sales", these bands, the marketplace share, the
  * commission and the drill's cost sentence all come from ONE `loadStatement`
  * call — the same `Statement.rows` / `Statement.periods` `buildSalesChart`
- * already reads in the Overview adapter. This module does not call
- * `loadChannelMix`: that answers in Otter's NET, and the P&L's sales lines are
- * GROSS — two different "net sales" on one page is the shape A-R1 exists to
- * forbid. Gross is also the basis the P&L actually charges commission on
- * (`commission = rate × gross`), which is why the drill's "what the mix cost"
- * sentence is exact on this basis.
+ * already reads in the Overview adapter. The bands are the statement's
+ * channel sales lines — gross, BEFORE discounts and refunds, which sit on
+ * their own lines and are not split by channel there. The commission is the
+ * statement's own commission rows (recorded fees plus the store-rate estimate
+ * on the after-discount ticket, see `commission-core.ts`), so the rate a band
+ * implies is commission over that band's gross.
  *
  * There is no rates parameter anywhere below. `getAllStoresPnL` already
- * computes `COM_UBER` / `COM_DD` per period and `consolidateRows` merges them
+ * computes `COM_UBER` / `COM_DD` / `COM_GH` per period and `consolidateRows` merges them
  * by code across stores, so the rate this account actually charges is
  * derivable from the same rollup that printed the headline (A-R14). Reading
  * `Store.uberCommissionRate` again here would be a second source for a number
@@ -144,6 +146,20 @@ function commissionFrom(rows: Statement["rows"], code: string): number {
 }
 
 /**
+ * Like `commissionFrom`, but `null` where the statement could not price the
+ * line at all: no row, or a row flagged unknown in every bucket and summing
+ * to nothing. Grubhub carries a rate now (`Store.grubhubCommissionRate`), so
+ * it is priced like the others — and is null exactly when it is not.
+ */
+function commissionOrNull(rows: Statement["rows"], code: string): number | null {
+  const row = rows.find((r) => r.code === code)
+  if (!row) return null
+  const total = -sum(row.values)
+  if (total === 0 && row.isUnknown && row.isUnknown.every(Boolean)) return null
+  return total
+}
+
+/**
  * A ratio-safe divide: `0` rather than `NaN` or an inverted sign.
  *
  * `<= 0` and not `=== 0`. The denominators here are sales, and a band that
@@ -196,7 +212,7 @@ export function channelSeries(statement: Statement): ChannelSeries {
   const labels = periods.map((p) => p.label)
 
   const valuesByChannel: Record<ChannelId, number[]> = {
-    house: bandValues(rows, n, SALES_CREDIT_CARDS_CODE, SALES_CASH_CODE),
+    house: bandValues(rows, n, SALES_CREDIT_CARDS_CODE, SALES_CASH_CODE, SALES_PREPAID_CODE),
     doordash: bandValues(rows, n, SALES_DOORDASH_CODE),
     ubereats: bandValues(rows, n, SALES_UBER_CODE),
     grubhub: bandValues(rows, n, SALES_GRUBHUB_CODE),
@@ -206,9 +222,9 @@ export function channelSeries(statement: Statement): ChannelSeries {
     house: 0,
     doordash: commissionFrom(rows, DOORDASH_COMMISSION_CODE),
     ubereats: commissionFrom(rows, UBER_COMMISSION_CODE),
-    // The schema publishes NO Grubhub rate. `0` would claim Grubhub works for
-    // free; `null` is "we do not know", which is what this is.
-    grubhub: null,
+    // Null only where the statement could not price it — `0` would claim
+    // Grubhub works for free.
+    grubhub: commissionOrNull(rows, GRUBHUB_COMMISSION_CODE),
   }
 
   // A bucket's four-channel total, precomputed once so every share and every
@@ -252,6 +268,7 @@ export function channelSeries(statement: Statement): ChannelSeries {
     n,
     DOORDASH_COMMISSION_CODE,
     UBER_COMMISSION_CODE,
+    GRUBHUB_COMMISSION_CODE,
   ).map((v) => -v)
   const commissionShares = commissionPerBucket.map((v, i) => ratio(v, bucketTotals[i]))
 

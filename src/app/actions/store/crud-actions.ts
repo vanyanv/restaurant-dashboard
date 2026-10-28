@@ -1,6 +1,12 @@
 "use server"
 
 import { revalidatePath } from "next/cache"
+import {
+  COMMISSION_RATE_INPUTS,
+  parseRatePercent,
+  percentToFraction,
+  type CommissionRateField,
+} from "@/lib/counter/commission-rate-input"
 import { getServerSession } from "next-auth"
 import { authOptions, hasOwnerAccess } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
@@ -8,6 +14,7 @@ import { getAccountStoreRows } from "@/lib/account-stores"
 import { z } from "zod"
 import { invalidateOwnerStoreCache } from "@/lib/chat/owner-scope"
 import { cache } from "react"
+import { bustTags } from "@/lib/cache/cached"
 
 const createStoreSchema = z.object({
   name: z.string().min(1, "Store name is required").max(100),
@@ -24,8 +31,15 @@ const updateStoreSchema = z.object({
   fixedMonthlyRent: z.number().min(0).max(1_000_000).nullable().optional(),
   fixedMonthlyTowels: z.number().min(0).max(1_000_000).nullable().optional(),
   fixedMonthlyCleaning: z.number().min(0).max(1_000_000).nullable().optional(),
+  // Delivery rates — required columns, so a blank leaves them unchanged.
   uberCommissionRate: z.number().min(0).max(1).optional(),
   doordashCommissionRate: z.number().min(0).max(1).optional(),
+  // Nullable: a blank CLEARS the rate, which the P&L reads as "not known"
+  // and flags rather than charging 0.
+  uberPickupCommissionRate: z.number().min(0).max(1).nullable().optional(),
+  doordashPickupCommissionRate: z.number().min(0).max(1).nullable().optional(),
+  grubhubCommissionRate: z.number().min(0).max(1).nullable().optional(),
+  lifecycleStage: z.enum(["pre_open", "warming_up", "ready"]).optional(),
 })
 
 export async function createStore(formData: FormData) {
@@ -158,14 +172,19 @@ export async function updateStore(storeId: string, formData: FormData) {
       return Number.isFinite(n) ? n : undefined
     }
 
-    const parseRate = (v: FormDataEntryValue | null): number | undefined => {
-      if (v == null) return undefined
-      const s = String(v).trim()
-      if (s === "") return undefined
-      const n = Number(s)
-      if (!Number.isFinite(n) || n < 0) return undefined
-      return n > 1 ? n / 100 : n
+    // Commission rates arrive as PERCENTS (25 = 25%) — one unit, parsed by
+    // the one parser the form also validates with. Absent = unchanged;
+    // blank clears an optional rate; anything else that is not 0..100 is an
+    // error the owner sees, never silently dropped or rescaled.
+    const rates: Partial<Record<CommissionRateField, number | null>> = {}
+    for (const r of COMMISSION_RATE_INPUTS) {
+      const v = formData.get(r.field)
+      if (v == null) continue
+      const parsed = parseRatePercent(String(v), r.label, { required: r.required })
+      if (!parsed.ok) return { error: parsed.error }
+      rates[r.field] = parsed.value === null ? null : percentToFraction(parsed.value)
     }
+    const stage = formData.get("lifecycleStage")
 
     const validatedData = updateStoreSchema.parse({
       name: formData.get("name"),
@@ -176,8 +195,8 @@ export async function updateStore(storeId: string, formData: FormData) {
       fixedMonthlyRent: parseOptionalNumber(formData.get("fixedMonthlyRent")),
       fixedMonthlyTowels: parseOptionalNumber(formData.get("fixedMonthlyTowels")),
       fixedMonthlyCleaning: parseOptionalNumber(formData.get("fixedMonthlyCleaning")),
-      uberCommissionRate: parseRate(formData.get("uberCommissionRate")),
-      doordashCommissionRate: parseRate(formData.get("doordashCommissionRate")),
+      ...rates,
+      lifecycleStage: stage == null || String(stage) === "" ? undefined : String(stage),
     })
 
     const existingStore = await prisma.store.findFirst({
@@ -199,6 +218,9 @@ export async function updateStore(storeId: string, formData: FormData) {
     invalidateOwnerStoreCache(session.user.accountId)
     revalidatePath("/dashboard/stores")
     revalidatePath(`/dashboard/stores/${storeId}`)
+    // Commission rates price every P&L range, so a rate edit must not wait out
+    // the rollup's 600s cache. Fire-and-forget, as the fixed-expense edits do.
+    void bustTags(["pnl"])
     return { success: true, store: updatedStore }
   } catch (error) {
     if (error instanceof z.ZodError) {

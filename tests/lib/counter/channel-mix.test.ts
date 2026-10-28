@@ -6,15 +6,37 @@ vi.mock("@/lib/prisma", () => ({
   prisma: { $queryRaw: vi.fn(), store: { findMany: vi.fn() } },
 }))
 
+// The order-fee groups are the commission module's own query; this file tests
+// the fold, so it hands the groups in directly. `commission-core`'s rules stay real.
+vi.mock("@/lib/counter/commission", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/counter/commission")>()),
+  loadOrderFeeGroups: vi.fn(async () => []),
+}))
+
 import { prisma } from "@/lib/prisma"
 import { toQueryBounds } from "@/lib/counter/date-range"
 import { loadChannelMix } from "@/lib/counter/channel-mix"
+import { loadOrderFeeGroups, type OrderFeeGroup } from "@/lib/counter/commission"
+
+function group(g: Partial<OrderFeeGroup> & { platform: string; ticket: number }): OrderFeeGroup {
+  return {
+    storeId: "s1",
+    day: "2026-08-20",
+    mode: "delivery",
+    recorded: false,
+    orders: 10,
+    fee: 0,
+    ...g,
+  }
+}
 
 const range = { start: new Date(2026, 7, 18), end: new Date(2026, 7, 24) }
 const accountId = "acct-A"
 
 interface RowSpec {
   storeId?: string
+  /** The summary's day; the order groups above default to the same one. */
+  day?: string
   platform: string
   fpNet?: number
   fpGross?: number
@@ -22,11 +44,16 @@ interface RowSpec {
   tpNet?: number
   tpGross?: number
   tpOrders?: number
+  /** Signed negative, as Otter sends them. */
+  fpDisc?: number
+  tpDisc?: number
+  tpRefunds?: number
 }
 
 function row(r: RowSpec) {
   return {
     storeId: r.storeId ?? "s1",
+    day: r.day ?? "2026-08-20",
     platform: r.platform,
     fpNetSales: r.fpNet ?? 0,
     fpGrossSales: r.fpGross ?? 0,
@@ -34,6 +61,13 @@ function row(r: RowSpec) {
     tpNetSales: r.tpNet ?? 0,
     tpGrossSales: r.tpGross ?? 0,
     tpOrderCount: r.tpOrders ?? 0,
+    fpDiscounts: r.fpDisc ?? 0,
+    tpDiscounts: r.tpDisc ?? 0,
+    fpServiceCharges: 0,
+    tpServiceCharges: 0,
+    fpTaxCollected: 0,
+    tpTaxCollected: 0,
+    tpRefundsAdjustments: r.tpRefunds ?? 0,
   }
 }
 
@@ -51,8 +85,10 @@ beforeEach(() => {
 
 describe("loadChannelMix", () => {
   it("reports net, orders and the ticket they imply", async () => {
+    // Net is the STATEMENT's: gross + discounts (+ refunds), not Otter's
+    // `fpNetSales` — which this row deliberately disagrees with.
     vi.mocked(prisma.$queryRaw).mockResolvedValue([
-      row({ platform: "css-pos", fpNet: 5000, fpGross: 5400, fpOrders: 200 }),
+      row({ platform: "css-pos", fpNet: 4900, fpGross: 5400, fpDisc: -400, fpOrders: 200 }),
     ] as never)
 
     const [house] = await loadChannelMix({ range, storeId: null, accountId })
@@ -75,19 +111,35 @@ describe("loadChannelMix", () => {
     expect(dd.ticket).toBeNull()
   })
 
-  it("takes commission from the STORE's configured rate, applied to gross", async () => {
+  it("subtracts marketplace refunds from a channel's net", async () => {
+    vi.mocked(prisma.$queryRaw).mockResolvedValue([
+      row({ platform: "doordash", tpGross: 1000, tpDisc: -200, tpRefunds: -50, tpOrders: 30 }),
+    ] as never)
+    const rows = await loadChannelMix({ range, storeId: null, accountId })
+    expect(by(rows, "doordash")?.net).toBe(750)
+  })
+
+  it("prices unrecorded orders at the store's rate on the DISCOUNTED ticket, and keeps recorded fees", async () => {
     vi.mocked(prisma.store.findMany).mockResolvedValue([
       store("s1", 0.3, 0.4),
     ] as never)
     vi.mocked(prisma.$queryRaw).mockResolvedValue([
-      row({ platform: "ubereats", tpNet: 900, tpGross: 1000, tpOrders: 30 }),
-      row({ platform: "doordash", tpNet: 1800, tpGross: 2000, tpOrders: 50 }),
+      row({ platform: "ubereats", tpGross: 1000, tpDisc: -100, tpOrders: 30 }),
+      row({ platform: "doordash", tpGross: 2000, tpDisc: -200, tpOrders: 50 }),
     ] as never)
+    vi.mocked(loadOrderFeeGroups).mockResolvedValueOnce([
+      // Uber: nothing recorded, ticket after discount 900 → 0.3 × 900.
+      group({ platform: "ubereats", ticket: 900, orders: 30 }),
+      // DoorDash: a recorded $500 on half the orders BEATS the 40% rate;
+      // the other half is estimated at 0.4 × 900.
+      group({ platform: "doordash", ticket: 900, orders: 25, recorded: true, fee: 500 }),
+      group({ platform: "doordash", ticket: 900, orders: 25 }),
+    ])
 
     const rows = await loadChannelMix({ range, storeId: null, accountId })
-    // The P&L's own derivation — rate × gross — so the two agree for a range.
-    expect(by(rows, "ubereats")?.commission).toBeCloseTo(300)
-    expect(by(rows, "doordash")?.commission).toBeCloseTo(800)
+    expect(by(rows, "ubereats")?.commission).toBeCloseTo(270)
+    expect(by(rows, "doordash")?.commission).toBeCloseTo(500 + 360)
+    expect(by(rows, "doordash")?.commissionBasis?.ordersEstimated).toBe(25)
   })
 
   it("charges in-house nothing and leaves Grubhub's commission unknown", async () => {
@@ -99,8 +151,8 @@ describe("loadChannelMix", () => {
     const rows = await loadChannelMix({ range, storeId: null, accountId })
     // In-house genuinely has no marketplace: zero is the true answer.
     expect(by(rows, "house")?.commission).toBe(0)
-    // `Store` publishes a rate for Uber and DoorDash and for nothing else.
-    // A $0 in this column would say Grubhub works for free.
+    // No Grubhub rate on this store and no order rows to price: unknown. A $0
+    // in this column would say Grubhub works for free.
     expect(by(rows, "grubhub")?.commission).toBeNull()
   })
 
@@ -110,22 +162,24 @@ describe("loadChannelMix", () => {
       store("s2", 0.3, 0.25),
     ] as never)
     vi.mocked(prisma.$queryRaw).mockResolvedValue([
-      row({ storeId: "s1", platform: "ubereats", tpNet: 900, tpGross: 1000, tpOrders: 30 }),
-      row({ storeId: "s2", platform: "ubereats", tpNet: 900, tpGross: 1000, tpOrders: 30 }),
+      row({ storeId: "s1", platform: "ubereats", tpGross: 1000, tpOrders: 30 }),
+      row({ storeId: "s2", platform: "ubereats", tpGross: 1000, tpOrders: 30 }),
     ] as never)
+    vi.mocked(loadOrderFeeGroups).mockResolvedValueOnce([
+      group({ storeId: "s1", platform: "ubereats", ticket: 1000, orders: 30 }),
+      group({ storeId: "s2", platform: "ubereats", ticket: 1000, orders: 30 }),
+    ])
 
     const rows = await loadChannelMix({ range, storeId: null, accountId })
-    // 0.2 × 1000 + 0.3 × 1000. A blended account-wide rate would say 500 too,
-    // so the rates differ from each other AND from their average's effect on
-    // the split below.
+    // 0.2 × 1000 + 0.3 × 1000, each store at its own rate.
     expect(by(rows, "ubereats")?.commission).toBeCloseTo(500)
     expect(by(rows, "ubereats")?.orders).toBe(60)
   })
 
   it("folds both first-party platforms into the house channel", async () => {
     vi.mocked(prisma.$queryRaw).mockResolvedValue([
-      row({ platform: "css-pos", fpNet: 3000, fpGross: 3200, fpOrders: 120 }),
-      row({ platform: "bnm-web", fpNet: 1000, fpGross: 1100, fpOrders: 40 }),
+      row({ platform: "css-pos", fpGross: 3200, fpDisc: -200, fpOrders: 120 }),
+      row({ platform: "bnm-web", fpGross: 1100, fpDisc: -100, fpOrders: 40 }),
     ] as never)
 
     const rows = await loadChannelMix({ range, storeId: null, accountId })
@@ -227,5 +281,22 @@ describe("loadChannelMix", () => {
     const rows = await loadChannelMix({ range, storeId: "stranger", accountId })
     expect(rows).toEqual([])
     expect(prisma.$queryRaw).not.toHaveBeenCalled()
+  })
+})
+
+describe("loadChannelMix — days the order sync missed", () => {
+  it("prices a day with no order rows off that day's sales, at the delivery rate, and says so", async () => {
+    vi.mocked(prisma.$queryRaw).mockResolvedValue([
+      row({ platform: "doordash", day: "2026-08-19", tpGross: 2_100, tpDisc: -100, tpOrders: 80 }),
+      row({ platform: "doordash", day: "2026-08-20", tpGross: 400, tpOrders: 10 }),
+    ] as never)
+    vi.mocked(loadOrderFeeGroups).mockResolvedValue([
+      group({ platform: "doordash", day: "2026-08-20", orders: 10, recorded: true, fee: 90, ticket: 400 }),
+    ])
+    const dd = by(await loadChannelMix({ range, storeId: null, accountId }), "doordash")
+    // 08-20: 10 rows for 10 orders → the recorded $90. 08-19: no rows for 80
+    // orders → 25% × $2,000 = $500. Never $0 for the day that sold.
+    expect(dd?.commission).toBeCloseTo(590)
+    expect(dd?.commissionBasis?.ordersFromSales).toBe(80)
   })
 })

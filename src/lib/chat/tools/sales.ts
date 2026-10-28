@@ -6,7 +6,102 @@ import {
   storeIdsSchema,
   ymd,
 } from "./_shared"
-import type { ChatTool } from "./types"
+import type { ChatTool, ChatToolContext } from "./types"
+import { rowSales, summarySlices } from "@/lib/pnl"
+import {
+  loadOrderFeeGroups,
+  totalCommission,
+  type OrderFeeGroup,
+  type SalesSlice,
+  type StoreCommissionRates,
+} from "@/lib/counter/commission"
+
+/*
+ * ONE DEFINITION OF SALES, ONE OF COMMISSION — the dashboard's.
+ *
+ * `net` is the statement's Net sales (`rowSales` in `@/lib/pnl`: gross +
+ * service charges + discounts + refunds, tax excluded), not Otter's
+ * `fpNetSales + tpNetSales`. `gross` is before discounts and refunds. `fees`
+ * is the one commission function (`@/lib/counter/commission`): recorded
+ * marketplace fees plus the store-rate estimate for orders without one — the
+ * figure the P&L's commission lines print — not Otter's `fpFees + tpFees`.
+ */
+
+const SUMMARY_SUMS = {
+  fpGrossSales: true,
+  tpGrossSales: true,
+  fpDiscounts: true,
+  tpDiscounts: true,
+  fpServiceCharges: true,
+  tpServiceCharges: true,
+  tpRefundsAdjustments: true,
+  fpTaxCollected: true,
+  tpTaxCollected: true,
+  fpTips: true,
+  tpTipForRestaurant: true,
+  fpOrderCount: true,
+  tpOrderCount: true,
+} as const
+
+type SummarySums = {
+  [K in keyof typeof SUMMARY_SUMS]: number | null
+}
+
+function salesOf(platform: string, sums: SummarySums) {
+  const r = rowSales({ platform, ...sums })
+  return {
+    gross: r.gross + r.serviceCharges,
+    net: r.net,
+    tax: r.tax,
+    tips: (sums.fpTips ?? 0) + (sums.tpTipForRestaurant ?? 0),
+    count: (sums.fpOrderCount ?? 0) + (sums.tpOrderCount ?? 0),
+  }
+}
+
+async function commissionContext(
+  ctx: ChatToolContext,
+  storeIds: string[],
+  from: Date,
+  to: Date,
+): Promise<{
+  groups: OrderFeeGroup[]
+  rates: Map<string, StoreCommissionRates>
+  slices: SalesSlice[]
+}> {
+  const [groups, stores, daily] = await Promise.all([
+    loadOrderFeeGroups(
+      { accountId: ctx.accountId, storeIds, startDate: from, endDate: to },
+      ctx.prisma,
+    ),
+    ctx.prisma.store.findMany({
+      where: { id: { in: storeIds }, accountId: ctx.accountId },
+      select: {
+        id: true,
+        uberCommissionRate: true,
+        doordashCommissionRate: true,
+        uberPickupCommissionRate: true,
+        doordashPickupCommissionRate: true,
+        grubhubCommissionRate: true,
+      },
+    }),
+    // Per store/day/platform, so days whose order rows are missing or thin
+    // are priced off the summary's sales (see `cellsOf` in commission-core).
+    ctx.prisma.otterDailySummary.groupBy({
+      by: ["storeId", "date", "platform"],
+      where: { storeId: { in: storeIds }, date: { gte: from, lte: to } },
+      _sum: SUMMARY_SUMS,
+    }),
+  ])
+  const slices = summarySlices(
+    (daily ?? []).map((d) => ({
+      storeId: d.storeId as string,
+      date: d.date as Date,
+      platform: d.platform as string,
+      ...(d._sum as SummarySums),
+    })),
+  )
+  return { groups, rates: new Map(stores.map((s) => [s.id, s])), slices }
+}
 
 const dailySalesParams = z
   .object({
@@ -29,12 +124,16 @@ export type DailySalesRow = {
   platform?: string
   /** Present when groupBy === 'paymentMethod'. */
   paymentMethod?: string
-  /** First-party + third-party gross sales summed. */
+  /** Gross sales before discounts and refunds (channel sales + service charges). Tax excluded. */
   gross: number
-  /** First-party + third-party net sales summed. */
+  /** Net sales — the P&L's: gross less discounts and refunds. Tax excluded. */
   net: number
-  /** Platform fees withheld by Otter / OFO partners. */
-  fees: number
+  /**
+   * Marketplace commission (recorded + estimated at the store's rate), the
+   * P&L's figure. `null` when grouped by payment method — commission is not
+   * split by tender — or when nothing could be priced.
+   */
+  fees: number | null
   /** Tax collected (FP + 3P combined). */
   tax: number
   /** Tips paid to the restaurant (FP cash/card + 3P passthrough). */
@@ -60,51 +159,55 @@ export const getDailySales: ChatTool<typeof dailySalesParams, DailySalesRow[]> =
           ? "platform"
           : "paymentMethod"
 
-    const grouped = await ctx.prisma.otterDailySummary.groupBy({
-      by: [byField as "date" | "platform" | "paymentMethod"],
-      where: {
-        storeId: { in: storeIds },
-        date: { gte: from, lte: to },
-      },
-      _sum: {
-        fpGrossSales: true,
-        tpGrossSales: true,
-        fpNetSales: true,
-        tpNetSales: true,
-        fpFees: true,
-        tpFees: true,
-        fpTaxCollected: true,
-        tpTaxCollected: true,
-        fpTips: true,
-        tpTipForRestaurant: true,
-        fpOrderCount: true,
-        tpOrderCount: true,
-      },
-      orderBy:
+    const [grouped, fee] = await Promise.all([
+      ctx.prisma.otterDailySummary.groupBy({
+        // Platform always rides along: which gross column counts (fp or tp)
+        // depends on it, so it cannot be summed away first.
+        by: (byField === "platform" ? ["platform"] : [byField, "platform"]) as Array<
+          "date" | "platform" | "paymentMethod"
+        >,
+        where: {
+          storeId: { in: storeIds },
+          date: { gte: from, lte: to },
+        },
+        _sum: SUMMARY_SUMS,
+      }),
+      commissionContext(ctx, storeIds, from, to),
+    ])
+
+    const out = new Map<string, DailySalesRow>()
+    for (const row of grouped) {
+      const key =
         groupKey === "day"
-          ? [{ date: "asc" }]
-          : undefined,
-    })
-
-    return grouped.map((row): DailySalesRow => {
-      const s = row._sum
-      const gross = (s.fpGrossSales ?? 0) + (s.tpGrossSales ?? 0)
-      const net = (s.fpNetSales ?? 0) + (s.tpNetSales ?? 0)
-      const fees = (s.fpFees ?? 0) + (s.tpFees ?? 0)
-      const tax = (s.fpTaxCollected ?? 0) + (s.tpTaxCollected ?? 0)
-      const tips = (s.fpTips ?? 0) + (s.tpTipForRestaurant ?? 0)
-      const count = (s.fpOrderCount ?? 0) + (s.tpOrderCount ?? 0)
-
-      const out: DailySalesRow = { gross, net, fees, tax, tips, count }
-      if (groupKey === "day") {
-        out.date = ymd(row.date as Date)
-      } else if (groupKey === "platform") {
-        out.platform = row.platform as string
-      } else {
-        out.paymentMethod = row.paymentMethod as string
+          ? ymd(row.date as Date)
+          : groupKey === "platform"
+            ? (row.platform as string)
+            : (row.paymentMethod as string)
+      const v = salesOf(row.platform as string, row._sum as SummarySums)
+      const cur = out.get(key) ?? { gross: 0, net: 0, fees: null, tax: 0, tips: 0, count: 0 }
+      cur.gross += v.gross
+      cur.net += v.net
+      cur.tax += v.tax
+      cur.tips += v.tips
+      cur.count += v.count
+      if (groupKey === "day") cur.date = key
+      else if (groupKey === "platform") cur.platform = key
+      else cur.paymentMethod = key
+      out.set(key, cur)
+    }
+    if (groupKey !== "paymentMethod") {
+      for (const [key, r] of out) {
+        r.fees = totalCommission(
+          fee.groups,
+          fee.rates,
+          (g) => (groupKey === "day" ? g.day === key : g.platform === key),
+          fee.slices,
+        ).amount
       }
-      return out
-    })
+    }
+    const rows = [...out.values()]
+    if (groupKey === "day") rows.sort((a, b) => (a.date ?? "").localeCompare(b.date ?? ""))
+    return rows
   },
 }
 
@@ -186,7 +289,8 @@ export type CompareSalesPeriodTotals = {
   to: string
   gross: number
   net: number
-  fees: number
+  /** Marketplace commission, the P&L's figure. `null` when nothing could be priced. */
+  fees: number | null
   tax: number
   tips: number
   count: number
@@ -205,46 +309,35 @@ export type CompareSalesResult = {
 }
 
 async function totalsFor(
-  ctx: { ownerId: string; prisma: import("@/generated/prisma/client").PrismaClient },
+  ctx: ChatToolContext,
   storeIds: string[],
   range: { from: Date; to: Date },
 ): Promise<Omit<CompareSalesPeriodTotals, "label" | "from" | "to">> {
-  const grouped = await ctx.prisma.otterDailySummary.groupBy({
-    by: ["storeId"],
-    where: {
-      storeId: { in: storeIds },
-      date: { gte: range.from, lte: range.to },
-    },
-    _sum: {
-      fpGrossSales: true,
-      tpGrossSales: true,
-      fpNetSales: true,
-      tpNetSales: true,
-      fpFees: true,
-      tpFees: true,
-      fpTaxCollected: true,
-      tpTaxCollected: true,
-      fpTips: true,
-      tpTipForRestaurant: true,
-      fpOrderCount: true,
-      tpOrderCount: true,
-    },
-  })
+  const [grouped, fee] = await Promise.all([
+    ctx.prisma.otterDailySummary.groupBy({
+      by: ["platform"],
+      where: {
+        storeId: { in: storeIds },
+        date: { gte: range.from, lte: range.to },
+      },
+      _sum: SUMMARY_SUMS,
+    }),
+    commissionContext(ctx, storeIds, range.from, range.to),
+  ])
   let gross = 0
   let net = 0
-  let fees = 0
   let tax = 0
   let tips = 0
   let count = 0
   for (const row of grouped) {
-    const s = row._sum
-    gross += (s.fpGrossSales ?? 0) + (s.tpGrossSales ?? 0)
-    net += (s.fpNetSales ?? 0) + (s.tpNetSales ?? 0)
-    fees += (s.fpFees ?? 0) + (s.tpFees ?? 0)
-    tax += (s.fpTaxCollected ?? 0) + (s.tpTaxCollected ?? 0)
-    tips += (s.fpTips ?? 0) + (s.tpTipForRestaurant ?? 0)
-    count += (s.fpOrderCount ?? 0) + (s.tpOrderCount ?? 0)
+    const v = salesOf(row.platform, row._sum as SummarySums)
+    gross += v.gross
+    net += v.net
+    tax += v.tax
+    tips += v.tips
+    count += v.count
   }
+  const fees = totalCommission(fee.groups, fee.rates, undefined, fee.slices).amount
   return { gross, net, fees, tax, tips, count }
 }
 

@@ -375,7 +375,7 @@ describe("absences", () => {
     // These two carry no reference at all — no band and no spark, exactly as
     // the prototype leaves them.
     expect(cellOf(s, "Bottom line")?.reference).toBeUndefined()
-    expect(cellOf(s, "Gross sales")?.reference).toBeUndefined()
+    expect(cellOf(s, "Net sales")?.reference).toBeUndefined()
   })
 
   it("draws no meter on food either when the store has set no target", async () => {
@@ -405,7 +405,7 @@ describe("absences", () => {
     expect(cellOf(s, "Food")?.reference?.series).toHaveLength(8)
     expect(cellOf(s, "Labor")?.reference?.series).toHaveLength(8)
     expect(cellOf(s, "Bottom line")?.reference).toBeUndefined()
-    expect(cellOf(s, "Gross sales")?.reference).toBeUndefined()
+    expect(cellOf(s, "Net sales")?.reference).toBeUndefined()
     // Points, not fractions — the scale the cell prints and the scale the
     // sparkline is drawn at have to be one scale.
     expect(cellOf(s, "Food")?.reference?.series?.[0]).toBeCloseTo(31.4, 1)
@@ -426,7 +426,7 @@ describe("absences", () => {
     expect(s.weeks.status).toBe("failed")
     // Every figure still there, in full.
     expect(must(s.headline, "headline").cells.map((c) => c.label)).toEqual([
-      "Bottom line", "Prime cost", "Food", "Labor", "Gross sales",
+      "Bottom line", "Prime cost", "Food", "Labor", "Net sales",
     ])
     expect(cellOf(s, "Prime cost")?.value).toBe("56.2%")
     // And the judgement survives too — it comes from the targets, not the weeks.
@@ -548,14 +548,16 @@ describe("the cascade", () => {
 
   it("counts the orders from the same rows the Overview counts them from", async () => {
     const s = await load()
-    expect(must(s.cascade, "cascade").start.sub).toBe("6,000 orders")
+    // On the cascade's Gross sales line now — the top of gross → discounts →
+    // refunds → net sales — and on the table's Net sales line, as before.
+    expect(must(s.cascade, "cascade").lead?.sub).toBe("6,000 orders")
     expect(lineOf(s, "gross")?.sub).toBe("6,000 orders")
   })
 
   it("leaves the order count out rather than printing a zero when the mix fails", async () => {
     vi.mocked(loadChannelMix).mockRejectedValue(new Error("Otter is down"))
     const s = await load()
-    expect(must(s.cascade, "cascade").start.sub).toBeUndefined()
+    expect(must(s.cascade, "cascade").lead?.sub).toBeUndefined()
     // The cascade itself still draws: the dollars did not come from the mix.
     expect(must(s.cascade, "cascade").start.amount).toBe(GROSS)
   })
@@ -564,6 +566,35 @@ describe("the cascade", () => {
 /* ── The statement table ──────────────────────────────────────────────── */
 
 describe("the statement table", () => {
+  it("prints a refund reversal as an addition, never a double minus", async () => {
+    // `k.refunds` arrives signed as Otter stores it; positive is money coming
+    // back, which the statement holds as a negative refund.
+    vi.mocked(getAllStoresPnL).mockImplementation((async (arg: { periods?: unknown[] }) =>
+      rollupFor(arg, { combined: kpis({ refunds: 500, discounts: -1_200 } as never) })) as never)
+    const s = await load()
+    expect(lineOf(s, "refunds")?.amount).toBe("+$500")
+    expect(lineOf(s, "discounts")?.amount).toBe("−$1,200")
+  })
+
+  it("says on the bottom line when commission is estimated off daily sales", async () => {
+    const commission = {
+      amount: 18_288, recorded: 0, estimated: 18_288, orders: 400, ordersRecorded: 0,
+      ordersEstimated: 400, unknownOrders: 0, ordersFromSales: 400, ticket: 73_152,
+    }
+    vi.mocked(getAllStoresPnL).mockImplementation((async (arg: { periods?: unknown[] }) =>
+      rollupFor(arg, { combined: { ...kpis(), commission } })) as never)
+    const s = await load()
+    expect(cellOf(s, "Bottom line")?.caption).toBe(
+      "Commission estimated for 100% of orders · 400 from daily sales, order detail missing",
+    )
+    expect(lineOf(s, "commissions")?.sub).toContain("from daily sales")
+  })
+
+  it("leaves the bottom line bare when every fee was recorded", async () => {
+    const s = await load()
+    expect(cellOf(s, "Bottom line")?.caption).toBeUndefined()
+  })
+
   it("prints an em-dash in every comparison cell when there is no comparison", async () => {
     const s = await load()
     expect(must(s.statement, "statement").comparisonLabel).toBeNull()

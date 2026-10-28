@@ -356,12 +356,6 @@ const DASH = "—"
 /** How far back "sells N times a period" looks, in days. */
 const CARRIED_LOOKBACK_DAYS = 28
 
-/**
- * The share of a range's marketplace orders that must carry a commission
- * before the strip will state a fee total as fact. See `buildOrdersStrip`.
- */
-const FEE_COVERAGE_FLOOR = 0.95
-
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
 
 /** Written out, because "the last four Thus" is not a sentence. */
@@ -522,58 +516,40 @@ export function buildOrdersStrip(
   const net = comparisonPhrase(now.totals.netSales, cmp, then?.totals.netSales ?? null)
   const avg = comparisonPhrase(ticket ?? 0, cmp, thenTicket)
 
-  const feeShare =
-    now.totals.thirdPartyNetSales > 0
-      ? (now.totals.commission / now.totals.thirdPartyNetSales) * 100
-      : null
-
   /*
-   * Marketplace sales with NO commission recorded against them is not a range
-   * that paid no fees — it is a range whose fees we do not have.
+   * The fee cell reads the ONE commission rule, the same the P&L's commission
+   * lines use (`@/lib/counter/commission-core`): the fee Otter recorded where
+   * there is one, and the store's own rate for the platform and fulfilment
+   * mode × the after-discount ticket where there is not.
    *
-   * `OtterOrder.commission` comes from Otter's `adjusted_commission`, and its
-   * coverage is erratic. Counted on 2026-08-26, marketplace orders carrying a
-   * commission by month:
-   *
-   *   Jan 96.9%   Feb 96.8%   Mar 96.8%   Apr 43.7%
-   *   May  0.0%   Jun  0.0%   Jul 58.1%   Aug  0.0%
-   *
-   * So a reader opening this page in August would be told DoorDash and Uber
-   * Eats took $0.
-   *
-   * That is the same lie `channel-mix.ts` refuses to tell about Grubhub, and
-   * it is worse here because the P&L answers the same question a DIFFERENT way
-   * — `pnl.ts` never reads this column at all, it applies
-   * `Store.uberCommissionRate` / `doordashCommissionRate` to sales. One page
-   * would read "$0" while the other read "−$1,632" for the same day. Note 60
-   * is precisely this, and the resolution note 60 takes is that a figure
-   * nobody can stand behind is not printed.
-   *
-   * ## Why a COVERAGE ratio and not `commission > 0`
-   *
-   * The guard used to fire only at EXACTLY zero coverage, which is the one
-   * month in three it catches. On April's 43.7% the cell printed
-   * `$13,927 · 10.8% of 3P` as fact, against an observed rate of 31.2% on the
-   * orders that DO carry a fee — an understatement of roughly $17,400. July's
-   * 58.1% printed `$22,910 · 14.7% of 3P` against 32.6%. The observed rate
-   * among covered orders held between 28% and 33% all year, so the fee rate
-   * never moved; only the sync did. A figure half the truth is exactly the
-   * claim ruling O-R13 says not to print, told at a different threshold.
-   *
-   * The floor is 95%: January's 96.9% is the shape that must still print (the
-   * recorded total is then within a few percent of the bill), April's 43.7%
-   * is the shape that must not.
-   *
-   * The cell does NOT fall back to an estimate built from the observed rate.
-   * A modelled figure and an observed one are different questions, and quietly
-   * substituting one for the other is how this page and the P&L came to
-   * disagree in the first place. The real repair is upstream, in the sync.
+   * It used to print the recorded sum alone and HIDE it below 95% coverage,
+   * because recorded coverage is erratic (counted 2026-08-26: Jan 96.9%,
+   * Apr 43.7%, May 0%) while the P&L charged a flat rate on gross — two
+   * figures for one day, and an em-dash most months. Now both read the same
+   * total, and the cell says how much of it is estimated rather than hiding
+   * it. `null` only when not one marketplace order could be priced.
    */
-  const coverage =
-    now.totals.thirdPartyCount > 0
-      ? now.totals.thirdPartyWithFees / now.totals.thirdPartyCount
-      : 1
-  const feesRecorded = coverage >= FEE_COVERAGE_FLOOR
+  const fees = now.totals.commission
+  const feeShare =
+    fees !== null && now.totals.thirdPartyNetSales > 0
+      ? (fees / now.totals.thirdPartyNetSales) * 100
+      : null
+  const priced = now.totals.thirdPartyWithFees + now.totals.thirdPartyEstimatedCount
+  const estPct = priced > 0 ? Math.round((now.totals.thirdPartyEstimatedCount / priced) * 100) : 0
+  const feeDelta =
+    now.totals.thirdPartyCount === 0
+      ? "no marketplace sales"
+      : fees === null
+        ? "no fee recorded and no rate on file"
+        : [
+            feeShare === null ? null : `${pct(feeShare, { scaled: true })} of 3P`,
+            estPct > 0 ? `est. for ${estPct}% of orders` : null,
+            now.totals.thirdPartyUnknownCount > 0
+              ? `${count(now.totals.thirdPartyUnknownCount)} unpriced`
+              : null,
+          ]
+            .filter(Boolean)
+            .join(" · ")
 
   return [
     { label: "Orders", value: count(now.totalCount), delta: orders.text, deltaTone: orders.tone },
@@ -588,20 +564,12 @@ export function buildOrdersStrip(
     },
     {
       label: "Marketplace fees",
-      // `money(null)` is an em dash — see `feesRecorded` above.
-      value: money(feesRecorded ? now.totals.commission : null),
+      // `money(null)` is an em dash — nothing could be priced.
+      value: money(fees),
       // The prototype puts this in `c[2]` (`.d`), not in `c[4]` (`.band`) —
       // see the report. Money leaving is `is-down` whichever way it moved.
-      delta: !feesRecorded
-        ? now.totals.thirdPartyWithFees === 0
-          ? "not recorded for this range"
-          : // A partly-covered range: the fraction is the fact, and the total
-            // is the thing nobody can stand behind.
-            `only ${pct(coverage * 100, { scaled: true })} of 3P orders have a fee on file`
-        : feeShare === null
-          ? "no marketplace sales"
-          : `${pct(feeShare, { scaled: true })} of 3P`,
-      deltaTone: feesRecorded && feeShare !== null ? "is-down" : "is-flat",
+      delta: feeDelta,
+      deltaTone: fees !== null && feeShare !== null ? "is-down" : "is-flat",
     },
     {
       // Ruling O-R1: the prototype's slot, this schema's figure, an honest name.
@@ -1364,7 +1332,8 @@ export function buildNeedsYou(
  * strip reads `totalCount` and `totals` and nothing else, which is why the
  * single-window load already asked for `summaryOnly`.
  */
-async function loadComparisonOrders(
+/** Exported for its test; the adapter is its only caller. */
+export async function loadComparisonOrders(
   filters: Parameters<typeof getOrdersList>[0],
   windows: DateRange[],
 ): Promise<OrderListResponse> {
@@ -1397,7 +1366,14 @@ async function loadComparisonOrders(
     undrainedCount: total((r) => r.undrainedCount),
     totals: {
       netSales: total((r) => r.totals.netSales),
-      commission: total((r) => r.totals.commission),
+      // Unknown in any window is unknown in the sum — never read as $0.
+      commission: parts.some((r) => r.totals.commission === null)
+        ? null
+        : total((r) => r.totals.commission ?? 0),
+      commissionRecorded: total((r) => r.totals.commissionRecorded),
+      commissionEstimated: total((r) => r.totals.commissionEstimated),
+      thirdPartyEstimatedCount: total((r) => r.totals.thirdPartyEstimatedCount),
+      thirdPartyUnknownCount: total((r) => r.totals.thirdPartyUnknownCount),
       thirdPartyNetSales: total((r) => r.totals.thirdPartyNetSales),
       thirdPartyCount: total((r) => r.totals.thirdPartyCount),
       thirdPartyWithFees: total((r) => r.totals.thirdPartyWithFees),

@@ -569,7 +569,7 @@ function buildVerdict(
   strong(money(w.cost))
   say(" of food and packaging against ")
   strong(money(w.sales))
-  say(" of Total Sales — ")
+  say(" of net sales — ")
   strong(pct(w.foodPct, { scaled: true }))
   say(" food cost.")
 
@@ -588,7 +588,7 @@ function buildVerdict(
     tone = "warn"
     headline = "Nothing to read against the plan"
     say(
-      ` The plan is ${pct(w.plan, { scaled: true })}, but this range carries no Total Sales, ` +
+      ` The plan is ${pct(w.plan, { scaled: true })}, but this range carries no net sales, ` +
         "so there is no percentage to compare with it.",
     )
   } else if (Math.abs(w.againstPlan) < ON_PLAN_WITHIN_PTS) {
@@ -664,7 +664,7 @@ function buildStrip(
       value: pct(w.foodPct, { scaled: true }),
       // Names the denominator out loud, beside the figure that carries it.
       // C-R1 exists because that denominator is not the obvious one.
-      delta: `${money(w.cost)} of ${money(w.sales)} Total Sales`,
+      delta: `${money(w.cost)} of ${money(w.sales)} net sales`,
       deltaTone: "is-flat",
     },
   ]
@@ -741,7 +741,7 @@ function buildHeadline(input: {
     figure: {
       label: "Food cost",
       value: pct(w.foodPct, { scaled: true }),
-      detail: "of Total Sales · the P&L's own denominator",
+      detail: "of net sales · the P&L's own denominator",
       detailTone: "is-flat",
     },
     verdict: buildVerdict(w, invoices),
@@ -754,7 +754,7 @@ function buildHeadline(input: {
       {
         label: "Food cost",
         value: pct(w.foodPct, { scaled: true }),
-        delta: "of Total Sales",
+        delta: "of net sales",
         deltaTone: "is-flat",
       },
       {
@@ -896,8 +896,8 @@ function buildPlan(
     ),
     alt:
       plan === null
-        ? "Food cost as a share of Total Sales"
-        : "Food cost as a share of Total Sales, against the published plan",
+        ? "Food cost as a share of net sales"
+        : "Food cost as a share of net sales, against the published plan",
   }
 
   const readable = folded.pct
@@ -915,13 +915,13 @@ function buildPlan(
   let sentence: string
   if (readable.length === 0) {
     sentence =
-      "No bucket in this range carries any Total Sales, so no bucket has a food-cost " +
+      "No bucket in this range carries any net sales, so no bucket has a food-cost " +
       "percentage to draw."
   } else {
     const w = d.window
     const head =
       w.foodPct === null
-        ? "The range carries no Total Sales to divide by."
+        ? "The range carries no net sales to divide by."
         : plan === null || w.againstPlan === null
           ? `Food cost ran ${pct(w.foodPct, { scaled: true })} across the range, with no ` +
             "published plan to read it against."
@@ -971,7 +971,7 @@ function buildPlan(
       (readable.length < 2
         ? "one reading"
         : plural(readable.length, `${GRAIN_WORD[granularity]} bucket`)) +
-      " · cost from DailyCogsItem over the statement's Total Sales",
+      " · cost from DailyCogsItem over the statement's net sales",
     // C-R4, published to the reader rather than left as a silent gap.
     note:
       "One line. DailyCogsItem.lineCost already IS the theoretical cost — recipes valued at " +
@@ -1226,8 +1226,8 @@ function buildItems(items: CogsItem[], plan: number): ItemsSection {
       `${pct(plan, { scaled: true })} plan · ${money(lostTotal)} between them`,
     note:
       "An item's percentage is its own booked cost over what it collected after discounts, because there is no " +
-      "statement-level Total Sales for one item to divide by. That is a different denominator " +
-      "from the headline's, which is the statement's Total Sales for the whole store — so these " +
+      "statement-level net sales for one item to divide by. That is a different denominator " +
+      "from the headline's, which is the statement's net sales for the whole store — so these " +
       "rows do not sum to the figure above, and are not meant to. “Lost” is the points " +
       "over plan applied to that item's own revenue: what the overshoot cost, not what the item " +
       "is worth.",
@@ -1290,7 +1290,7 @@ function buildWorst(items: CogsItem[], plan: number | null): WorstSection {
         : `${count(overCount)} over the ${pct(plan, { scaled: true })} plan`),
     note:
       "Ranked by each item's own food cost — its booked cost over what it collected after discounts — which is a " +
-      "different denominator from the headline's Total Sales and does not roll up into it. " +
+      "different denominator from the headline's net sales and does not roll up into it. " +
       (plan === null
         ? "No plan is published for this store, so no row carries a loss figure."
         : "“Lost” is the points over the store's own published plan applied to that " +

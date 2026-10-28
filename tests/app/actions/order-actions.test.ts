@@ -18,6 +18,7 @@ vi.mock("@/lib/prisma", () => ({
       findMany: vi.fn(),
       count: vi.fn(),
       aggregate: vi.fn(),
+      groupBy: vi.fn(),
     },
   },
 }))
@@ -30,6 +31,23 @@ import { prisma } from "@/lib/prisma"
 import { getOrdersList } from "@/app/actions/order-actions"
 
 const session = { user: { id: "u1", accountId: "acct-A" } }
+
+const ZERO = {
+  netSales: 0,
+  commission: 0,
+  commissionRecorded: 0,
+  commissionEstimated: 0,
+  thirdPartyEstimatedCount: 0,
+  thirdPartyUnknownCount: 0,
+  thirdPartyNetSales: 0,
+  thirdPartyCount: 0,
+  thirdPartyWithFees: 0,
+}
+
+/** One `groupBy` row: a store, platform and mode, and the money behind it. */
+function feeGroup(platform: string, mode: string | null, count: number, subtotal: number, discount: number, commission: number) {
+  return { storeId: "s1", platform, fulfillmentMode: mode, _count: { _all: count }, _sum: { subtotal, discount, commission } }
+}
 
 /**
  * A single aggregate result shape, matching what `.aggregate` resolves to.
@@ -47,9 +65,10 @@ beforeEach(() => {
   vi.clearAllMocks()
   vi.mocked(getServerSession).mockResolvedValue(session as never)
   vi.mocked(prisma.store.findMany).mockResolvedValue([
-    { id: "s1", name: "Hollywood", isActive: true },
+    { id: "s1", name: "Hollywood", isActive: true, doordashCommissionRate: 0.25, uberCommissionRate: 0.27 },
   ] as never)
   vi.mocked(prisma.otterOrder.findMany).mockResolvedValue([] as never)
+  vi.mocked(prisma.otterOrder.groupBy).mockResolvedValue([] as never)
   vi.mocked(prisma.otterOrder.count).mockResolvedValue(0)
   vi.mocked(prisma.otterOrder.aggregate).mockResolvedValue(
     sums(0, 0, 0) as never
@@ -61,38 +80,61 @@ describe("getOrdersList — early returns still satisfy OrderListResponse", () =
     vi.mocked(getServerSession).mockResolvedValue(null)
     const result = await getOrdersList()
     expect(result.undrainedCount).toBe(0)
-    expect(result.totals).toEqual({
-      netSales: 0,
-      commission: 0,
-      thirdPartyNetSales: 0,
-      thirdPartyCount: 0,
-      thirdPartyWithFees: 0,
-    })
+    expect(result.totals).toEqual(ZERO)
   })
 
   it("returns undrainedCount and totals of zero when the account has no stores", async () => {
     vi.mocked(prisma.store.findMany).mockResolvedValue([] as never)
     const result = await getOrdersList()
     expect(result.undrainedCount).toBe(0)
-    expect(result.totals).toEqual({
-      netSales: 0,
-      commission: 0,
-      thirdPartyNetSales: 0,
-      thirdPartyCount: 0,
-      thirdPartyWithFees: 0,
-    })
+    expect(result.totals).toEqual(ZERO)
   })
 
   it("returns undrainedCount and totals of zero for a cross-account storeId", async () => {
     const result = await getOrdersList({ storeId: "not-mine" })
     expect(result.undrainedCount).toBe(0)
-    expect(result.totals).toEqual({
-      netSales: 0,
-      commission: 0,
-      thirdPartyNetSales: 0,
-      thirdPartyCount: 0,
-      thirdPartyWithFees: 0,
-    })
+    expect(result.totals).toEqual(ZERO)
+  })
+})
+
+describe("getOrdersList — the commission estimate", () => {
+  it("leaves cancelled orders out of the commission groups", async () => {
+    await getOrdersList()
+    const where = vi.mocked(prisma.otterOrder.groupBy).mock.calls[0][0]?.where as {
+      AND: Array<Record<string, unknown>>
+    }
+    expect(JSON.stringify(where.AND[1])).toContain("OFO_STATUS_CANCELED")
+  })
+
+  it("counts orders WITH a fee over the same non-cancelled orders the fee groups price", async () => {
+    await getOrdersList()
+    const calls = vi.mocked(prisma.otterOrder.count).mock.calls.map((c) => JSON.stringify(c[0]?.where))
+    const withFees = calls.find((w) => w.includes('"commission":{"not":0}'))
+    expect(withFees).toBeDefined()
+    expect(withFees).toContain("OFO_STATUS_CANCELED")
+  })
+
+  it("prices pickup at the pickup rate and reports a platform with no rate as unpriced, not free", async () => {
+    vi.mocked(prisma.store.findMany).mockResolvedValue([
+      { id: "s1", name: "Hollywood", isActive: true, doordashCommissionRate: 0.25, uberCommissionRate: 0.27, doordashPickupCommissionRate: 0.06, grubhubCommissionRate: null },
+    ] as never)
+    vi.mocked(prisma.otterOrder.groupBy)
+      .mockResolvedValueOnce([] as never)
+      .mockResolvedValueOnce([
+        feeGroup("doordash", "FULFILLMENT_MODE_PICKUP", 10, 1000, 0, 0),
+        feeGroup("grubhub", "FULFILLMENT_MODE_OFO_DELIVERY", 5, 500, 0, 0),
+      ] as never)
+    const result = await getOrdersList()
+    expect(result.totals.commission).toBeCloseTo(60)
+    expect(result.totals.thirdPartyUnknownCount).toBe(5)
+  })
+
+  it("is null, never zero, when no marketplace order could be priced", async () => {
+    vi.mocked(prisma.otterOrder.groupBy)
+      .mockResolvedValueOnce([] as never)
+      .mockResolvedValueOnce([feeGroup("chownow", null, 7, 700, 0, 0)] as never)
+    const result = await getOrdersList()
+    expect(result.totals.commission).toBeNull()
   })
 })
 
@@ -188,10 +230,20 @@ describe("getOrdersList — totals is a range aggregate, not a page sum", () => 
     // fee-coverage ratio. Both totals' denominators ride on their aggregate.
     vi.mocked(prisma.otterOrder.count).mockResolvedValueOnce(0).mockResolvedValueOnce(36)
 
+    // The commission groups: 36 orders with a recorded $8,000, and 44 without
+    // one on a $9,800 discounted ticket, priced at the store's 25% DoorDash rate.
+    vi.mocked(prisma.otterOrder.groupBy)
+      .mockResolvedValueOnce([feeGroup("doordash", "FULFILLMENT_MODE_OFO_DELIVERY", 36, 20000, -300, -8000)] as never)
+      .mockResolvedValueOnce([feeGroup("doordash", "FULFILLMENT_MODE_OFO_DELIVERY", 44, 10000, -200, 0)] as never)
+
     const result = await getOrdersList()
     expect(result.totals.netSales).toBe(48800)
-    // Reported positive: it is a fee, not a negative number.
-    expect(result.totals.commission).toBe(8000)
+    // Reported positive: it is a fee, not a negative number. Recorded where
+    // there is one, the store's rate on the after-discount ticket where not.
+    expect(result.totals.commissionRecorded).toBe(8000)
+    expect(result.totals.commissionEstimated).toBeCloseTo(2450)
+    expect(result.totals.commission).toBeCloseTo(10450)
+    expect(result.totals.thirdPartyEstimatedCount).toBe(44)
     expect(result.totals.thirdPartyNetSales).toBe(29500)
     // The strip cannot tell a complete fee bill from a fraction of one without
     // these two — `adjusted_commission`'s coverage ran 43.7% in April 2026 and

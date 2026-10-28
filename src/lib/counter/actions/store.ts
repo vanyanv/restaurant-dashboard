@@ -13,15 +13,15 @@ import {
  * `./recipe.ts`, `./stock-count.ts` and `./settings.ts`.
  *
  * `updateStore` validates the whole store, so the name has to travel with any
- * change or its `min(1)` rejects it. Its `parseRate` reads a commission
- * greater than 1 as a percentage and divides by 100, so the form can send
- * either 21 or 0.21 and mean the same thing.
+ * change or its `min(1)` rejects it. Commission rates arrive here as
+ * PERCENTS (25 = 25%) and travel as percents — see `saveStoreFile`.
  *
  * `targetCogsPct` is deliberately absent: `updateStoreSchema` does not accept
  * it, so no form can set it and the store file says so rather than offering a
  * field that silently does nothing.
  */
 export interface StoreFileEdit {
+  /* Commission rates below are PERCENTS, e.g. 25 for 25%. */
   name: string
   address: string | null
   phone: string | null
@@ -31,6 +31,12 @@ export interface StoreFileEdit {
   fixedMonthlyCleaning: number | null
   uberCommissionRate: number
   doordashCommissionRate: number
+  /** Blank (null) clears it: "not known", never free. */
+  uberPickupCommissionRate: number | null
+  doordashPickupCommissionRate: number | null
+  grubhubCommissionRate: number | null
+  /** Present only when the owner changed it — see `saveStoreFile`. */
+  lifecycleStage?: "pre_open" | "warming_up" | "ready"
 }
 
 /** A blank clears the value; `updateStore` reads "" as null and absent as unchanged. */
@@ -51,8 +57,18 @@ export async function saveStoreFile(
   put(form, "fixedMonthlyLabor", edit.fixedMonthlyLabor)
   put(form, "fixedMonthlyTowels", edit.fixedMonthlyTowels)
   put(form, "fixedMonthlyCleaning", edit.fixedMonthlyCleaning)
+  // Sent as PERCENTS, the unit the owner typed. `updateStore` parses them
+  // with `parseRatePercent` (0..100, or an error) and stores the fraction —
+  // one conversion, in one place.
   put(form, "uberCommissionRate", edit.uberCommissionRate)
   put(form, "doordashCommissionRate", edit.doordashCommissionRate)
+  put(form, "uberPickupCommissionRate", edit.uberPickupCommissionRate)
+  put(form, "doordashPickupCommissionRate", edit.doordashPickupCommissionRate)
+  put(form, "grubhubCommissionRate", edit.grubhubCommissionRate)
+  // Only when the owner changed it. The nightly model promotes a store from
+  // warming_up to ready on its own; always sending the stage the page loaded
+  // with would quietly undo that promotion on any unrelated save.
+  if (edit.lifecycleStage !== undefined) form.set("lifecycleStage", edit.lifecycleStage)
 
   const result = await updateStore(storeId, form)
   if ("error" in result && result.error) return { ok: false, error: result.error }

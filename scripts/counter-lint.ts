@@ -467,6 +467,14 @@ const MOTION_ALLOWED = /[/\\]components[/\\]counter[/\\]motion[/\\]/
  * and `adapters/cogs.ts`; `logged-waste.ts` values logged stock adjustments
  * by reason class for `adapters/product-usage.ts` and `adapters/cogs.ts`.
  *
+ * `commission.ts` was named on 2026-10-28: it runs the one grouped
+ * `OtterOrder` read behind every marketplace-commission figure (recorded fees
+ * plus the store-rate estimate) and is read by the P&L rollup,
+ * `channel-mix.ts`, `adapters/menu-item.ts` and `adapters/stores.ts`, so the
+ * P&L, Overview, Analytics, menu-item and Orders pages price a marketplace's
+ * cut through one function. Its rules live in the Prisma-free
+ * `commission-core.ts`, which needs no exemption.
+ *
  * Confirmed empirically: extending rule 4 to `.ts` with no exemption beyond
  * `adapters/` produced 25 violations across 20 files (12 under `actions/`,
  * 8 top-level); this allowance, `(adapters|actions)/` plus these eight
@@ -476,7 +484,7 @@ const MOTION_ALLOWED = /[/\\]components[/\\]counter[/\\]motion[/\\]/
  * a fake Prisma import inside a hook is still caught.
  */
 const DATA_ALLOWED_TOP_LEVEL_FILES =
-  "channel-mix|cogs|item-discounts|item-economics|labor-leaks|labor-week|logged-waste|price-move|purchases|run-out|service-profile|staffing-curve|statement|vendor-basket"
+  "channel-mix|cogs|commission|item-discounts|item-economics|labor-leaks|labor-week|logged-waste|price-move|purchases|run-out|service-profile|staffing-curve|statement|vendor-basket"
 const DATA_ALLOWED = new RegExp(
   String.raw`[/\\]lib[/\\]counter[/\\](?:adapters|actions)[/\\]` +
     "|" +
