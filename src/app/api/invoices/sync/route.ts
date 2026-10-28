@@ -622,6 +622,12 @@ async function runSync(
     )
     const dateSuspect =
       Boolean(inv.extraction.invoiceDate) && invoiceDate === null
+    // No date printed at all (Vitco's order-credit PDFs have none): the email
+    // arrived the day it was issued, and an undated row drops out of every
+    // date-filtered total. A date that was read and rejected stays empty —
+    // that one goes to review as suspect.
+    const datedInvoice =
+      invoiceDate ?? (!inv.extraction.invoiceDate ? emailReceivedAt : null)
 
     const mathMismatches = findLineMathMismatches(inv.extraction.lineItems)
     for (const m of mathMismatches) {
@@ -707,7 +713,7 @@ async function runSync(
       attachmentName: inv.attachmentName,
       vendorName: normalizeVendorName(inv.extraction.vendorName),
       invoiceNumber: inv.extraction.invoiceNumber,
-      invoiceDate,
+      invoiceDate: datedInvoice,
       dueDate: inv.extraction.dueDate ? new Date(inv.extraction.dueDate) : null,
       deliveryAddress: inv.extraction.deliveryAddress,
       subtotal: inv.extraction.subtotal,

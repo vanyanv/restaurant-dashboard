@@ -4,6 +4,7 @@ import type { InvoiceExtraction } from "@/types/invoice"
 import { recordAiUsage } from "@/lib/monitoring/ai-usage"
 import {
   dropDuplicatedLines,
+  fixCreditLineSigns,
   normalizeCatchWeightMeatLines,
   normalizeCountPackLines,
 } from "@/lib/invoice-sanity"
@@ -164,7 +165,13 @@ function normalizeExtraction(extraction: InvoiceExtraction): InvoiceExtraction {
   const normalized = normalizeCountPackLines(
     normalizeCatchWeightMeatLines(applyKnownSkuPackProfiles(extraction))
   )
-  const { extraction: deduped, dropped } = dropDuplicatedLines(normalized)
+  const { extraction: signed, flipped } = fixCreditLineSigns(normalized)
+  if (flipped.length > 0) {
+    console.warn(
+      `Credit line(s) ${flipped.join(", ")} on ${extraction.vendorName} #${extraction.invoiceNumber} took the amount's minus sign`
+    )
+  }
+  const { extraction: deduped, dropped } = dropDuplicatedLines(signed)
   if (dropped.length > 0) {
     console.warn(
       `Dropped line(s) ${dropped.join(", ")} read twice on ${extraction.vendorName} #${extraction.invoiceNumber}`
