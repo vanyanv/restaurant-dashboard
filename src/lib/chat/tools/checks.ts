@@ -54,13 +54,16 @@ export const getCleaningChecks: ChatTool<typeof params, CleaningChecksResult> = 
   async execute(args, ctx) {
     const storeIds = await resolveStoreIds(ctx, args.storeIds)
     const { from, to } = parseDateRange(args.dateRange)
-    if ((to.getTime() - from.getTime()) / 86_400_000 > 31) {
+    if ((to.getTime() - from.getTime()) / 86_400_000 > 30) {
       throw new Error("dateRange is limited to 31 days for checks")
     }
     const now = new Date()
     // Never ask about days that have not started: they are all "upcoming".
     const today = todayLA(now)
     const toDay = ymd(to) > today ? today : ymd(to)
+    if (ymd(from) > today) {
+      throw new Error(`dateRange starts after today (${today}); no check has been due yet`)
+    }
 
     const grid = await loadCheckGrid({
       accountId: ctx.accountId,

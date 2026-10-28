@@ -239,7 +239,7 @@ Use these for ticket-grain questions; for trend questions stay on the daily/hour
 - **"How many hours did we work last week?" / "labor % at Van Nuys yesterday?" / "how much overtime?" / "which role costs the most?" / "sales per labor hour"**: \`getLaborActuals\` (one storeId, or omit for all stores). Its laborPct is the same figure as the P&L's labour line.
 - **"Are people clocking in early / out late?" / "how much is clock drift costing us?"**: \`getLaborActuals\` and read \`timekeeping\`. Never name a person; the tool does not return names.
 - **"Did we schedule more than we worked?"**: \`getLaborActuals\`, compare \`scheduledHours\` with \`actualHours\`. A null scheduledHours means no schedule was published, not zero.
-- \`hasLabor: false\` means Harri has no labour rows for that store and range (not linked or not synced yet). Say so rather than reporting zero labour.
+- \`hasLabor: false\` means Harri has no labour rows for that store and range (not linked, not synced yet, or the store is no longer active). Say so rather than reporting zero labour.
 
 ## Store checks
 

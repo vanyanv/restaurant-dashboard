@@ -94,7 +94,7 @@ describe("getLaborActuals", () => {
 
   it("refuses a range past 92 days", async () => {
     await expect(
-      getLaborActuals.execute({ dateRange: { from: "2026-01-01", to: "2026-10-01" } }, ctx),
+      getLaborActuals.execute({ dateRange: { from: "2026-07-01", to: "2026-10-01" } }, ctx),
     ).rejects.toThrow(/92 days/)
   })
 })
@@ -140,7 +140,14 @@ describe("getCleaningChecks", () => {
 
   it("refuses a range past 31 days", async () => {
     await expect(
-      getCleaningChecks.execute({ dateRange: { from: "2026-08-01", to: "2026-10-01" } }, ctx),
+      getCleaningChecks.execute({ dateRange: { from: "2026-09-01", to: "2026-10-02" } }, ctx),
     ).rejects.toThrow(/31 days/)
+  })
+
+  it("refuses a range that starts after today rather than reporting zero checks", async () => {
+    await expect(
+      getCleaningChecks.execute({ dateRange: { from: "2099-01-01", to: "2099-01-02" } }, ctx),
+    ).rejects.toThrow(/after today/)
+    expect(loadCheckGrid).not.toHaveBeenCalled()
   })
 })

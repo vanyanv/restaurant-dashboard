@@ -1,11 +1,10 @@
 import { getStores } from "@/app/actions/store/crud-actions"
 import { businessDay } from "@/lib/counter/business-date"
 import { isOperational } from "@/lib/store-lifecycle"
-import { buildPeriods, TOTAL_SALES_CODE } from "@/lib/pnl"
+import { buildPeriods } from "@/lib/pnl"
 import {
   granularityFor,
   loadStatement,
-  rowValues,
   type Granularity,
   type Statement,
 } from "@/lib/counter/statement"
@@ -24,7 +23,6 @@ import { salesByDayOf } from "@/lib/counter/labor-figures"
 import { loadScheduleGap, loadStaffingCurve, type StaffingCurve } from "@/lib/counter/staffing-curve"
 import { count, money, pct, plural, points } from "@/lib/counter/format"
 import {
-  dayCount,
   isoDay,
   rangeLabel,
   toQueryBounds,

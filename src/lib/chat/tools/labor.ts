@@ -36,7 +36,7 @@ export type LaborActualsResult = {
   storeId: string | null
   from: string
   to: string
-  /** False when Harri has no labour rows for the range — a store not linked, or not synced yet. */
+  /** False when Harri has no labour rows for the range — a store not linked, not synced yet, or no longer active. */
   hasLabor: boolean
   totals: {
     actualHours: number
@@ -85,7 +85,7 @@ export const getLaborActuals: ChatTool<typeof params, LaborActualsResult> = {
     const [storeId] = args.storeId ? await resolveStoreIds(ctx, [args.storeId]) : [null]
     const { from, to } = parseDateRange(args.dateRange)
     const span = (to.getTime() - from.getTime()) / 86_400_000
-    if (span > 92) throw new Error("dateRange is limited to 92 days for labour")
+    if (span > 91) throw new Error("dateRange is limited to 92 days for labour")
 
     const f = await loadLaborFigures({
       range: localRange(from, to),
