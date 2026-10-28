@@ -29,6 +29,13 @@ export interface PriorShapeRow {
   packSize: number | null
   unitSize: number | null
   unitSizeUom: string | null
+  /**
+   * The owner approved the invoice this line is on. An approved shape has
+   * been checked by a person, so it carries a full prior's weight on its own:
+   * IFS portion cups 61250CS were approved once as 20×125 CT, and the next
+   * delivery read "2 OZ" from the name and sat in review for it.
+   */
+  approved?: boolean
 }
 
 export interface PackShapePrior {
@@ -127,15 +134,16 @@ export function derivePackShapePrior(rows: PriorShapeRow[]): PackShapePrior | nu
 
     if (isNameLeakProneShape(row)) continue
 
-    eligible++
+    const weight = row.approved ? PRIOR_MIN_SUPPORT : 1
+    eligible += weight
     const totalBase = Math.round(packSize * unitSize * 1e6) / 1e6
     const groupKey = `${unit}|${sizeClass}|${totalBase}`
     const vote = votes.get(groupKey) ?? { count: 0, exemplars: new Map() }
-    vote.count++
+    vote.count += weight
     const uomRaw = row.unitSizeUom?.trim().toUpperCase() ?? null
     const exactKey = `${packSize}|${unitSize}|${uomRaw ?? ""}`
     const exemplar = vote.exemplars.get(exactKey) ?? { count: 0, packSize, unitSize, uomRaw }
-    exemplar.count++
+    exemplar.count += weight
     vote.exemplars.set(exactKey, exemplar)
     votes.set(groupKey, vote)
   }
