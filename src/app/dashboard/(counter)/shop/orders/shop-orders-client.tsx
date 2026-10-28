@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import { useRouter } from "next/navigation"
-import { Section, useCounterTransition, usePageChrome } from "@/components/counter"
+import { Section, useCounterTransition, usePageChrome, useSurfaceHref } from "@/components/counter"
 import { markOrderPickedUp, markOrderReady } from "@/lib/counter/actions/shop"
 import type { SectionSources } from "@/lib/counter/adapters/types"
 import type { OrderView, OrdersData, OrdersSections } from "@/lib/counter/adapters/shop"
@@ -29,6 +29,7 @@ export function ShopOrdersClient({ sections }: { sections: SectionSources<Orders
 }
 
 function useGo() {
+  const surface = useSurfaceHref()
   const router = useRouter()
   const { startTransition } = useCounterTransition()
   return (q: Record<string, string | null>) => {
@@ -38,7 +39,7 @@ function useGo() {
       else sp.set(k, v)
     }
     const qs = sp.toString()
-    startTransition(() => router.push(qs ? `/dashboard/shop/orders?${qs}` : "/dashboard/shop/orders", { scroll: false }))
+    startTransition(() => router.push(surface(qs ? `/dashboard/shop/orders?${qs}` : "/dashboard/shop/orders"), { scroll: false }))
   }
 }
 
@@ -59,7 +60,7 @@ function Orders({ data }: { data: OrdersData }) {
       <div className="ck-split">
         <div className="sec">
           <div className="ck-tablewrap">
-            <table className="ck-table">
+            <table className="ck-table sh-table sh-table--orders">
               <thead>
                 <tr>
                   <th />

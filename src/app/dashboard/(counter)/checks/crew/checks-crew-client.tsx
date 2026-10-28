@@ -96,7 +96,7 @@ function Crew({ data }: { data: CrewData }) {
       )}
       {adding && <AddForm storeId={data.store.id} onDone={() => setAdding(false)} />}
       <div className="ck-tablewrap">
-        <table className="ck-table">
+        <table className="ck-table ck-table--crew">
           <thead>
             <tr>
               <th>Name</th>

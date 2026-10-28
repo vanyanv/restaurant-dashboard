@@ -3,7 +3,7 @@
 import { useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { Section, useCounterTransition, usePageChrome } from "@/components/counter"
+import { Section, useCounterTransition, usePageChrome, useSurfaceHref } from "@/components/counter"
 import type { SectionSources } from "@/lib/counter/adapters/types"
 import type { CustomerView, CustomersData, CustomersSections } from "@/lib/counter/adapters/shop"
 import { ShopGlyphMark, ShopHead } from "../shop-ui"
@@ -23,6 +23,7 @@ export function ShopCustomersClient({ sections }: { sections: SectionSources<Cus
 }
 
 function useGo() {
+  const surface = useSurfaceHref()
   const router = useRouter()
   const { startTransition } = useCounterTransition()
   return (q: Record<string, string | null>) => {
@@ -32,7 +33,7 @@ function useGo() {
       else sp.set(k, v)
     }
     const qs = sp.toString()
-    startTransition(() => router.push(qs ? `/dashboard/shop/customers?${qs}` : "/dashboard/shop/customers", { scroll: false }))
+    startTransition(() => router.push(surface(qs ? `/dashboard/shop/customers?${qs}` : "/dashboard/shop/customers"), { scroll: false }))
   }
 }
 
@@ -58,7 +59,7 @@ function Customers({ data }: { data: CustomersData }) {
       <div className="ck-split">
         <div className="sec">
           <div className="ck-tablewrap">
-            <table className="ck-table">
+            <table className="ck-table sh-table">
               <thead>
                 <tr>
                   <th>Customer</th>
@@ -104,6 +105,7 @@ function Customers({ data }: { data: CustomersData }) {
 }
 
 function Drawer({ c, onClose }: { c: CustomerView; onClose: () => void }) {
+  const surface = useSurfaceHref()
   return (
     <div className="ck-drawer">
       <div className="ck-spread">
@@ -151,7 +153,7 @@ function Drawer({ c, onClose }: { c: CustomerView; onClose: () => void }) {
       </dl>
       <div className="sh-queue">
         {c.history.map((o) => (
-          <Link key={o.id} className="sh-order" style={{ gridTemplateColumns: "auto minmax(0,1fr) auto", color: "inherit", textDecoration: "none" }} href={`/dashboard/shop/orders?filter=all&order=${encodeURIComponent(o.id)}`}>
+          <Link key={o.id} className="sh-order" style={{ gridTemplateColumns: "auto minmax(0,1fr) auto", color: "inherit", textDecoration: "none" }} href={surface(`/dashboard/shop/orders?filter=all&order=${encodeURIComponent(o.id)}`)}>
             <ShopGlyphMark glyph={o.glyph} title={o.state} small />
             <span className="who">
               <b>

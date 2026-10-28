@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, useTransition, type ReactNode } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { PageHead, SubNav } from "@/components/counter"
+import { PageHead, SubNav, useSurfaceHref } from "@/components/counter"
 import { SHOP_TABS } from "@/lib/counter/nav"
 import {
   markOrderPickedUp,
@@ -26,9 +26,10 @@ import { OutcomeLine, type Outcome } from "../checks/checks-ui"
 export { OutcomeLine, type Outcome }
 
 export function ShopHead({ sub, children }: { sub: string; children?: ReactNode }) {
+  const href = useSurfaceHref()
   return (
     <PageHead title="Shop" sub={sub}>
-      <SubNav items={SHOP_TABS} label="Shop" />
+      <SubNav items={SHOP_TABS.map((t) => ({ ...t, href: href(t.href) }))} label="Shop" />
       {children}
     </PageHead>
   )

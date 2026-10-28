@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import { useRouter } from "next/navigation"
-import { Section, useCounterTransition, usePageChrome } from "@/components/counter"
+import { Section, useCounterTransition, usePageChrome, useSurfaceHref } from "@/components/counter"
 import { createShopProduct, saveShopProduct, setShopProductStatus, setShopProductStock } from "@/lib/counter/actions/shop"
 import type { SectionSources } from "@/lib/counter/adapters/types"
 import type { ProductEdit, ProductLine, ProductsData, ProductsSections, StockView } from "@/lib/counter/adapters/shop"
@@ -28,6 +28,7 @@ export function ShopProductsClient({ sections }: { sections: SectionSources<Prod
 }
 
 function useGo() {
+  const surface = useSurfaceHref()
   const router = useRouter()
   const { startTransition } = useCounterTransition()
   return (q: Record<string, string | null>) => {
@@ -37,7 +38,7 @@ function useGo() {
       else sp.set(k, v)
     }
     const qs = sp.toString()
-    startTransition(() => router.push(qs ? `/dashboard/shop/products?${qs}` : "/dashboard/shop/products", { scroll: false }))
+    startTransition(() => router.push(surface(qs ? `/dashboard/shop/products?${qs}` : "/dashboard/shop/products"), { scroll: false }))
   }
 }
 
@@ -63,7 +64,7 @@ function Products({ data }: { data: ProductsData }) {
       <div className="ck-split">
         <div className="sec">
           <div className="ck-tablewrap">
-            <table className="ck-table">
+            <table className="ck-table sh-table">
               <thead>
                 <tr>
                   <th>Product</th>
