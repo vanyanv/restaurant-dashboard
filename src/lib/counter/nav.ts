@@ -204,6 +204,13 @@ export const CHECKS_TABS: readonly SubNavItem[] = [
   { label: "QR posters", href: "/dashboard/checks/posters" },
 ] as const
 
+/** Invoices — the worklist, the full list, and what the prices did. */
+export const INVOICES_TABS: readonly SubNavItem[] = [
+  { label: "Needs you", href: "/dashboard/invoices" },
+  { label: "All invoices", href: "/dashboard/invoices/all" },
+  { label: "Prices", href: "/dashboard/invoices/prices" },
+] as const
+
 /** Shop — the chrisneddys.com merch desk. See `src/lib/shop/`. */
 export const SHOP_TABS: readonly SubNavItem[] = [
   { label: "Today", href: "/dashboard/shop" },

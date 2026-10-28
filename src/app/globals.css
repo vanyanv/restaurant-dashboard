@@ -28,6 +28,7 @@
 @import "../styles/counter-repairs.css";
 @import "../styles/counter-checks.css";
 @import "../styles/counter-shop.css";
+@import "../styles/counter-invoices.css";
 @import "../styles/counter-menu.css";
 
 @theme {

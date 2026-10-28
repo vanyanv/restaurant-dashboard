@@ -216,7 +216,7 @@ async function loadVendor(input: VendorInput): Promise<Loaded | null> {
       date: i.invoiceDate,
       total: i.totalAmount,
       lines: i.lineItems.length,
-      gap: Math.abs(delta) > EPSILON ? delta : null,
+      gap: Math.round(Math.abs(delta) * 100) >= Math.round(EPSILON * 100) ? delta : null,
       status: i.status,
       hasPdf: i.pdfBlobPathname !== null,
     }

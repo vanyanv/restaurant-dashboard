@@ -1,0 +1,51 @@
+/* src/styles/counter-invoices.css
+ *
+ * Invoices: the three tabs under /dashboard/invoices and the invoice page.
+ * They wear Store checks' and Shop's parts (glyphs, tiles, the queue row,
+ * tables, alerts — counter-checks.css and counter-shop.css); this file only
+ * adds what an invoice has and an order does not: the verdict bar, the
+ * "What we checked" list and the provenance panels. Every colour is a Counter
+ * token; nothing here declares a colour of its own.
+ */
+
+/* ── tiles: the invoices strip has five figures, not four ─────────────── */
+.sh-tiles.iv-tiles{grid-template-columns:repeat(auto-fit,minmax(170px,1fr))}
+
+/* ── list ─────────────────────────────────────────────────────────────── */
+.iv-inv{display:flex;gap:10px;align-items:center;min-width:0}
+.iv-inv > span:last-child{display:grid;gap:1px;min-width:0}
+.iv-gap{color:var(--bad);font-weight:600;white-space:nowrap}
+.iv-ok{color:var(--good);font-weight:700}
+
+/* ── invoice page ─────────────────────────────────────────────────────── */
+.iv-crumb{font-size:var(--t-cap);color:var(--ink-2)}
+.iv-crumb a{color:var(--ink-2)}
+.iv-head{display:grid;gap:10px}
+.iv-sub{margin:0;color:var(--ink-2);font-size:var(--t-body);line-height:1.5}
+.iv-open{margin:8px 0 0;font-size:var(--t-cap)}
+
+.iv-decide{display:flex;flex-wrap:wrap;gap:10px 16px;align-items:center;justify-content:space-between;padding:12px 16px;
+  border-radius:var(--r);background:var(--surface);border:1px solid var(--line-strong)}
+.iv-decide--bad{border-color:var(--bad)}
+.iv-decide .btnrow{margin:0}
+.iv-decide .ct-note{flex-basis:100%;margin:0}
+.iv-decide__state{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.iv-pill{display:inline-flex;align-items:center;padding:3px 10px;border-radius:999px;font-size:var(--t-cap);font-weight:700;
+  background:var(--sunk);color:var(--ink-2)}
+.iv-pill--good{background:var(--good-wash);color:var(--good)}
+.iv-pill--warn{background:var(--warn-wash);color:var(--warn)}
+.iv-pill--bad{background:var(--bad-wash);color:var(--bad)}
+
+.iv-checks{list-style:none;margin:0;padding:0;display:grid}
+.iv-check{display:flex;gap:12px;align-items:flex-start;padding:11px 16px;border-bottom:1px solid var(--line)}
+.iv-check:last-child{border-bottom:0}
+.iv-check > span:last-child{display:grid;gap:2px;min-width:0}
+.iv-check--bad{background:var(--bad-wash)}
+.iv-check--warn{background:var(--warn-wash)}
+
+.iv-panels{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:16px 24px}
+.iv-panels > div{display:grid;gap:6px;align-content:start;min-width:0}
+
+@media (max-width:700px){
+  .iv-decide .btn{min-height:44px;flex:1}
+}

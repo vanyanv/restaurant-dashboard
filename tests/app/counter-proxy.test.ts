@@ -29,3 +29,26 @@ describe("Counter legacy redirects", () => {
     expect(redirect("/dashboard/chat?range=d30").searchParams.get("range")).toBe("d30")
   })
 })
+
+function onPhone(path: string): URL {
+  const url = new URL(path, "https://dashboard.example")
+  return (proxy as unknown as (req: unknown) => URL)({
+    url: url.toString(), nextUrl: url, nextauth: { token: { role: "OWNER" } },
+    headers: { get: () => "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) Mobile/15E148" },
+    cookies: { get: () => undefined },
+  })
+}
+
+describe("Invoices tabs on a phone", () => {
+  // Both sit under the `[id]` prefix; without exact entries they rewrote onto
+  // `/m/invoices/all` and `/m/invoices/prices`, read as invoice ids, and 404'd.
+  it("sends All invoices to the phone's invoice list", () => {
+    expect(onPhone("/dashboard/invoices/all?view=gaps").pathname).toBe("/m/invoices")
+  })
+  it("sends Prices to the phone's price monitor", () => {
+    expect(onPhone("/dashboard/invoices/prices").pathname).toBe("/m/ingredients/prices")
+  })
+  it("still carries an invoice id to the phone's invoice page", () => {
+    expect(onPhone("/dashboard/invoices/cabc123").pathname).toBe("/m/invoices/cabc123")
+  })
+})

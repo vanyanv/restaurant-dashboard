@@ -190,7 +190,7 @@ async function loadVendors(input: VendorsInput): Promise<VendorData> {
       0,
     )
     const reference = inv.subtotal ?? inv.totalAmount
-    if (Math.abs(goods - reference) > EPSILON) acc.broken += 1
+    if (Math.round(Math.abs(goods - reference) * 100) >= Math.round(EPSILON * 100)) acc.broken += 1
 
     folded.set(key, acc)
   }
