@@ -1,5 +1,6 @@
 "use server"
 
+import { getItemDiscounts, netOfDiscount } from "@/lib/counter/item-discounts"
 import { startOfDayUTC as startOfDay } from "@/lib/date-utils"
 // F22 — Menu engineering classifier. Splits the menu into the four
 // classic Kasavana–Smith quadrants based on a median split of velocity
@@ -207,6 +208,20 @@ export async function getMenuEngineering(input: {
       existing.recipeId = row.recipeId
       existing.recipeQty = soldQty
     }
+  }
+
+  // Revenue over what was COLLECTED: a BOGO rings up twice the money it
+  // brings in, so its margin and quadrant would otherwise read twice as fat.
+  // Coverage (above) stays on rung-up revenue — it is a share, not a margin.
+  const discounts = await getItemDiscounts({
+    accountId: user.accountId,
+    storeIds,
+    startDate: windowStart,
+    // `windowEnd` is a DATE the rollup includes whole; orders carry a time.
+    endDate: new Date(windowEnd.getTime() + 86_400_000 - 1),
+  })
+  for (const r of mergedByKey.values()) {
+    r.revenue = netOfDiscount(r.revenue, discounts.get(r.itemName))
   }
 
   const rowsRaw = Array.from(mergedByKey.values()).filter(
