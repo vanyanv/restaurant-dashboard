@@ -84,14 +84,17 @@ async function invoicesSections() {
   )
 }
 
+const moverRows = [
+  {
+    key: "ing_1",
+    href: "/dashboard/ingredients/ing_1",
+    cells: { ingredient: "ground beef", median: "$3.84", latest: "$4.18", move: "+9%", volume: "910 lb", costs: "$264", recipes: "5" },
+  },
+]
+
 const movers = ready({
-  rows: [
-    {
-      key: "ing_1",
-      href: "/dashboard/ingredients/ing_1",
-      cells: { ingredient: "ground beef", median: "$3.84", latest: "$4.18", move: "+9%", volume: "910 lb", costs: "$264", recipes: "5" },
-    },
-  ],
+  rows: moverRows,
+  allRows: moverRows,
   phoneRows: [],
   meta: "1 of 1",
   note: "Ranked by money.",

@@ -439,7 +439,9 @@ function goodsOf(i: LoadedInvoice): number {
 }
 
 const gapOf = (i: LoadedInvoice) => goodsOf(i) - printedOf(i)
-const reconciles = (i: LoadedInvoice) => Math.abs(gapOf(i)) < EPSILON
+// In whole cents: `100.02 - 100` is 0.01999…, which a float compare would call
+// under two cents and tie out.
+const reconciles = (i: LoadedInvoice) => Math.round(Math.abs(gapOf(i)) * 100) < Math.round(EPSILON * 100)
 /**
  * Still on the worklist for its gap: it does not reconcile and the owner has
  * not rejected it. A rejected invoice is a decision already made, so its gap

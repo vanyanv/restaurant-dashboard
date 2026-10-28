@@ -440,9 +440,9 @@ async function loadInvoice(input: InvoiceInput): Promise<Loaded | null> {
       isCharge: isChargeRow(l.productName),
     })),
     goods,
-    // `>=`, matching the list's `reconciles` (`< EPSILON` ties out), so an invoice
+    // In whole cents, matching the list's `reconciles`, so an invoice
     // cannot tie out on its own page and fail to on Needs you.
-    gap: Math.abs(delta) >= EPSILON ? delta : null,
+    gap: Math.round(Math.abs(delta) * 100) >= Math.round(EPSILON * 100) ? delta : null,
     reasons,
     matchConfidence: inv.matchConfidence,
     storeName: inv.store?.name ?? null,

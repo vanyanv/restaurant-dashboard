@@ -170,3 +170,11 @@ describe("invoices adapter · the list's status shapes", () => {
     expect(list.gapOutsideWindow).toBe(0)
   })
 })
+
+describe("invoices adapter · tie-out in whole cents", () => {
+  it("counts a two-cent gap that float subtraction reads as 0.01999", async () => {
+    const rows = [invoice("two", { lines: [100.02], subtotal: 100, total: 100 })]
+    const list = await ready((await sectionsOf(rows)).list)
+    expect(list.rows[0].gap).toBe("$0.02 over")
+  })
+})

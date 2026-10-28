@@ -45,7 +45,7 @@ export function InvoicePricesClient({ sections }: { sections: SectionSources<Pri
 
       <Section
         title="Ranked by what it costs you"
-        meta={(m) => m.meta}
+        meta={(m) => `${m.allRows.length} moved · 30-day volume`}
         data={sections.movers}
         pending={pending}
         pad={false}
@@ -53,14 +53,14 @@ export function InvoicePricesClient({ sections }: { sections: SectionSources<Pri
       >
         {(m) => (
           <>
-            <Table columns={MOVER_COLUMNS} rows={m.rows} />
+            <Table columns={MOVER_COLUMNS} rows={m.allRows} />
             <Note flush>{m.note}</Note>
           </>
         )}
       </Section>
 
       <Section
-        title="The three that cost the most, by week"
+        title="The three biggest moves in dollars, by week"
         meta={(c) => c.meta}
         data={sections.chart}
         pending={pending}

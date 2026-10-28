@@ -352,6 +352,8 @@ function chartOf(d: PriceData): PriceChart {
 
 export interface PriceMovers {
   rows: Row[]
+  /** Every mover, not cut to the table's twelve. */
+  allRows: Row[]
   phoneRows: MListRow[]
   meta: string
   note: string
@@ -359,9 +361,7 @@ export interface PriceMovers {
 
 function moversOf(d: PriceData): PriceMovers {
   const shown = d.movers.slice(0, TABLE_ROWS)
-
-  return {
-    rows: shown.map((m) => ({
+  const rowOf = (m: (typeof d.movers)[number]): Row => ({
       key: m.id,
       // The ingredient page is the deep dive: every delivery, every vendor,
       // every recipe the move reaches.
@@ -375,7 +375,13 @@ function moversOf(d: PriceData): PriceMovers {
         costs: m.costs > 0 ? { v: money(m.costs), cls: "hot" } : money(m.costs),
         recipes: m.recipes === 0 ? "none" : count(m.recipes),
       },
-    })),
+    })
+
+  return {
+    rows: shown.map(rowOf),
+    // Every mover, uncut, for Invoices → Prices: it is the page the Needs you
+    // box's "Every price that moved" link promises, so it cannot stop at 12.
+    allRows: d.movers.map(rowOf),
     phoneRows: shown.slice(0, 6).map((m) => ({
       key: m.id,
       title: m.name,
