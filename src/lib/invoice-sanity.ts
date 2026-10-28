@@ -957,3 +957,19 @@ export function moneyProblemScore(extraction: InvoiceExtraction): number {
     findLineMathMismatches(extraction.lineItems).length * 10
   )
 }
+
+/** Account paperwork that arrives with bills but is not one. */
+const ACCOUNT_PAPER_RE = /\b(statement|payment receipt|remittance|receipt)(?![a-z])/i
+
+/**
+ * A statement or payment receipt: named so in the email or file, and no line
+ * names a product (its lines are the invoice numbers it pays or lists).
+ */
+export function isAccountPaper(
+  subject: string | null | undefined,
+  attachmentName: string | null | undefined,
+  lines: { productName: string | null; description?: string | null }[]
+): boolean {
+  if (!ACCOUNT_PAPER_RE.test(`${subject ?? ""} ${(attachmentName ?? "").replace(/[_.-]+/g, " ")}`)) return false
+  return lines.every((li) => !/[a-z]/i.test(`${li.productName ?? ""} ${li.description ?? ""}`))
+}
