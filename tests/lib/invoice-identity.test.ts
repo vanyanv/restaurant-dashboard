@@ -64,6 +64,22 @@ describe("loadInvoiceIdentities", () => {
     expect(keys.has(invoiceIdentityKey({ ...stored, vendorName: "kevidko" })!)).toBe(true)
   })
 
+  it("also matches an undated copy of a stored bill, dated by its own email", async () => {
+    // Vitco credits print no date; the sync dates each copy by its email, so
+    // two copies would carry two dates. The dateless key is what they share.
+    const stored = {
+      vendorName: "Vitco Foodservice",
+      invoiceNumber: "323469-0A",
+      totalAmount: -118.71,
+      isReturn: false,
+      storeId: "store_hw",
+      invoiceDate: new Date("2026-09-03T00:00:00Z"),
+    }
+    findMany.mockResolvedValue([stored])
+    const keys = await loadInvoiceIdentities("acc_1", ["323469-0A"])
+    expect(keys.has(invoiceIdentityKey({ ...stored, invoiceDate: null })!)).toBe(true)
+  })
+
   it("skips the query when no invoice has a number", async () => {
     expect((await loadInvoiceIdentities("acc_1", [null])).size).toBe(0)
     expect(findMany).not.toHaveBeenCalled()
