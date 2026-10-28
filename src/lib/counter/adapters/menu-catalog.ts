@@ -4,12 +4,7 @@ import { getScopedStores } from "@/lib/account-stores"
 import { unitsSold } from "@/lib/inventory/usage-math"
 import { count, money, pct } from "@/lib/counter/format"
 import { toQueryBounds, type DateRange } from "@/lib/counter/date-range"
-import {
-  getItemDiscounts,
-  isDealRunning,
-  netOfDiscount,
-  type ItemDiscountEntry,
-} from "@/lib/counter/item-discounts"
+import { getItemEconomics, type ItemEconomics } from "@/lib/counter/item-economics"
 import {
   awaitSections,
   classify,
@@ -77,7 +72,12 @@ export interface CatalogRow {
   key: string
   item: string
   category: string
-  /** Rung-up revenue over quantity (before discounts) — not a list price. */
+  /**
+   * What a unit was PAID once the deals came off — collected revenue over
+   * units, the same basis as `plateCost` and `margin`, so Paid − Plate cost
+   * is the row's margin in dollars. Where the deals moved it, the rung-up
+   * price follows: "$6.75 of $13.49". Not a list price; this schema has none.
+   */
   price: string
   sold: string
   soldQty: number
@@ -85,7 +85,7 @@ export interface CatalogRow {
   isModifier: boolean
   /** `—` when nothing costed it — no COSTED `DailyCogsItem` row in range. */
   plateCost: string
-  /** After discounts; ends ` · deal` when one is running. */
+  /** After discounts (`item-economics.ts`); ends ` · deal` when one is running. */
   margin: string
   /** More than `DEAL_THRESHOLD` of what it rang up came back off. */
   dealRunning: boolean
@@ -213,9 +213,8 @@ interface CatalogData {
   modifiers: Map<string, Agg>
   mappedItems: Set<string>
   mappedModifiers: Set<string>
-  costs: Map<string, { cost: number; revenue: number; qty: number }>
-  /** Per item name — the deals that came off what it rang up (`item-discounts.ts`). */
-  discounts: Map<string, ItemDiscountEntry>
+  /** Per POS item name — price, discount, plate cost and margin (`item-economics.ts`). */
+  economics: Map<string, ItemEconomics>
   categoryRevenue: Map<string, number>
   categoryItems: Map<string, Set<string>>
 }
@@ -241,8 +240,7 @@ async function loadCatalog(input: MenuCatalogInput): Promise<CatalogData> {
     modifiers: new Map(),
     mappedItems: new Set(),
     mappedModifiers: new Set(),
-    costs: new Map(),
-    discounts: new Map(),
+    economics: new Map(),
     categoryRevenue: new Map(),
     categoryItems: new Map(),
   }
@@ -256,7 +254,7 @@ async function loadCatalog(input: MenuCatalogInput): Promise<CatalogData> {
     tpTotalSales: true,
   } as const
 
-  const [rawItems, rawMods, itemMaps, modMaps, cogs, discounts] = await Promise.all([
+  const [rawItems, rawMods, itemMaps, modMaps, economics] = await Promise.all([
     prisma.otterMenuItem.findMany({
       where: { ...where, isModifier: false },
       select: { itemName: true, category: true, ...sales },
@@ -273,18 +271,12 @@ async function loadCatalog(input: MenuCatalogInput): Promise<CatalogData> {
       where: { storeId: { in: storeIds } },
       select: { otterSubItemName: true },
     }),
-    // COSTED rows only. The materializer also writes UNMAPPED and
-    // MISSING_COST rows, which carry real revenue and quantity at $0
-    // `lineCost`; grouping them in printed a $0.00 plate cost and a 100%
-    // margin for an item nothing has costed, and pulled a part-costed item's
-    // plate cost down by every unit sold while it was unmapped. An item with
-    // no COSTED row has no entry here, and `rowsOf` prints "—" for both.
-    prisma.dailyCogsItem.groupBy({
-      by: ["itemName"],
-      where: { ...where, status: "COSTED" },
-      _sum: { lineCost: true, salesRevenue: true, qtySold: true },
-    }),
-    getItemDiscounts({ accountId, storeIds, startDate, endDate }),
+    // The shared definition. Plate cost and margin are over COSTED rows only:
+    // the materializer also writes UNMAPPED and MISSING_COST rows, which carry
+    // real revenue and quantity at $0 `lineCost`, and grouping them in printed
+    // a $0.00 plate cost and a 100% margin for an item nothing has costed. An
+    // item with no COSTED row has `costed: null`, and `rowsOf` prints "—".
+    getItemEconomics({ accountId, storeIds, startDate, endDate }),
   ])
 
   const items = new Map<string, Agg>()
@@ -323,17 +315,7 @@ async function loadCatalog(input: MenuCatalogInput): Promise<CatalogData> {
     modifiers,
     mappedItems: new Set(itemMaps.map((m) => m.otterItemName)),
     mappedModifiers: new Set(modMaps.map((m) => m.otterSubItemName)),
-    costs: new Map(
-      cogs.map((c) => [
-        c.itemName,
-        {
-          cost: Number(c._sum.lineCost ?? 0),
-          revenue: Number(c._sum.salesRevenue ?? 0),
-          qty: Number(c._sum.qtySold ?? 0),
-        },
-      ]),
-    ),
-    discounts,
+    economics: economics.items,
     categoryRevenue,
     categoryItems,
   }
@@ -348,23 +330,27 @@ const slugOf = (name: string) =>
 
 function rowsOf(data: CatalogData): CatalogRow[] {
   const build = (name: string, agg: Agg, isModifier: boolean): CatalogRow => {
-    const cost = data.costs.get(name)
+    const e = isModifier ? undefined : data.economics.get(name)
     const mapped = isModifier ? data.mappedModifiers.has(name) : data.mappedItems.has(name)
-    const plate = cost && cost.qty > 0 ? cost.cost / cost.qty : null
+    const plate = e?.plateCost ?? null
     // Over what was COLLECTED once the item's deals came off — on a BOGO the
     // rung-up revenue is twice the money, and the margin read twice as fat.
-    const deal = isModifier ? undefined : data.discounts.get(name)
-    const collected = cost ? netOfDiscount(cost.revenue, deal) : 0
-    const margin = cost && collected > 0 ? 100 - (cost.cost / collected) * 100 : null
+    const margin = e?.marginPct ?? null
+    const dealRunning = e?.dealRunning ?? false
+    // PAID, on the margin's own basis. The column printed the rung-up price
+    // beside a margin taken over what was collected, so on a BOGO slider
+    // "$13.49 · $1.53 plate · 77% margin" did not add up on one row — the 77%
+    // is over $6.75. A modifier, and an item the COGS run has not reached
+    // yet, falls back to the POS rollup, where nothing has been taken off.
+    const rung = agg.qty > 0 ? agg.revenue / agg.qty : null
+    const paid = e?.collectedUnitPrice ?? rung
+    const paidText = money(paid, { cents: true })
+    const rungText = money(e?.unitPrice ?? rung, { cents: true })
     return {
       key: `${isModifier ? "mod" : "item"}::${name}`,
       item: name,
       category: isModifier ? "Modifier" : [...agg.categories].sort().join(" · "),
-      // Revenue over quantity, NOT a list price — this schema has no list
-      // price. It is the RUNG-UP price: `fpTotalSales`/`tpTotalSales` are
-      // before discounts, so a deal does not show here. Only `margin` below is
-      // taken over what was collected (`netOfDiscount`).
-      price: agg.qty > 0 ? money(agg.revenue / agg.qty, { cents: true }) : "—",
+      price: paid === null ? "—" : paidText === rungText ? paidText : `${paidText} of ${rungText}`,
       sold: count(agg.qty),
       soldQty: agg.qty,
       mapped,
@@ -373,10 +359,10 @@ function rowsOf(data: CatalogData): CatalogRow[] {
       margin:
         margin === null
           ? "—"
-          : isDealRunning(deal)
+          : dealRunning
             ? `${pct(margin, { scaled: true })} · deal`
             : pct(margin, { scaled: true }),
-      dealRunning: isDealRunning(deal),
+      dealRunning,
       href: `/dashboard/menu/catalog/${slugOf(name)}`,
     }
   }

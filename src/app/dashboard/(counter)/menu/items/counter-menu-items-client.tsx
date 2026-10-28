@@ -136,7 +136,7 @@ function Body({ data }: { data: MenuItemsData }) {
         <div className="sh-tile">
           <span className="k">Food cost</span>
           <span className="v">{pct(foodCost)}</span>
-          <span className="s">Of the menu&apos;s own sales, before discounts</span>
+          <span className="s">Of what costed items collected, after discounts</span>
         </div>
         <a className="sh-tile" href="#needs">
           <span className="k">Prices to check</span>

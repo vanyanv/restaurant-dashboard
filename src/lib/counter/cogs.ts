@@ -3,6 +3,8 @@ import { getScopedStores } from "@/lib/account-stores"
 import { cached, monthTags, stableKey } from "@/lib/cache/cached"
 import { rangeTtl } from "@/lib/cache/range"
 import { toQueryBounds, type DateRange } from "@/lib/counter/date-range"
+import { getItemDiscounts } from "@/lib/counter/item-discounts"
+import { foldItemEconomics } from "@/lib/counter/item-economics"
 
 /**
  * The cost of goods for a window: its category split, and the items losing
@@ -104,10 +106,13 @@ export interface CogsCategory {
 
 export interface CogsItem {
   itemName: string
+  /** Booked cost on the item's COSTED rows (`item-economics.ts`). */
   cost: number
+  /** What those costed rows COLLECTED, after discounts. */
   revenue: number
+  /** Every unit sold. */
   units: number
-  /** This item's cost over ITS OWN revenue, 0..100. `null` with no revenue
+  /** This item's cost over what IT collected, 0..100. `null` with no revenue
    *  OR no cost — see the module note on why a zero cost is never printed
    *  as a real percentage. */
   foodPct: number | null
@@ -368,7 +373,9 @@ export async function loadCogs(input: {
   // that shapes every item's `againstPlan`, and a setting edit should show on
   // the next load, not after a TTL.
   const fold = await cached(
-    `counter:cogs:${stableKey({
+    // `v2`: the item list became after-discount (`item-economics.ts`), and a
+    // fold cached under the old shape must not be served as the new one.
+    `counter:cogs:v2:${stableKey({
       ids: [...storeIds].sort(),
       from: startDate,
       to: endDate,
@@ -378,7 +385,7 @@ export async function loadCogs(input: {
     // `cogs` is what `recomputeDailyCogsForRange` busts; the month tags let a
     // recompute of last month leave this month's window alone.
     ["cogs", ...monthTags(startDate, endDate)],
-    () => foldCogsRows({ storeIds, startDate, endDate, plan }),
+    () => foldCogsRows({ accountId, storeIds, startDate, endDate, plan }),
   )
 
   const window = cogsWindow({
@@ -395,6 +402,7 @@ export async function loadCogs(input: {
 
 /** The row read and the arithmetic over it — everything `sales` does not touch. */
 async function foldCogsRows(input: {
+  accountId: string
   storeIds: string[]
   startDate: Date
   endDate: Date
@@ -408,27 +416,31 @@ async function foldCogsRows(input: {
   items: CogsItem[]
   byDay: CogsDay[]
 }> {
-  const { storeIds, startDate, endDate, plan } = input
+  const { accountId, storeIds, startDate, endDate, plan } = input
 
-  const rows = await prisma.dailyCogsItem.findMany({
-    where: { storeId: { in: storeIds }, date: { gte: startDate, lte: endDate } },
-    select: {
-      date: true,
-      itemName: true,
-      category: true,
-      salesRevenue: true,
-      lineCost: true,
-      qtySold: true,
-      status: true,
-      partialCost: true,
-    },
-  })
+  const [rows, discounts] = await Promise.all([
+    prisma.dailyCogsItem.findMany({
+      where: { storeId: { in: storeIds }, date: { gte: startDate, lte: endDate } },
+      select: {
+        date: true,
+        itemName: true,
+        category: true,
+        recipeId: true,
+        salesRevenue: true,
+        lineCost: true,
+        qtySold: true,
+        status: true,
+        partialCost: true,
+        costSource: true,
+      },
+    }),
+    getItemDiscounts({ accountId, storeIds, startDate, endDate }),
+  ])
 
   let cost = 0
   let partialLines = 0
   let unmappedLines = 0
   const categoryCost = new Map<string, number>()
-  const itemAgg = new Map<string, { cost: number; revenue: number; units: number }>()
   const dayCost = new Map<string, number>()
 
   for (const r of rows) {
@@ -442,12 +454,6 @@ async function foldCogsRows(input: {
     // here — west of Greenwich they name the previous day.
     const day = r.date.toISOString().slice(0, 10)
     dayCost.set(day, (dayCost.get(day) ?? 0) + r.lineCost)
-
-    const bucket = itemAgg.get(r.itemName) ?? { cost: 0, revenue: 0, units: 0 }
-    bucket.cost += r.lineCost
-    bucket.revenue += r.salesRevenue
-    bucket.units += r.qtySold
-    itemAgg.set(r.itemName, bucket)
   }
 
   const categories = [...categoryCost.entries()].map(([category, catCost]) => ({
@@ -455,8 +461,25 @@ async function foldCogsRows(input: {
     cost: catCost,
   }))
 
-  const items = [...itemAgg.entries()].map(([itemName, agg]) =>
-    cogsItem({ itemName, cost: agg.cost, revenue: agg.revenue, units: agg.units, plan }),
+  // The item list is the shared per-item definition (`item-economics.ts`):
+  // an item's food cost is its BOOKED cost over what it COLLECTED once the
+  // deals came off, COSTED rows only. On the rung-up price a buy-one-get-one
+  // read half its real food cost and never reached this ranking; and an item
+  // that sold partly uncosted no longer has its percentage diluted by revenue
+  // nothing was costed against. Packaging is not an item and is not listed.
+  // The window totals above are untouched: they still fold every row.
+  const { items: economics } = foldItemEconomics(
+    rows.map((r) => ({ ...r, status: String(r.status), recipeId: r.recipeId ?? null })),
+    discounts,
+  )
+  const items = [...economics.values()].map((e) =>
+    cogsItem({
+      itemName: e.itemName,
+      cost: e.costed?.cost ?? 0,
+      revenue: e.costed?.collected ?? 0,
+      units: e.units,
+      plan,
+    }),
   )
 
   const byDay: CogsDay[] = [...dayCost.entries()]

@@ -6,6 +6,7 @@ import { classify, guardSection, type StreamedSections } from "@/lib/counter/ada
 import { photoFrame, type PhotoFrame } from "@/lib/counter/menu-photos"
 import { ingredientPhoto } from "@/lib/counter/ingredient-photos"
 import type { SectionData } from "@/lib/counter/section-data"
+import { getItemEconomics, rollUpByRecipe } from "@/lib/counter/item-economics"
 
 /**
  * Menu items — one row per dish the owner sells, with its photo, what it
@@ -19,13 +20,15 @@ import type { SectionData } from "@/lib/counter/section-data"
  * and the Catalog tab lists each one. This page is the owner's menu, so it
  * groups by the recipe those names map to and shows the name count.
  *
- * ## Every figure is READ from `DailyCogsItem`, never recomputed
+ * ## Every figure comes from `item-economics.ts`, never recomputed here
  *
- * Plate cost, sales and food cost are the sums the COGS materializer already
- * booked for the range, so this page and the COGS page cannot disagree about
- * a dish. Margin is on the item's own booked revenue, the same basis
- * `menu-hub.ts` documents; a delivery deal that halves what was collected is
- * that table's to express, not this page's to re-derive.
+ * Plate cost is what the COGS materializer booked for the range (COSTED rows
+ * only), so this page and the COGS page cannot disagree about a dish. Price,
+ * food cost and "Keep per plate" are on what the dish COLLECTED once the deals
+ * came off — the one rule every menu page and chat tool shares. A BOGO slider
+ * rings up twice what it is paid, and on the rung-up price its food cost read
+ * half what it is. The Food cost tile is `menuMargin`'s food cost: every costed
+ * item, Packaging out, after discounts.
  *
  * ## What lands in "Needs you"
  *
@@ -132,7 +135,7 @@ export async function loadMenuItems(input: MenuItemsInput): Promise<MenuItemsDat
   const stores = await getScopedStores(accountId, input.storeId)
   const storeIds = stores.map((s) => s.id)
 
-  const [recipes, cogs, maps] = await Promise.all([
+  const [recipes, cogs, maps, economics] = await Promise.all([
     prisma.recipe.findMany({
       where: { accountId },
       select: {
@@ -166,7 +169,9 @@ export async function loadMenuItems(input: MenuItemsInput): Promise<MenuItemsDat
           select: { recipeId: true, otterItemName: true },
         })
       : Promise.resolve([]),
+    getItemEconomics({ accountId, storeIds, startDate, endDate }),
   ])
+  const byRecipe = rollUpByRecipe(economics.items.values())
 
   const byId = new Map(recipes.map((r) => [r.id, r]))
   const dishes = recipes.filter((r) => r.isSellable && !NOT_A_DISH.has(r.category.trim().toLowerCase()))
@@ -184,8 +189,6 @@ export async function loadMenuItems(input: MenuItemsInput): Promise<MenuItemsDat
 
   const agg = new Map<string, Agg>()
   const unmapped = new Map<string, { name: string; category: string; sold: number; revenue: number }>()
-  let cost = 0
-  let revenue = 0
   for (const c of cogs) {
     if (c.status === "UNMAPPED" || !c.recipeId) {
       if (OPEN_ITEM.test(c.itemName.trim()) || mappedNames.has(c.itemName.trim().toLowerCase())) continue
@@ -206,8 +209,6 @@ export async function loadMenuItems(input: MenuItemsInput): Promise<MenuItemsDat
     if (c.costSource === "override") a.override = true
     if (c.status === "MISSING_COST") a.missing = true
     agg.set(c.recipeId, a)
-    cost += c.lineCost
-    revenue += c.salesRevenue
   }
 
   // Ingredients a selling dish uses, directly or through one component recipe.
@@ -289,10 +290,19 @@ export async function loadMenuItems(input: MenuItemsInput): Promise<MenuItemsDat
     // selling dishes, so an unsold one is not counted either way.
     if (glyph === "ok") fullyCosted += 1
 
+    // The figures, from the shared definition. `avg` is what a plate
+    // COLLECTED (weighted over units, after discounts); `plate` is the booked
+    // cost per costed unit; `fc` is cost over collected, as a fraction. No
+    // costed sale means no plate, no food cost and no keep — never $0 or 0%.
+    const e = byRecipe.get(d.id)
     const sold = a?.sold ?? 0
-    const avg = sold > 0 ? a!.revenue / sold : null
-    const plate = sold > 0 ? a!.cost / sold : null
-    const fc = a && a.revenue > 0 ? a.cost / a.revenue : null
+    const avg = sold > 0 ? (e?.collectedUnitPrice ?? null) : null
+    const plate = sold > 0 ? (e?.plateCost ?? null) : null
+    const fc = e?.foodCostPct != null ? e.foodCostPct / 100 : null
+    const keep =
+      e?.marginDollars != null && e.costed && e.costed.units > 0
+        ? e.marginDollars / e.costed.units
+        : null
     items.push({
       id: d.id,
       name: d.itemName,
@@ -308,7 +318,7 @@ export async function loadMenuItems(input: MenuItemsInput): Promise<MenuItemsDat
       plateCost: money(plate, { cents: true }),
       foodCostPct: fc,
       foodCost: pct(fc),
-      keep: avg != null && plate != null ? money(avg - plate, { cents: true }) : money(null),
+      keep: money(keep, { cents: true }),
     })
 
     if (!a || a.sold === 0) continue
@@ -402,8 +412,9 @@ export async function loadMenuItems(input: MenuItemsInput): Promise<MenuItemsDat
           .reduce((s, d) => s + (agg.get(d.id)?.sold ?? 0), 0),
       staleIngredients: stale.length,
       staleExample: staleTop ? staleTop.name : null,
-      cost,
-      revenue,
+      // `menuMargin`'s basis — the client divides these for its Food cost tile.
+      cost: economics.menu.cost,
+      revenue: economics.menu.collected,
     },
     needs,
     items,

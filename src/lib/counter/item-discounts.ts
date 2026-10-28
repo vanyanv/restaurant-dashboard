@@ -1,3 +1,4 @@
+import type { PrismaClient } from "@/generated/prisma/client"
 import { prisma } from "@/lib/prisma"
 
 /**
@@ -125,14 +126,17 @@ export async function getItemDiscounts(input: {
   endDate: Date
   /** Limit to one item name — the menu item page. */
   itemName?: string
+  /** Defaults to the app client; the chat tools pass their context's. */
+  db?: Pick<PrismaClient, "$queryRaw">
 }): Promise<Map<string, ItemDiscountEntry>> {
   const { accountId, storeIds, startDate, endDate, itemName } = input
+  const db = input.db ?? prisma
   const out = new Map<string, ItemDiscountEntry>()
   if (storeIds.length === 0) return out
   const only = itemName ?? null
 
   const [grossRows, discountedLines] = await Promise.all([
-    prisma.$queryRaw<{ name: string; platform: string; gross: number }[]>`
+    db.$queryRaw<{ name: string; platform: string; gross: number }[]>`
       SELECT i."name" AS name,
              o."platform" AS platform,
              SUM(i."price" * i."quantity")::float AS gross
@@ -147,7 +151,7 @@ export async function getItemDiscounts(input: {
     // Every line of every discounted order — not only the named item's —
     // because whether the discount is that item's depends on what else the
     // order held.
-    prisma.$queryRaw<
+    db.$queryRaw<
       { orderId: string; platform: string; discount: number; name: string; price: number; quantity: number }[]
     >`
       SELECT o."id" AS "orderId",

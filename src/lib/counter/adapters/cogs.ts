@@ -1227,7 +1227,7 @@ function buildItems(items: CogsItem[], plan: number): ItemsSection {
       `${count(shown.length)} of ${count(ranked.length)} items over the ` +
       `${pct(plan, { scaled: true })} plan · ${money(lostTotal)} between them`,
     note:
-      "An item's percentage is its own cost over its own menu revenue, because there is no " +
+      "An item's percentage is its own booked cost over what it collected after discounts, because there is no " +
       "statement-level Total Sales for one item to divide by. That is a different denominator " +
       "from the headline's, which is the statement's Total Sales for the whole store — so these " +
       "rows do not sum to the figure above, and are not meant to. “Lost” is the points " +
@@ -1291,7 +1291,7 @@ function buildWorst(items: CogsItem[], plan: number | null): WorstSection {
         ? "no published plan to rank against"
         : `${count(overCount)} over the ${pct(plan, { scaled: true })} plan`),
     note:
-      "Ranked by each item's own food cost — its cost over its own menu revenue — which is a " +
+      "Ranked by each item's own food cost — its booked cost over what it collected after discounts — which is a " +
       "different denominator from the headline's Total Sales and does not roll up into it. " +
       (plan === null
         ? "No plan is published for this store, so no row carries a loss figure."

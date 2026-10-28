@@ -11,7 +11,7 @@ import {
 } from "@/lib/counter/adapters/types"
 import { empty, mapReady, ready, type SectionData } from "@/lib/counter/section-data"
 import type { DonutSlice, FigureProps, MListRow, QueueItem } from "@/components/counter"
-import { blendedMargin } from "@/lib/counter/blended-margin"
+import { getItemEconomics, menuMargin, type MenuMargin } from "@/lib/counter/item-economics"
 
 /**
  * The Menu hub — `P.menuhub` (`docs/counter/counter-prototype.html:7274`).
@@ -30,8 +30,11 @@ import { blendedMargin } from "@/lib/counter/blended-margin"
  *
  * ## THE MARGIN IS ON MENU REVENUE, AND IT WILL NOT MATCH COGS
  *
- * `blendedMargin` is `DailyCogsItem.lineCost` over
- * `DailyCogsItem.salesRevenue` — the menu's OWN revenue, item by item. The
+ * The margin is `item-economics.ts`'s `menuMargin` — booked cost over what
+ * costed items COLLECTED after discounts, Packaging out — the same cell Menu
+ * profit and Product mix print. (It used to be every `DailyCogsItem` row's
+ * cost over every row's rung-up revenue: unmapped items at 100%, the boxes'
+ * cost against no revenue, and a BOGO at twice its money.) The
  * COGS page divides the same cost by the statement's Total Sales and gets a
  * food cost of 28.4%, implying a 71.6% margin. **78.1% against 71.6%: seven
  * and a half points apart, and both correct.**
@@ -124,8 +127,8 @@ interface MenuCounts {
   unmappedItems: number
   modifiers: number
   unmappedModifiers: number
-  cost: number
-  revenue: number
+  /** `menuMargin` — see `item-economics.ts`. */
+  menu: MenuMargin
 }
 
 async function loadMenuCounts(input: MenuHubInput): Promise<MenuCounts> {
@@ -144,14 +147,13 @@ async function loadMenuCounts(input: MenuHubInput): Promise<MenuCounts> {
       unmappedItems: 0,
       modifiers: 0,
       unmappedModifiers: 0,
-      cost: 0,
-      revenue: 0,
+      menu: menuMargin([]),
     }
   }
   const storeIds = stores.map((s) => s.id)
   const where = { storeId: { in: storeIds }, date: { gte: startDate, lte: endDate } }
 
-  const [sold, mods, mappedItems, mappedMods, cogs] = await Promise.all([
+  const [sold, mods, mappedItems, mappedMods, economics] = await Promise.all([
     prisma.otterMenuItem.findMany({
       where: { ...where, isModifier: false },
       select: { itemName: true, category: true },
@@ -170,10 +172,7 @@ async function loadMenuCounts(input: MenuHubInput): Promise<MenuCounts> {
       where: { storeId: { in: storeIds } },
       select: { otterSubItemName: true },
     }),
-    prisma.dailyCogsItem.aggregate({
-      where,
-      _sum: { lineCost: true, salesRevenue: true },
-    }),
+    getItemEconomics({ accountId, storeIds, startDate, endDate }),
   ])
 
   const mappedItemNames = new Set(mappedItems.map((m) => m.otterItemName))
@@ -223,21 +222,20 @@ async function loadMenuCounts(input: MenuHubInput): Promise<MenuCounts> {
     unmappedItems: [...names].filter((n) => !mappedItemNames.has(n)).length,
     modifiers: mods.length,
     unmappedModifiers: mods.filter((m) => !mappedModNames.has(m.itemName)).length,
-    cost: cogs._sum.lineCost ?? 0,
-    revenue: cogs._sum.salesRevenue ?? 0,
+    menu: economics.menu,
   }
 }
 
 export { blendedMargin } from "@/lib/counter/blended-margin"
 
 function headline(c: MenuCounts): MenuHubHeadline {
-  const margin = blendedMargin(c.cost, c.revenue)
+  const margin = c.menu.marginPct
   const marginCell: FigureProps = {
     label: "Blended margin",
     value: margin === null ? "—" : pct(margin, { scaled: true }),
     // The denominator, in the cell itself. A margin whose base is not named is
     // the defect this project has now fixed on four pages.
-    delta: "of menu revenue",
+    delta: "of menu revenue, after discounts",
     deltaTone: "is-flat",
   }
   const unmapped: FigureProps = {

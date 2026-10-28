@@ -23,7 +23,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest"
 vi.mock("@/lib/prisma", () => ({
   prisma: {
     otterMenuItem: { findMany: vi.fn() },
-    dailyCogsItem: { aggregate: vi.fn() },
+    dailyCogsItem: { groupBy: vi.fn() },
     otterItemMapping: { findFirst: vi.fn() },
     otterOrder: { count: vi.fn() },
     otterSubItemMapping: { findMany: vi.fn() },
@@ -42,6 +42,7 @@ import { getScopedStores } from "@/lib/account-stores"
 import { getMenuItemSectionPromises } from "@/lib/counter/adapters/menu-item"
 import { hasData } from "@/lib/counter/section-data"
 import { getItemDiscounts } from "@/lib/counter/item-discounts"
+import { cogsGroupBy, cogsRow } from "../fixtures/item-economics"
 
 /* ── Fixtures ─────────────────────────────────────────────────────────── */
 
@@ -80,9 +81,22 @@ function setup(channelRows: unknown[], stores = [HOLLY]) {
       tpTotalSales: 600,
     },
   ] as never)
-  vi.mocked(prisma.dailyCogsItem.aggregate).mockResolvedValue({
-    _sum: { lineCost: 300, salesRevenue: 1000, qtySold: 100 },
-  } as never)
+  vi.mocked(prisma.dailyCogsItem.groupBy).mockImplementation(
+    cogsGroupBy(
+      stores.map((st, i) =>
+        cogsRow({
+          storeId: st.id,
+          itemName: "Smash Burger",
+          category: "Burgers",
+          recipeId: "r1",
+          // One store carries the whole booked figure, so two stores do not double it.
+          qtySold: i === 0 ? 100 : 0,
+          salesRevenue: i === 0 ? 1000 : 0,
+          lineCost: i === 0 ? 300 : 0,
+        }),
+      ),
+    ) as never,
+  )
   vi.mocked(prisma.otterItemMapping.findFirst).mockResolvedValue({ recipeId: "r1" } as never)
   vi.mocked(prisma.otterOrder.count).mockResolvedValue(12 as never)
   vi.mocked(prisma.recipe.findMany).mockResolvedValue([] as never)

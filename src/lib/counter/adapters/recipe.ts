@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma"
 import { getScopedStores } from "@/lib/account-stores"
 import { batchRecipeCosts, type RecipeCostLine } from "@/lib/recipe-cost"
+import { getItemEconomics, rollUpByRecipe } from "@/lib/counter/item-economics"
 import { count, money, pct, titleCase, unitCost } from "@/lib/counter/format"
 import { rangeLabel, toQueryBounds, type DateRange } from "@/lib/counter/date-range"
 import type { ChartSpec } from "@/lib/counter/chart-geometry"
@@ -270,8 +271,14 @@ export interface Loaded {
   posNames: Array<{ kind: string; name: string; stores: number }>
   trend: Array<{ date: string; cost: number | null; qty: number; partial: boolean }>
   soldQty: number
+  /** Collected — after discounts (`item-economics.ts`). */
   revenue: number
+  /** Collected over units, weighted. Null when nothing sold. */
   price: number | null
+  /** What COGS booked per costed plate in range. Null with no costed sale. */
+  bookedPlate: number | null
+  /** Margin over collected, on the booked plate cost. Null with no costed sale. */
+  margin: number | null
   rangeLabel: string
   /** Ingredients bought that reach no recipe, split food vs supplies. */
   packaging: { n: number; spend: number }
@@ -341,22 +348,11 @@ async function loadRecipe(input: RecipeInput): Promise<Loaded | null> {
               AND date >= (${endDate}::date - MAKE_INTERVAL(days => ${TREND_DAYS - 1}))
               AND date <= ${endDate}::date
             GROUP BY 1 ORDER BY 1`,
-      storeIds.length === 0
-        ? Promise.resolve([] as Array<{ qty: number; revenue: number; price: number | null }>)
-        : prisma.$queryRaw<Array<{ qty: number; revenue: number; price: number | null }>>`
-            SELECT SUM(oi.quantity)::int AS qty,
-                   SUM(oi.quantity * oi.price)::float AS revenue,
-                   AVG(NULLIF(oi.price, 0))::float AS price
-            FROM "OtterItemMapping" m
-            JOIN "OtterOrderItem" oi ON oi.name = m."otterItemName"
-            JOIN "OtterOrder" o ON o.id = oi."orderId"
-              -- A mapping is per store: (storeId, otterItemName) is its key. Without
-              -- this a line counted once per store that maps the same POS name.
-              AND o."storeId" = m."storeId"
-            WHERE m."recipeId" = ${recipeId}
-              AND o."storeId" = ANY(${storeIds})
-              AND o."referenceTimeLocal" >= ${startDate}
-              AND o."referenceTimeLocal" <= ${endDate}`,
+      // Sold, collected, booked plate cost and margin — the shared definition,
+      // the same figures the Recipes catalogue and the Menu items row print.
+      // It used to be AVG(line price) over the order feed: an unweighted mean
+      // of line prices, before discounts, beside a cost at today's prices.
+      getItemEconomics({ accountId, storeIds, startDate, endDate }),
       prisma.$queryRaw<Array<{ id: string; name: string; category: string | null; spend: number }>>`
         SELECT ci.id, ci.name, ci.category, COALESCE(SUM(li."extendedPrice"), 0)::float AS spend
         FROM "CanonicalIngredient" ci
@@ -369,6 +365,7 @@ async function loadRecipe(input: RecipeInput): Promise<Loaded | null> {
     ])
 
   const walked = costs.get(recipeId)
+  const econ = rollUpByRecipe(sold.items.values()).get(recipeId) ?? null
   const { splitReach } = await import("@/lib/counter/ingredient-reach")
   const reach = splitReach(orphanSupplies)
 
@@ -469,9 +466,11 @@ async function loadRecipe(input: RecipeInput): Promise<Loaded | null> {
       qty: t.qty,
       partial: t.partial,
     })),
-    soldQty: sold[0]?.qty ?? 0,
-    revenue: sold[0]?.revenue ?? 0,
-    price: sold[0]?.price ?? null,
+    soldQty: econ?.units ?? 0,
+    revenue: econ?.collected ?? 0,
+    price: econ && econ.units > 0 ? econ.collectedUnitPrice : null,
+    bookedPlate: econ?.plateCost ?? null,
+    margin: econ?.marginPct ?? null,
     rangeLabel: rangeLabel(range, "custom"),
     packaging: { n: reach.supplies.n, spend: reach.supplies.spend },
   }
@@ -479,15 +478,27 @@ async function loadRecipe(input: RecipeInput): Promise<Loaded | null> {
 
 /* -- sections --------------------------------------------------------- */
 
-const marginOf = (d: Loaded): number | null =>
-  d.price === null || d.price <= 0 ? null : ((d.price - d.totalCost) / d.price) * 100
+/**
+ * `item-economics.ts`'s margin: the cost COGS booked over what the plates
+ * collected. Never today's walk against an old price — the two are different
+ * days' figures. Null when the recipe had no costed sale in range.
+ */
+const marginOf = (d: Loaded): number | null => d.margin
+
+/** The plate cost the money lines subtract: booked where it sold, else today's walk. */
+const plateOf = (d: Loaded): { cost: number; booked: boolean } =>
+  d.bookedPlate !== null ? { cost: d.bookedPlate, booked: true } : { cost: d.totalCost, booked: false }
 
 export function headOf(d: Loaded): RecipeHead {
   const margin = marginOf(d)
   const zero = d.emptyWalk && Math.abs(d.totalCost) < 0.005
 
   const costCell: FigureProps = {
-    label: "Cost per serving",
+    // AT TODAY'S PRICES — the walk of the lines below, which is what this page
+    // edits. The margin beside it is over the cost COGS BOOKED in range; the
+    // two differ by exactly the price moves and modifiers since, so the
+    // label says which this is.
+    label: "Cost per serving, today",
     value: zero ? "$0.00" : unitCost(d.totalCost),
     // The prototype's delta is "▲ $0.19 in 3 weeks". What matters more here is
     // whether the number was computed at all.
@@ -510,7 +521,10 @@ export function headOf(d: Loaded): RecipeHead {
   const marginCell: FigureProps = {
     label: "Margin",
     value: margin === null ? "—" : pct(margin, { scaled: true }),
-    delta: margin === null ? `no sale in ${d.rangeLabel}` : `on ${unitCost(d.price)}`,
+    delta:
+      margin === null
+        ? `no costed sale in ${d.rangeLabel}`
+        : `on ${unitCost(d.price)} collected · ${unitCost(d.bookedPlate)} booked plate`,
     deltaTone: zero ? "is-down" : "is-flat",
   }
 
@@ -529,14 +543,14 @@ export function headOf(d: Loaded): RecipeHead {
       {
         label: "Sells at",
         value: d.price === null ? "—" : unitCost(d.price),
-        delta: d.price === null ? "no observed price" : `mean over ${d.rangeLabel}`,
+        delta: d.price === null ? "no observed price" : `collected per plate, ${d.rangeLabel}`,
         deltaTone: "is-flat",
       },
       marginCell,
       {
         label: "Sold in range",
         value: count(d.soldQty),
-        delta: d.soldQty === 0 ? d.rangeLabel : `${money(d.revenue)} of revenue`,
+        delta: d.soldQty === 0 ? d.rangeLabel : `${money(d.revenue)} collected`,
         deltaTone: "is-flat",
       },
     ],
@@ -803,12 +817,19 @@ export function costOf(d: Loaded): RecipeCost {
   ]
 
   const margin = marginOf(d)
+  const plate = plateOf(d)
+  // ONE basis down the column: what a plate collected, less what COGS booked
+  // for it, so the dollar line agrees with the margin percent under it. A
+  // recipe that did not sell shows its walk at today's prices and no margin.
   const lines: MoneyLine[] = [
     { label: "Sells at", value: d.price === null ? "—" : unitCost(d.price) },
-    { label: "Plate cost", value: `−${unitCost(d.totalCost)}` },
+    {
+      label: plate.booked ? "Plate cost, booked" : "Plate cost, at today's prices",
+      value: `−${unitCost(plate.cost)}`,
+    },
     {
       label: "Gross margin",
-      value: d.price === null ? "—" : unitCost(d.price - d.totalCost),
+      value: d.price === null || !plate.booked ? "—" : unitCost(d.price - plate.cost),
       total: true,
     },
   ]
@@ -828,7 +849,7 @@ export function costOf(d: Loaded): RecipeCost {
     money: lines,
     foot:
       (margin === null
-        ? `No observed price in ${d.rangeLabel}, so there is no margin to state.`
+        ? `No costed sale in ${d.rangeLabel}, so there is no margin to state.`
         : `${pct(margin, { scaled: true })} margin · ${pct(100 - margin, { scaled: true })} food cost`) +
       // A MANUAL PRICE HAS NO HISTORY, and the product does not say so
       // anywhere. `getCanonicalIngredientCost` documents it — "we do not store

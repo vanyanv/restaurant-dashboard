@@ -1,6 +1,6 @@
 "use server"
 
-import { getItemDiscounts, netOfDiscount } from "@/lib/counter/item-discounts"
+import { getItemEconomics, type MenuMargin } from "@/lib/counter/item-economics"
 import { startOfDayUTC as startOfDay } from "@/lib/date-utils"
 // F22 — Menu engineering classifier. Splits the menu into the four
 // classic Kasavana–Smith quadrants based on a median split of velocity
@@ -75,6 +75,13 @@ export interface MenuEngineeringData {
   counts: Record<MenuQuadrant, number>
   totalContribution: number
   coverage: MenuEngineeringCoverage
+  /**
+   * The menu-wide blended margin — `item-economics.ts`'s `menuMargin`, over
+   * every costed item BEFORE the `minSoldQty` cut. The cut is a display choice
+   * for the quadrant chart; the blend is the same figure the Menu hub and
+   * Product mix print.
+   */
+  menu: MenuMargin
 }
 
 export type GetMenuEngineeringResult =
@@ -117,12 +124,22 @@ export async function getMenuEngineering(input: {
     category: { not: "Packaging" },
   }
 
-  const [grouped, statusRollup, partialAgg, elasticityRows] = await Promise.all([
-    prisma.dailyCogsItem.groupBy({
-      by: ["itemName", "category", "recipeId"],
-      where: { ...windowWhere, status: "COSTED" },
-      _sum: { qtySold: true, salesRevenue: true, lineCost: true },
+  // `windowEnd` is a DATE the rollup includes whole; orders carry a time.
+  const windowEndInclusive = new Date(windowEnd.getTime() + 86_400_000 - 1)
+
+  const [economics, statusRollup, partialAgg, elasticityRows] = await Promise.all([
+    // Per-item price, cost and margin — the one function every menu screen
+    // reads (`item-economics.ts`): COSTED rows, Packaging out, revenue over
+    // what was COLLECTED once the deals came off. A BOGO rings up twice the
+    // money it brings in, so its margin and quadrant read twice as fat on the
+    // rung-up price.
+    getItemEconomics({
+      accountId: user.accountId,
+      storeIds,
+      startDate: windowStart,
+      endDate: windowEndInclusive,
     }),
+    // Coverage stays on rung-up revenue — it is a share, not a margin.
     prisma.dailyCogsItem.groupBy({
       by: ["status"],
       where: windowWhere,
@@ -183,56 +200,24 @@ export async function getMenuEngineering(input: {
     coveragePct: allRevenue > 0 ? (costedRevenue / allRevenue) * 100 : 100,
   }
 
-  // Re-merge by (itemName, category): grouping by recipeId can split an item
-  // that was remapped mid-window into two rows. Keep the highest-qty recipeId.
-  const mergedByKey = new Map<
-    string,
-    { itemName: string; category: string; recipeId: string | null; recipeQty: number; soldQty: number; revenue: number; cogs: number }
-  >()
-  for (const row of grouped) {
-    const soldQty = row._sum.qtySold ?? 0
-    const revenue = row._sum.salesRevenue ?? 0
-    const cogs = row._sum.lineCost ?? 0
-    const key = `${row.itemName}:::${row.category}`
-    const existing = mergedByKey.get(key)
-    if (!existing) {
-      mergedByKey.set(key, {
-        itemName: row.itemName,
-        category: row.category,
-        recipeId: row.recipeId ?? null,
-        recipeQty: soldQty,
-        soldQty,
-        revenue,
-        cogs,
-      })
-      continue
-    }
-    existing.soldQty += soldQty
-    existing.revenue += revenue
-    existing.cogs += cogs
-    if (soldQty > existing.recipeQty && row.recipeId) {
-      existing.recipeId = row.recipeId
-      existing.recipeQty = soldQty
-    }
-  }
+  // One row per ITEM. This used to group by (itemName, category, recipeId)
+  // and re-merge by (itemName, category), so an item the POS filed under two
+  // categories was two dots with two margins; it is one item at one price,
+  // which is how the catalog and the item page already count it.
+  const rowsAll = [...economics.items.values()]
+    .filter((i) => i.costed !== null)
+    .map((i) => ({
+      itemName: i.itemName,
+      category: i.category,
+      recipeId: i.recipeId,
+      soldQty: i.costed!.units,
+      revenue: i.costed!.collected,
+      cogs: i.costed!.cost,
+    }))
 
-  // Revenue over what was COLLECTED: a BOGO rings up twice the money it
-  // brings in, so its margin and quadrant would otherwise read twice as fat.
-  // Coverage (above) stays on rung-up revenue — it is a share, not a margin.
-  const discounts = await getItemDiscounts({
-    accountId: user.accountId,
-    storeIds,
-    startDate: windowStart,
-    // `windowEnd` is a DATE the rollup includes whole; orders carry a time.
-    endDate: new Date(windowEnd.getTime() + 86_400_000 - 1),
-  })
-  for (const r of mergedByKey.values()) {
-    r.revenue = netOfDiscount(r.revenue, discounts.get(r.itemName))
-  }
-
-  const rowsRaw = Array.from(mergedByKey.values()).filter(
-    (r) => r.soldQty >= minSoldQty
-  )
+  // A display cut for the chart, not a definition: `menu` above is over
+  // every costed item.
+  const rowsRaw = rowsAll.filter((r) => r.soldQty >= minSoldQty)
 
   if (rowsRaw.length === 0) {
     return {
@@ -248,6 +233,7 @@ export async function getMenuEngineering(input: {
         counts: { STAR: 0, PLOWHORSE: 0, PUZZLE: 0, DOG: 0 },
         totalContribution: 0,
         coverage,
+        menu: economics.menu,
       },
     }
   }
@@ -317,6 +303,7 @@ export async function getMenuEngineering(input: {
       counts,
       totalContribution,
       coverage,
+      menu: economics.menu,
     },
   }
 }

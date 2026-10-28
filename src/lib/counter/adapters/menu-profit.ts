@@ -4,7 +4,6 @@ import {
   type MenuEngineeringRow,
 } from "@/app/actions/forecasts/menu-engineering-actions"
 import { count, money, pct } from "@/lib/counter/format"
-import { blendedMargin } from "@/lib/counter/blended-margin"
 import { dayCount, type DateRange } from "@/lib/counter/date-range"
 import { loadStatement } from "@/lib/counter/statement"
 import { COGS_CODE } from "@/lib/pnl"
@@ -195,9 +194,12 @@ function headlineOf(
   totalSales: number,
   foodCost: number,
 ): MenuProfitHeadline {
-  const revenue = data.rows.reduce((t, r) => t + r.revenue, 0)
-  const cogs = data.rows.reduce((t, r) => t + r.cogs, 0)
-  const margin = blendedMargin(cogs, revenue)
+  // `menuMargin` — the one rule (`item-economics.ts`): every costed item,
+  // Packaging out, after discounts. NOT the sum of `rows`, which the
+  // classifier has already cut to items with five or more units: the Menu hub
+  // and Product mix print this same cell, and a margin that moved with a chart
+  // filter would read differently on each.
+  const margin = data.menu.marginPct
 
   const marginCell: FigureProps = {
     label: "Blended margin",
@@ -205,7 +207,7 @@ function headlineOf(
     // The denominator, in the cell. The COGS page divides the same cost by the
     // statement's Total Sales and gets a different answer; both are right and
     // neither may go unnamed.
-    delta: "of menu revenue",
+    delta: "of menu revenue, after discounts",
     deltaTone: "is-flat",
   }
   const coverageCell: FigureProps = {
@@ -242,12 +244,9 @@ function headlineOf(
 }
 
 function matrixOf(data: MenuEngineeringData, days: number): MatrixSection {
-  // `itemName` is NOT unique: `getMenuEngineering` returns a row per item per
-  // category, and this menu sells seven items under two categories each (the
-  // POS emits some with a category and some without — see the Menu hub's own
-  // note). Keying a dot by name alone collided on all seven and React dropped
-  // half of them silently, which is a chart quietly missing points rather than
-  // an error anyone would see.
+  // `getMenuEngineering` now returns ONE row per item (`item-economics.ts`),
+  // so the name is unique; the category stays in the key so a remapped item
+  // can never collide with an old dot and be dropped silently by React.
   const points: MatrixPoint[] = data.rows
     .filter((r) => r.marginPct !== null)
     .map((r) => ({

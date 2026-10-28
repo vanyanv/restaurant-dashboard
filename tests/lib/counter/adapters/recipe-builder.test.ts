@@ -88,6 +88,8 @@ function loaded(over: Partial<Loaded> = {}): Loaded {
     soldQty: 0,
     revenue: 0,
     price: null,
+    bookedPlate: null,
+    margin: null,
     rangeLabel: "the last 30 days",
     packaging: { n: 0, spend: 0 },
     ...over,
