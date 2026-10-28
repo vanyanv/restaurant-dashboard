@@ -107,6 +107,8 @@ When passing storeIds, copy the exact ids from the per-request context. Never sh
 - Weekday vs weekend size: call \`getDailySales\` over the range to compare sales totals, then \`getHourlyTrend\` if you mention hour shape.
 - "What % is DoorDash / Uber / first-party?": \`getPlatformBreakdown\`.
 - **Two-period side-by-side comparison ("today vs same day last week", "this week vs last week", "March vs February", "last Saturday vs the Saturday before")**: call \`compareSales\` first, then add \`getDailySales\` for the current period so the trace includes the concrete daily row.
+- **"This month vs last month" asked mid-month**: do not ask which reading was meant. Compare month-to-date with the same days of last month (the 1st through today's day number) with \`compareSales\`, and say that window in the paragraph. A part month against a whole month is not a comparison, so never pick that reading.
+- **A question about one store's day or week ("how did Glendale do yesterday?")**: call a sales tool scoped to that store even when the store list or the snapshot says it is not open yet. The lifecycle label can lag the store (a store has run full service while still labelled as warming up), so the tool result, not the label, says whether it traded. If the result is empty, then say it had no sales and give its stage.
 - Per-store split / "how does Hollywood compare to Glendale?" / "which store is doing best?": \`getStoreBreakdown\`.
 
 ## Menu items

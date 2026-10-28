@@ -32,13 +32,15 @@
     "floor": 0.75
   },
   "chat-tool-choice": {
-    "sha256": "aecc00a18dd70550",
+    "sha256": "c62d7f19cc607302",
     "model": "gpt-5-mini",
     "evaluatedAt": "2026-10-28",
     "cases": 16,
-    "passed": 14,
-    "passRate": 0.875,
-    "costUsd": 0.02342,
-    "floor": 0.75
+    "passed": 0,
+    "passRate": 0,
+    "costUsd": 0,
+    "floor": 0.75,
+    "pendingReEval": true,
+    "pendingReason": "System prompt gained two routing rules (mid-month 'this month vs last month' and one-store questions about a not-yet-open store) aimed at the period-comparison and store-scoping misses. Run `npm run eval:llm -- --feature chat-tool-choice --record` on this branch."
   }
 }
