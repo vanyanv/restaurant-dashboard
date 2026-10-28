@@ -46,7 +46,7 @@ export interface PhoneTab {
 
 export const PHONE_TABS: readonly PhoneTab[] = [
   { id: "today", label: "Today", href: "/m", icon: "grid" },
-  { id: "count", label: "Count", href: "/m/operations/inventory", icon: "clip" },
+  { id: "count", label: "Count", href: "/m/count", icon: "clip" },
   { id: "ask", label: "Ask", href: "/m/ask", icon: "ask", mid: true },
   { id: "invoices", label: "Invoices", href: "/m/invoices", icon: "doc" },
   { id: "more", label: "More", href: "/m/more", icon: "more" },

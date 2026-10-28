@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useRef, useState } from "react"
 import { signIn, getSession } from "next-auth/react"
-import { useRouter } from "next/navigation"
 import {
   Logo,
   WelcomeLine,
@@ -70,7 +69,6 @@ export function CounterPhoneLoginClient() {
   const [problem, setProblem] = useState<string | null>(null)
   const [reveal, setReveal] = useState(false)
   const [typing, setTyping] = useState(false)
-  const router = useRouter()
 
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const unfold = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -120,8 +118,13 @@ export function CounterPhoneLoginClient() {
       // phone's own flood took 700ms, which is the floor under reduced motion.
       const hello = greetingFor(session.user.name)
       setGreeting(hello)
+      // A full load, not `router.push`. This page and `/m` share
+      // `(mobile)/m/layout.tsx`, which read the session BEFORE sign-in and so
+      // drew no tab bar; a client navigation keeps that layout as it was, and
+      // the phone arrived on Today with no bottom bar until it was reloaded.
+      // The welcome marquee is decided in that layout too.
       timer.current = setTimeout(
-        () => router.push("/m"),
+        () => window.location.replace("/m"),
         reduced ? PHONE_FLOOD_MS : Math.max(PHONE_FLOOD_MS, welcomeHoldMs(hello)),
       )
     } catch {
