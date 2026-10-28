@@ -694,13 +694,24 @@ async function runSync(
       )
     }
 
+    // A PDF that is no bill at all: no number, no lines, no money. IFS's
+    // "ifs-sharedservices-customer-letter.pdf" (2026-10-09) read that way and
+    // the row failed to save (invoiceNumber is required), so the email was
+    // never marked done and, as the oldest pending, was re-read and re-uploaded
+    // first on every run of the September backfill. It is stored set aside
+    // instead, so the message dedup skips it from then on.
+    const notAnInvoice =
+      !inv.extraction.invoiceNumber?.trim() &&
+      inv.extraction.lineItems.length === 0 &&
+      !inv.extraction.totalAmount
     const notASupplier =
+      !notAnInvoice &&
       knownVendors !== null &&
       !inv.extraction.deliveryAddress?.trim() &&
       !knownVendors.has(vendorMatchKey(inv.extraction.vendorName ?? ""))
 
     let status: "MATCHED" | "REVIEW" | "PENDING" | "REJECTED"
-    if (notASupplier) {
+    if (notAnInvoice || notASupplier) {
       status = "REJECTED"
     } else if (
       dateSuspect ||
@@ -718,7 +729,14 @@ async function runSync(
 
     // Persist WHY it needs review — the detail page renders these so the
     // owner isn't left staring at a bare badge.
-    const reviewReasons: ReviewReason[] = notASupplier
+    const reviewReasons: ReviewReason[] = notAnInvoice
+      ? [
+          {
+            kind: "not_an_invoice",
+            message: "No invoice number, lines or total on this PDF — it is a letter or notice, not a bill. Set aside.",
+          },
+        ]
+      : notASupplier
       ? [
           {
             kind: "not_a_supplier",
@@ -749,7 +767,7 @@ async function runSync(
       emailReceivedAt,
       attachmentName: inv.attachmentName,
       vendorName: normalizeVendorName(inv.extraction.vendorName),
-      invoiceNumber: inv.extraction.invoiceNumber,
+      invoiceNumber: inv.extraction.invoiceNumber ?? "",
       invoiceDate: datedInvoice,
       // Dated from the email, not the PDF: two copies of this bill would
       // carry different dates, so dedup must not compare them.
@@ -758,7 +776,7 @@ async function runSync(
       deliveryAddress: inv.extraction.deliveryAddress,
       subtotal: inv.extraction.subtotal,
       taxAmount: inv.extraction.taxAmount,
-      totalAmount: inv.extraction.totalAmount,
+      totalAmount: inv.extraction.totalAmount ?? 0,
       isReturn: inv.extraction.isReturn ?? false,
       status,
       matchConfidence: match?.confidence ?? null,
