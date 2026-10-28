@@ -1332,7 +1332,8 @@ export function buildNeedsYou(
  * strip reads `totalCount` and `totals` and nothing else, which is why the
  * single-window load already asked for `summaryOnly`.
  */
-async function loadComparisonOrders(
+/** Exported for its test; the adapter is its only caller. */
+export async function loadComparisonOrders(
   filters: Parameters<typeof getOrdersList>[0],
   windows: DateRange[],
 ): Promise<OrderListResponse> {
@@ -1365,7 +1366,10 @@ async function loadComparisonOrders(
     undrainedCount: total((r) => r.undrainedCount),
     totals: {
       netSales: total((r) => r.totals.netSales),
-      commission: total((r) => r.totals.commission ?? 0),
+      // Unknown in any window is unknown in the sum — never read as $0.
+      commission: parts.some((r) => r.totals.commission === null)
+        ? null
+        : total((r) => r.totals.commission ?? 0),
       commissionRecorded: total((r) => r.totals.commissionRecorded),
       commissionEstimated: total((r) => r.totals.commissionEstimated),
       thirdPartyEstimatedCount: total((r) => r.totals.thirdPartyEstimatedCount),

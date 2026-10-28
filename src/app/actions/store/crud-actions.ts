@@ -1,6 +1,12 @@
 "use server"
 
 import { revalidatePath } from "next/cache"
+import {
+  COMMISSION_RATE_INPUTS,
+  parseRatePercent,
+  percentToFraction,
+  type CommissionRateField,
+} from "@/lib/counter/commission-rate-input"
 import { getServerSession } from "next-auth"
 import { authOptions, hasOwnerAccess } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
@@ -166,19 +172,17 @@ export async function updateStore(storeId: string, formData: FormData) {
       return Number.isFinite(n) ? n : undefined
     }
 
-    const parseRate = (v: FormDataEntryValue | null): number | undefined => {
-      if (v == null) return undefined
-      const s = String(v).trim()
-      if (s === "") return undefined
-      const n = Number(s)
-      if (!Number.isFinite(n) || n < 0) return undefined
-      return n > 1 ? n / 100 : n
-    }
-
-    const parseNullableRate = (v: FormDataEntryValue | null): number | null | undefined => {
-      if (v == null) return undefined
-      if (String(v).trim() === "") return null
-      return parseRate(v)
+    // Commission rates arrive as PERCENTS (25 = 25%) — one unit, parsed by
+    // the one parser the form also validates with. Absent = unchanged;
+    // blank clears an optional rate; anything else that is not 0..100 is an
+    // error the owner sees, never silently dropped or rescaled.
+    const rates: Partial<Record<CommissionRateField, number | null>> = {}
+    for (const r of COMMISSION_RATE_INPUTS) {
+      const v = formData.get(r.field)
+      if (v == null) continue
+      const parsed = parseRatePercent(String(v), r.label, { required: r.required })
+      if (!parsed.ok) return { error: parsed.error }
+      rates[r.field] = parsed.value === null ? null : percentToFraction(parsed.value)
     }
     const stage = formData.get("lifecycleStage")
 
@@ -191,11 +195,7 @@ export async function updateStore(storeId: string, formData: FormData) {
       fixedMonthlyRent: parseOptionalNumber(formData.get("fixedMonthlyRent")),
       fixedMonthlyTowels: parseOptionalNumber(formData.get("fixedMonthlyTowels")),
       fixedMonthlyCleaning: parseOptionalNumber(formData.get("fixedMonthlyCleaning")),
-      uberCommissionRate: parseRate(formData.get("uberCommissionRate")),
-      doordashCommissionRate: parseRate(formData.get("doordashCommissionRate")),
-      uberPickupCommissionRate: parseNullableRate(formData.get("uberPickupCommissionRate")),
-      doordashPickupCommissionRate: parseNullableRate(formData.get("doordashPickupCommissionRate")),
-      grubhubCommissionRate: parseNullableRate(formData.get("grubhubCommissionRate")),
+      ...rates,
       lifecycleStage: stage == null || String(stage) === "" ? undefined : String(stage),
     })
 

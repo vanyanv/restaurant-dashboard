@@ -106,6 +106,14 @@ describe("getOrdersList — the commission estimate", () => {
     expect(JSON.stringify(where.AND[1])).toContain("OFO_STATUS_CANCELED")
   })
 
+  it("counts orders WITH a fee over the same non-cancelled orders the fee groups price", async () => {
+    await getOrdersList()
+    const calls = vi.mocked(prisma.otterOrder.count).mock.calls.map((c) => JSON.stringify(c[0]?.where))
+    const withFees = calls.find((w) => w.includes('"commission":{"not":0}'))
+    expect(withFees).toBeDefined()
+    expect(withFees).toContain("OFO_STATUS_CANCELED")
+  })
+
   it("prices pickup at the pickup rate and reports a platform with no rate as unpriced, not free", async () => {
     vi.mocked(prisma.store.findMany).mockResolvedValue([
       { id: "s1", name: "Hollywood", isActive: true, doordashCommissionRate: 0.25, uberCommissionRate: 0.27, doordashPickupCommissionRate: 0.06, grubhubCommissionRate: null },

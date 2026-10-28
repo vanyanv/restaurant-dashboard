@@ -3,7 +3,7 @@ import { businessCalendarDate } from "@/lib/counter/business-date"
 import type { LifecycleStage } from "@/generated/prisma/enums"
 import { isOperational } from "@/lib/store-lifecycle"
 import { loadChannelMix, type ChannelReading } from "@/lib/counter/channel-mix"
-import { commissionBasis } from "@/lib/counter/commission-core"
+import { commissionBasis, commissionIsEstimated } from "@/lib/counter/commission-core"
 import { loadStripTargets, type StripTargets, type Target } from "@/lib/counter/targets"
 import {
   granularityFor,
@@ -487,6 +487,12 @@ function buildStrip(
     label: "Bottom line",
     value: money(p.bottomLine),
     delta: margin === null ? undefined : `${pct(margin, { scaled: true })} of sales`,
+    // The bottom line is after commission; when any of that commission is an
+    // estimate (a rate, or a day priced off sales because its order rows are
+    // missing), the cell says so in the statement's own words.
+    caption: commissionIsEstimated(p.commission)
+      ? `Commission ${commissionBasis(p.commission)}`
+      : undefined,
     // The prototype compares the two bottom lines RAW (line 5266), which reads
     // a four-occurrence weekday window as four times the money. The divisor
     // belongs on every comparison of dollars, including this one.
@@ -943,7 +949,9 @@ function buildStatement(
     key,
     name,
     sub,
-    amount: `${negative ? "−" : ""}${money(value)}`,
+    // A "negative" line holding a negative value (refunds that net positive —
+    // a reversal) prints as an addition, never "−−$12".
+    amount: negative && value < 0 ? `+${money(-value)}` : `${negative ? "−" : ""}${money(value)}`,
     share: pct(sharePct(value, p), { scaled: true }),
     comparison: DASH,
     change: DASH,

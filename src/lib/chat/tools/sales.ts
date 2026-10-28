@@ -7,11 +7,12 @@ import {
   ymd,
 } from "./_shared"
 import type { ChatTool, ChatToolContext } from "./types"
-import { rowSales } from "@/lib/pnl"
+import { rowSales, summarySlices } from "@/lib/pnl"
 import {
   loadOrderFeeGroups,
   totalCommission,
   type OrderFeeGroup,
+  type SalesSlice,
   type StoreCommissionRates,
 } from "@/lib/counter/commission"
 
@@ -62,8 +63,12 @@ async function commissionContext(
   storeIds: string[],
   from: Date,
   to: Date,
-): Promise<{ groups: OrderFeeGroup[]; rates: Map<string, StoreCommissionRates> }> {
-  const [groups, stores] = await Promise.all([
+): Promise<{
+  groups: OrderFeeGroup[]
+  rates: Map<string, StoreCommissionRates>
+  slices: SalesSlice[]
+}> {
+  const [groups, stores, daily] = await Promise.all([
     loadOrderFeeGroups(
       { accountId: ctx.accountId, storeIds, startDate: from, endDate: to },
       ctx.prisma,
@@ -79,8 +84,23 @@ async function commissionContext(
         grubhubCommissionRate: true,
       },
     }),
+    // Per store/day/platform, so days whose order rows are missing or thin
+    // are priced off the summary's sales (see `cellsOf` in commission-core).
+    ctx.prisma.otterDailySummary.groupBy({
+      by: ["storeId", "date", "platform"],
+      where: { storeId: { in: storeIds }, date: { gte: from, lte: to } },
+      _sum: SUMMARY_SUMS,
+    }),
   ])
-  return { groups, rates: new Map(stores.map((s) => [s.id, s])) }
+  const slices = summarySlices(
+    (daily ?? []).map((d) => ({
+      storeId: d.storeId as string,
+      date: d.date as Date,
+      platform: d.platform as string,
+      ...(d._sum as SummarySums),
+    })),
+  )
+  return { groups, rates: new Map(stores.map((s) => [s.id, s])), slices }
 }
 
 const dailySalesParams = z
@@ -177,8 +197,11 @@ export const getDailySales: ChatTool<typeof dailySalesParams, DailySalesRow[]> =
     }
     if (groupKey !== "paymentMethod") {
       for (const [key, r] of out) {
-        r.fees = totalCommission(fee.groups, fee.rates, (g) =>
-          groupKey === "day" ? g.day === key : g.platform === key,
+        r.fees = totalCommission(
+          fee.groups,
+          fee.rates,
+          (g) => (groupKey === "day" ? g.day === key : g.platform === key),
+          fee.slices,
         ).amount
       }
     }
@@ -314,7 +337,7 @@ async function totalsFor(
     tips += v.tips
     count += v.count
   }
-  const fees = totalCommission(fee.groups, fee.rates).amount
+  const fees = totalCommission(fee.groups, fee.rates, undefined, fee.slices).amount
   return { gross, net, fees, tax, tips, count }
 }
 

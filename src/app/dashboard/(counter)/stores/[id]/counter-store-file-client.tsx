@@ -28,6 +28,7 @@ import {
   saveStoreFile,
 } from "@/lib/counter/actions/store"
 import { storesViewTabs } from "@/lib/counter/nav"
+import { parseRatePercent } from "@/lib/counter/commission-rate-input"
 import type { SectionSources } from "@/lib/counter/adapters/types"
 import type {
   StoreFileEditable,
@@ -67,8 +68,7 @@ const pctField = (v: number | null): string => (v === null ? "" : String(Math.ro
 
 /**
  * The five commission settings, in the order the Delivery commission table
- * lists them. Delivery rates are required columns (a blank keeps the saved
- * one); the pickup and Grubhub rates may be cleared, which the P&L reads as
+ * lists them. Delivery rates are required columns (a blank is an error); the pickup and Grubhub rates may be cleared, which the P&L reads as
  * "not known" rather than free.
  */
 const RATE_FIELDS = [
@@ -155,6 +155,17 @@ function StoreFileForm({
 
   function save() {
     setSaid(null)
+    // Every rate checked before anything is sent: a typo is an error on the
+    // page, never a silently cleared or rescaled rate.
+    const rates = {} as Record<(typeof RATE_FIELDS)[number]["key"], number | null>
+    for (const f of RATE_FIELDS) {
+      const r = parseRatePercent(form[f.key], f.label, { required: f.required })
+      if (!r.ok) {
+        setSaid({ ok: false, text: `${r.error}.` })
+        return
+      }
+      rates[f.key] = r.value
+    }
     startSaving(async () => {
       const result = await saveStoreFile(data.storeId, {
         name: data.name,
@@ -164,12 +175,13 @@ function StoreFileForm({
         fixedMonthlyLabor: numberOf(form.labor),
         fixedMonthlyTowels: numberOf(form.towels),
         fixedMonthlyCleaning: numberOf(form.cleaning),
-        uberCommissionRate: numberOf(form.uber) ?? data.uber * 100,
-        doordashCommissionRate: numberOf(form.doordash) ?? data.doordash * 100,
-        uberPickupCommissionRate: numberOf(form.uberPickup),
-        doordashPickupCommissionRate: numberOf(form.doordashPickup),
-        grubhubCommissionRate: numberOf(form.grubhub),
-        lifecycleStage: form.stage,
+        // Required fields: `parseRatePercent` has already refused a blank.
+        uberCommissionRate: rates.uber ?? data.uber * 100,
+        doordashCommissionRate: rates.doordash ?? data.doordash * 100,
+        uberPickupCommissionRate: rates.uberPickup,
+        doordashPickupCommissionRate: rates.doordashPickup,
+        grubhubCommissionRate: rates.grubhub,
+        ...(form.stage !== data.stage ? { lifecycleStage: form.stage } : {}),
       })
       if (!result.ok) {
         setSaid({ ok: false, text: `Could not save: ${result.error}.` })

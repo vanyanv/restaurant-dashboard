@@ -14,6 +14,7 @@ import {
   channelMix,
   monthlyFromFrequency,
   CUSTOM_FIXED_CODE_PREFIX,
+  summarySlices,
   type CustomFixedExpense,
   type Granularity,
   type Period,
@@ -430,6 +431,7 @@ export async function getStorePnL(input: {
         fpServiceCharges: true,
         tpServiceCharges: true,
         tpRefundsAdjustments: true,
+        tpOrderCount: true,
       },
     })
 
@@ -494,7 +496,14 @@ export async function getStorePnL(input: {
       cogsValues: cogs.cogsValues,
       harriLaborByPeriod,
       customFixedExpenses,
-      commission: bucketCommission(feeGroups, periods, new Map([[store.id, store]])),
+      // Order rows checked against the summary's order count per day and
+      // platform: thin or missing rows are priced off the day's sales instead.
+      commission: bucketCommission(
+        feeGroups,
+        periods,
+        new Map([[store.id, store]]),
+        summarySlices(summaries.map((r) => ({ ...r, storeId: store.id }))),
+      ),
     })
 
     const refillFailedPeriodIndexes: number[] = []
@@ -672,6 +681,7 @@ export async function getAllStoresPnL(input: {
         fpServiceCharges: true,
         tpServiceCharges: true,
         tpRefundsAdjustments: true,
+        tpOrderCount: true,
       },
     })
 
@@ -776,7 +786,12 @@ export async function getAllStoresPnL(input: {
         cogsValues: storeCogs.cogsValues,
         harriLaborByPeriod,
         customFixedExpenses: toCustomFixedExpenses(expensesByStore.get(store.id) ?? []),
-        commission: bucketCommission(feeGroupsByStore.get(store.id) ?? [], periods, ratesByStore),
+        commission: bucketCommission(
+          feeGroupsByStore.get(store.id) ?? [],
+          periods,
+          ratesByStore,
+          summarySlices(storeSummaries),
+        ),
       })
       perStoreComputed.push(computed)
 

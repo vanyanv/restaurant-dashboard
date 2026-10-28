@@ -10,9 +10,11 @@ import { isAfter, isBefore } from "date-fns"
 import {
   COMMISSION_LINES,
   estimateFromSales,
+  salesSlices,
   type CommissionLine,
   type CommissionTotals,
   type PeriodCommission,
+  type SalesSlice,
 } from "@/lib/counter/commission-core"
 import {
   addDaysUTC as addDays,
@@ -312,6 +314,35 @@ export function rowSales(r: Omit<OtterSummaryRow, "paymentMethod"> & { paymentMe
   const refunds = r.tpRefundsAdjustments ?? 0
   const tax = (r.fpTaxCollected ?? 0) + (r.tpTaxCollected ?? 0)
   return { gross, serviceCharges, discounts, refunds, net: gross + serviceCharges + discounts + refunds, tax }
+}
+
+/**
+ * The daily summary as commission slices (store/day/platform): the
+ * marketplace order count and the commissionable sales, gross + discounts +
+ * refunds (service charges are not commissioned). `commission-core`'s
+ * `cellsOf` uses them to price days whose order rows are missing or partial.
+ */
+export function summarySlices(
+  rows: Array<
+    Omit<OtterSummaryRow, "paymentMethod"> & {
+      storeId: string
+      date: Date | string
+      tpOrderCount?: number | null
+    }
+  >,
+): SalesSlice[] {
+  return salesSlices(
+    rows.map((r) => {
+      const s = rowSales(r)
+      return {
+        storeId: r.storeId,
+        date: r.date,
+        platform: r.platform,
+        orders: r.tpOrderCount ?? 0,
+        net: s.gross + s.discounts + s.refunds,
+      }
+    }),
+  )
 }
 
 /** Sum-by-predicate over a list of Otter rows. Treats null as 0. */

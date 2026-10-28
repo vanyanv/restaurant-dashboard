@@ -566,6 +566,35 @@ describe("the cascade", () => {
 /* ── The statement table ──────────────────────────────────────────────── */
 
 describe("the statement table", () => {
+  it("prints a refund reversal as an addition, never a double minus", async () => {
+    // `k.refunds` arrives signed as Otter stores it; positive is money coming
+    // back, which the statement holds as a negative refund.
+    vi.mocked(getAllStoresPnL).mockImplementation((async (arg: { periods?: unknown[] }) =>
+      rollupFor(arg, { combined: kpis({ refunds: 500, discounts: -1_200 } as never) })) as never)
+    const s = await load()
+    expect(lineOf(s, "refunds")?.amount).toBe("+$500")
+    expect(lineOf(s, "discounts")?.amount).toBe("−$1,200")
+  })
+
+  it("says on the bottom line when commission is estimated off daily sales", async () => {
+    const commission = {
+      amount: 18_288, recorded: 0, estimated: 18_288, orders: 400, ordersRecorded: 0,
+      ordersEstimated: 400, unknownOrders: 0, ordersFromSales: 400, ticket: 73_152,
+    }
+    vi.mocked(getAllStoresPnL).mockImplementation((async (arg: { periods?: unknown[] }) =>
+      rollupFor(arg, { combined: { ...kpis(), commission } })) as never)
+    const s = await load()
+    expect(cellOf(s, "Bottom line")?.caption).toBe(
+      "Commission estimated for 100% of orders · 400 from daily sales, order detail missing",
+    )
+    expect(lineOf(s, "commissions")?.sub).toContain("from daily sales")
+  })
+
+  it("leaves the bottom line bare when every fee was recorded", async () => {
+    const s = await load()
+    expect(cellOf(s, "Bottom line")?.caption).toBeUndefined()
+  })
+
   it("prints an em-dash in every comparison cell when there is no comparison", async () => {
     const s = await load()
     expect(must(s.statement, "statement").comparisonLabel).toBeNull()

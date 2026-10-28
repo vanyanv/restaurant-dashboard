@@ -57,6 +57,7 @@ import {
   commissionRateOf,
   flattenOrderLines,
   getOrdersSections,
+  loadComparisonOrders,
   platformsForChannels,
   type OrderLine,
 } from "@/lib/counter/adapters/orders"
@@ -1184,5 +1185,24 @@ describe("where an unmapped line sends you", () => {
     expect(byKey.get("SKU-UNKNOWN")?.href).toBe("/dashboard/menu/catalog")
     expect(byKey.get("SKU-ONION")?.act).toBe("Map the modifier")
     expect(byKey.get("SKU-ONION")?.href).toBe("/dashboard/ingredients")
+  })
+})
+
+describe("loadComparisonOrders — an unknown commission stays unknown", () => {
+  it("is null when any window's commission is null, never summed as $0", async () => {
+    vi.mocked(getOrdersList)
+      .mockResolvedValueOnce(listResponse())
+      .mockResolvedValueOnce(listResponse({ totals: { ...listResponse().totals, commission: null } }))
+    const w = { start: new Date(2026, 9, 1), end: new Date(2026, 9, 7) }
+    const out = await loadComparisonOrders({} as never, [w, w])
+    expect(out.totals.commission).toBeNull()
+    expect(out.totals.netSales).toBeCloseTo(9_625)
+  })
+
+  it("sums when every window's commission is known", async () => {
+    vi.mocked(getOrdersList).mockResolvedValue(listResponse())
+    const w = { start: new Date(2026, 9, 1), end: new Date(2026, 9, 7) }
+    const out = await loadComparisonOrders({} as never, [w, w])
+    expect(out.totals.commission).toBe(1_368)
   })
 })

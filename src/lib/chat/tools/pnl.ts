@@ -11,6 +11,7 @@ import {
   type CustomFixedExpense,
   type ExpenseFrequency,
   type Granularity,
+  summarySlices,
   type OtterSummaryRow,
   type Period,
   type PnLRow,
@@ -528,6 +529,7 @@ async function computeWindow(input: {
         feeGroups.filter((g) => g.storeId === store.id),
         periods,
         ratesByStore,
+        summarySlices(storeSummaries),
       ),
     })
 

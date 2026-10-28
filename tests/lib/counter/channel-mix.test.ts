@@ -35,6 +35,8 @@ const accountId = "acct-A"
 
 interface RowSpec {
   storeId?: string
+  /** The summary's day; the order groups above default to the same one. */
+  day?: string
   platform: string
   fpNet?: number
   fpGross?: number
@@ -51,6 +53,7 @@ interface RowSpec {
 function row(r: RowSpec) {
   return {
     storeId: r.storeId ?? "s1",
+    day: r.day ?? "2026-08-20",
     platform: r.platform,
     fpNetSales: r.fpNet ?? 0,
     fpGrossSales: r.fpGross ?? 0,
@@ -278,5 +281,22 @@ describe("loadChannelMix", () => {
     const rows = await loadChannelMix({ range, storeId: "stranger", accountId })
     expect(rows).toEqual([])
     expect(prisma.$queryRaw).not.toHaveBeenCalled()
+  })
+})
+
+describe("loadChannelMix — days the order sync missed", () => {
+  it("prices a day with no order rows off that day's sales, at the delivery rate, and says so", async () => {
+    vi.mocked(prisma.$queryRaw).mockResolvedValue([
+      row({ platform: "doordash", day: "2026-08-19", tpGross: 2_100, tpDisc: -100, tpOrders: 80 }),
+      row({ platform: "doordash", day: "2026-08-20", tpGross: 400, tpOrders: 10 }),
+    ] as never)
+    vi.mocked(loadOrderFeeGroups).mockResolvedValue([
+      group({ platform: "doordash", day: "2026-08-20", orders: 10, recorded: true, fee: 90, ticket: 400 }),
+    ])
+    const dd = by(await loadChannelMix({ range, storeId: null, accountId }), "doordash")
+    // 08-20: 10 rows for 10 orders → the recorded $90. 08-19: no rows for 80
+    // orders → 25% × $2,000 = $500. Never $0 for the day that sold.
+    expect(dd?.commission).toBeCloseTo(590)
+    expect(dd?.commissionBasis?.ordersFromSales).toBe(80)
   })
 })

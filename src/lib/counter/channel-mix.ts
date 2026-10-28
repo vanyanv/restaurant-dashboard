@@ -5,7 +5,7 @@ import { toQueryBounds, type DateRange } from "@/lib/counter/date-range"
 import { otterRangeTags, rangeTtl } from "@/lib/cache/range"
 import { cached, stableKey } from "@/lib/cache/cached"
 import { getScopedStores } from "@/lib/account-stores"
-import { rowSales } from "@/lib/pnl"
+import { rowSales, summarySlices } from "@/lib/pnl"
 import {
   loadOrderFeeGroups,
   storeRateFor,
@@ -138,6 +138,8 @@ const FIRST_PARTY: ReadonlySet<ChannelId> = new Set<ChannelId>(["house"])
 
 interface SummaryRow {
   storeId: string
+  /** `YYYY-MM-DD` of the summary's `date` — rows are per day so commission can be checked day by day. */
+  day: string
   platform: string
   fpGrossSales: number | null
   fpOrderCount: number | null
@@ -200,7 +202,7 @@ export async function loadChannelMix(
  * `loadChannelMix` once per operational store — 2 queries each, none of them
  * cached — which is 2N where 1 will do. The reason given in that adapter was
  * that "loadChannelMix aggregates rather than grouping", and that was half
- * true: the SQL has always ended `GROUP BY "storeId", "platform"` and
+ * true: the SQL has always ended `GROUP BY "storeId", "platform"` (now also by "date", for the commission check) and
  * returned per-store rows. Only the JS fold threw the store away.
  *
  * So this shares the query and partitions the rows it already has. A store
@@ -272,7 +274,7 @@ function queryChannelRows(
     // Store ids rather than the account: `getScopedStores` has already resolved
     // the account and the store filter into this exact list, so two readers with
     // different scopes cannot collide on one key.
-    `counter:chanrows2:${stableKey({
+    `counter:chanrows3:${stableKey({
       ids: [...storeIds].sort(),
       from: startDate,
       to: endDate,
@@ -291,6 +293,7 @@ function queryChannelRowsUncached(
   return prisma.$queryRaw<SummaryRow[]>(Prisma.sql`
     SELECT
       "storeId",
+      to_char("date", 'YYYY-MM-DD')                              AS "day",
       "platform",
       SUM(COALESCE("fpGrossSales", 0))::double precision         AS "fpGrossSales",
       SUM(COALESCE("fpOrderCount", 0))::integer                  AS "fpOrderCount",
@@ -307,7 +310,7 @@ function queryChannelRowsUncached(
     WHERE "storeId" IN (${Prisma.join(storeIds)})
       AND "date" >= ${startDate}
       AND "date" <= ${endDate}
-    GROUP BY "storeId", "platform"
+    GROUP BY "storeId", "date", "platform"
   `)
 }
 
@@ -346,13 +349,17 @@ function foldToChannels(
     acc.set(channel, bucket)
   }
 
-  // Commission per marketplace channel, off the order rows, by the one rule.
+  // Commission per marketplace channel, off the order rows, by the one rule —
+  // with each day's rows checked against the summary's order count, so a day
+  // the order sync missed is priced off its sales rather than counted as $0.
+  const slices = summarySlices(rows.map((r) => ({ ...r, date: r.day })))
   for (const [channel, bucket] of acc) {
     if (FIRST_PARTY.has(channel)) continue
     const basis = totalCommission(
       groups,
       ratesByStore,
       (g) => CHANNEL_FOR_PLATFORM[g.platform] === channel,
+      slices,
     )
     bucket.basis = basis
     // Sales on file and not one order to price them from is a sync gap, not

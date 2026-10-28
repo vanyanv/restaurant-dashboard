@@ -348,7 +348,9 @@ export async function getOrdersList(
       summaryOnly
         ? Promise.resolve(0)
         : prisma.otterOrder.count({
-            where: { AND: [thirdPartyWhere, { commission: { not: 0 } }] },
+            // Cancelled orders excluded, as in the fee groups below: the count
+            // of orders with a fee and the fee itself describe the same orders.
+            where: { AND: [thirdPartyWhere, notCancelled, { commission: { not: 0 } }] },
           }),
       summaryOnly ? Promise.resolve([]) : feeGroups(true),
       summaryOnly ? Promise.resolve([]) : feeGroups(false),
