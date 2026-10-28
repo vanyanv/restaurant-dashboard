@@ -32,11 +32,16 @@ vi.mock("@/lib/prisma", () => ({
   },
 }))
 vi.mock("@/lib/account-stores", () => ({ getScopedStores: vi.fn() }))
+vi.mock("@/lib/counter/item-discounts", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/counter/item-discounts")>()),
+  getItemDiscounts: vi.fn(async () => new Map()),
+}))
 
 import { prisma } from "@/lib/prisma"
 import { getScopedStores } from "@/lib/account-stores"
 import { getMenuItemSectionPromises } from "@/lib/counter/adapters/menu-item"
 import { hasData } from "@/lib/counter/section-data"
+import { getItemDiscounts } from "@/lib/counter/item-discounts"
 
 /* ── Fixtures ─────────────────────────────────────────────────────────── */
 
@@ -178,6 +183,36 @@ describe("menu item — Kept", () => {
     // $1,000 less 21% of the $600 that came through Uber.
     expect(cell(headline, "Kept")?.value).toBe("$874")
     expect(cell(headline, "Kept")?.delta).toBe("after commission")
+  })
+
+  it("takes a buy-one-get-one off before the margin, on its own platform only", async () => {
+    setup([
+      { storeId: "holly", platform: "css-pos", qty: 40, revenue: 400 },
+      { storeId: "holly", platform: "ubereats", qty: 60, revenue: 600 },
+    ])
+    // Half of Uber's $600 came back off; nothing in-house. 30% overall.
+    vi.mocked(getItemDiscounts).mockResolvedValueOnce(
+      new Map([
+        [
+          "Smash Burger",
+          {
+            gross: 1000,
+            discount: 300,
+            byPlatform: new Map([
+              ["css-pos", { gross: 400, discount: 0 }],
+              ["ubereats", { gross: 600, discount: 300 }],
+            ]),
+          },
+        ],
+      ]),
+    )
+    const { headline, channels } = await load()
+    expect(cell(headline, "Charged")?.delta).toBe("before $300 of discounts")
+    // $700 collected less 21% of Uber's $600.
+    expect(cell(headline, "Kept")?.value).toBe("$574")
+    expect(cell(headline, "Counter margin")?.delta).toMatch(/^deal running · 30\.0% off/)
+    // Uber's unit brought in $5, not $10.
+    expect(row(channels, "ubereats")?.netEach).toBe("$2.90")
   })
 
   it("withholds itself when any channel the item sold on has no rate", async () => {

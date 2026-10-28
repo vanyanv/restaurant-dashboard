@@ -443,6 +443,12 @@ const MOTION_ALLOWED = /[/\\]components[/\\]counter[/\\]motion[/\\]/
  * defers to `prime-cost.ts` instead of querying) and is correctly NOT named
  * here — naming it would be exempting a file the rule already passes.
  *
+ * `item-discounts.ts` was named on the same two tests on 2026-10-28: it
+ * reads the order feed's discounts at runtime and is read by
+ * `adapters/menu-catalog.ts` and `adapters/menu-item.ts` (and the menu
+ * engineering action behind `menu-profit.ts`), so every per-item margin nets
+ * its deals through one function.
+ *
  * Confirmed empirically: extending rule 4 to `.ts` with no exemption beyond
  * `adapters/` produced 25 violations across 20 files (12 under `actions/`,
  * 8 top-level); this allowance, `(adapters|actions)/` plus these eight
@@ -452,7 +458,7 @@ const MOTION_ALLOWED = /[/\\]components[/\\]counter[/\\]motion[/\\]/
  * a fake Prisma import inside a hook is still caught.
  */
 const DATA_ALLOWED_TOP_LEVEL_FILES =
-  "channel-mix|cogs|labor-leaks|labor-week|run-out|service-profile|staffing-curve|statement|vendor-basket"
+  "channel-mix|cogs|item-discounts|labor-leaks|labor-week|run-out|service-profile|staffing-curve|statement|vendor-basket"
 const DATA_ALLOWED = new RegExp(
   String.raw`[/\\]lib[/\\]counter[/\\](?:adapters|actions)[/\\]` +
     "|" +

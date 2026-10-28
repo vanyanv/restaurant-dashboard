@@ -11,6 +11,8 @@ vi.mock("@/lib/prisma", () => ({ prisma: {} }))
 import {
   buildModifierUsage,
   computeFoodCogsRows,
+  removalCreditPerUse,
+  removalMatchFor,
   type ModifierUsage,
 } from "@/lib/cogs-materializer"
 import type { RecipeCostResult, RecipeCostLine } from "@/lib/recipe-cost"
@@ -434,5 +436,102 @@ describe("buildModifierUsage — order sub-item bucketing", () => {
     const bucket = usage.get("Burger")!
     expect(bucket.breakdown).toHaveLength(1)
     expect(bucket.extraLineCost).toBeCloseTo(0.5)
+  })
+})
+
+describe("removal modifiers — Remove Cheese takes the parent's cheese off", () => {
+  const cheese = (lineCost: number) =>
+    costLine({ refId: "ing-cheese", name: "american cheese yellow 160", lineCost, unitCost: 0.12 })
+  const beef = costLine({ refId: "ing-beef", name: "ground beef 73/27", lineCost: 0.69 })
+  const doubleSlider = costResult({
+    recipeId: "r-double",
+    itemName: "Double Slider",
+    totalCost: 0.93,
+    lines: [beef, cheese(0.24)],
+  })
+  const removeCheese = costResult({
+    recipeId: "r-remove-cheese",
+    itemName: "Mod: Remove Cheese",
+    totalCost: 0,
+    lines: [],
+    emptyWalk: true,
+    hasLines: false,
+  })
+  const combo = costResult({
+    recipeId: "r-combo",
+    itemName: "2 Slider Combo",
+    totalCost: 2.76,
+    lines: [
+      costLine({ kind: "component", refId: "r-double", name: "Double Slider", quantity: 2, lineCost: 1.86 }),
+      costLine({ refId: "ing-fries", name: "potato fry", lineCost: 0.9 }),
+    ],
+  })
+  const recipes: Record<string, RecipeCostResult> = {
+    "r-double": doubleSlider,
+    "r-remove-cheese": removeCheese,
+    "r-combo": combo,
+  }
+  const costFor = async (id: string) => recipes[id] ?? null
+
+  it("recognises Remove/No names and derives the word to match", () => {
+    expect(removalMatchFor(removeCheese)).toEqual({ ingredientIds: [], token: "cheese" })
+    expect(removalMatchFor(costResult({ itemName: "Mod: No Pickles", lines: [] }))).toEqual({
+      ingredientIds: [],
+      token: "pickle",
+    })
+    expect(removalMatchFor(costResult({ itemName: "Mod: Add Cheese" }))).toBeNull()
+    // Explicit lines win over the name.
+    expect(
+      removalMatchFor(costResult({ itemName: "Mod: Remove Cheese", lines: [cheese(0.12)] })),
+    ).toEqual({ ingredientIds: ["ing-cheese"], token: null })
+  })
+
+  it("credits the parent's own cheese, or one sub-recipe's worth on a combo", async () => {
+    const match = removalMatchFor(removeCheese)!
+    expect(await removalCreditPerUse(doubleSlider, match, costFor)).toBeCloseTo(0.24)
+    // One use on a two-slider combo is ONE slider's cheese.
+    expect(await removalCreditPerUse(combo, match, costFor)).toBeCloseTo(0.24)
+    const noMatch = { ingredientIds: [], token: "tomato" }
+    expect(await removalCreditPerUse(doubleSlider, noMatch, costFor)).toBe(0)
+  })
+
+  it("books the credit against the item's line cost, never below zero", async () => {
+    const usage = await buildModifierUsage({
+      subItems: [
+        {
+          skuId: "sku-rc",
+          name: "Remove Cheese",
+          quantity: 1,
+          orderItem: { name: "Signature Slider", quantity: 2 },
+        },
+      ],
+      subRecipeBySku: new Map([["sku-rc", "r-remove-cheese"]]),
+      costFor,
+    })
+    const bucket = usage.get("Signature Slider")!
+    expect(bucket.extraLineCost).toBe(0)
+    expect(bucket.removals).toHaveLength(1)
+    expect(bucket.missingMappings).toBe(false)
+
+    const [row] = await compute({
+      menuRows: [menuRow({ itemName: "Signature Slider", tpQuantitySold: 10, tpTotalSales: 134.9 })],
+      mappingByName: new Map([["Signature Slider", "r-double"]]),
+      modifierUsageByItem: usage,
+      costFor,
+    })
+    // 10 × $0.93, less two sliders' cheese (2 × $0.24).
+    expect(row.lineCost).toBeCloseTo(9.3 - 0.48)
+    expect(row.partialCost).toBe(false)
+  })
+
+  it("keeps a negative modifier fallback as a credit", async () => {
+    const usage = await buildModifierUsage({
+      subItems: [
+        { skuId: "sku-lp", name: "Loaded Plain", quantity: 1, orderItem: { name: "Fries", quantity: 1 } },
+      ],
+      subRecipeBySku: new Map([["sku-lp", "r-lp"]]),
+      costFor: async () => costResult({ itemName: "Mod: Loaded Plain", totalCost: -0.07, lines: [] }),
+    })
+    expect(usage.get("Fries")!.extraLineCost).toBeCloseTo(-0.07)
   })
 })

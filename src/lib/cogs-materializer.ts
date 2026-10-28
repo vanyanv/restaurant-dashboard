@@ -3,7 +3,11 @@ import { prisma } from "@/lib/prisma"
 import { bustTags, monthTagsForRange } from "@/lib/cache/cached"
 import { startOfDayUTC } from "@/lib/date-utils"
 import { getCanonicalIngredientCost } from "@/lib/canonical-ingredients"
-import { computeRecipeCost, type RecipeCostResult } from "@/lib/recipe-cost"
+import {
+  computeRecipeCost,
+  type RecipeCostLine,
+  type RecipeCostResult,
+} from "@/lib/recipe-cost"
 import {
   CONTAINER_GROUP_CANONICALS,
   CONTAINER_GROUP_LABELS,
@@ -24,6 +28,80 @@ export type ModifierUsage = {
   missingMappings: boolean
   /** Running partial list of `(modifierName, uses)` for debugging / UI. */
   breakdown: Array<{ skuId: string; name: string; uses: number; unitCost: number | null }>
+  /**
+   * "Remove …" / "No …" modifiers on this item. Their credit depends on the
+   * PARENT's recipe (one slice off a single, two off a double), which this
+   * bucketing pass does not know, so they are carried to `computeFoodCogsRows`
+   * and priced there. Optional so a hand-built usage without any still reads.
+   */
+  removals?: Array<{ match: RemovalMatch; uses: number }>
+}
+
+/** Which of a parent's ingredient lines a removal modifier takes off. */
+export type RemovalMatch = {
+  /** Canonical ingredient ids the removal recipe lists, when it lists any. */
+  ingredientIds: string[]
+  /** Otherwise the word after "Remove"/"No" ("cheese"), matched in line names. */
+  token: string | null
+}
+
+/**
+ * A modifier recipe named "Mod: Remove Cheese" or "Mod: No Pickles" takes an
+ * ingredient OFF the plate. It used to cost a flat $0 — the recipe had no
+ * lines and a $0 fallback — so a slider sold without cheese was still charged
+ * for its cheese. A flat negative would be wrong the other way: "Remove
+ * Cheese" is rung on singles (1 slice), doubles (2) and triples (3). So the
+ * name marks it a removal, and what it removes is priced from the parent.
+ *
+ * Which ingredient: the removal recipe's own ingredient lines when it has any
+ * (exact, by canonical id), else the word after Remove/No matched against the
+ * parent's line names ("cheese" matches "american cheese yellow 160").
+ */
+export function removalMatchFor(result: RecipeCostResult): RemovalMatch | null {
+  const m = /^\s*mod:\s*(?:remove|no)\s+(.+?)\s*$/i.exec(result.itemName)
+  if (!m) return null
+  const ingredientIds = result.lines.filter((l) => l.kind === "ingredient").map((l) => l.refId)
+  const word = m[1].toLowerCase()
+  // "Pickles" names the same thing as a "pickle chips" line.
+  const token = word.endsWith("s") && word.length > 3 ? word.slice(0, -1) : word
+  return { ingredientIds, token: ingredientIds.length > 0 ? null : token }
+}
+
+function lineMatches(line: RecipeCostLine, match: RemovalMatch): boolean {
+  if (line.kind !== "ingredient") return false
+  if (match.ingredientIds.length > 0) return match.ingredientIds.includes(line.refId)
+  return match.token !== null && line.name.toLowerCase().includes(match.token)
+}
+
+/**
+ * The dollars ONE use of a removal takes off ONE of the parent.
+ *
+ * The parent's own matching lines when it has them — a Double Slider's two
+ * slices, per serving. When it has none, the first sub-recipe that does,
+ * counted ONCE: a combo of two sliders rings "Remove Cheese" per slider (the
+ * style modifiers measure ~1.6 per combo), so one use is one slider's cheese,
+ * not the whole combo's. Depth-limited, since recipes can nest.
+ */
+export async function removalCreditPerUse(
+  parent: RecipeCostResult,
+  match: RemovalMatch,
+  costFor: (recipeId: string) => Promise<RecipeCostResult | null>,
+  depth = 0
+): Promise<number> {
+  const serving = parent.servingSize > 0 ? parent.servingSize : 1
+  const direct = parent.lines
+    .filter((l) => lineMatches(l, match))
+    .reduce((t, l) => t + (l.lineCost > 0 ? l.lineCost : 0), 0)
+  if (direct > 0) return direct / serving
+  if (depth >= 3) return 0
+  for (const line of parent.lines) {
+    if (line.kind !== "component") continue
+    const sub = await costFor(line.refId)
+    if (!sub) continue
+    const credit = await removalCreditPerUse(sub, match, costFor, depth + 1)
+    if (credit > 0) return credit
+  }
+  return 0
 }
 
 export type ComputedRow = {
@@ -327,11 +405,21 @@ export async function buildModifierUsage(input: {
       continue
     }
     const result = await costFor(modRecipeId)
+    const removal = result ? removalMatchFor(result) : null
+    if (removal) {
+      // Priced against the parent in `computeFoodCogsRows`; its own walk is
+      // only the list of what it removes.
+      ;(bucket.removals ??= []).push({ match: removal, uses })
+      bucket.breakdown.push({ skuId: s.skuId ?? "(no sku)", name: s.name, uses, unitCost: null })
+      continue
+    }
     const modCost = result?.totalCost ?? 0
     if (!result || result.partial) {
       bucket.missingMappings = true
     }
-    if (modCost > 0) bucket.extraLineCost += modCost * uses
+    // Negative too: a fallback below zero ("Loaded - Cheese & Sauce Only",
+    // −$0.07) is a deliberate credit, and `> 0` used to drop it.
+    if (modCost !== 0 && isFinite(modCost)) bucket.extraLineCost += modCost * uses
     bucket.breakdown.push({
       skuId: s.skuId ?? "(no sku)",
       name: s.name,
@@ -418,7 +506,15 @@ export async function computeFoodCogsRows(input: {
       const baseUnitCost = result?.totalCost ?? null
       const hasBase = baseUnitCost != null && baseUnitCost > 0
       const baseLineCost = hasBase ? baseUnitCost * qty : 0
-      const totalLineCost = baseLineCost + modLineCost
+      let removalCost = 0
+      if (hasBase && result && mod?.removals?.length) {
+        for (const r of mod.removals) {
+          removalCost += (await removalCreditPerUse(result, r.match, costFor)) * r.uses
+        }
+        removalCost *= modifierShare
+      }
+      // Never below zero: credits can only take off what the plate carried.
+      const totalLineCost = Math.max(0, baseLineCost + modLineCost - removalCost)
       const blendedUnitCost =
         qty > 0 ? totalLineCost / qty : hasBase ? baseUnitCost : null
       const status = hasBase ? CogsStatus.COSTED : CogsStatus.MISSING_COST

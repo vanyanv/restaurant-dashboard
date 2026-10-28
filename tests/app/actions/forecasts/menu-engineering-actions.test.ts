@@ -16,9 +16,15 @@ vi.mock("@/lib/prisma", () => ({
   },
 }))
 
+vi.mock("@/lib/counter/item-discounts", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/counter/item-discounts")>()),
+  getItemDiscounts: vi.fn(async () => new Map()),
+}))
+
 import { getServerSession } from "next-auth"
 import { prisma } from "@/lib/prisma"
 import { getMenuEngineering } from "@/app/actions/forecasts/menu-engineering-actions"
+import { getItemDiscounts } from "@/lib/counter/item-discounts"
 
 const sessionWith = (overrides: Record<string, unknown> = {}) => ({
   user: { id: "u1", accountId: "acct-A", ...overrides },
@@ -93,6 +99,27 @@ describe("getMenuEngineering", () => {
     expect(result.data.counts).toEqual({ STAR: 1, PLOWHORSE: 1, PUZZLE: 1, DOG: 1 })
     // Total contribution = 500 + 100 + 160 + 10 = 770
     expect(result.data.totalContribution).toBeCloseTo(770, 5)
+  })
+
+  it("prices a BOGO item's margin on what it collected", async () => {
+    vi.mocked(getServerSession).mockResolvedValue(sessionWith() as never)
+    vi.mocked(prisma.store.findMany).mockResolvedValue([
+      { id: "s1", name: "S1", accountId: "acct-A", isActive: true },
+    ] as never)
+    vi.mocked(prisma.dailyCogsItem.groupBy).mockResolvedValue([
+      { itemName: "Slider", category: "Sliders", _sum: { qtySold: 100, salesRevenue: 1349, lineCost: 153 } },
+    ] as never)
+    vi.mocked(getItemDiscounts).mockResolvedValueOnce(
+      new Map([["Slider", { gross: 1349, discount: 674.5, byPlatform: new Map() }]]),
+    )
+
+    const result = await getMenuEngineering({ storeId: "s1" })
+    if (!result || !result.ok) throw new Error("expected ok")
+    const [slider] = result.data.rows
+    expect(slider.revenue).toBeCloseTo(674.5)
+    // ~23% food cost, not the ~11% the rung-up price implied.
+    expect(slider.marginPct).toBeCloseTo((1 - 153 / 674.5) * 100)
+    expect(vi.mocked(getItemDiscounts).mock.calls[0][0]).toMatchObject({ accountId: "acct-A" })
   })
 
   it("attaches elasticity only when the nightly fit is usable", async () => {

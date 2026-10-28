@@ -9,6 +9,12 @@ import {
   commissionRateFor,
 } from "@/lib/counter/channel-mix"
 import { channelById, type ChannelId } from "@/lib/counter/channels"
+import {
+  discountShare,
+  getItemDiscounts,
+  isDealRunning,
+  netOfDiscount,
+} from "@/lib/counter/item-discounts"
 import type { ChartSpec } from "@/lib/counter/chart-geometry"
 import {
   awaitSections,
@@ -187,7 +193,12 @@ interface ItemData {
   name: string
   categories: string[]
   qty: number
+  /** Rung-up revenue, BEFORE discounts — the POS rollup. */
   revenue: number
+  /** Share of `revenue` the deals took back off, 0..1 (`item-discounts.ts`). */
+  discountShare: number
+  /** True above `DEAL_THRESHOLD` — a BOGO or a standing promo on this item. */
+  dealRunning: boolean
   daily: { date: string; qty: number }[]
   plateCost: number | null
   margin: number | null
@@ -198,7 +209,14 @@ interface ItemData {
    * `null` where the schema publishes no rate for the channel. Never `0` for
    * an unknown — a fee we cannot price is not a fee of nothing.
    */
-  byChannel: { channel: ChannelId; qty: number; revenue: number; commission: number | null }[]
+  byChannel: {
+    channel: ChannelId
+    qty: number
+    revenue: number
+    /** Dollars of order discount attributed to this item on this channel. */
+    discount: number
+    commission: number | null
+  }[]
   modifiers: { name: string; qty: number; revenue: number; mapped: boolean }[]
   /** True when ANY order in the window carries a commission. Measured: false. */
   feesRecorded: boolean
@@ -252,7 +270,7 @@ async function loadItem(input: MenuItemInput): Promise<ItemData | null> {
     daily.set(key, (daily.get(key) ?? 0) + q)
   }
 
-  const [cost, mapping, channelRows, modifierRows, feeCount, nameSpread, recipeList] =
+  const [cost, mapping, channelRows, modifierRows, feeCount, nameSpread, recipeList, discounts] =
     await Promise.all([
     prisma.dailyCogsItem.aggregate({
       where: { ...where, itemName: name },
@@ -319,7 +337,9 @@ async function loadItem(input: MenuItemInput): Promise<ItemData | null> {
       select: { id: true, itemName: true },
       orderBy: { itemName: "asc" },
     }),
+    getItemDiscounts({ accountId, storeIds, startDate, endDate, itemName: name }),
   ])
+  const discount = discounts.get(name) ?? null
 
   const mappedModifiers = new Set(
     (
@@ -342,16 +362,24 @@ async function loadItem(input: MenuItemInput): Promise<ItemData | null> {
   // would report its volume as commission-free.
   const byChannel = new Map<
     ChannelId,
-    { qty: number; revenue: number; commission: number | null }
+    { qty: number; revenue: number; discount: number; commission: number | null }
   >()
   const ratesByStore = new Map(stores.map((st) => [st.id, st]))
   for (const r of channelRows) {
     const channel = CHANNEL_FOR_PLATFORM[r.platform]
     if (!channel) continue
-    const acc = byChannel.get(channel) ?? { qty: 0, revenue: 0, commission: 0 as number | null }
+    const acc = byChannel.get(channel) ?? {
+      qty: 0,
+      revenue: 0,
+      discount: 0,
+      commission: 0 as number | null,
+    }
     const revenue = Number(r.revenue)
     acc.qty += Number(r.qty)
     acc.revenue += revenue
+    // At the PLATFORM's share, not the item's: a BOGO that runs on Uber Eats
+    // only must not discount the in-house price.
+    acc.discount += revenue * discountShare(discount?.byPlatform.get(r.platform))
     /*
      * The marketplace's cut, at the rate the P&L charges it at.
      *
@@ -378,9 +406,15 @@ async function loadItem(input: MenuItemInput): Promise<ItemData | null> {
     categories: [...categories].sort(),
     qty,
     revenue,
+    discountShare: discountShare(discount),
+    dealRunning: isDealRunning(discount),
     daily: [...daily.entries()].sort().map(([date, q]) => ({ date, qty: q })),
     plateCost: costQty > 0 ? lineCost / costQty : null,
-    margin: costRevenue > 0 ? 100 - (lineCost / costRevenue) * 100 : null,
+    // Over what was COLLECTED: on a BOGO the rung-up revenue is twice the money.
+    margin:
+      costRevenue > 0 && netOfDiscount(costRevenue, discount) > 0
+        ? 100 - (lineCost / netOfDiscount(costRevenue, discount)) * 100
+        : null,
     mapped: mapping !== null,
     recipeLines: null,
     byChannel: [...byChannel.entries()]
@@ -426,7 +460,7 @@ function keptOf(d: ItemData): number | null {
   if (d.byChannel.length === 0) return null
   if (d.byChannel.some((c) => c.commission === null)) return null
   const taken = d.byChannel.reduce((t, c) => t + (c.commission ?? 0), 0)
-  return d.revenue - taken
+  return d.revenue * (1 - d.discountShare) - taken
 }
 
 function headlineOf(d: ItemData): ItemHeadline {
@@ -440,8 +474,13 @@ function headlineOf(d: ItemData): ItemHeadline {
   const marginCell: FigureProps = {
     label: "Counter margin",
     value: d.margin === null ? "—" : pct(d.margin, { scaled: true }),
-    delta: d.margin === null ? "no costed sales" : "before the marketplace's share",
-    deltaTone: "is-flat",
+    delta:
+      d.margin === null
+        ? "no costed sales"
+        : d.dealRunning
+          ? `deal running · ${pct(d.discountShare * 100, { scaled: true })} off, after discounts`
+          : "after discounts, before the marketplace's share",
+    deltaTone: d.dealRunning ? "is-down" : "is-flat",
   }
 
   return {
@@ -449,7 +488,15 @@ function headlineOf(d: ItemData): ItemHeadline {
     sub: `${d.categories.join(" · ")} · ${plural(d.byChannel.length, "channel")}`,
     cells: [
       soldCell,
-      { label: "Charged", value: money(d.revenue), delta: "before commission", deltaTone: "is-flat" },
+      {
+        label: "Charged",
+        value: money(d.revenue),
+        delta:
+          d.discountShare > 0
+            ? `before ${money(d.revenue * d.discountShare)} of discounts`
+            : "before commission",
+        deltaTone: "is-flat",
+      },
       {
         label: "Kept",
         // Charged LESS the marketplaces' cut. `keptOf` is null when any
@@ -461,7 +508,9 @@ function headlineOf(d: ItemData): ItemHeadline {
         value: kept === null ? "—" : money(kept),
         delta:
           kept !== null
-            ? "after commission"
+            ? d.discountShare > 0
+              ? "after discounts and commission"
+              : "after commission"
             : d.byChannel.length === 0
               ? CHANNELS_ABSENT
               : RATE_ABSENT,
@@ -501,11 +550,13 @@ function channelsOf(d: ItemData): ItemChannels {
   const rows: ItemChannelRow[] = d.byChannel.map((c) => {
     const meta = channelById(c.channel)
     const price = c.qty > 0 ? c.revenue / c.qty : 0
+    // What a unit actually brought in on this channel once its deal came off.
+    const collected = c.qty > 0 ? (c.revenue - c.discount) / c.qty : 0
     // Against the PLATE cost, which does not vary by channel. This is what the
     // kitchen keeps before the marketplace takes its share, and the column
     // header says exactly that.
     const margin =
-      d.plateCost !== null && price > 0 ? 100 - (d.plateCost / price) * 100 : null
+      d.plateCost !== null && collected > 0 ? 100 - (d.plateCost / collected) * 100 : null
     return {
       key: c.channel,
       channel: meta.name,
@@ -519,7 +570,7 @@ function channelsOf(d: ItemData): ItemChannels {
       netEach:
         c.commission === null || c.qty <= 0
           ? RATE_ABSENT
-          : money((c.revenue - c.commission) / c.qty, { cents: true }),
+          : money((c.revenue - c.discount - c.commission) / c.qty, { cents: true }),
       margin: margin === null ? "—" : pct(margin, { scaled: true }),
     }
   })
