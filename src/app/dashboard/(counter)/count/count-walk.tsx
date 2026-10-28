@@ -3,6 +3,7 @@
 import { useEffect, useState, useTransition } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
+import { useSurfaceHref } from "@/components/counter"
 import { finishCount, saveCountItem, startCount } from "@/lib/counter/actions/count"
 import type { WalkData, WalkItem } from "@/lib/counter/adapters/count"
 import { COUNT_AREAS, describeShelf, fmtQty, hasAnyValue, shelfTotal, showQty } from "@/lib/counter/count-layers"
@@ -30,6 +31,7 @@ function parse(s: string | undefined): number | null {
 
 export function CountWalk({ data, base }: { data: WalkData; base: "/dashboard/count" | "/m/count" }) {
   const router = useRouter()
+  const href = useSurfaceHref()
   const [busy, start] = useTransition()
   const [screen, setScreen] = useState<Screen>({ kind: "list" })
   const [countId, setCountId] = useState<string | null>(data.count?.id ?? null)
@@ -59,7 +61,7 @@ export function CountWalk({ data, base }: { data: WalkData; base: "/dashboard/co
     return (
       <div className="cw">
         <p className="cw__sub">Nothing is on the count list yet. Pick what you count and how it comes in, once, and it's here every week.</p>
-        <Link className="cw__btn cw__btn--primary" href="/dashboard/count/setup">Set up the count list</Link>
+        <Link className="cw__btn cw__btn--primary" href={href("/dashboard/count/setup")}>Set up the count list</Link>
       </div>
     )
   }
@@ -100,7 +102,7 @@ export function CountWalk({ data, base }: { data: WalkData; base: "/dashboard/co
           This count is the starting point now. Next week&apos;s count is compared against it, plus deliveries from invoices, minus what sales say you used and the waste you logged.
         </p>
         <div className="cw__foot">
-          <Link className="cw__btn cw__btn--primary" href={`/dashboard/count/report?store=${data.store.id}`}>See the report</Link>
+          <Link className="cw__btn cw__btn--primary" href={href(`/dashboard/count/report?store=${data.store.id}`)}>See the report</Link>
           <Link className="cw__btn" href={`${base}/waste?store=${data.store.id}`}>Log waste</Link>
         </div>
       </div>
