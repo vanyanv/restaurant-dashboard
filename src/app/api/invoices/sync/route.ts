@@ -583,18 +583,21 @@ async function runSync(
   // prints "1452 A Sherman Way" for 14523, which the matcher rightly scores
   // as uncertain (0.75) — and so every Van Nuys IFS delivery sat in review
   // for the same confirmation. Once one is approved, the rest follow it.
+  // Keyed by `addressKey`: the same vendor prints "1452 A SHERMAN WAY" on one
+  // invoice and "1452 A Sherman Way" on the next (IFS I91432-00, 2026-10-28),
+  // and an exact-string match missed the approval it should have followed.
   const confirmedAddresses = new Map<string, string>()
-  const batchAddresses = [
-    ...new Set(validExtractions.map((inv) => inv.extraction.deliveryAddress).filter((a): a is string => Boolean(a))),
-  ]
-  if (batchAddresses.length > 0) {
+  const addressKey = (a: string) => a.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim()
+  const hasBatchAddress = validExtractions.some((inv) => Boolean(inv.extraction.deliveryAddress))
+  if (hasBatchAddress) {
     try {
       const approved = await prisma.invoice.findMany({
-        where: { accountId, status: "APPROVED", storeId: { not: null }, deliveryAddress: { in: batchAddresses } },
+        where: { accountId, status: "APPROVED", storeId: { not: null }, deliveryAddress: { not: null } },
         select: { deliveryAddress: true, storeId: true },
+        distinct: ["deliveryAddress", "storeId"],
       })
       for (const a of approved) {
-        if (a.deliveryAddress && a.storeId) confirmedAddresses.set(a.deliveryAddress, a.storeId)
+        if (a.deliveryAddress && a.storeId) confirmedAddresses.set(addressKey(a.deliveryAddress), a.storeId)
       }
     } catch (err) {
       logger.error("[invoice-sync] approved-address lookup failed — continuing without it:", err)
@@ -625,7 +628,7 @@ async function runSync(
       ? matchInvoiceToStore(inv.extraction.deliveryAddress, stores)
       : null
     const confirmedStore = inv.extraction.deliveryAddress
-      ? confirmedAddresses.get(inv.extraction.deliveryAddress)
+      ? confirmedAddresses.get(addressKey(inv.extraction.deliveryAddress))
       : undefined
     const match =
       fuzzy && confirmedStore === fuzzy.storeId && fuzzy.confidence < 0.85

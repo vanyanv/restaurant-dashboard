@@ -20,7 +20,7 @@ const CATCH_WEIGHT_VENDOR_RE =
   /\b(premier\s+meats?|crystal\s+bay|ben\s+e\.?\s+keith)\b/i
 const MEAT_LINE_RE =
   /\b(meat|beef|ground\s+beef|angus|chuck|brisket|ribeye|steak|sirloin|pork|bacon|ham|chicken|turkey|poultry|seafood|fish|salmon|tuna)\b/i
-const GRAM_UOMS = new Set(["G", "GR", "GM", "GRM", "GRAM", "GRAMS"])
+const GRAM_UOMS = new Set(["G", "GR", "GM", "GRM", "GRAM", "GRAMS", "GS", "GMS", "GRS"])
 const PAPER_COUNT_PACK_RE =
   /\b(bag|bags|bath\s+tissue|tissue|toilet|napkin|towel|roll|wrap|wrapper|cup|cups|lid|lids|glove|gloves|paper|liner|liners|foil|film|sheet|sheets|straw|straws)\b/i
 

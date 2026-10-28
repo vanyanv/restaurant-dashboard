@@ -57,6 +57,8 @@ const SYNONYMS: Record<string, CanonicalUnit> = {
   // R365 weight-vs-fluid disambiguated forms (see also fl oz below).
   "oz-wt": "oz", "oz wt": "oz", "wt oz": "oz", "oz-w": "oz",
   "g": "g", "gr": "g", "gram": "g", "grams": "g",
+  // Sysco prints "GS" (and some vendors GM/GMS/GRS) for grams on packets.
+  "gs": "g", "gm": "g", "gms": "g", "grs": "g", "grm": "g",
   "kg": "kg", "kgs": "kg", "kilo": "kg", "kilogram": "kg", "kilograms": "kg",
   // volume
   "ml": "ml", "milliliter": "ml", "milliliters": "ml",
