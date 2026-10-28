@@ -1,11 +1,16 @@
 name: Invoices Sync
 on:
   schedule:
-    # Every 6h, offset by 30 min from the others. Vendors deliver invoices on
-    # daily-to-weekly cadences so polling faster gives no benefit. Concurrency
-    # lock prevents pile-up if a run drags.
-    - cron: '30 */6 * * *'
+    # Hourly at :30 since 2026-10-28. Every 6h was enough for new mail but a
+    # run reads only six emails, so any backlog took days to clear (13 were
+    # still waiting on 2026-10-28). Concurrency lock prevents pile-up.
+    - cron: '30 * * * *'
   workflow_dispatch:
+    inputs:
+      lookback_days:
+        description: "Search this many days back (backfill). Blank = normal run."
+        required: false
+        default: ""
 
 concurrency:
   group: invoices-sync
@@ -28,9 +33,12 @@ jobs:
           LOG_FILE: logs/invoices-sync.log
           CRON_RETRIES: "2"
           CRON_MAX_TIME: "115"
+          LOOKBACK_DAYS: ${{ github.event.inputs.lookback_days }}
         run: |
+          url="$APP_URL/api/invoices/sync"
+          if [[ "$LOOKBACK_DAYS" =~ ^[0-9]+$ ]]; then url="$url?lookbackDays=$LOOKBACK_DAYS"; fi
           bash .github/scripts/run-with-cron-logging.sh \
-            .github/scripts/curl-cron-json.sh POST "$APP_URL/api/invoices/sync"
+            .github/scripts/curl-cron-json.sh POST "$url"
       - name: Upload failure log
         if: failure()
         uses: actions/upload-artifact@v4

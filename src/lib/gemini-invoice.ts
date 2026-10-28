@@ -3,6 +3,7 @@ import OpenAI from "openai"
 import type { InvoiceExtraction } from "@/types/invoice"
 import { recordAiUsage } from "@/lib/monitoring/ai-usage"
 import {
+  dropDuplicatedLines,
   normalizeCatchWeightMeatLines,
   normalizeCountPackLines,
 } from "@/lib/invoice-sanity"
@@ -160,12 +161,33 @@ function applyKnownSkuPackProfiles(extraction: InvoiceExtraction): InvoiceExtrac
 }
 
 function normalizeExtraction(extraction: InvoiceExtraction): InvoiceExtraction {
-  return normalizeCountPackLines(
+  const normalized = normalizeCountPackLines(
     normalizeCatchWeightMeatLines(applyKnownSkuPackProfiles(extraction))
   )
+  const { extraction: deduped, dropped } = dropDuplicatedLines(normalized)
+  if (dropped.length > 0) {
+    console.warn(
+      `Dropped line(s) ${dropped.join(", ")} read twice on ${extraction.vendorName} #${extraction.invoiceNumber}`
+    )
+  }
+  return deduped
 }
 
-function buildExtractionPrompt(): string {
+/**
+ * The second-read addendum: what the first read got wrong, so the model looks
+ * at those places again instead of reproducing the same misread.
+ */
+function rereadAddendum(problems: string[]): string {
+  return `
+
+A FIRST READ OF THIS SAME PDF FAILED THESE CHECKS:
+${problems.map((p) => `- ${p}`).join("\n")}
+Read the document again from the top. Check every product line against the
+printed amounts, make sure no line is skipped or read twice, and make the lines
+add up to the printed subtotal before you answer.`
+}
+
+function buildExtractionPrompt(problems?: string[]): string {
   const today = new Date().toISOString().slice(0, 10)
   return `You are an invoice data extraction specialist for restaurant food & beverage suppliers.
 Extract ALL data from this supplier invoice PDF. Common vendors include Sysco, US Foods,
@@ -398,12 +420,13 @@ Return valid JSON matching this schema EXACTLY (every field must be present):
   "taxAmount": number or null,
   "totalAmount": number,
   "isReturn": boolean
-}`
+}` + (problems && problems.length > 0 ? rereadAddendum(problems) : "")
 }
 
 async function extractViaOpenAI(
   pdfBase64: string,
-  fileName: string
+  fileName: string,
+  problems?: string[]
 ): Promise<InvoiceExtraction> {
   const apiKey = process.env.OPENAI_API_KEY
   if (!apiKey) throw new Error("OPENAI_API_KEY env var is required")
@@ -423,7 +446,7 @@ async function extractViaOpenAI(
               file_data: `data:application/pdf;base64,${pdfBase64}`,
             },
           },
-          { type: "text", text: buildExtractionPrompt() },
+          { type: "text", text: buildExtractionPrompt(problems) },
         ],
       },
     ],
@@ -449,7 +472,7 @@ async function extractViaOpenAI(
   return JSON.parse(text) as InvoiceExtraction
 }
 
-async function extractViaGemini(pdfBase64: string): Promise<InvoiceExtraction> {
+async function extractViaGemini(pdfBase64: string, problems?: string[]): Promise<InvoiceExtraction> {
   const apiKey = process.env.GEMINI_API_KEY
   if (!apiKey) throw new Error("GEMINI_API_KEY env var is required")
   const ai = new GoogleGenAI({ apiKey })
@@ -462,7 +485,7 @@ async function extractViaGemini(pdfBase64: string): Promise<InvoiceExtraction> {
         role: "user",
         parts: [
           { inlineData: { mimeType: "application/pdf", data: pdfBase64 } },
-          { text: buildExtractionPrompt() },
+          { text: buildExtractionPrompt(problems) },
         ],
       },
     ],
@@ -512,8 +535,31 @@ function shouldFallBackToGemini(err: unknown): boolean {
 
 export async function extractInvoiceData(
   pdfBase64: string,
-  fileName: string
+  fileName: string,
+  options?: {
+    /**
+     * Set for a second read: what the first read got wrong (from
+     * `describeMoneyProblems`). The second read goes to the OTHER model first,
+     * so a misread one model makes on a layout is not simply repeated, and
+     * falls back to the primary on any error (a missing key included).
+     */
+    rereadProblems?: string[]
+  }
 ): Promise<InvoiceExtractionResult> {
+  const problems = options?.rereadProblems
+  if (problems && problems.length > 0) {
+    try {
+      const extraction = normalizeExtraction(await extractViaGemini(pdfBase64, problems))
+      return { extraction, model: FALLBACK_MODEL }
+    } catch (err) {
+      console.warn(
+        `Gemini re-read failed (${err instanceof Error ? err.message.slice(0, 120) : err}), ` +
+        `re-reading with ${PRIMARY_MODEL}`
+      )
+      const extraction = normalizeExtraction(await extractViaOpenAI(pdfBase64, fileName, problems))
+      return { extraction, model: PRIMARY_MODEL }
+    }
+  }
   try {
     const extraction = normalizeExtraction(await extractViaOpenAI(pdfBase64, fileName))
     return { extraction, model: PRIMARY_MODEL }
