@@ -1,6 +1,7 @@
 "use client"
 
 import Link from "next/link"
+import { phoneHref } from "@/lib/phone-routes"
 import { MList, MStrip, Section, useCounterTransition } from "@/components/counter"
 import type { RecipesSections } from "@/lib/counter/adapters/recipes"
 import type { SectionSources } from "@/lib/counter/adapters/types"
@@ -55,7 +56,7 @@ export function CounterPhoneRecipesClient({
 
       <Section bare title="Needs confirming" data={sections.work} pending={pending}>
         {(w) => (
-          <Link className="mbtn mbtn--primary" href={w.items[0]?.href ?? "/dashboard/recipes"}>
+          <Link className="mbtn mbtn--primary" href={phoneHref(w.items[0]?.href ?? "/dashboard/recipes")}>
             {w.items[0] ? w.items[0].title : "The catalogue"}
           </Link>
         )}
