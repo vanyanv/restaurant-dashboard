@@ -1,5 +1,6 @@
 import Link from "next/link"
 import type { ReactNode } from "react"
+import { phoneHref } from "@/lib/phone-routes"
 
 /**
  * `.mlist` — the phone's list of rows, and the one element that replaces a
@@ -85,7 +86,7 @@ export function MList({ rows }: { rows: MListRow[] }) {
         )
 
         return r.href ? (
-          <Link key={r.key} className="mli is-link" href={r.href}>
+          <Link key={r.key} className="mli is-link" href={phoneHref(r.href)}>
             {body}
           </Link>
         ) : (

@@ -78,7 +78,7 @@ export function CounterPhoneCatalogClient({
 
       {/* `.mbtn` is class-keyed and styles an `<a>` unchanged — a destination
           is a link, not a button, the same trade the decisions phone page made. */}
-      <Link className="mbtn mbtn--primary" href="/dashboard/recipes">
+      <Link className="mbtn mbtn--primary" href="/m/recipes">
         Map the modifiers
       </Link>
     </>

@@ -43,7 +43,7 @@ export function CounterPhoneMenuItemClient({
         {(c) => <MList rows={c.phoneRows} />}
       </Section>
 
-      <Link className="mbtn mbtn--primary" href="/dashboard/recipes">
+      <Link className="mbtn mbtn--primary" href="/m/recipes">
         Open the recipe
       </Link>
     </>

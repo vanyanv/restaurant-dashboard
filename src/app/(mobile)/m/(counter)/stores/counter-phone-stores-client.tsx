@@ -1,6 +1,7 @@
 "use client"
 
 import Link from "next/link"
+import { phoneHref } from "@/lib/phone-routes"
 
 import { MList, Section, SubNav, useCounterTransition } from "@/components/counter"
 import { storesViewTabs } from "@/lib/counter/nav"
@@ -61,7 +62,7 @@ export function CounterPhoneStoresClient({
       <Section bare title="Open a store file" data={sections.table} pending={pending}>
         {(t) =>
           t.primary ? (
-            <Link className="mbtn mbtn--primary" href={t.primary.href}>
+            <Link className="mbtn mbtn--primary" href={phoneHref(t.primary.href)}>
               {t.primary.label}
             </Link>
           ) : null
