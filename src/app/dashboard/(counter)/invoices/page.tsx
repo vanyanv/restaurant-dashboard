@@ -3,13 +3,14 @@ import { redirect } from "next/navigation"
 import { authOptions } from "@/lib/auth"
 import { readCounterParams } from "@/lib/counter/url-state"
 import { getInvoicesSectionPromises } from "@/lib/counter/adapters/invoices"
+import { getPriceSectionPromises } from "@/lib/counter/adapters/prices"
 import { getOverviewStores } from "@/lib/counter/adapters/overview"
 import { CounterInvoicesClient } from "./counter-invoices-client"
 import { counterToday } from "@/lib/counter/today"
 
 export const dynamic = "force-dynamic"
 
-/** Invoices — `P.invoices` (`docs/counter/counter-prototype.html:5621`). */
+/** Invoices — Needs you: the worklist, worst first, and what the prices did. */
 export default async function InvoicesPage({
   searchParams,
 }: {
@@ -27,6 +28,7 @@ export default async function InvoicesPage({
   const today = counterToday()
   const counterParams = readCounterParams(params, today)
   const stores = await getOverviewStores()
+  const storeName = stores.find((s) => s.id === counterParams.storeId)?.name ?? "All stores"
 
   const sections = getInvoicesSectionPromises({
     range: counterParams.range,
@@ -35,14 +37,14 @@ export default async function InvoicesPage({
     accountId: session.user.accountId,
     today,
   })
+  const prices = getPriceSectionPromises(session.user.accountId)
 
   return (
     <>
       <CounterInvoicesClient
-        params={params.toString()}
-        stores={stores}
-        today={today}
-        sections={sections}
+        sub={`${storeName} · read from the invoices inbox`}
+        sections={{ headline: sections.headline, desk: sections.desk }}
+        prices={{ movers: prices.movers }}
       />
       <span hidden data-perf-ready="/dashboard/invoices" />
     </>

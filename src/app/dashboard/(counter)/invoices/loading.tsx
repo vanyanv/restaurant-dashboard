@@ -2,31 +2,20 @@
 
 import { Section } from "@/components/counter"
 import { loading } from "@/lib/counter/section-data"
+import { InvoicesHead } from "./invoices-ui"
 
-/** Invoices' loading boundary — the five entries the client renders. */
+/** Needs you's loading boundary: the tabs stay put while the queue loads. */
 export default function InvoicesLoading() {
   return (
     <>
+      <InvoicesHead sub="Loading" />
       <Section bare title="The figures" data={loading()}>
         {() => null}
       </Section>
-      <div className="sec">
-        <Section bare title="Received" data={loading()}>
-          {() => null}
-        </Section>
-      </div>
-      <Section title="Spend" data={loading()}>
+      <Section title="To review" data={loading()} pad={false}>
         {() => null}
       </Section>
-      <div className="split">
-        <Section title="What we hold" data={loading()}>
-          {() => null}
-        </Section>
-        <Section title="Fix before approving" data={loading()}>
-          {() => null}
-        </Section>
-      </div>
-      <Section title="What the spend was on" data={loading()} pad={false}>
+      <Section title="Prices that moved" data={loading()} pad={false}>
         {() => null}
       </Section>
     </>

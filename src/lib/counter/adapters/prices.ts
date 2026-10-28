@@ -363,6 +363,9 @@ function moversOf(d: PriceData): PriceMovers {
   return {
     rows: shown.map((m) => ({
       key: m.id,
+      // The ingredient page is the deep dive: every delivery, every vendor,
+      // every recipe the move reaches.
+      href: `/dashboard/ingredients/${m.id}`,
       cells: {
         ingredient: m.packVaries ? { v: m.name, cls: "hot" } : m.name,
         median: unitCost(m.median),

@@ -9,6 +9,7 @@ import {
   type StreamedSections,
 } from "@/lib/counter/adapters/types"
 import { mapReady, type SectionData } from "@/lib/counter/section-data"
+import { reasonLabel } from "@/lib/counter/invoice-reasons"
 import type { FigureProps, KvRow, MListRow, MoneyLine, Row } from "@/components/counter"
 
 /**
@@ -105,8 +106,24 @@ export interface InvoiceDocument {
   note: string
 }
 
+/** One line of "What we checked": a pass, a problem, or something to look at. */
+export interface InvoiceCheck {
+  key: string
+  tone: "good" | "bad" | "warn"
+  title: string
+  body: string
+}
+
 export interface InvoiceReasons {
   rows: Array<{ key: string; kind: string; message: string; lines: string | null }>
+  /**
+   * The checklist the invoice page draws: whether the lines tie to what the
+   * document prints, whether every goods line reaches an ingredient, then each
+   * stored reason. The first two are computed here from the same `gap` and
+   * line rows the rest of the page uses, so the list cannot disagree with the
+   * arithmetic under the lines.
+   */
+  checks: InvoiceCheck[]
   meta: string
   note: string
 }
@@ -423,7 +440,9 @@ async function loadInvoice(input: InvoiceInput): Promise<Loaded | null> {
       isCharge: isChargeRow(l.productName),
     })),
     goods,
-    gap: Math.abs(delta) > EPSILON ? delta : null,
+    // `>=`, matching the list's `reconciles` (`< EPSILON` ties out), so an invoice
+    // cannot tie out on its own page and fail to on Needs you.
+    gap: Math.abs(delta) >= EPSILON ? delta : null,
     reasons,
     matchConfidence: inv.matchConfidence,
     storeName: inv.store?.name ?? null,
@@ -492,17 +511,6 @@ function shortKey(path: string | null): string {
   if (!path) return "—"
   const tail = path.split("_-").pop()
   return tail && tail !== path ? `invoices/…_-${tail}` : path
-}
-
-const REASON_LABEL: Record<string, string> = {
-  no_lines: "Nothing was extracted",
-  total_reconciliation: "The lines do not sum to the subtotal",
-  line_math: "A line's arithmetic does not hold",
-  pack_shape: "A pack shape looks wrong",
-  date_suspect: "The printed date is implausible",
-  low_match_confidence: "The store match is uncertain",
-  no_store_match: "No store matched the address",
-  unknown: "Flagged",
 }
 
 /* -- sections --------------------------------------------------------- */
@@ -789,11 +797,78 @@ function countsNote(d: Loaded): string {
  * An invoice with no reasons is not necessarily clean — it may simply predate
  * every rule — and the empty state says that rather than "all good".
  */
+/** Reasons whose rule is about the money itself, not about a reading of it. */
+const MONEY_REASONS = new Set(["no_lines", "total_reconciliation", "line_math"])
+
+function checksOf(d: Loaded): InvoiceCheck[] {
+  const printed = d.subtotal ?? d.total
+  const printedWord = d.subtotal === null ? "total" : "subtotal"
+  const goodsLines = d.lines.filter((l) => !l.isCharge)
+  const unmatched = goodsLines.filter((l) => l.matchedTo === null)
+
+  const checks: InvoiceCheck[] = [
+    d.gap === null
+      ? {
+          key: "ties",
+          tone: "good",
+          title: `The lines tie to the printed ${printedWord}`,
+          body: `${plural(goodsLines.length, "goods line")} ${pluralWord(goodsLines.length, "comes", "come")} to ${money(d.goods, { cents: true })}, the same as the document prints. Delivery and tax rows are left out.`,
+        }
+      : {
+          key: "ties",
+          tone: "bad",
+          title:
+            goodsLines.length === 0
+              ? "Nothing was read from the PDF"
+              : `The lines are ${money(Math.abs(d.gap), { cents: true })} ${d.gap < 0 ? "short" : "over"}`,
+          body:
+            `${plural(goodsLines.length, "goods line")} ${pluralWord(goodsLines.length, "comes", "come")} to ` +
+            `${money(d.goods, { cents: true })} against a printed ` +
+            `${printedWord} of ${money(printed, { cents: true })}. Approve stays locked until that gap is zero.`,
+        },
+    unmatched.length === 0
+      ? {
+          key: "matched",
+          tone: "good",
+          title: "Every goods line reaches an ingredient",
+          body:
+            goodsLines.length === 0
+              ? "There are no goods lines to match."
+              : `All ${count(goodsLines.length)} are matched, so their cost reaches the recipes that use them.`,
+        }
+      : {
+          key: "matched",
+          tone: "warn",
+          title: `${plural(unmatched.length, "line")} ${pluralWord(unmatched.length, "matches", "match")} no ingredient`,
+          body: `Their cost stays out of recipe costing until each is matched: ${unmatched
+            .slice(0, 3)
+            .map((l) => titleCase(l.productName))
+            .join(", ")}${unmatched.length > 3 ? ", and more" : ""}.`,
+        },
+  ]
+
+  d.reasons.forEach((r, i) => {
+    // The tie-out row above already says this one, with today's numbers.
+    if (r.kind === "total_reconciliation" || r.kind === "no_lines") return
+    checks.push({
+      key: `${r.kind}:${i}`,
+      tone: MONEY_REASONS.has(r.kind) ? "bad" : "warn",
+      title:
+        reasonLabel(r.kind) +
+        (r.lineNumbers && r.lineNumbers.length > 0 ? ` (line ${r.lineNumbers.join(", ")})` : ""),
+      body: r.message,
+    })
+  })
+
+  return checks
+}
+
 function reasonsOf(d: Loaded): InvoiceReasons {
   return {
+    checks: checksOf(d),
     rows: d.reasons.map((r, i) => ({
       key: `${r.kind}:${i}`,
-      kind: REASON_LABEL[r.kind] ?? titleCase(r.kind.replace(/_/g, " ")),
+      kind: reasonLabel(r.kind),
       message: r.message,
       lines:
         r.lineNumbers && r.lineNumbers.length > 0
