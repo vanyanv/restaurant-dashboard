@@ -1,0 +1,64 @@
+"use client"
+
+import type { ReactNode } from "react"
+import { useRouter } from "next/navigation"
+import { PageHead, SubNav } from "@/components/counter"
+import { COUNT_TABS } from "@/lib/counter/nav"
+
+/** Pieces shared by the Count & waste tabs, desk and phone. */
+
+export function CountHead({ sub, children }: { sub: string; children?: ReactNode }) {
+  return (
+    <PageHead title="Count & waste" sub={sub}>
+      <SubNav items={COUNT_TABS} label="Count & waste" />
+      {children}
+    </PageHead>
+  )
+}
+
+export function money(n: number): string {
+  const neg = n < 0
+  const s = Math.abs(n).toLocaleString("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  return neg ? `−${s}` : s
+}
+
+/** Store chips that move the page to `?store=<id>`. */
+export function StoreChips({
+  stores,
+  current,
+  path,
+  extra,
+}: {
+  stores: Array<{ id: string; name: string }>
+  current: string
+  path: string
+  extra?: Record<string, string>
+}) {
+  const router = useRouter()
+  if (stores.length < 2) return null
+  return (
+    <div className="cw__chips" role="group" aria-label="Store">
+      {stores.map((s) => (
+        <button
+          key={s.id}
+          type="button"
+          className="cw__chip"
+          aria-pressed={current === s.id}
+          onClick={() => router.push(`${path}?${new URLSearchParams({ ...extra, store: s.id }).toString()}`)}
+        >
+          {s.name}
+        </button>
+      ))}
+    </div>
+  )
+}
+
+export type Outcome = { ok: boolean; text: string } | null
+
+export function OutcomeLine({ outcome }: { outcome: Outcome }) {
+  return (
+    <span className={`cw__msg ${outcome ? (outcome.ok ? "cw__msg--ok" : "cw__msg--bad") : ""}`} role="status">
+      {outcome?.text ?? ""}
+    </span>
+  )
+}

@@ -53,6 +53,7 @@ model Account {
   pnlNarrativeEmbeddings        PnlNarrativeEmbedding[]
   invites                       Invite[]
   vendorLeadTimes               VendorLeadTime[]
+  countItems                    CountItem[]
   alertPreferences              AlertPreference[]
   recipeMappingProposals        RecipeMappingProposal[]
   ingredientMatchDecisions      IngredientMatchDecision[]
@@ -642,6 +643,7 @@ model CanonicalIngredient {
   stockCountLines      StockCountLine[]
   inventoryAdjustments InventoryAdjustment[]
   modelStates          IngredientModelState[]
+  countItems           CountItem[]
   matchDecisions       IngredientMatchDecision[]
 
   @@unique([ownerId, name])
@@ -1347,6 +1349,11 @@ model StockCountLine {
   note                     String?
   estimatedQtyAtCount      Float?
   calibrationFactorAtCount Float?
+  /// How the shelf was counted, layer by layer, keyed by CountItem id:
+  /// `{ "<countItemId>": [2, 3, 4.5] }` is 2 cases, 3 chubs and 4.5 lb on the
+  /// scale. `qtyInRecipeUnit` is their sum through each layer's `per`; this
+  /// keeps the numbers as typed so reopening the item shows them again.
+  breakdown                Json?
   createdAt                DateTime @default(now())
   updatedAt                DateTime @updatedAt
 
@@ -1363,6 +1370,39 @@ enum InventoryAdjustmentReason {
   SUPPLIER_RETURN
   DAMAGE
   OTHER
+  /// Waste reasons from the phone waste log (2026-10-28). EXPIRY is "Went bad".
+  DROPPED
+  BURNT
+  REMAKE
+}
+
+/// One stop on the weekly count walk: an ingredient, where it is counted, and
+/// the layers it is counted in, biggest first. Beef in the walk-in is
+/// `[Cases, Loose chubs, Opened (lb)]`; the same beef on the line is
+/// `[Pressed patties]` — a second CountItem for the same ingredient in another
+/// area, and the two are added together into one StockCountLine.
+///
+/// `layers` is `[{ label, qty, of, per, quarters }]`: one `label` holds `qty`
+/// of `of` (a lower layer's label or a unit like "lb"); `per` is that worked
+/// out in the ingredient's recipe unit and is what the count multiplies by.
+/// `quarters` makes the − / + buttons step by ¼ for an open tub or pail.
+model CountItem {
+  id                    String   @id @default(cuid())
+  accountId             String
+  canonicalIngredientId String
+  /// walk_in | freezer | dry | line
+  area                  String
+  sortOrder             Int      @default(0)
+  layers                Json
+  active                Boolean  @default(true)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  account             Account             @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  canonicalIngredient CanonicalIngredient @relation(fields: [canonicalIngredientId], references: [id], onDelete: Cascade)
+
+  @@unique([accountId, canonicalIngredientId, area])
+  @@index([accountId, active])
 }
 
 /// Manual adjustment to running on-hand. Logged for major events only —

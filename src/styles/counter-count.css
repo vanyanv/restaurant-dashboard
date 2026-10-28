@@ -1,0 +1,84 @@
+/* src/styles/counter-count.css
+ *
+ * Count & waste: the weekly count walk and the waste log (phone first, also
+ * on the desk), the report and the setup. Every colour is a Counter token;
+ * nothing here declares one. Glyphs reuse `.ck-gl` from counter-checks.css so
+ * "done" and "open" look the same as they do on Store checks.
+ */
+
+.cw{display:grid;gap:14px;max-width:560px}
+.cw--wide{max-width:none}
+.cw__top{display:grid;gap:6px}
+.cw__meta{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;font-size:13px;color:var(--ink-2)}
+.cw__bar{height:6px;border-radius:3px;background:var(--line);overflow:hidden}
+.cw__bar i{display:block;height:100%;background:var(--good)}
+.cw__mono{font-family:var(--mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3)}
+.cw__area{display:grid;gap:6px}
+.cw__card{background:var(--surface);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.cw__row{display:flex;gap:10px;align-items:center;width:100%;min-height:52px;padding:10px 12px;border:0;border-bottom:1px solid var(--line);
+  background:none;font:inherit;font-size:15px;color:var(--ink);text-align:left;cursor:pointer}
+.cw__row:last-child{border-bottom:0}
+.cw__row:hover{background:var(--paper)}
+.cw__row b{flex:1;min-width:0;font-weight:600}
+.cw__row span:last-child{color:var(--ink-2);font-size:13px;text-align:right}
+.cw__foot{display:flex;gap:8px;flex-wrap:wrap}
+.cw__btn{display:flex;align-items:center;justify-content:center;flex:1;min-height:50px;padding:0 14px;border-radius:10px;
+  border:1px solid var(--line-strong);background:var(--surface);color:var(--ink);font:inherit;font-weight:700;font-size:15px;
+  cursor:pointer;text-decoration:none;white-space:nowrap}
+.cw__btn:hover{background:var(--paper)}
+.cw__btn--primary{background:var(--accent);border-color:var(--accent);color:var(--surface)}
+.cw__btn--primary:hover{background:var(--accent-hi)}
+.cw__btn[disabled]{opacity:.55;cursor:default}
+.cw__link{border:0;background:none;padding:0;font:inherit;font-size:14px;font-weight:600;color:var(--accent);cursor:pointer;min-height:36px;text-align:left}
+.cw__h{font-family:var(--display);font-size:26px;font-weight:700;letter-spacing:-.02em;line-height:1.1;margin:0}
+.cw__sub{margin:0;font-size:14px;color:var(--ink-2);line-height:1.4}
+.cw__fld{display:flex;align-items:center;gap:10px;padding:12px;border-bottom:1px solid var(--line)}
+.cw__fld:last-child{border-bottom:0}
+.cw__lb{flex:1;min-width:0;display:grid;gap:2px;font-size:15px;font-weight:600;line-height:1.25}
+.cw__lb small{font-weight:400;font-size:12px;color:var(--ink-2)}
+.cw__step{width:48px;height:48px;flex:none;border-radius:10px;border:1px solid var(--line-strong);background:var(--paper);
+  font:inherit;font-size:22px;font-weight:600;color:var(--ink);cursor:pointer}
+.cw__step:active{background:var(--sunk)}
+.cw__qty{width:64px;height:48px;flex:none;text-align:center;font:inherit;font-size:20px;font-weight:700;font-variant-numeric:tabular-nums;
+  border:1px solid var(--line-strong);border-radius:10px;background:var(--surface);color:var(--ink)}
+.cw__hero{background:var(--ink);color:var(--surface);border-radius:12px;padding:14px;display:grid;gap:4px}
+.cw__hero .cw__mono{color:var(--line)}
+.cw__hero b{font-size:30px;font-weight:600;letter-spacing:-.03em;line-height:1;font-variant-numeric:tabular-nums}
+.cw__hero span{font-size:13px}
+.cw__chips{display:flex;flex-wrap:wrap;gap:6px}
+.cw__chip{min-height:42px;padding:0 14px;border-radius:999px;border:1px solid var(--line-strong);background:var(--surface);
+  font:inherit;font-size:14px;font-weight:600;color:var(--ink);cursor:pointer}
+.cw__chip[aria-pressed="true"]{background:var(--ink);border-color:var(--ink);color:var(--surface)}
+.cw__msg{font-size:13px;font-weight:600;min-height:18px}
+.cw__msg--bad{color:var(--bad)}
+.cw__msg--ok{color:var(--good)}
+.cw__input{min-height:44px;padding:0 12px;border:1px solid var(--line-strong);border-radius:8px;background:var(--surface);
+  font:inherit;font-size:15px;color:var(--ink);min-width:0}
+.cw__warn{font-size:14px;line-height:1.4;background:var(--signal-wash);border:1px solid var(--signal);border-radius:10px;padding:10px 12px}
+
+/* Report and setup (desk) */
+.cw-tbl{width:100%;border-collapse:collapse;font-size:14px;font-variant-numeric:tabular-nums}
+.cw-tbl th{text-align:right;font-family:var(--mono);font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3);
+  font-weight:500;padding:10px 12px;border-bottom:1px solid var(--line-strong);white-space:nowrap}
+.cw-tbl td{padding:10px 12px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap}
+.cw-tbl th:first-child,.cw-tbl td:first-child{text-align:left}
+.cw-tbl tr:last-child td{border-bottom:0}
+.cw-tbl .miss{color:var(--bad);font-weight:700}
+.cw-tbl .ok{color:var(--good);font-weight:700}
+.cw-wrap{overflow-x:auto}
+.cw-figs{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;padding:14px}
+.cw-fig{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:14px;display:grid;gap:4px}
+.cw-fig b{font-size:28px;font-weight:600;letter-spacing:-.03em;line-height:1.05;font-variant-numeric:tabular-nums}
+.cw-fig b.miss{color:var(--bad)}
+.cw-fig span:last-child{font-size:13px;color:var(--ink-2)}
+.cw-pad{padding:14px;display:grid;gap:12px}
+.cw-set{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:center;padding:10px 14px;border-bottom:1px solid var(--line)}
+.cw-set:last-child{border-bottom:0}
+.cw-set__name{display:grid;gap:2px}
+.cw-set__name small{color:var(--ink-2);font-size:13px}
+.cw-set__btns{display:flex;gap:6px;flex-wrap:wrap}
+.cw-set__btns button{min-height:36px;padding:0 10px;border-radius:8px;border:1px solid var(--line-strong);background:var(--surface);font:inherit;font-size:13px;font-weight:600;color:var(--ink);cursor:pointer}
+.cw-ed{grid-column:1/-1;display:grid;gap:10px;background:var(--paper);border-radius:10px;padding:12px}
+.cw-ed__row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.cw-ed__row .cw__input{min-height:38px}
+.cw-ed__row label{display:flex;gap:6px;align-items:center;font-size:13px}

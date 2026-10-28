@@ -20,6 +20,7 @@ import {
   Activity,
   ClipboardCheck,
   ShoppingBag,
+  ClipboardList,
 } from "lucide-react"
 
 /**
@@ -55,4 +56,5 @@ export const NAV_ICONS: Record<string, LucideIcon> = {
   Activity,
   ClipboardCheck,
   ShoppingBag,
+  ClipboardList,
 }

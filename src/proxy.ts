@@ -23,6 +23,10 @@ const DESKTOP_TO_MOBILE: Record<string, string> = {
   // page file for the measurement that retired it.
   "/dashboard/chat": "/m/ask",
   "/dashboard/cogs": "/m/cogs",
+  // The weekly count and the waste log are phone-first. The report and the
+  // setup stay on the desk layout on a phone, as Store checks' owner tabs do.
+  "/dashboard/count": "/m/count",
+  "/dashboard/count/waste": "/m/count/waste",
   "/dashboard/decisions": "/m/decisions",
   "/dashboard/ingredients": "/m/ingredients",
   "/dashboard/invoices": "/m/invoices",
