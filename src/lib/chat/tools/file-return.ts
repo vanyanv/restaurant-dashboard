@@ -98,7 +98,7 @@ export type FileReturnInput = z.infer<typeof parameters>
 export const fileReturn: ChatTool<typeof parameters, FileReturnInput> = {
   name: "fileReturn",
   description:
-    "File the answer for display. Call this exactly once per turn, after the data tools have returned and before writing your paragraph. It renders the headline verdict and the figure strip at the top of your answer, so the numbers you pass here are the ones the owner reads first. Every value must come from a tool result in this same turn.",
+    "File the answer for display. Call this exactly once per turn, after the data tools have returned, in the same response as your paragraph. It renders the headline verdict and the figure strip at the top of your answer, so the numbers you pass here are the ones the owner reads first. Every value must come from a tool result in this same turn.",
   parameters,
   // Presentation only: the input IS the result. No ctx use, no data access.
   async execute(args) {

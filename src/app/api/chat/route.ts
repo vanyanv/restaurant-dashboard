@@ -44,6 +44,7 @@ import { CHAT_REASONING_EFFORT, CHAT_ROUTING_MODEL } from "@/lib/chat/openai-cli
 import { logger } from "@/lib/logger"
 import { generateConversationTitle } from "@/lib/chat/auto-title"
 import { checkDailyBudget } from "@/lib/chat/spend-cap"
+import { answerFiledAndWritten } from "@/lib/chat/stop"
 
 /*
  * 60 was the old Vercel ceiling. It is now 300 on every plan, and 60 was
@@ -214,6 +215,54 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "messages required" }, { status: 400 })
   }
 
+  // The question, read once. Needed early so the classifier below can start
+  // before the conversation work rather than after it.
+  const lastMessage = body.messages[body.messages.length - 1]
+  const userMessageText =
+    lastMessage.role === "user" ? extractText(lastMessage) : ""
+
+  /*
+   * THE SPLIT OF WHAT THE READER SENT.
+   *
+   * `use-ask.ts` sends `${context.sentence}.\n${question}`. The classifier
+   * wants the typed words alone — the sentence names a page and a store and
+   * would only bias a routing decision the page id already makes. The CACHE
+   * wants both, and used to get only the first half: the sentence is where
+   * the store and the date range live, so a key built without it made
+   * Hollywood's answer and Glendale's answer one entry.
+   *
+   * Split once, here, so the two consumers cannot disagree about where the
+   * boundary is.
+   */
+  const newlineAt = userMessageText.indexOf("\n")
+  const askedQuestion =
+    newlineAt >= 0 ? userMessageText.slice(newlineAt + 1) : userMessageText
+  const askedScope = newlineAt >= 0 ? userMessageText.slice(0, newlineAt) : null
+
+  /*
+   * WHICH SCHEMAS THIS TURN CARRIES — the page's answer, or the classifier's.
+   *
+   * `activeTools` narrows what is OFFERED to the model for this turn, which is
+   * where the token cost lives: all the schemas plus the full routing guide
+   * measured about 25k input tokens before the model had read the question,
+   * against 9k to 13k for one page's departments, and a reasoning model plans
+   * across every schema it is handed. `null` means the page established no
+   * department, and the honest answer to that is the full menu rather than a
+   * guessed one.
+   *
+   * A reader who opened Ask from the rail carries no page, so the question
+   * text is the only evidence there is — one short nano call reads it. Its
+   * failures all return null, which is the full menu. It is STARTED here and
+   * awaited after the conversation is resolved, so its round trip overlaps
+   * that database work instead of following it. An over-budget turn can still
+   * reach the cache, but it must not pay the classifier to get there.
+   */
+  let activeTools = activeToolsForPage(body.askScope?.pageId ?? null)
+  const classifyPromise =
+    !activeTools && userMessageText && !budget.overBudget
+      ? classifyToolGroups(askedQuestion)
+      : Promise.resolve(null)
+
   // Resolve or create the conversation. `getConversation` throws on
   // NOT_OWNED, which we surface as 403.
   let conversationId = body.conversationId
@@ -266,9 +315,6 @@ export async function POST(req: Request) {
 
   // Persist the user's latest turn before invoking the model so the
   // conversation reflects what the model saw.
-  const lastMessage = body.messages[body.messages.length - 1]
-  const userMessageText =
-    lastMessage.role === "user" ? extractText(lastMessage) : ""
   // ChatTurn truncates to 4KB on each side.
   const userMessageStored = userMessageText.slice(0, 4000)
   const userPersistPromise =
@@ -282,6 +328,14 @@ export async function POST(req: Request) {
           return null
         })
       : Promise.resolve(null)
+
+  /*
+   * How long each tool call's own work took, by call id, measured inside
+   * `execute`. The step callback cannot measure this: the SDK runs a step's
+   * tools before it reports the step, so a clock started there read 0ms for
+   * every call ever stored.
+   */
+  const toolDurations = new Map<string, number>()
 
   /*
    * `activeTools` is filled in below, once the page and the classifier have
@@ -305,7 +359,8 @@ export async function POST(req: Request) {
       tool({
         description: t.description,
         inputSchema: t.parameters,
-        execute: async (args: unknown) => {
+        execute: async (args: unknown, { toolCallId }: { toolCallId: string }) => {
+          const startedAt = performance.now()
           /*
            * The freshness stamp rides along with every result, read in
            * parallel so it costs the turn nothing: a `MAX(syncedAt)` on the
@@ -320,6 +375,7 @@ export async function POST(req: Request) {
             t.execute(args as never, ctx) as Promise<unknown>,
             asOfForTool(t.name),
           ])
+          toolDurations.set(toolCallId, Math.round(performance.now() - startedAt))
           return withSidecar(result, asOf, presentFor(t.name, args, result))
         },
         /*
@@ -344,54 +400,8 @@ export async function POST(req: Request) {
     ]),
   )
 
-  /*
-   * WHICH SCHEMAS THIS TURN CARRIES.
-   *
-   * `tools` above stays the whole registry — every tool keeps its schema and
-   * its owner-scoped `execute`. `activeTools` narrows what is OFFERED to the
-   * model for this turn, which is where the token cost lives: all 58 schemas
-   * measured 21.9k input tokens before the model had read the question, and a
-   * reasoning model plans across every one of them.
-   *
-   * `null` means the page established no department, and the honest answer to
-   * that is the full menu rather than a guessed one.
-   */
-  let activeTools = activeToolsForPage(body.askScope?.pageId ?? null)
-  /*
-   * The one route whose own name is not a subject. A reader who opened Ask
-   * from the rail carries no page, so the map cannot answer and the question
-   * text is the only evidence there is — one short nano call reads it. Its
-   * failures all return null, which is the full menu, so this can make the
-   * turn faster or leave it alone and nothing else.
-   */
-  let classifiedGroups: string[] | null = null
-  /*
-   * THE TWO HALVES OF WHAT THE READER SENT.
-   *
-   * `use-ask.ts` sends `${context.sentence}.\n${question}`. The classifier
-   * wants the typed words alone — the sentence names a page and a store and
-   * would only bias a routing decision the page id already makes. The CACHE
-   * wants both, and used to get only the first half: the sentence is where
-   * the store and the date range live, so a key built without it made
-   * Hollywood's answer and Glendale's answer one entry.
-   *
-   * Split once, here, so the two consumers cannot disagree about where the
-   * boundary is.
-   */
-  const newlineAt = userMessageText.indexOf("\n")
-  const askedQuestion =
-    newlineAt >= 0 ? userMessageText.slice(newlineAt + 1) : userMessageText
-  const askedScope = newlineAt >= 0 ? userMessageText.slice(0, newlineAt) : null
-  // An over-budget turn can still reach the cache, but it must not pay the
-  // classifier to get there. No department means the full menu, which is what
-  // this branch degrades to anyway.
-  if (!activeTools && userMessageText && !budget.overBudget) {
-    const groups = await classifyToolGroups(askedQuestion)
-    if (groups) {
-      classifiedGroups = groups
-      activeTools = toolsInGroups(groups)
-    }
-  }
+  const classifiedGroups = await classifyPromise
+  if (classifiedGroups) activeTools = toolsInGroups(classifiedGroups)
   // Settled. `describeSchema` answers "what can you reach?" from this, and
   // the system prompt's routing guide is cut to the same set below, so the
   // three things that tell the model what exists now agree with each other.
@@ -408,6 +418,20 @@ export async function POST(req: Request) {
    * restored thread reads back out of the table.
    */
   const chatTurnId = randomUUID()
+
+  /*
+   * The system prompt is started here and awaited after the cache lookup, so
+   * the store list and situation snapshot it reads overlap the freshness and
+   * Redis reads below. A cache hit discards it; both of its reads are memoised
+   * for a minute, so the waste is at most one small query.
+   */
+  const systemPromptStartMs = performance.now()
+  const systemPromise = buildSystemPrompt(accountId, new Date(), {
+    all: Object.keys(chatTools),
+    active: activeTools,
+  })
+  // A hit returns before awaiting it; a rejection there must not go unhandled.
+  systemPromise.catch(() => undefined)
 
   /*
    * THE SAME QUESTION, ASKED AGAIN.
@@ -553,7 +577,6 @@ export async function POST(req: Request) {
   if (budget.overBudget) return budgetRefusal()
 
   const requestStartMs = performance.now()
-  const systemPromptStartMs = performance.now()
   /*
    * The guide is cut to the same set as the schemas. Before this, the prompt
    * named all 58 tools on a turn that might be carrying nine, and told the
@@ -561,10 +584,7 @@ export async function POST(req: Request) {
    * question outside the narrowed department had no honest answer available
    * to it. See `renderToolGuide`.
    */
-  const system = await buildSystemPrompt(accountId, new Date(), {
-    all: Object.keys(chatTools),
-    active: activeTools,
-  })
+  const system = await systemPromise
   const systemPromptMs = Math.round(performance.now() - systemPromptStartMs)
 
   // First-token latency captured from the first `text-delta` chunk.
@@ -582,7 +602,8 @@ export async function POST(req: Request) {
   const capturedToolErrors: Record<string, string> = {}
   /** The last `fileReturn` verdict the model filed this turn, for the title. */
   let filedVerdict: string | null = null
-  const stepStartTimes = new Map<string, number>()
+  /** When each model step finished, from the start of the stream. */
+  const stepEndMs: number[] = []
   const turnStartMs = Date.now()
 
   /*
@@ -634,28 +655,29 @@ export async function POST(req: Request) {
     providerOptions: {
       openai: { reasoningEffort: reasoningEffortFor(body.askScope?.effort) },
     },
-    stopWhen: stepCountIs(15),
+    /*
+     * The turn ends when the answer is filed AND written (see `stop.ts`), or
+     * at fifteen steps as the backstop. The first saves the third model call
+     * a turn used to make just to write the paragraph.
+     */
+    stopWhen: [answerFiledAndWritten, stepCountIs(15)],
     onChunk: ({ chunk }) => {
       if (firstTokenMs === null && chunk.type === "text-delta") {
         firstTokenMs = Math.round(performance.now() - streamStartMs)
       }
     },
-    onStepFinish: ({ toolCalls, toolResults, content }) => {
-      const now = Date.now()
-      for (const call of toolCalls) {
-        stepStartTimes.set(call.toolCallId, now)
-      }
+    onStepFinish: ({ toolResults, content }) => {
+      stepEndMs.push(Math.round(performance.now() - streamStartMs))
       for (const tr of toolResults) {
         if (tr.toolName === "fileReturn") {
           const v = (tr.output as { verdict?: unknown } | null)?.verdict
           if (typeof v === "string" && v.trim()) filedVerdict = v.trim()
         }
-        const start = stepStartTimes.get(tr.toolCallId) ?? now
         capturedToolCalls.push({
           toolName: tr.toolName,
           args: tr.input,
           result: tr.output,
-          durationMs: Math.max(0, now - start),
+          durationMs: toolDurations.get(tr.toolCallId) ?? 0,
         })
       }
       // AI SDK v6 surfaces tool errors as `tool-error` parts in `step.content`,
@@ -668,7 +690,14 @@ export async function POST(req: Request) {
         }
       }
     },
-    onFinish: async ({ text, usage, finishReason }) => {
+    /*
+     * `totalUsage`, not `usage`. The SDK's `usage` is the LAST step only, and
+     * a turn is three or four steps, so `AiUsageEvent` was recording about a
+     * third of each turn's tokens — and the daily spend cap, which sums that
+     * table, was under-counting by the same factor. The footer already used
+     * `totalUsage`, so the two figures now agree.
+     */
+    onFinish: async ({ text, totalUsage: usage, finishReason }) => {
       const totalMs = Math.round(performance.now() - requestStartMs)
       const toolMs = capturedToolCalls.map((c) => c.durationMs)
       // Cached input tokens live on `usage.inputTokenDetails.cacheReadTokens`
@@ -691,7 +720,8 @@ export async function POST(req: Request) {
       logger.info(
         `[chat] ownerId=${ownerId} convId=${conversationId} ` +
           `systemPromptMs=${systemPromptMs} firstTokenMs=${firstTokenMs ?? "n/a"} ` +
-          `totalMs=${totalMs} tools=${capturedToolCalls.length} ` +
+          `totalMs=${totalMs} steps=${stepEndMs.length} stepEndMs=[${stepEndMs.join(",")}] ` +
+          `tools=${capturedToolCalls.length} ` +
           `toolMs=[${toolMs.join(",")}] ` +
           `inputTokens=${promptTokens ?? "n/a"} cachedTokens=${cachedTokens} ` +
           // The lever and its effect on one line: which page narrowed the

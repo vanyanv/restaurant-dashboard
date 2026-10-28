@@ -28,6 +28,7 @@ import { convertToModelMessages, stepCountIs, streamText, tool, type ToolSet } f
 import { openai } from "@ai-sdk/openai"
 import { prisma } from "@/lib/prisma"
 import { chatTools } from "@/lib/chat/tools"
+import { answerFiledAndWritten } from "@/lib/chat/stop"
 import { buildSystemPrompt } from "@/lib/chat/system-prompt"
 import { CHAT_ROUTING_MODEL } from "@/lib/chat/openai-client"
 import { selectFiledReturn, returnForm, type ReturnPart } from "@/lib/chat/return"
@@ -93,6 +94,7 @@ async function main() {
     const started = Date.now()
     const parts: ReturnPart[] = []
     const toolsCalled: string[] = []
+    let steps = 0
 
     const result = streamText({
       model: openai(CHAT_ROUTING_MODEL),
@@ -101,8 +103,10 @@ async function main() {
         { id: "u1", role: "user", parts: [{ type: "text", text: probe.q }] },
       ] as never),
       tools: toolSet,
-      stopWhen: stepCountIs(15),
+      // The route's own stop rule, so `steps` below is what production pays.
+      stopWhen: [answerFiledAndWritten, stepCountIs(15)],
       onStepFinish: ({ toolResults }) => {
+        steps++
         for (const tr of toolResults) {
           toolsCalled.push(tr.toolName)
           parts.push({
@@ -120,7 +124,9 @@ async function main() {
 
     const filed = selectFiledReturn(parts)
     console.log(`tools  ${toolsCalled.join(" → ") || "(none)"}`)
-    console.log(`time   ${seconds}s`)
+    // Two model calls is the target: one to read the data, one to file and
+    // write. Three means the model filed the return without its paragraph.
+    console.log(`time   ${seconds}s  steps ${steps}`)
 
     if (!filed) {
       failures++
