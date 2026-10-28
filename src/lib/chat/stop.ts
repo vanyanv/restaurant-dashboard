@@ -12,6 +12,11 @@
  * it always cost and nothing more. And text alone is not a stop either: the
  * SDK already ends a step that calls no tool, which is the normal finish for a
  * clarifying question or a reply after a refusal.
+ *
+ * Filed means a RESULT came back, not that a call was made. A `fileReturn`
+ * call whose input failed the schema is still in the step's tool calls, and
+ * stopping on it would end the turn before the model saw the error and filed
+ * again, leaving the answer with no card.
  */
 
 const FILE_RETURN_TOOL = "fileReturn"
@@ -19,7 +24,7 @@ const FILE_RETURN_TOOL = "fileReturn"
 /** The two fields of a finished step this reads, structurally. */
 export interface StopStep {
   text: string
-  toolCalls: ReadonlyArray<{ toolName: string }>
+  toolResults: ReadonlyArray<{ toolName: string }>
 }
 
 export function answerFiledAndWritten({ steps }: { steps: ReadonlyArray<StopStep> }): boolean {
@@ -27,6 +32,6 @@ export function answerFiledAndWritten({ steps }: { steps: ReadonlyArray<StopStep
   if (!last) return false
   return (
     last.text.trim().length > 0 &&
-    last.toolCalls.some((c) => c.toolName === FILE_RETURN_TOOL)
+    last.toolResults.some((c) => c.toolName === FILE_RETURN_TOOL)
   )
 }

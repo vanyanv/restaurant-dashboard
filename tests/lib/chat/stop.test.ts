@@ -3,7 +3,7 @@ import { answerFiledAndWritten } from "@/lib/chat/stop"
 
 const step = (text: string, ...tools: string[]) => ({
   text,
-  toolCalls: tools.map((toolName) => ({ toolName })),
+  toolResults: tools.map((toolName) => ({ toolName })),
 })
 
 describe("answerFiledAndWritten", () => {
@@ -19,6 +19,11 @@ describe("answerFiledAndWritten", () => {
     expect(
       answerFiledAndWritten({ steps: [step("", "getDailySales"), step("  ", "fileReturn")] }),
     ).toBe(false)
+  })
+
+  it("keeps going when the fileReturn call failed and produced no result", () => {
+    // A schema-rejected call has no tool result; the model must see the error.
+    expect(answerFiledAndWritten({ steps: [step("Sales held.")] })).toBe(false)
   })
 
   it("keeps going while the model is still reading data", () => {
