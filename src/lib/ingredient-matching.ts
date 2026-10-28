@@ -44,7 +44,7 @@ export async function matchNewLineItems(
       storeId: true,
       lineItems: {
         where: { canonicalIngredientId: null },
-        select: { id: true, sku: true, productName: true },
+        select: { id: true, sku: true, productName: true, unit: true },
       },
     },
   })
@@ -74,7 +74,10 @@ export async function matchNewLineItems(
     }
   }
 
-  const nameIndex = await loadUniqueProductNames(accountId)
+  const nameIndex = await loadUniqueProductNames(
+    accountId,
+    invoices.flatMap((i) => i.lineItems.map((li) => li.productName))
+  )
 
   let matchedBySku = 0
   let matchedByAlias = 0
@@ -98,8 +101,13 @@ export async function matchNewLineItems(
         if (canonicalId) source = "alias"
       }
       if (!canonicalId) {
-        canonicalId = nameIndex.get(productNameKey(li.productName))
-        if (canonicalId) source = "name"
+        const known = nameIndex.get(productNameKey(li.productName))
+        // A different invoice unit (CS vs LB) would cost the line on another
+        // basis than the ingredient's history; that one is for a person.
+        if (known && (!li.unit || known.units.size === 0 || known.units.has(li.unit.toUpperCase()))) {
+          canonicalId = known.canonicalId
+          source = "name"
+        }
       }
 
       if (canonicalId && source) {
@@ -142,27 +150,42 @@ export function productNameKey(name: string): string {
 }
 
 /**
- * Product name → ingredient, for names that every matched line on the account
- * has linked to the same one ingredient. Names linked to more than one are
- * dropped rather than guessed at.
+ * Product name → ingredient, for the names in this batch that every line
+ * matched by SKU or by hand has linked to the same one ingredient, with the
+ * invoice units those lines came in. Names linked to more than one are dropped
+ * rather than guessed at. Alias and name matches are left out on purpose: a
+ * guess must not become the evidence for the next guess.
  */
-async function loadUniqueProductNames(accountId: string): Promise<Map<string, string>> {
+async function loadUniqueProductNames(
+  accountId: string,
+  productNames: string[]
+): Promise<Map<string, { canonicalId: string; units: Set<string> }>> {
+  const out = new Map<string, { canonicalId: string; units: Set<string> }>()
+  const names = [...new Set(productNames.map((n) => n.trim()).filter(Boolean))]
+  if (names.length === 0) return out
   const rows = await prisma.invoiceLineItem.groupBy({
-    by: ["productName", "canonicalIngredientId"],
-    where: { canonicalIngredientId: { not: null }, invoice: { accountId } },
+    by: ["productName", "canonicalIngredientId", "unit"],
+    where: {
+      canonicalIngredientId: { not: null },
+      matchSource: { in: ["sku", "manual"] },
+      productName: { in: names, mode: "insensitive" },
+      invoice: { accountId },
+    },
   })
-  const owners = new Map<string, Set<string>>()
+  const owners = new Map<string, { canonicals: Set<string>; units: Set<string> }>()
   for (const r of rows) {
     if (!r.canonicalIngredientId) continue
     const key = productNameKey(r.productName)
     if (!key) continue
-    const set = owners.get(key) ?? new Set<string>()
-    set.add(r.canonicalIngredientId)
-    owners.set(key, set)
+    const entry = owners.get(key) ?? { canonicals: new Set<string>(), units: new Set<string>() }
+    entry.canonicals.add(r.canonicalIngredientId)
+    if (r.unit) entry.units.add(r.unit.toUpperCase())
+    owners.set(key, entry)
   }
-  const out = new Map<string, string>()
-  for (const [key, set] of owners) {
-    if (set.size === 1) out.set(key, [...set][0])
+  for (const [key, entry] of owners) {
+    if (entry.canonicals.size === 1) {
+      out.set(key, { canonicalId: [...entry.canonicals][0], units: entry.units })
+    }
   }
   return out
 }

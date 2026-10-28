@@ -13,8 +13,15 @@ vi.mock("@/lib/ingredient-cost", () => ({
 
 import { matchNewLineItems, productNameKey } from "@/lib/ingredient-matching"
 
-function invoiceWith(lines: Array<{ id: string; sku: string | null; productName: string }>) {
-  return [{ id: "inv_1", vendorName: "Brand New Vendor", storeId: "store_1", lineItems: lines }]
+function invoiceWith(lines: Array<{ id: string; sku: string | null; productName: string; unit?: string | null }>) {
+  return [
+    {
+      id: "inv_1",
+      vendorName: "Brand New Vendor",
+      storeId: "store_1",
+      lineItems: lines.map((l) => ({ unit: "CS", ...l })),
+    },
+  ]
 }
 
 describe("matchNewLineItems name fallback", () => {
@@ -29,8 +36,8 @@ describe("matchNewLineItems name fallback", () => {
       invoiceWith([{ id: "li_1", sku: "99581COKEZERO", productName: "Syrup Coca Cola Zero Sugar" }])
     )
     db.invoiceLineItem.groupBy.mockResolvedValue([
-      { productName: "SYRUP COCA COLA ZERO SUGAR", canonicalIngredientId: "ci_zero" },
-      { productName: "Syrup Coca-Cola Zero Sugar", canonicalIngredientId: "ci_zero" },
+      { productName: "SYRUP COCA COLA ZERO SUGAR", canonicalIngredientId: "ci_zero", unit: "CS" },
+      { productName: "Syrup Coca-Cola Zero Sugar", canonicalIngredientId: "ci_zero", unit: "cs" },
     ])
     const res = await matchNewLineItems("acc_1", ["inv_1"])
     expect(res.matchedByName).toBe(1)
@@ -39,15 +46,33 @@ describe("matchNewLineItems name fallback", () => {
       data: expect.objectContaining({ canonicalIngredientId: "ci_zero", matchSource: "name" }),
     })
     expect(db.invoiceLineItem.groupBy).toHaveBeenCalledWith(
-      expect.objectContaining({ where: expect.objectContaining({ invoice: { accountId: "acc_1" } }) })
+      expect.objectContaining({
+        where: expect.objectContaining({
+          invoice: { accountId: "acc_1" },
+          // Only SKU and hand matches count as evidence, never an earlier guess.
+          matchSource: { in: ["sku", "manual"] },
+          productName: { in: ["Syrup Coca Cola Zero Sugar"], mode: "insensitive" },
+        }),
+      })
     )
+  })
+
+  it("leaves a line billed in a different unit for review", async () => {
+    db.invoice.findMany.mockResolvedValue(
+      invoiceWith([{ id: "li_1", sku: null, productName: "Ground Beef", unit: "LB" }])
+    )
+    db.invoiceLineItem.groupBy.mockResolvedValue([
+      { productName: "Ground Beef", canonicalIngredientId: "ci_beef", unit: "CS" },
+    ])
+    const res = await matchNewLineItems("acc_1", ["inv_1"])
+    expect(res).toMatchObject({ matchedByName: 0, unmatched: 1 })
   })
 
   it("leaves a name that two ingredients have shared for review", async () => {
     db.invoice.findMany.mockResolvedValue(invoiceWith([{ id: "li_1", sku: null, productName: "Fries" }]))
     db.invoiceLineItem.groupBy.mockResolvedValue([
-      { productName: "Fries", canonicalIngredientId: "ci_fry" },
-      { productName: "FRIES", canonicalIngredientId: "ci_tray" },
+      { productName: "Fries", canonicalIngredientId: "ci_fry", unit: "CS" },
+      { productName: "FRIES", canonicalIngredientId: "ci_tray", unit: "CS" },
     ])
     const res = await matchNewLineItems("acc_1", ["inv_1"])
     expect(res).toMatchObject({ matchedByName: 0, unmatched: 1 })

@@ -10,21 +10,29 @@ import { vendorMatchKey } from "@/lib/vendor-normalize"
  * bill again (376528, 378460).
  *
  * The total is part of the key because a credit memo can reuse its bill's
- * number. Null when there is no invoice number to go on.
+ * number; the store and date because a short or recycled number on a
+ * standing order could otherwise collide across stores or weeks. Null when
+ * the number is too thin to identify a bill (empty, under 4 characters, or
+ * no digits at all, like an extractor's "N/A"): better to store a duplicate
+ * than to drop a real bill.
  */
 export function invoiceIdentityKey(inv: {
   vendorName: string
   invoiceNumber: string | null | undefined
   totalAmount: number
   isReturn?: boolean | null
+  storeId?: string | null
+  invoiceDate?: Date | null
 }): string | null {
   const number = (inv.invoiceNumber ?? "").trim().toLowerCase()
-  if (!number) return null
+  if (number.length < 4 || !/\d/.test(number)) return null
   return [
     vendorMatchKey(inv.vendorName),
     number,
     inv.totalAmount.toFixed(2),
     inv.isReturn ? "return" : "bill",
+    inv.storeId ?? "",
+    inv.invoiceDate ? inv.invoiceDate.toISOString().slice(0, 10) : "",
   ].join("::")
 }
 
@@ -37,7 +45,14 @@ export async function loadInvoiceIdentities(
   if (numbers.length === 0) return new Set()
   const rows = await prisma.invoice.findMany({
     where: { accountId, invoiceNumber: { in: numbers } },
-    select: { vendorName: true, invoiceNumber: true, totalAmount: true, isReturn: true },
+    select: {
+      vendorName: true,
+      invoiceNumber: true,
+      totalAmount: true,
+      isReturn: true,
+      storeId: true,
+      invoiceDate: true,
+    },
   })
   const out = new Set<string>()
   for (const r of rows) {

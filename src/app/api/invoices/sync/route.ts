@@ -621,6 +621,9 @@ async function runSync(
   // receipt) has a new message id, so the message dedup above lets it
   // through. Before this check four bills were stored twice, $3,353 of spend
   // counted double. See `invoiceIdentityKey` for what counts as the same.
+  // A skipped email stores no row, so it is re-read on each run until it
+  // leaves the lookback window (7 days in steady state); that is the price of
+  // not adding a table for "emails we chose not to keep".
   const seenIdentities = await loadInvoiceIdentities(
     accountId,
     invoicesToCreate.map((inv) => inv.invoiceNumber)
