@@ -28,3 +28,32 @@ export function businessCalendarDate(instant: Date): Date {
 export function businessQueryDate(instant: Date): Date {
   return new Date(`${businessDay(instant)}T00:00:00.000Z`)
 }
+
+const clock = new Intl.DateTimeFormat("en-US", {
+  timeZone: BUSINESS_TIME_ZONE,
+  hourCycle: "h23",
+  year: "numeric", month: "2-digit", day: "2-digit",
+  hour: "2-digit", minute: "2-digit", second: "2-digit",
+})
+
+/** The Los Angeles wall-clock reading of an instant, as if it were UTC. */
+function wallClockAsUtc(instant: Date): number {
+  const parts = clock.formatToParts(instant)
+  const n = (type: string) => Number(parts.find((p) => p.type === type)!.value)
+  return Date.UTC(n("year"), n("month") - 1, n("day"), n("hour"), n("minute"), n("second"))
+}
+
+/**
+ * The instant a business day starts (local midnight), from a date in the
+ * @db.Date encoding (`YYYY-MM-DDT00:00:00Z`). For filtering real timestamps
+ * such as `InventoryAdjustment.occurredAt`, which `toQueryBounds` cannot do:
+ * its bounds are calendar fields, so 9pm Pacific (04:00Z next day) would land
+ * on tomorrow.
+ */
+export function businessDayStartInstant(day: Date): Date {
+  const midnightUtc = Date.UTC(day.getUTCFullYear(), day.getUTCMonth(), day.getUTCDate())
+  let guess = midnightUtc
+  // Two passes settle the offset across a DST change.
+  for (let i = 0; i < 2; i++) guess = midnightUtc - (wallClockAsUtc(new Date(guess)) - guess)
+  return new Date(guess)
+}

@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma"
+import { businessDayStartInstant } from "@/lib/counter/business-date"
 import { sumAdjustments, type AdjustmentTotals } from "@/lib/counter/waste-reasons"
 
 /**
@@ -13,6 +14,11 @@ import { sumAdjustments, type AdjustmentTotals } from "@/lib/counter/waste-reaso
  * Tenancy: `InventoryAdjustment` is store-owned, so the account boundary is
  * reached through `"Store"."accountId"`. `storeIds` null means every store on
  * the account.
+ *
+ * `from` and `to` are business dates in the @db.Date encoding (what
+ * `toQueryBounds` returns). `occurredAt` is a real instant, so the window is
+ * Los Angeles midnight on `from` up to, not including, LA midnight after
+ * `to` — waste logged at close lands on the day it was logged.
  */
 export async function loadLoggedAdjustments(input: {
   accountId: string
@@ -20,7 +26,10 @@ export async function loadLoggedAdjustments(input: {
   from: Date
   to: Date
 }): Promise<AdjustmentTotals> {
-  const { accountId, storeIds, from, to } = input
+  const { accountId, storeIds } = input
+  const from = businessDayStartInstant(input.from)
+  const dayAfterTo = new Date(Date.UTC(input.to.getUTCFullYear(), input.to.getUTCMonth(), input.to.getUTCDate() + 1))
+  const until = businessDayStartInstant(dayAfterTo)
   const rows = await prisma.$queryRaw<Array<{ reason: string; qty: number; cost: number | null }>>`
     SELECT a.reason::text AS reason, a.qty::float AS qty,
            ci."costPerRecipeUnit"::float AS cost
@@ -29,6 +38,6 @@ export async function loadLoggedAdjustments(input: {
     JOIN "CanonicalIngredient" ci ON ci.id = a."canonicalIngredientId"
     WHERE s."accountId" = ${accountId}
       AND (${storeIds}::text[] IS NULL OR a."storeId" = ANY(${storeIds}::text[]))
-      AND a."occurredAt" >= ${from} AND a."occurredAt" <= ${to}`
+      AND a."occurredAt" >= ${from} AND a."occurredAt" < ${until}`
   return sumAdjustments(rows)
 }

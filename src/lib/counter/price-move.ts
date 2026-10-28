@@ -153,9 +153,12 @@ export function priceMoveOf(
   readings: PricedReading[],
   volumeSince: Date,
 ): PriceMoveFigures | null {
-  const priced = readings
+  const valid = readings
     .filter((r) => Number.isFinite(r.cost) && r.cost > 0)
     .sort((a, b) => a.at.getTime() - b.at.getTime())
+  // Credits and returns net out of volume but never set the price: a credit
+  // line can be the newest reading and is not a delivery at that price.
+  const priced = valid.filter((r) => r.qty > 0)
   if (priced.length < MIN_READINGS) return null
 
   // The booked-cost guard, over the same window booked costs judge.
@@ -170,10 +173,14 @@ export function priceMoveOf(
   const baseline = median(older.map((r) => r.cost))
   if (baseline === null || baseline <= 0) return null
 
-  const kept = priced.slice(0, chosenAt + 1)
-  const volume30 = kept
-    .filter((r) => r.at.getTime() >= volumeSince.getTime())
-    .reduce((t, r) => t + r.qty, 0)
+  // Every unit bought in the window, set-aside readings included (the guard
+  // decides the price, not what arrived), net of credits and never below 0.
+  const volume30 = Math.max(
+    0,
+    valid
+      .filter((r) => r.at.getTime() >= volumeSince.getTime())
+      .reduce((t, r) => t + r.qty, 0),
+  )
 
   const shapes = new Map<string, Set<number>>()
   for (const r of priced) {

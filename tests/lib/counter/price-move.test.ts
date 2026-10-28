@@ -105,9 +105,25 @@ describe("priceMoveOf", () => {
       ],
       since,
     )
-    expect(m!.baseline).toBeCloseTo(1.1)
+    // The credit nets out of volume but is not a price reading.
+    expect(m!.baseline).toBeCloseTo(1)
     expect(m!.volume30).toBe(18)
-    expect(m!.impact30).toBeCloseTo(0.4 * 18)
+    expect(m!.impact30).toBeCloseTo(0.5 * 18)
+  })
+
+  it("never lets a credit become the latest price, and volume never goes negative", () => {
+    const m = priceMoveOf(
+      [
+        reading("2026-07-01", 1, 10),
+        reading("2026-08-01", 1, 10),
+        reading("2026-09-12", 1.5, 2),
+        reading("2026-09-14", 3, -10),
+      ],
+      since,
+    )
+    expect(m!.latest).toBeCloseTo(1.5)
+    expect(m!.volume30).toBe(0)
+    expect(m!.impact30).toBe(0)
   })
 })
 

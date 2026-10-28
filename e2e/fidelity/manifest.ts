@@ -871,42 +871,11 @@ export const PAGES: FidelityPage[] = [
     mobileRoute: "/m/cogs",
     report: true,
     // MEASURED. Desk 15 of 15, phone 9 of 9 — landmark for landmark, 0 extra.
-    // The only two differences on either surface are the strip's cell count.
+    // The strip's cell-count allowances were removed when "Waste logged"
+    // landed: the group desk strip is the prototype's four cells again
+    // (Theoretical stays dropped, C-R4; "Against plan" took its place, C-R9).
     status: "counter",
     baseline: { desktop: 15, mobile: 9 },
-    styleAllowances: [
-      {
-        landmark: "strip",
-        property: "data-n",
-        desktop: 1,
-        mobile: 0,
-        reason:
-          "The prototype's strip is four cells; ours is three. TWO of its " +
-          "cells cannot be answered and ONE was added in their place. " +
-          "'Waste' is gone because `InventoryAdjustment` holds 0 rows in the " +
-          "whole table and `StockCount` holds 4 — there is no waste series " +
-          "and no honest way to invent one (C-R3). 'Theoretical' is gone " +
-          "because `DailyCogsItem.lineCost` ALREADY IS the theoretical cost, " +
-          "recipes valued at invoice prices times units sold; the only " +
-          "available actual is purchasing, and purchasing is not consumption " +
-          "without an inventory bridge — measured month by month the two " +
-          "swing from 37% under to 38% over inside six months, which is " +
-          "invoice cadence, not waste (C-R4). 'Against plan' was added in " +
-          "their place because `Store.targetCogsPct` is the one reference " +
-          "this schema publishes (C-R9). `data-n` IS the layout, so the " +
-          "track count below is this line's consequence rather than a " +
-          "second finding. The day a store file carries a waste figure or an " +
-          "inventory count lands, both of these lines must fail rather than " +
-          "quietly absorb it.",
-      },
-      {
-        landmark: "strip",
-        property: "grid-template-columns",
-        desktop: 1,
-        mobile: 0,
-        reason: "The track count that follows from the `data-n` above. One cause, two measurements.",
-      },
-    ],
   },
   {
     protoId: "menu",

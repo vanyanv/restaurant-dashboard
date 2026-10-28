@@ -355,10 +355,16 @@ function headlineOf(d: UsageData): UsageHeadline {
   return {
     cells: [
       {
+        // The desk strip is the prototype's four cells, so "Attributed" rides
+        // on this cell's delta here rather than taking a fifth; the phone
+        // keeps it as a cell.
         label: "Theoretical",
         value: money(d.theoretical),
-        delta: "from recipes × units sold",
-        deltaTone: "is-flat",
+        delta:
+          coverage === null || coverage >= 99.95
+            ? "from recipes × units sold"
+            : `${pct(coverage, { scaled: true })} attributed · ${money(d.theoretical - d.attributed)} has no ingredient`,
+        deltaTone: coverage !== null && coverage < 95 ? "is-down" : "is-flat",
       },
       {
         label: "Purchased",
@@ -368,7 +374,6 @@ function headlineOf(d: UsageData): UsageHeadline {
       },
       varianceCell,
       wasteCell,
-      coverageCell,
     ],
     phoneCells: [varianceCell, coverageCell],
   }
