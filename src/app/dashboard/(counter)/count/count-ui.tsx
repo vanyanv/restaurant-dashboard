@@ -2,15 +2,16 @@
 
 import type { ReactNode } from "react"
 import { useRouter } from "next/navigation"
-import { PageHead, SubNav } from "@/components/counter"
+import { PageHead, SubNav, useSurfaceHref } from "@/components/counter"
 import { COUNT_TABS } from "@/lib/counter/nav"
 
 /** Pieces shared by the Count & waste tabs, desk and phone. */
 
 export function CountHead({ sub, children }: { sub: string; children?: ReactNode }) {
+  const href = useSurfaceHref()
   return (
     <PageHead title="Count & waste" sub={sub}>
-      <SubNav items={COUNT_TABS} label="Count & waste" />
+      <SubNav items={COUNT_TABS.map((t) => ({ ...t, href: href(t.href) }))} label="Count & waste" />
       {children}
     </PageHead>
   )
@@ -35,6 +36,7 @@ export function StoreChips({
   extra?: Record<string, string>
 }) {
   const router = useRouter()
+  const href = useSurfaceHref()
   if (stores.length < 2) return null
   return (
     <div className="cw__chips" role="group" aria-label="Store">
@@ -44,7 +46,7 @@ export function StoreChips({
           type="button"
           className="cw__chip"
           aria-pressed={current === s.id}
-          onClick={() => router.push(`${path}?${new URLSearchParams({ ...extra, store: s.id }).toString()}`)}
+          onClick={() => router.push(href(`${path}?${new URLSearchParams({ ...extra, store: s.id }).toString()}`))}
         >
           {s.name}
         </button>

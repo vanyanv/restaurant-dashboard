@@ -16,10 +16,11 @@ export const DESKTOP_TO_MOBILE: Record<string, string> = {
   // page file for the measurement that retired it.
   "/dashboard/chat": "/m/ask",
   "/dashboard/cogs": "/m/cogs",
-  // The weekly count and the waste log are phone-first. The report and the
-  // setup have no phone page yet; they are on `DESK_ONLY` below.
+  // Count & waste: all four tabs, the desk clients drawn in the phone shell.
   "/dashboard/count": "/m/count",
   "/dashboard/count/waste": "/m/count/waste",
+  "/dashboard/count/report": "/m/count/report",
+  "/dashboard/count/setup": "/m/count/setup",
   "/dashboard/decisions": "/m/decisions",
   "/dashboard/ingredients": "/m/ingredients",
   "/dashboard/invoices": "/m/invoices",
@@ -218,6 +219,4 @@ export const DESK_ONLY: ReadonlySet<string> = new Set([
   "/dashboard/shop/customers",
   "/dashboard/shop/settings",
   "/dashboard/menu/items",
-  "/dashboard/count/report",
-  "/dashboard/count/setup",
 ])

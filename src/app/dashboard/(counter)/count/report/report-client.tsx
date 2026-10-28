@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { Section, useCounterTransition, usePageChrome } from "@/components/counter"
+import { Section, useCounterTransition, usePageChrome, useSurfaceHref } from "@/components/counter"
 import type { SectionSources } from "@/lib/counter/adapters/types"
 import type { ReportData, ReportSections } from "@/lib/counter/adapters/count"
 import { fmtQty } from "@/lib/counter/count-layers"
@@ -36,6 +36,7 @@ function q(n: number): string {
 
 function Gap({ data }: { data: ReportData }) {
   const router = useRouter()
+  const href = useSurfaceHref()
   return (
     <div style={{ display: "grid" }}>
       <div className="cw-pad" style={{ borderBottom: "1px solid var(--line)" }}>
@@ -48,7 +49,7 @@ function Gap({ data }: { data: ReportData }) {
                 type="button"
                 className="cw__chip"
                 aria-pressed={data.current?.id === c.id}
-                onClick={() => router.push(`/dashboard/count/report?store=${data.store.id}&count=${c.id}`)}
+                onClick={() => router.push(href(`/dashboard/count/report?store=${data.store.id}&count=${c.id}`))}
               >
                 {c.label}
               </button>
@@ -60,7 +61,7 @@ function Gap({ data }: { data: ReportData }) {
         <div className="cw-pad">
           <p className="cw__sub">No finished count for {data.store.name} yet. Finish one and it becomes the starting point; the second count makes the first report.</p>
           <div className="cw__foot" style={{ maxWidth: 360 }}>
-            <Link className="cw__btn cw__btn--primary" href={`/dashboard/count?store=${data.store.id}`}>Start the count</Link>
+            <Link className="cw__btn cw__btn--primary" href={href(`/dashboard/count?store=${data.store.id}`)}>Start the count</Link>
           </div>
         </div>
       ) : !data.previous ? (
@@ -92,7 +93,7 @@ function Gap({ data }: { data: ReportData }) {
             <p className="cw__sub" style={{ padding: 14 }}>No item was counted both times, so there is nothing to compare yet.</p>
           ) : (
             <div className="cw-wrap">
-              <table className="cw-tbl">
+              <table className="cw-tbl cw-tbl--cards">
                 <thead>
                   <tr>
                     <th>Item</th>
@@ -114,13 +115,13 @@ function Gap({ data }: { data: ReportData }) {
                           <b>{r.name}</b>
                           {r.partial ? <><br /><small style={{ color: "var(--ink-2)" }}>Some deliveries need a case size</small></> : null}
                         </td>
-                        <td>{q(r.last)} {r.unit}</td>
-                        <td>{q(r.delivered)}</td>
-                        <td>{q(r.used)}</td>
-                        <td>{q(r.waste)}</td>
-                        <td>{q(r.should)}</td>
-                        <td>{q(r.counted)}</td>
-                        <td className={off ? "ok" : r.missing > 0 ? "miss" : ""}>
+                        <td data-label="Last count">{q(r.last)} {r.unit}</td>
+                        <td data-label="+ Delivered">{q(r.delivered)}</td>
+                        <td data-label="− Sales used">{q(r.used)}</td>
+                        <td data-label="− Logged waste">{q(r.waste)}</td>
+                        <td data-label="= Should have">{q(r.should)}</td>
+                        <td data-label="You counted">{q(r.counted)}</td>
+                        <td data-label="Missing" className={off ? "ok" : r.missing > 0 ? "miss" : ""}>
                           {off
                             ? "✓ matches"
                             : r.missing > 0
@@ -149,7 +150,7 @@ function Orders({ data }: { data: ReportData }) {
   }
   return (
     <div className="cw-wrap">
-      <table className="cw-tbl">
+      <table className="cw-tbl cw-tbl--cards">
         <thead>
           <tr>
             <th>Item</th>
@@ -165,12 +166,12 @@ function Orders({ data }: { data: ReportData }) {
           {data.orders.map((o) => (
             <tr key={o.name}>
               <td><b>{o.name}</b></td>
-              <td>{o.vendor}</td>
-              <td>{o.orders}</td>
-              <td>{o.usually}</td>
-              <td>{o.amount}</td>
-              <td>{o.every}</td>
-              <td>{o.last}</td>
+              <td data-label="Vendor">{o.vendor}</td>
+              <td data-label="Orders">{o.orders}</td>
+              <td data-label="Usually">{o.usually}</td>
+              <td data-label="Usual amount">{o.amount}</td>
+              <td data-label="Every">{o.every}</td>
+              <td data-label="Last delivery">{o.last}</td>
             </tr>
           ))}
         </tbody>

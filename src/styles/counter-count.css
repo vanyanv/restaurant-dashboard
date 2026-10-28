@@ -65,6 +65,16 @@
 .cw-tbl tr:last-child td{border-bottom:0}
 .cw-tbl .miss{color:var(--bad);font-weight:700}
 .cw-tbl .ok{color:var(--good);font-weight:700}
+/* Phone width: each row becomes a card, every figure under its own label,
+   instead of an eight-column table scrolled sideways. */
+@media (max-width:760px){
+  .cw-tbl--cards thead{display:none}
+  .cw-tbl--cards tr{display:grid;grid-template-columns:minmax(0,1fr) auto;justify-items:end;gap:4px 12px;padding:12px 14px;border-bottom:1px solid var(--line)}
+  .cw-tbl--cards tr:last-child{border-bottom:0}
+  .cw-tbl--cards td{display:contents;white-space:normal}
+  .cw-tbl--cards td:first-child{display:block;justify-self:stretch;grid-column:1/-1;padding:0 0 4px;border:0}
+  .cw-tbl--cards td[data-label]::before{content:attr(data-label);font-family:var(--mono);font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3);justify-self:start}
+}
 .cw-wrap{overflow-x:auto}
 .cw-figs{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;padding:14px}
 .cw-fig{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:14px;display:grid;gap:4px}

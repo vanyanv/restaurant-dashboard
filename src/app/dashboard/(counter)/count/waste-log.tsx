@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
+import { useSurfaceHref } from "@/components/counter"
 import { deleteWaste, logWaste } from "@/lib/counter/actions/count"
 import type { WasteData } from "@/lib/counter/adapters/count"
 import { WASTE_REASONS, fmtQty, showQty, type WasteReason } from "@/lib/counter/count-layers"
@@ -16,6 +17,7 @@ import { money, OutcomeLine, StoreChips, type Outcome } from "./count-ui"
  */
 export function WasteLog({ data, base }: { data: WasteData; base: "/dashboard/count" | "/m/count" }) {
   const router = useRouter()
+  const href = useSurfaceHref()
   const [busy, start] = useTransition()
   const [outcome, setOutcome] = useState<Outcome>(null)
   const [pick, setPick] = useState<string | null>(null)
@@ -69,7 +71,7 @@ export function WasteLog({ data, base }: { data: WasteData; base: "/dashboard/co
     return (
       <div className="cw">
         <p className="cw__sub">Waste is logged against the items on your count list, and that list is empty.</p>
-        <Link className="cw__btn cw__btn--primary" href="/dashboard/count/setup">Set up the count list</Link>
+        <Link className="cw__btn cw__btn--primary" href={href("/dashboard/count/setup")}>Set up the count list</Link>
       </div>
     )
   }
