@@ -27,6 +27,7 @@ const line = (o: Partial<InvoiceExtractionLineItem>): InvoiceExtractionLineItem 
 
 describe("findPackShapeAnomalies · real cases are not flagged", () => {
   it.each([
+    ["Sysco sugar packets, 200 × 2.85 GS (grams)", line({ productName: "Sys Cls Sugar Packet", category: "Dry Goods", packSize: 200, unitSize: 2.85, unitSizeUom: "GS" })],
     ["Vitco house sauce, 180 cups a case", line({ productName: "CHRIS & EDDY'S HOUSE SCE", category: "Sauces", packSize: 180, unitSize: 1.5, unitSizeUom: "OZ" })],
     ["IFS can liners, 100 a case", line({ productName: "Can Liner 40x46 1.5 mil Black Coreless", packSize: 100, unitSize: 1, unitSizeUom: "EA" })],
     ["IFS napkins, 6,000 a case", line({ productName: "Napkin Disp 2 Ply White", packSize: 6000, unitSize: 1, unitSizeUom: "CT" })],

@@ -18,7 +18,7 @@ import {
 import { putInvoicePdf, type InvoicePdfUpload } from "@/lib/blob"
 import { sendGraphMail } from "@/lib/graph-mail"
 import { buildPriceAlertEmail, type PriceHike } from "@/lib/price-alert-email"
-import { normalizeVendorName } from "@/lib/vendor-normalize"
+import { normalizeVendorName, vendorMatchKey } from "@/lib/vendor-normalize"
 import { invoiceIdentityKey, loadInvoiceIdentities } from "@/lib/invoice-identity"
 import { matchNewLineItems } from "@/lib/ingredient-matching"
 import { autoResolveUnmatchedLines } from "@/lib/ingredient-auto-match"
@@ -583,22 +583,44 @@ async function runSync(
   // prints "1452 A Sherman Way" for 14523, which the matcher rightly scores
   // as uncertain (0.75) — and so every Van Nuys IFS delivery sat in review
   // for the same confirmation. Once one is approved, the rest follow it.
+  // Keyed by `addressKey`: the same vendor prints "1452 A SHERMAN WAY" on one
+  // invoice and "1452 A Sherman Way" on the next (IFS I91432-00, 2026-10-28),
+  // and an exact-string match missed the approval it should have followed.
   const confirmedAddresses = new Map<string, string>()
-  const batchAddresses = [
-    ...new Set(validExtractions.map((inv) => inv.extraction.deliveryAddress).filter((a): a is string => Boolean(a))),
-  ]
-  if (batchAddresses.length > 0) {
+  const addressKey = (a: string) => a.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim()
+  const hasBatchAddress = validExtractions.some((inv) => Boolean(inv.extraction.deliveryAddress))
+  if (hasBatchAddress) {
     try {
       const approved = await prisma.invoice.findMany({
-        where: { accountId, status: "APPROVED", storeId: { not: null }, deliveryAddress: { in: batchAddresses } },
+        where: { accountId, status: "APPROVED", storeId: { not: null }, deliveryAddress: { not: null } },
         select: { deliveryAddress: true, storeId: true },
+        distinct: ["deliveryAddress", "storeId"],
       })
       for (const a of approved) {
-        if (a.deliveryAddress && a.storeId) confirmedAddresses.set(a.deliveryAddress, a.storeId)
+        if (a.deliveryAddress && a.storeId) confirmedAddresses.set(addressKey(a.deliveryAddress), a.storeId)
       }
     } catch (err) {
       logger.error("[invoice-sync] approved-address lookup failed — continuing without it:", err)
     }
+  }
+
+  // Vendors this account has had a bill from before. A first bill from a
+  // stranger with no delivery address on it is not a supply delivery: on
+  // 2026-10-20 a "Re: Coaching That Turns Vision…" email carried a $29,969
+  // "BlLL-J46515.pdf" and sat in review as if it were one.
+  let knownVendors: Set<string> | null = null
+  try {
+    const rows = await prisma.invoice.findMany({
+      // A set-aside bill does not make its sender known, or its next one
+      // would get through.
+      where: { accountId, status: { not: "REJECTED" } },
+      select: { vendorName: true },
+      distinct: ["vendorName"],
+    })
+    // An account with no bills yet has no one to compare a sender against.
+    knownVendors = rows.length > 0 ? new Set(rows.map((r) => vendorMatchKey(r.vendorName))) : null
+  } catch (err) {
+    logger.error("[invoice-sync] known-vendor lookup failed — not screening senders this run:", err)
   }
 
   const invoicesToCreate = validExtractions.map((inv) => {
@@ -606,7 +628,7 @@ async function runSync(
       ? matchInvoiceToStore(inv.extraction.deliveryAddress, stores)
       : null
     const confirmedStore = inv.extraction.deliveryAddress
-      ? confirmedAddresses.get(inv.extraction.deliveryAddress)
+      ? confirmedAddresses.get(addressKey(inv.extraction.deliveryAddress))
       : undefined
     const match =
       fuzzy && confirmedStore === fuzzy.storeId && fuzzy.confidence < 0.85
@@ -672,8 +694,15 @@ async function runSync(
       )
     }
 
-    let status: "MATCHED" | "REVIEW" | "PENDING"
-    if (
+    const notASupplier =
+      knownVendors !== null &&
+      !inv.extraction.deliveryAddress?.trim() &&
+      !knownVendors.has(vendorMatchKey(inv.extraction.vendorName ?? ""))
+
+    let status: "MATCHED" | "REVIEW" | "PENDING" | "REJECTED"
+    if (notASupplier) {
+      status = "REJECTED"
+    } else if (
       dateSuspect ||
       mathMismatches.length > 0 ||
       packAnomalies.length > 0 ||
@@ -689,8 +718,16 @@ async function runSync(
 
     // Persist WHY it needs review — the detail page renders these so the
     // owner isn't left staring at a bare badge.
-    const reviewReasons: ReviewReason[] =
-      status === "REVIEW"
+    const reviewReasons: ReviewReason[] = notASupplier
+      ? [
+          {
+            kind: "not_a_supplier",
+            message:
+              "First bill from this sender and no delivery address on it — set aside as not a supply delivery. " +
+              "Check it is a real supplier before paying anything.",
+          },
+        ]
+      : status === "REVIEW"
         ? composeReviewReasons({
             dateSuspect,
             mathMismatches,
@@ -825,7 +862,9 @@ async function runSync(
           },
         },
       })
-      createdInvoiceIds.push(created.id)
+      // A bill set aside as not a supply delivery is kept to look at, but its
+      // lines must not reach ingredient matching, costs or price alerts.
+      if (inv.status !== "REJECTED") createdInvoiceIds.push(created.id)
       if (identity) seenIdentities.add(identity)
       const dateless = invoiceIdentityKey({ ...inv, invoiceDate: null })
       if (dateless) seenIdentities.add(dateless)
