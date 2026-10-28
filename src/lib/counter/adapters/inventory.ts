@@ -275,7 +275,9 @@ async function loadInventory(input: InventoryInput): Promise<InventoryData> {
       take: 12,
     }),
     prisma.invoice.findFirst({
-      where: { accountId, storeId: store.id },
+      // Same rule as the purchases it opens the window for: a rejected
+      // invoice delivered nothing, so it cannot start the window either.
+      where: { accountId, storeId: store.id, status: { not: "REJECTED" } },
       select: { invoiceDate: true },
       orderBy: { invoiceDate: "asc" },
     }),

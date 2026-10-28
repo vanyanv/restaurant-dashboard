@@ -39,7 +39,9 @@ import { prisma } from "@/lib/prisma"
  *   was never assigned to one". An unassigned invoice belongs to no store, so
  *   it never shows on a single-store view. The active-store half keeps an
  *   inactive store's deliveries out, because its sales are not on the
- *   theoretical side either.
+ *   theoretical side either. One exception: `Invoice.store` is
+ *   `onDelete: SetNull`, so a hard-deleted store's invoices become unassigned
+ *   and do show here. Stores are deactivated, not deleted, in practice.
  */
 export interface PurchaseScope {
   accountId: string
