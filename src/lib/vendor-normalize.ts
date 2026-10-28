@@ -6,6 +6,12 @@ const VENDOR_ALIASES: Record<string, string> = {
   // Invoice numbering (I01054-00) and email subject format both match the
   // spelled-out spelling; it is one legal entity under two renderings.
   "ifs individual foodservice": "Individual FoodService",
+  // IFS's invoices began arriving as "Imperial Brady" on 2026-10-13 (invoice
+  // 43526940). Same customer number (IF06220 in the subject), same item codes
+  // (18418 napkins, G299 peppers) at the same prices. Under its own name none
+  // of its 12 lines found IFS's learned SKU matches, so syrup, napkin and
+  // pepper costs would have stopped following the invoices.
+  "imperial brady": "Individual FoodService",
   "restaurant depot": "Restaurant Depot",
   "performance food group": "Performance Food Group",
   "ben e. keith": "Ben E. Keith",

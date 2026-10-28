@@ -5,6 +5,7 @@ import { recomputeCanonicalCost } from "@/lib/ingredient-cost"
 export type MatchResult = {
   matchedBySku: number
   matchedByAlias: number
+  matchedByName: number
   unmatched: number
   costsUpdated: number
 }
@@ -14,6 +15,13 @@ export type MatchResult = {
  * to a CanonicalIngredient:
  *   1. (vendor, sku) → IngredientSkuMatch   (preferred, learned from prior confirms)
  *   2. productName    → IngredientAlias      (fallback for skuless vendors / legacy)
+ *   3. productName    → an earlier matched line, any vendor or store, when
+ *      that exact name (case and punctuation aside) has only ever been
+ *      linked to one ingredient. This is what carries a vendor that starts
+ *      billing under a new name: its SKUs and per-store aliases are unknown
+ *      under the new key, but "Syrup Coca Cola Zero Sugar" is still the
+ *      ingredient it was. A name seen on two ingredients proves nothing and
+ *      is left for review.
  *
  * Leaves `canonicalIngredientId` null when neither path hits — those land in
  * the "Needs review" queue at /dashboard/ingredients.
@@ -25,7 +33,7 @@ export async function matchNewLineItems(
   invoiceIds: string[]
 ): Promise<MatchResult> {
   if (invoiceIds.length === 0) {
-    return { matchedBySku: 0, matchedByAlias: 0, unmatched: 0, costsUpdated: 0 }
+    return { matchedBySku: 0, matchedByAlias: 0, matchedByName: 0, unmatched: 0, costsUpdated: 0 }
   }
 
   const invoices = await prisma.invoice.findMany({
@@ -66,8 +74,11 @@ export async function matchNewLineItems(
     }
   }
 
+  const nameIndex = await loadUniqueProductNames(accountId)
+
   let matchedBySku = 0
   let matchedByAlias = 0
+  let matchedByName = 0
   let unmatched = 0
   const now = new Date()
   const touchedCanonicals = new Set<string>()
@@ -76,7 +87,7 @@ export async function matchNewLineItems(
     const vendor = vendorMatchKey(inv.vendorName)
     for (const li of inv.lineItems) {
       let canonicalId: string | undefined
-      let source: "sku" | "alias" | undefined
+      let source: "sku" | "alias" | "name" | undefined
 
       if (li.sku) {
         canonicalId = skuIndex.get(`${vendor}::${li.sku}`)
@@ -85,6 +96,10 @@ export async function matchNewLineItems(
       if (!canonicalId && inv.storeId) {
         canonicalId = aliasIndex.get(`${inv.storeId}::${li.productName.toLowerCase()}`)
         if (canonicalId) source = "alias"
+      }
+      if (!canonicalId) {
+        canonicalId = nameIndex.get(productNameKey(li.productName))
+        if (canonicalId) source = "name"
       }
 
       if (canonicalId && source) {
@@ -98,7 +113,8 @@ export async function matchNewLineItems(
         })
         touchedCanonicals.add(canonicalId)
         if (source === "sku") matchedBySku++
-        else matchedByAlias++
+        else if (source === "alias") matchedByAlias++
+        else matchedByName++
       } else {
         unmatched++
       }
@@ -117,5 +133,36 @@ export async function matchNewLineItems(
     }
   }
 
-  return { matchedBySku, matchedByAlias, unmatched, costsUpdated }
+  return { matchedBySku, matchedByAlias, matchedByName, unmatched, costsUpdated }
+}
+
+/** Case, punctuation and spacing are noise in a product name, as in a vendor's. */
+export function productNameKey(name: string): string {
+  return name.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim()
+}
+
+/**
+ * Product name → ingredient, for names that every matched line on the account
+ * has linked to the same one ingredient. Names linked to more than one are
+ * dropped rather than guessed at.
+ */
+async function loadUniqueProductNames(accountId: string): Promise<Map<string, string>> {
+  const rows = await prisma.invoiceLineItem.groupBy({
+    by: ["productName", "canonicalIngredientId"],
+    where: { canonicalIngredientId: { not: null }, invoice: { accountId } },
+  })
+  const owners = new Map<string, Set<string>>()
+  for (const r of rows) {
+    if (!r.canonicalIngredientId) continue
+    const key = productNameKey(r.productName)
+    if (!key) continue
+    const set = owners.get(key) ?? new Set<string>()
+    set.add(r.canonicalIngredientId)
+    owners.set(key, set)
+  }
+  const out = new Map<string, string>()
+  for (const [key, set] of owners) {
+    if (set.size === 1) out.set(key, [...set][0])
+  }
+  return out
 }

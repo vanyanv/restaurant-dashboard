@@ -14,6 +14,7 @@ import { putInvoicePdf, type InvoicePdfUpload } from "@/lib/blob"
 import { sendGraphMail } from "@/lib/graph-mail"
 import { buildPriceAlertEmail, type PriceHike } from "@/lib/price-alert-email"
 import { normalizeVendorName } from "@/lib/vendor-normalize"
+import { invoiceIdentityKey, loadInvoiceIdentities } from "@/lib/invoice-identity"
 import { matchNewLineItems } from "@/lib/ingredient-matching"
 import { autoResolveUnmatchedLines } from "@/lib/ingredient-auto-match"
 import { resolveAutoMatchMode } from "@/lib/ingredient-auto-match-core"
@@ -616,8 +617,25 @@ async function runSync(
 
   // ─── Phase 4: Write to database ───
   const createdInvoiceIds: string[] = []
+  // The same bill arriving in a second email (a forward, a reminder, a
+  // receipt) has a new message id, so the message dedup above lets it
+  // through. Before this check four bills were stored twice, $3,353 of spend
+  // counted double. See `invoiceIdentityKey` for what counts as the same.
+  const seenIdentities = await loadInvoiceIdentities(
+    accountId,
+    invoicesToCreate.map((inv) => inv.invoiceNumber)
+  )
   for (let i = 0; i < invoicesToCreate.length; i++) {
     const inv = invoicesToCreate[i]
+    const identity = invoiceIdentityKey(inv)
+    if (identity && seenIdentities.has(identity)) {
+      logger.warn(
+        `[invoice-sync] skipping ${inv.vendorName} #${inv.invoiceNumber} ` +
+        `($${inv.totalAmount}) from "${inv.emailSubject ?? ""}": already stored from another email`
+      )
+      counts.skipped++
+      continue
+    }
     try {
       const created = await prisma.invoice.create({
         data: {
@@ -676,6 +694,7 @@ async function runSync(
         },
       })
       createdInvoiceIds.push(created.id)
+      if (identity) seenIdentities.add(identity)
       counts.created++
     } catch (err) {
       // Unique constraint violation (P2002) = already processed (race condition safety)
@@ -701,7 +720,7 @@ async function runSync(
       const matchResult = await matchNewLineItems(accountId, createdInvoiceIds)
       logger.info(
         `[invoice-sync] matched ${matchResult.matchedBySku} by SKU, ` +
-        `${matchResult.matchedByAlias} by alias, ${matchResult.unmatched} unmatched, ` +
+        `${matchResult.matchedByAlias} by alias, ${matchResult.matchedByName} by name, ${matchResult.unmatched} unmatched, ` +
         `${matchResult.costsUpdated} canonical costs refreshed`
       )
     } catch (err) {

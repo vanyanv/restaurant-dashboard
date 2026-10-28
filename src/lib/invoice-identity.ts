@@ -1,0 +1,48 @@
+import { prisma } from "@/lib/prisma"
+import { vendorMatchKey } from "@/lib/vendor-normalize"
+
+/**
+ * What makes two stored invoices the same bill: vendor (by match key, so
+ * "Sysco" and "Sysco Los Angeles, Inc." agree), invoice number, total, and
+ * whether it is a return. The email it came in does not count — a bill can
+ * arrive more than once. Seen on this account: a forwarded copy (Sysco
+ * 945828794, IFS H12702-00) and KEVIDKO's payment receipt, which carries the
+ * bill again (376528, 378460).
+ *
+ * The total is part of the key because a credit memo can reuse its bill's
+ * number. Null when there is no invoice number to go on.
+ */
+export function invoiceIdentityKey(inv: {
+  vendorName: string
+  invoiceNumber: string | null | undefined
+  totalAmount: number
+  isReturn?: boolean | null
+}): string | null {
+  const number = (inv.invoiceNumber ?? "").trim().toLowerCase()
+  if (!number) return null
+  return [
+    vendorMatchKey(inv.vendorName),
+    number,
+    inv.totalAmount.toFixed(2),
+    inv.isReturn ? "return" : "bill",
+  ].join("::")
+}
+
+/** Identity keys of the account's invoices that share one of these numbers. */
+export async function loadInvoiceIdentities(
+  accountId: string,
+  invoiceNumbers: Array<string | null | undefined>
+): Promise<Set<string>> {
+  const numbers = [...new Set(invoiceNumbers.filter((n): n is string => !!n?.trim()))]
+  if (numbers.length === 0) return new Set()
+  const rows = await prisma.invoice.findMany({
+    where: { accountId, invoiceNumber: { in: numbers } },
+    select: { vendorName: true, invoiceNumber: true, totalAmount: true, isReturn: true },
+  })
+  const out = new Set<string>()
+  for (const r of rows) {
+    const key = invoiceIdentityKey(r)
+    if (key) out.add(key)
+  }
+  return out
+}
