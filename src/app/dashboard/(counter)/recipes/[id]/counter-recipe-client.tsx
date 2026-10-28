@@ -1,10 +1,10 @@
 "use client"
 
 import { useCallback, useEffect, useMemo, useState, useTransition } from "react"
+import dynamic from "next/dynamic"
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
 import {
-  Chart,
   CostBar,
   DateControl,
   MenuPhoto,
@@ -43,6 +43,16 @@ import type {
   RecipeBuilder,
   RecipeSections,
 } from "@/lib/counter/adapters/recipe"
+
+/**
+ * The cost-per-serving chart is the last section on the page, so its chunk
+ * loads after the builder instead of in the first load. Server rendering stays
+ * on, so the chart is still in the HTML. This keeps the phone edit page
+ * (`/m/recipes/[id]/edit`) inside the phone bundle budget.
+ */
+const Chart = dynamic(() => import("@/components/counter/surface/chart").then((m) => m.Chart), {
+  loading: () => null,
+})
 
 /**
  * The recipe builder, composed from `P.recipe.desk()`

@@ -1,7 +1,7 @@
 "use client"
 
 import type { ReactNode } from "react"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import { PageHead, SubNav, useSurfaceHref } from "@/components/counter"
 import { COUNT_TABS } from "@/lib/counter/nav"
 
@@ -9,9 +9,13 @@ import { COUNT_TABS } from "@/lib/counter/nav"
 
 export function CountHead({ sub, children }: { sub: string; children?: ReactNode }) {
   const href = useSurfaceHref()
+  // The picked store rides along between tabs; without it the next tab falls
+  // back to the first store, and waste gets logged against the wrong one.
+  const store = useSearchParams().get("store")
+  const q = store ? `?${new URLSearchParams({ store })}` : ""
   return (
     <PageHead title="Count & waste" sub={sub}>
-      <SubNav items={COUNT_TABS.map((t) => ({ ...t, href: href(t.href) }))} label="Count & waste" />
+      <SubNav items={COUNT_TABS.map((t) => ({ ...t, href: href(t.href + q) }))} label="Count & waste" />
       {children}
     </PageHead>
   )
