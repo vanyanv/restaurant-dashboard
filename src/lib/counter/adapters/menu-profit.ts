@@ -6,6 +6,7 @@ import {
 import { count, money, pct } from "@/lib/counter/format"
 import { dayCount, type DateRange } from "@/lib/counter/date-range"
 import { loadStatement } from "@/lib/counter/statement"
+import { getScopedStores } from "@/lib/account-stores"
 import { COGS_CODE } from "@/lib/pnl"
 import { rowValues } from "@/lib/counter/statement"
 import {
@@ -518,11 +519,21 @@ function ledgerOf(data: MenuEngineeringData): LedgerSection {
 export function getMenuProfitSectionPromises(
   input: MenuProfitInput,
 ): StreamedSections<MenuProfitSections> {
-  const { range, storeId } = input
+  const { range, storeId, accountId } = input
   const days = dayCount(range)
 
   const dataP = classify(
     async () => {
+      // THE SAME STORES the Menu hub and Product mix read: `getScopedStores`,
+      // which keeps only ACTIVE stores. `getMenuEngineering` resolves through
+      // `resolveStoreContext`, whose single-store branch accepts an inactive
+      // store — so a closed location picked in the switcher printed a Blended
+      // margin here and nothing on the other two pages. A store the shared
+      // scope does not return reads as empty here too.
+      if (storeId) {
+        const scoped = await getScopedStores(accountId, storeId)
+        if (scoped.length === 0) return { me: null, totalSales: 0, foodCost: 0 }
+      }
       const [me, statement] = await Promise.all([
         // `lookbackDays` is the gap from the window's first day to `asOf`, not
         // the day count: the loader reads `[asOf − lookbackDays, asOf]`
@@ -545,28 +556,32 @@ export function getMenuProfitSectionPromises(
         foodCost: -cogsRow.reduce((t, v) => t + v, 0),
       }
     },
-    { retryAction: "retryMenuProfit", isEmpty: (d) => d.me.rows.length === 0, emptyReason: "no_match" },
+    {
+      retryAction: "retryMenuProfit",
+      isEmpty: (d) => d.me === null || d.me.rows.length === 0,
+      emptyReason: "no_match",
+    },
   )
 
   return {
     headline: guardSection(
-      dataP.then((sd) => mapReady(sd, (d) => headlineOf(d.me, d.totalSales, d.foodCost))),
+      dataP.then((sd) => mapReady(sd, (d) => headlineOf(d.me!, d.totalSales, d.foodCost))),
       "retryMenuProfit",
     ),
     matrix: guardSection(
-      dataP.then((sd) => mapReady(sd, (d) => matrixOf(d.me, days))),
+      dataP.then((sd) => mapReady(sd, (d) => matrixOf(d.me!, days))),
       "retryMenuProfit",
     ),
     opportunities: guardSection(
-      dataP.then((sd) => mapReady(sd, (d) => opportunitiesOf(d.me))),
+      dataP.then((sd) => mapReady(sd, (d) => opportunitiesOf(d.me!))),
       "retryMenuProfit",
     ),
     coverage: guardSection(
-      dataP.then((sd) => mapReady(sd, (d) => coverageOf(d.me))),
+      dataP.then((sd) => mapReady(sd, (d) => coverageOf(d.me!))),
       "retryMenuProfit",
     ),
     ledger: guardSection(
-      dataP.then((sd) => mapReady(sd, (d) => ledgerOf(d.me))),
+      dataP.then((sd) => mapReady(sd, (d) => ledgerOf(d.me!))),
       "retryMenuProfit",
     ),
   }

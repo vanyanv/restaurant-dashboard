@@ -37,6 +37,15 @@ export interface ItemDiscount {
 export interface ItemDiscountEntry extends ItemDiscount {
   /** The same split by `OtterOrder.platform` ("ubereats", "doordash", …). */
   byPlatform: Map<string, ItemDiscount>
+  /**
+   * The same split by `OtterOrder.storeId`. A deal is a store's: an item on
+   * BOGO at one store and full price at another has two shares, and folding
+   * them into one would discount the second store's sales by the first's
+   * deal. `item-economics.ts` applies these per store slice. Optional only so
+   * a hand-built entry (a test, a caller with one store) can omit it; absent,
+   * the item-wide share applies everywhere.
+   */
+  byStore?: Map<string, ItemDiscount>
 }
 
 /**
@@ -136,9 +145,10 @@ export async function getItemDiscounts(input: {
   const only = itemName ?? null
 
   const [grossRows, discountedLines] = await Promise.all([
-    db.$queryRaw<{ name: string; platform: string; gross: number }[]>`
+    db.$queryRaw<{ name: string; platform: string; storeId: string; gross: number }[]>`
       SELECT i."name" AS name,
              o."platform" AS platform,
+             o."storeId" AS "storeId",
              SUM(i."price" * i."quantity")::float AS gross
       FROM "OtterOrderItem" i
       JOIN "OtterOrder" o ON o."id" = i."orderId"
@@ -147,15 +157,24 @@ export async function getItemDiscounts(input: {
         AND o."storeId" = ANY(${storeIds})
         AND o."referenceTimeLocal" BETWEEN ${startDate} AND ${endDate}
         AND (${only}::text IS NULL OR i."name" = ${only})
-      GROUP BY i."name", o."platform"`,
+      GROUP BY i."name", o."platform", o."storeId"`,
     // Every line of every discounted order — not only the named item's —
     // because whether the discount is that item's depends on what else the
     // order held.
     db.$queryRaw<
-      { orderId: string; platform: string; discount: number; name: string; price: number; quantity: number }[]
+      {
+        orderId: string
+        platform: string
+        storeId: string
+        discount: number
+        name: string
+        price: number
+        quantity: number
+      }[]
     >`
       SELECT o."id" AS "orderId",
              o."platform" AS platform,
+             o."storeId" AS "storeId",
              (-o."discount")::float AS discount,
              i."name" AS name,
              i."price"::float AS price,
@@ -173,7 +192,7 @@ export async function getItemDiscounts(input: {
   ])
 
   const entryFor = (name: string) => {
-    const entry = out.get(name) ?? { gross: 0, discount: 0, byPlatform: new Map() }
+    const entry = out.get(name) ?? { gross: 0, discount: 0, byPlatform: new Map(), byStore: new Map() }
     out.set(name, entry)
     return entry
   }
@@ -182,18 +201,29 @@ export async function getItemDiscounts(input: {
     entry.byPlatform.set(platform, p)
     return p
   }
+  const storeOf = (entry: ItemDiscountEntry, storeId: string) => {
+    const byStore = (entry.byStore ??= new Map())
+    const p = byStore.get(storeId) ?? { gross: 0, discount: 0 }
+    byStore.set(storeId, p)
+    return p
+  }
 
   for (const r of grossRows) {
     const gross = Number(r.gross) || 0
     const entry = entryFor(r.name)
     entry.gross += gross
     platformOf(entry, r.platform).gross += gross
+    if (r.storeId) storeOf(entry, r.storeId).gross += gross
   }
 
-  const orders = new Map<string, { platform: string; discount: number; lines: OrderLine[] }>()
+  const orders = new Map<
+    string,
+    { platform: string; storeId: string; discount: number; lines: OrderLine[] }
+  >()
   for (const r of discountedLines) {
     const o = orders.get(r.orderId) ?? {
       platform: r.platform,
+      storeId: r.storeId,
       discount: Number(r.discount) || 0,
       lines: [],
     }
@@ -206,6 +236,7 @@ export async function getItemDiscounts(input: {
       const entry = entryFor(name)
       entry.discount += dollars
       platformOf(entry, o.platform).discount += dollars
+      if (o.storeId) storeOf(entry, o.storeId).discount += dollars
     }
   }
   return out

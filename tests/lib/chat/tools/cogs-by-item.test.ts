@@ -66,10 +66,11 @@ describe("getCogsByItem — costed rows only", () => {
     ;(ctx.prisma.$queryRaw as unknown as ReturnType<typeof vi.fn>).mockImplementation(
       async (strings: TemplateStringsArray) =>
         strings.join("").includes('SUM(i."price" * i."quantity")')
-          ? [{ name: SLIDER, platform: "ubereats", gross: 1349 }]
+          ? [{ name: SLIDER, platform: "ubereats", storeId: "s1", gross: 1349 }]
           : Array.from({ length: 50 }, (_, n) => ({
               orderId: `o${n}`,
               platform: "ubereats",
+              storeId: "s1",
               discount: 13.49,
               name: SLIDER,
               price: 13.49,

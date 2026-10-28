@@ -2,9 +2,9 @@ import type { PrismaClient } from "@/generated/prisma/client"
 import { prisma } from "@/lib/prisma"
 import { blendedMargin } from "@/lib/counter/blended-margin"
 import {
+  DEAL_THRESHOLD,
   discountShare,
   getItemDiscounts,
-  isDealRunning,
   type ItemDiscountEntry,
 } from "@/lib/counter/item-discounts"
 
@@ -25,7 +25,9 @@ import {
  *   materializer copied it, one row per store, day, item and category.
  *   `revenue` is BEFORE discounts: that is what the POS rings up.
  * - **Discounts** come from `item-discounts.ts` (`getItemDiscounts`), applied
- *   as the item's SHARE of what it rang up on the order feed. `collected` is
+ *   as the item's SHARE of what it rang up on the order feed AT THAT STORE —
+ *   per (store, item), applied to each store's own rows, so one store's deal
+ *   never discounts another store's sales. `collected` is
  *   `revenue × (1 − share)` — what the restaurant was actually paid. A BOGO
  *   rings up 2 × $13.49 and collects $13.49; its food cost is over the $13.49.
  * - **Plate cost** is engine A: `DailyCogsItem.lineCost / qtySold` over
@@ -39,8 +41,10 @@ import {
  * - **Packaging** (`category: "Packaging"`, the `Packaging - *` rows that hold
  *   cost against $0 of revenue) is not a menu item. It is kept out of `items`
  *   and reported once, as `packagingCost`, for a caller that needs it.
- * - **Deal running** is `item-discounts.ts`'s `isDealRunning`: more than 10%
- *   of what it rang up came back off.
+ * - **Deal running** is `item-discounts.ts`'s `DEAL_THRESHOLD`: more than 10%
+ *   of what it rang up came back off, measured on the folded rows.
+ * - **Recipes** roll up from the rows' own `recipeId` (`rollUpByRecipe`), so
+ *   a POS name booked against two recipes credits each with its own rows.
  *
  * What is NOT here: the marketplace's commission (`pnl.ts`, `channel-mix.ts`,
  * the menu item page's "Kept"). Margin here is before that cut, and the pages
@@ -56,6 +60,8 @@ import {
 
 /** One grouped `DailyCogsItem` slice — or one raw row, with `rows` 1. */
 export interface CogsSlice {
+  /** The store the slice sold at — the discount share is that store's deal. */
+  storeId?: string
   itemName: string
   category: string
   recipeId: string | null
@@ -86,8 +92,15 @@ export interface ItemEconomics {
   category: string
   /** Every category the POS filed it under in the window. */
   categories: string[]
-  /** The recipe behind most of its costed units (else any it was mapped to). */
+  /**
+   * The recipe behind most of its costed units (else any it was mapped to) —
+   * a LABEL for a one-recipe view. Roll-ups never use it: a name mapped to
+   * different recipes at two stores, or remapped mid-window, is split by the
+   * rows' own `recipeId` in `recipes` below.
+   */
   recipeId: string | null
+  /** The same figures per `DailyCogsItem.recipeId` the rows were booked against. */
+  recipes: RecipeSlice[]
   /** Every unit sold, costed or not. */
   units: number
   /** Every dollar rung up, BEFORE discounts. */
@@ -127,8 +140,10 @@ export interface ItemEconomics {
 /**
  * The menu-wide figure every "Blended margin" cell prints.
  *
- * THE RULE: over items that have COSTED rows, Packaging excluded (it is not an
- * item), on COLLECTED revenue (after discounts):
+ * THE RULE: over items whose own margin exists — COSTED rows with a booked
+ * cost above $0 and something collected, the same test the per-item cell
+ * uses — Packaging excluded (it is not an item), on COLLECTED revenue (after
+ * discounts):
  *
  *     marginPct   = 100 − Σ costed cost / Σ costed collected × 100
  *     foodCostPct = Σ costed cost / Σ costed collected × 100
@@ -172,6 +187,151 @@ export const PACKAGING_CATEGORY = "Packaging"
 
 const isPackaging = (s: Pick<CogsSlice, "category">) => s.category === PACKAGING_CATEGORY
 
+/** The running sums every figure here is finished from. */
+interface Bucket {
+  units: number
+  revenue: number
+  collected: number
+  costedUnits: number
+  costedRevenue: number
+  costedCollected: number
+  cost: number
+  hasCosted: boolean
+  partialDays: number
+  override: boolean
+  missingCost: boolean
+  unmapped: boolean
+}
+
+const emptyBucket = (): Bucket => ({
+  units: 0,
+  revenue: 0,
+  collected: 0,
+  costedUnits: 0,
+  costedRevenue: 0,
+  costedCollected: 0,
+  cost: 0,
+  hasCosted: false,
+  partialDays: 0,
+  override: false,
+  missingCost: false,
+  unmapped: false,
+})
+
+function addSlice(b: Bucket, s: CogsSlice, share: number) {
+  const qty = Number(s.qtySold) || 0
+  const revenue = Number(s.salesRevenue) || 0
+  const lineCost = Number(s.lineCost) || 0
+  const collected = revenue * (1 - share)
+  b.units += qty
+  b.revenue += revenue
+  b.collected += collected
+  if (s.partialCost) b.partialDays += s.rows ?? 1
+  if (s.status === "COSTED") {
+    b.hasCosted = true
+    b.costedUnits += qty
+    b.costedRevenue += revenue
+    b.costedCollected += collected
+    b.cost += lineCost
+    if (s.costSource === "override") b.override = true
+  } else if (s.status === "MISSING_COST") {
+    b.missingCost = true
+  } else if (s.status === "UNMAPPED") {
+    b.unmapped = true
+  }
+}
+
+function mergeBucket(into: Bucket, b: Bucket) {
+  into.units += b.units
+  into.revenue += b.revenue
+  into.collected += b.collected
+  into.costedUnits += b.costedUnits
+  into.costedRevenue += b.costedRevenue
+  into.costedCollected += b.costedCollected
+  into.cost += b.cost
+  into.hasCosted ||= b.hasCosted
+  into.partialDays += b.partialDays
+  into.override ||= b.override
+  into.missingCost ||= b.missingCost
+  into.unmapped ||= b.unmapped
+}
+
+/**
+ * Whether a costed slice yields a ratio at all: a cost of nothing, or nothing
+ * collected, yields none — the same "never 0, never 100" rule `cogs.ts`'s
+ * `itemFoodPct` states. `menuMargin` applies the SAME test, so an item whose
+ * cell reads "—" is not quietly inside the blend.
+ */
+const ratioOk = (c: CostedEconomics | null): c is CostedEconomics =>
+  c !== null && c.cost > 0 && c.collected > 0
+
+/** The figures every view prints, finished from one bucket. */
+interface Figures {
+  units: number
+  revenue: number
+  discountShare: number
+  discount: number
+  collected: number
+  dealRunning: boolean
+  unitPrice: number | null
+  collectedUnitPrice: number | null
+  costed: CostedEconomics | null
+  plateCost: number | null
+  foodCostPct: number | null
+  marginPct: number | null
+  marginDollars: number | null
+  partialDays: number
+  override: boolean
+  missingCost: boolean
+  unmapped: boolean
+}
+
+function finish(b: Bucket): Figures {
+  const discount = b.revenue - b.collected
+  const share = b.revenue > 0 ? Math.min(1, Math.max(0, discount / b.revenue)) : 0
+  const costed: CostedEconomics | null = b.hasCosted
+    ? { units: b.costedUnits, revenue: b.costedRevenue, collected: b.costedCollected, cost: b.cost }
+    : null
+  const ok = ratioOk(costed)
+  const foodCostPct = ok ? (costed.cost / costed.collected) * 100 : null
+  return {
+    units: b.units,
+    revenue: b.revenue,
+    discountShare: share,
+    discount,
+    collected: b.collected,
+    dealRunning: share > DEAL_THRESHOLD,
+    unitPrice: b.units > 0 ? b.revenue / b.units : null,
+    collectedUnitPrice: b.units > 0 ? b.collected / b.units : null,
+    costed,
+    plateCost: costed && costed.units > 0 ? costed.cost / costed.units : null,
+    foodCostPct,
+    marginPct: foodCostPct === null ? null : 100 - foodCostPct,
+    marginDollars: ok ? costed.collected - costed.cost : null,
+    partialDays: b.partialDays,
+    override: b.override,
+    missingCost: b.missingCost,
+    unmapped: b.unmapped,
+  }
+}
+
+/**
+ * The discount share for one slice: its STORE's deal on the item when the
+ * discount map splits by store (`getItemDiscounts` always does), else the
+ * item-wide share. A store with no order-feed reading for the item took
+ * nothing off it.
+ */
+function shareFor(s: CogsSlice, deal: ItemDiscountEntry | undefined): number {
+  if (!deal) return 0
+  if (s.storeId !== undefined && deal.byStore) return discountShare(deal.byStore.get(s.storeId))
+  return discountShare(deal)
+}
+
+/** One recipe's share of an item — the rows booked against that recipe. */
+export interface RecipeSlice extends Figures {
+  recipeId: string
+}
+
 /**
  * Fold `DailyCogsItem` slices and the discount map into per-item economics.
  * Pure — the loader below and `cogs.ts`'s own fold both call it, so a figure
@@ -182,63 +342,40 @@ export function foldItemEconomics(
   discounts: Map<string, ItemDiscountEntry>,
 ): { items: Map<string, ItemEconomics>; packagingCost: number } {
   interface Acc {
-    units: number
-    revenue: number
+    all: Bucket
+    byRecipe: Map<string, Bucket>
     catUnits: Map<string, number>
     recipeUnits: Map<string, number>
     anyRecipe: string | null
-    costedUnits: number
-    costedRevenue: number
-    cost: number
-    hasCosted: boolean
-    partialDays: number
-    override: boolean
-    missingCost: boolean
-    unmapped: boolean
   }
   const accs = new Map<string, Acc>()
   let packagingCost = 0
 
   for (const s of slices) {
-    const qty = Number(s.qtySold) || 0
-    const revenue = Number(s.salesRevenue) || 0
-    const lineCost = Number(s.lineCost) || 0
     if (isPackaging(s)) {
-      packagingCost += lineCost
+      packagingCost += Number(s.lineCost) || 0
       continue
     }
     const a: Acc = accs.get(s.itemName) ?? {
-      units: 0,
-      revenue: 0,
+      all: emptyBucket(),
+      byRecipe: new Map(),
       catUnits: new Map(),
       recipeUnits: new Map(),
       anyRecipe: null,
-      costedUnits: 0,
-      costedRevenue: 0,
-      cost: 0,
-      hasCosted: false,
-      partialDays: 0,
-      override: false,
-      missingCost: false,
-      unmapped: false,
     }
-    a.units += qty
-    a.revenue += revenue
+    const share = shareFor(s, discounts.get(s.itemName))
+    addSlice(a.all, s, share)
+    const qty = Number(s.qtySold) || 0
     const category = s.category?.trim() ? s.category.trim() : "Uncategorized"
     a.catUnits.set(category, (a.catUnits.get(category) ?? 0) + qty)
-    if (s.recipeId) a.anyRecipe ??= s.recipeId
-    if (s.partialCost) a.partialDays += s.rows ?? 1
-    if (s.status === "COSTED") {
-      a.hasCosted = true
-      a.costedUnits += qty
-      a.costedRevenue += revenue
-      a.cost += lineCost
-      if (s.recipeId) a.recipeUnits.set(s.recipeId, (a.recipeUnits.get(s.recipeId) ?? 0) + qty)
-      if (s.costSource === "override") a.override = true
-    } else if (s.status === "MISSING_COST") {
-      a.missingCost = true
-    } else if (s.status === "UNMAPPED") {
-      a.unmapped = true
+    if (s.recipeId) {
+      a.anyRecipe ??= s.recipeId
+      const rb = a.byRecipe.get(s.recipeId) ?? emptyBucket()
+      addSlice(rb, s, share)
+      a.byRecipe.set(s.recipeId, rb)
+      if (s.status === "COSTED") {
+        a.recipeUnits.set(s.recipeId, (a.recipeUnits.get(s.recipeId) ?? 0) + qty)
+      }
     }
     accs.set(s.itemName, a)
   }
@@ -248,43 +385,13 @@ export function foldItemEconomics(
 
   const items = new Map<string, ItemEconomics>()
   for (const [itemName, a] of accs) {
-    const deal = discounts.get(itemName)
-    const share = discountShare(deal)
-    const collected = a.revenue * (1 - share)
-    const costed: CostedEconomics | null = a.hasCosted
-      ? {
-          units: a.costedUnits,
-          revenue: a.costedRevenue,
-          collected: a.costedRevenue * (1 - share),
-          cost: a.cost,
-        }
-      : null
-    // A cost of nothing, or nothing collected, yields no ratio — the same
-    // "never 0, never 100" rule `cogs.ts`'s `itemFoodPct` states.
-    const ratioOk = costed !== null && costed.cost > 0 && costed.collected > 0
-    const foodCostPct = ratioOk ? (costed.cost / costed.collected) * 100 : null
     items.set(itemName, {
       itemName,
       category: top(a.catUnits) ?? "Uncategorized",
       categories: [...a.catUnits.keys()].sort(),
       recipeId: top(a.recipeUnits) ?? a.anyRecipe,
-      units: a.units,
-      revenue: a.revenue,
-      discountShare: share,
-      discount: a.revenue * share,
-      collected,
-      dealRunning: isDealRunning(deal),
-      unitPrice: a.units > 0 ? a.revenue / a.units : null,
-      collectedUnitPrice: a.units > 0 ? collected / a.units : null,
-      costed,
-      plateCost: costed && costed.units > 0 ? costed.cost / costed.units : null,
-      foodCostPct,
-      marginPct: foodCostPct === null ? null : 100 - foodCostPct,
-      marginDollars: ratioOk ? costed.collected - costed.cost : null,
-      partialDays: a.partialDays,
-      override: a.override,
-      missingCost: a.missingCost,
-      unmapped: a.unmapped,
+      recipes: [...a.byRecipe.entries()].map(([recipeId, b]) => ({ recipeId, ...finish(b) })),
+      ...finish(a.all),
     })
   }
   return { items, packagingCost }
@@ -297,7 +404,9 @@ export function menuMargin(items: Iterable<ItemEconomics>): MenuMargin {
   let collected = 0
   let n = 0
   for (const i of items) {
-    if (!i.costed) continue
+    // The per-item rule, verbatim: an item whose own margin is "—" (costed
+    // at $0, or nothing collected) is not counted into the blend either.
+    if (!ratioOk(i.costed)) continue
     cost += i.costed.cost
     revenue += i.costed.revenue
     collected += i.costed.collected
@@ -316,84 +425,53 @@ export function menuMargin(items: Iterable<ItemEconomics>): MenuMargin {
 }
 
 /** Per-recipe roll-up of the same figures, for the pages that list dishes. */
-export interface RecipeEconomics {
+export interface RecipeEconomics extends Figures {
   recipeId: string
-  /** POS item names whose units count toward it. */
+  /** POS item names whose rows were booked against it. */
   itemNames: string[]
-  units: number
-  revenue: number
-  collected: number
-  discount: number
-  /** Collected over units — WEIGHTED, never a mean of line prices. */
-  collectedUnitPrice: number | null
-  unitPrice: number | null
-  costed: CostedEconomics | null
-  plateCost: number | null
-  foodCostPct: number | null
-  marginPct: number | null
-  marginDollars: number | null
-  partialDays: number
-  override: boolean
-  missingCost: boolean
 }
 
 /**
- * Sum the items behind each recipe. An item counts toward the recipe that
- * carries most of its costed units — `ItemEconomics.recipeId` — which is the
- * recipe COGS actually booked it against, not whatever the mapping table says
- * today.
+ * Sum, per recipe, the rows BOOKED against it — each item's `recipes` slices,
+ * split by the rows' own `DailyCogsItem.recipeId`. A POS name that two stores
+ * map to two different recipes, or that was remapped mid-window, credits each
+ * recipe with exactly the sales it was costed against, so a recipe's units,
+ * plate cost and margin come from the same rows.
  */
 export function rollUpByRecipe(items: Iterable<ItemEconomics>): Map<string, RecipeEconomics> {
-  const out = new Map<string, RecipeEconomics>()
+  const sums = new Map<string, { bucket: Bucket; names: string[] }>()
   for (const i of items) {
-    if (!i.recipeId) continue
-    const r: RecipeEconomics = out.get(i.recipeId) ?? {
-      recipeId: i.recipeId,
-      itemNames: [],
-      units: 0,
-      revenue: 0,
-      collected: 0,
-      discount: 0,
-      collectedUnitPrice: null,
-      unitPrice: null,
-      costed: null,
-      plateCost: null,
-      foodCostPct: null,
-      marginPct: null,
-      marginDollars: null,
-      partialDays: 0,
-      override: false,
-      missingCost: false,
+    for (const r of i.recipes) {
+      const acc = sums.get(r.recipeId) ?? { bucket: emptyBucket(), names: [] }
+      mergeBucket(acc.bucket, bucketOf(r))
+      acc.names.push(i.itemName)
+      sums.set(r.recipeId, acc)
     }
-    r.itemNames.push(i.itemName)
-    r.units += i.units
-    r.revenue += i.revenue
-    r.collected += i.collected
-    r.discount += i.discount
-    r.partialDays += i.partialDays
-    r.override ||= i.override
-    r.missingCost ||= i.missingCost
-    if (i.costed) {
-      const c = r.costed ?? { units: 0, revenue: 0, collected: 0, cost: 0 }
-      c.units += i.costed.units
-      c.revenue += i.costed.revenue
-      c.collected += i.costed.collected
-      c.cost += i.costed.cost
-      r.costed = c
-    }
-    out.set(i.recipeId, r)
   }
-  for (const r of out.values()) {
-    r.unitPrice = r.units > 0 ? r.revenue / r.units : null
-    r.collectedUnitPrice = r.units > 0 ? r.collected / r.units : null
-    const c = r.costed
-    const ratioOk = c !== null && c.cost > 0 && c.collected > 0
-    r.plateCost = c && c.units > 0 ? c.cost / c.units : null
-    r.foodCostPct = ratioOk ? (c.cost / c.collected) * 100 : null
-    r.marginPct = r.foodCostPct === null ? null : 100 - r.foodCostPct
-    r.marginDollars = ratioOk ? c.collected - c.cost : null
+  return new Map(
+    [...sums.entries()].map(([recipeId, { bucket, names }]) => [
+      recipeId,
+      { recipeId, itemNames: names, ...finish(bucket) },
+    ]),
+  )
+}
+
+/** A finished slice back into sums, for the roll-up. */
+function bucketOf(f: Figures): Bucket {
+  return {
+    units: f.units,
+    revenue: f.revenue,
+    collected: f.collected,
+    costedUnits: f.costed?.units ?? 0,
+    costedRevenue: f.costed?.revenue ?? 0,
+    costedCollected: f.costed?.collected ?? 0,
+    cost: f.costed?.cost ?? 0,
+    hasCosted: f.costed !== null,
+    partialDays: f.partialDays,
+    override: f.override,
+    missingCost: f.missingCost,
+    unmapped: f.unmapped,
   }
-  return out
 }
 
 export type ItemEconomicsDb = Pick<PrismaClient, "$queryRaw" | "dailyCogsItem">
@@ -421,7 +499,7 @@ export async function getItemEconomics(input: {
 
   const [grouped, discounts] = await Promise.all([
     db.dailyCogsItem.groupBy({
-      by: ["itemName", "category", "recipeId", "status", "partialCost", "costSource"],
+      by: ["storeId", "itemName", "category", "recipeId", "status", "partialCost", "costSource"],
       where: {
         storeId: { in: storeIds },
         store: { accountId },
@@ -435,6 +513,7 @@ export async function getItemEconomics(input: {
   ])
 
   const slices: CogsSlice[] = grouped.map((g) => ({
+    storeId: g.storeId,
     itemName: g.itemName,
     category: g.category,
     recipeId: g.recipeId ?? null,

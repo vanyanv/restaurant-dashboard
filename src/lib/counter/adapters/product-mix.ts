@@ -135,11 +135,21 @@ interface Unit {
   qty: number
   /** Units on COSTED rows; 0 when nothing costed it. */
   costedQty: number
-  /** Booked cost per costed unit. */
-  cost: number
-  /** Collected (after discounts) per costed unit. */
-  price: number
+  /** Booked cost on the costed rows. */
+  costTotal: number
+  /** Collected (after discounts) on the costed rows. */
+  collectedTotal: number
+  /**
+   * In the blend exactly when `menuMargin` counts it — a booked cost above $0
+   * over something collected. The bridge and the Blended margin cell use one
+   * test, so the bridge's "Now" line is the cell.
+   */
+  inBlend: boolean
 }
+
+/** Per costed unit, or `null` when there is no unit to divide by. */
+const perUnit = (u: Unit) =>
+  u.costedQty > 0 ? { cost: u.costTotal / u.costedQty, price: u.collectedTotal / u.costedQty } : null
 
 interface Window {
   units: Map<string, Unit>
@@ -192,16 +202,19 @@ async function loadWindow(
   const units = new Map<string, Unit>()
   let totalQty = 0
   for (const i of economics.items.values()) {
-    if (i.units <= 0) continue
     const c = i.costed
-    const costedQty = c && c.units > 0 ? c.units : 0
+    const inBlend = c !== null && c.cost > 0 && c.collected > 0
+    // Kept when it sold OR when the blend counts it: dropping a zero-unit
+    // item that carries booked cost made the bridge disagree with the cell.
+    if (i.units <= 0 && !inBlend) continue
     units.set(i.itemName, {
-      qty: i.units,
-      costedQty,
-      cost: costedQty > 0 ? c!.cost / costedQty : 0,
-      price: costedQty > 0 ? c!.collected / costedQty : 0,
+      qty: Math.max(0, i.units),
+      costedQty: c && c.units > 0 ? c.units : 0,
+      costTotal: c?.cost ?? 0,
+      collectedTotal: c?.collected ?? 0,
+      inBlend,
     })
-    totalQty += i.units
+    totalQty += Math.max(0, i.units)
   }
   return { units, totalQty, orders, menu: economics.menu }
 }
@@ -255,15 +268,15 @@ async function loadMix(input: ProductMixInput): Promise<MixData> {
  */
 function bridgeMargin(
   names: string[],
-  pick: (name: string) => Unit | null,
+  pick: (name: string) => { cost: number; revenue: number } | null,
 ): number | null {
   let cost = 0
   let revenue = 0
   for (const name of names) {
-    const u = pick(name)
-    if (!u || u.costedQty <= 0) continue
-    cost += u.cost * u.costedQty
-    revenue += u.price * u.costedQty
+    const t = pick(name)
+    if (!t) continue
+    cost += t.cost
+    revenue += t.revenue
   }
   return blendedMargin(cost, revenue)
 }
@@ -275,7 +288,7 @@ function headlineOf(d: MixData): MixHeadline {
   const perOrder = now.orders > 0 ? now.totalQty / now.orders : null
   const priorPerOrder = prior && prior.orders > 0 ? prior.totalQty / prior.orders : null
 
-  const ranked = [...now.units.entries()].sort((a, b) => b[1].qty - a[1].qty)
+  const ranked = [...now.units.entries()].filter(([, u]) => u.qty > 0).sort((a, b) => b[1].qty - a[1].qty)
   const top = ranked[0]
   const topShare = top && now.totalQty > 0 ? (top[1].qty / now.totalQty) * 100 : null
 
@@ -312,7 +325,7 @@ function headlineOf(d: MixData): MixHeadline {
       {
         label: "Items sold",
         value: count(now.totalQty),
-        delta: `across ${count(now.units.size)} items`,
+        delta: `across ${count(ranked.length)} items`,
         deltaTone: "is-flat",
       },
       perOrderCell,
@@ -329,7 +342,7 @@ function headlineOf(d: MixData): MixHeadline {
 }
 
 function unitsOf(d: MixData): MixUnits {
-  const ranked = [...d.now.units.entries()].sort((a, b) => b[1].qty - a[1].qty)
+  const ranked = [...d.now.units.entries()].filter(([, u]) => u.qty > 0).sort((a, b) => b[1].qty - a[1].qty)
   const build = (n: number, budget: number): ChartSpec => {
     const top = ranked.slice(0, n)
     return {
@@ -352,7 +365,7 @@ function unitsOf(d: MixData): MixUnits {
 
 function tableOf(d: MixData): MixTable {
   const { now, prior } = d
-  const ranked = [...now.units.entries()].sort((a, b) => b[1].qty - a[1].qty)
+  const ranked = [...now.units.entries()].filter(([, u]) => u.qty > 0).sort((a, b) => b[1].qty - a[1].qty)
   const shown = ranked.slice(0, TABLE_ROWS)
 
   const shareOf = (w: Window | null, name: string) => {
@@ -368,8 +381,7 @@ function tableOf(d: MixData): MixTable {
     // The item's OWN margin, which is what the prototype's own comment asks
     // for: "the margin column is the menu's, not this page's" — so it is the
     // menu's figure, after discounts, and an em dash when nothing costed it.
-    const margin =
-      u.costedQty > 0 && u.cost > 0 && u.price > 0 ? 100 - (u.cost / u.price) * 100 : null
+    const margin = u.inBlend ? 100 - (u.costTotal / u.collectedTotal) * 100 : null
     return { name, share, was, change, margin }
   })
 
@@ -422,7 +434,7 @@ function tableOf(d: MixData): MixTable {
      * already looks to be told the section is share of units. `/dashboard/pnl`
      * states the identical rule under its cascade for the identical reason.
      */
-    meta: `${count(shown.length)} of ${count(now.units.size)} · share of units · change in pts`,
+    meta: `${count(shown.length)} of ${count(ranked.length)} · share of units · change in pts`,
   }
 }
 
@@ -443,14 +455,19 @@ function bridgeOf(d: MixData): MixBridge {
   ): number | null =>
     bridgeMargin(d.names, (n) => {
       const q = qtyFrom.units.get(n)
-      if (!q) return null
+      // The same membership test as `menuMargin`, on the window the
+      // quantities come from.
+      if (!q || !q.inBlend) return null
+      const own = perUnit(q)
+      // No costed unit to re-price: the term enters at its own totals.
+      if (!own) return { cost: q.costTotal, revenue: q.collectedTotal }
       // A term with no reading in the window a factor is taken from falls back
       // to the other window's, rather than to zero: a missing prior cost is
       // "we have no earlier reading", not "it used to be free".
-      const costed = (u: Unit | undefined) => (u && u.costedQty > 0 ? u : undefined)
-      const c = costed(costFrom.units.get(n)) ?? q
-      const p = costed(priceFrom.units.get(n)) ?? q
-      return { qty: q.qty, costedQty: q.costedQty, cost: c.cost, price: p.price }
+      const reading = (u: Unit | undefined) => (u && u.inBlend ? perUnit(u) : null)
+      const c = reading(costFrom.units.get(n)) ?? own
+      const p = reading(priceFrom.units.get(n)) ?? own
+      return { cost: c.cost * q.costedQty, revenue: p.price * q.costedQty }
     })
 
   const m0 = at(prior, prior, prior)

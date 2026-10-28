@@ -104,4 +104,26 @@ describe("getItemDiscounts", () => {
     expect(discountShare(slider.byPlatform.get("css-pos"))).toBe(0)
     expect(out.get("Fries")!.discount).toBe(0)
   })
+
+  it("splits the same figures by store, so one store's deal stays that store's", async () => {
+    vi.mocked(prisma.$queryRaw)
+      .mockResolvedValueOnce([
+        { name: SLIDER, platform: "ubereats", storeId: "holly", gross: 53.96 },
+        { name: SLIDER, platform: "ubereats", storeId: "gln", gross: 53.96 },
+      ] as never)
+      .mockResolvedValueOnce([
+        { orderId: "o1", platform: "ubereats", storeId: "holly", discount: 26.98, name: SLIDER, price: 13.49, quantity: 4 },
+      ] as never)
+
+    const out = await getItemDiscounts({
+      accountId: "acc",
+      storeIds: ["holly", "gln"],
+      startDate: new Date(),
+      endDate: new Date(),
+    })
+    const slider = out.get(SLIDER)!
+    expect(discountShare(slider)).toBeCloseTo(0.25)
+    expect(discountShare(slider.byStore!.get("holly"))).toBeCloseTo(0.5)
+    expect(discountShare(slider.byStore!.get("gln"))).toBe(0)
+  })
 })

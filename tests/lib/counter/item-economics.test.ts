@@ -388,3 +388,109 @@ describe("the three Blended margin cells are one number", () => {
     expect(cell(profit.data.cells)).toBe(expected)
   })
 })
+
+/* ── Review fixes: recipe slices, per-store deals, the $0 rule, scoping ── */
+
+describe("a POS name booked against two recipes credits each with its own rows", () => {
+  // Hollywood maps "Slider" to r_a; Glendale maps the same name to r_b.
+  const SPLIT = [
+    cogsRow({ storeId: "s1", itemName: "Slider", recipeId: "r_a", qtySold: 10, salesRevenue: 100, lineCost: 30 }),
+    cogsRow({ storeId: "s2", itemName: "Slider", recipeId: "r_b", qtySold: 5, salesRevenue: 50, lineCost: 25 }),
+  ]
+
+  it("rolls up per (item, recipe) slice, not to the item's top recipe", () => {
+    const { items } = foldItemEconomics(SPLIT, new Map())
+    const byRecipe = rollUpByRecipe(items.values())
+    expect(byRecipe.get("r_a")).toMatchObject({ units: 10, plateCost: 3 })
+    expect(byRecipe.get("r_b")).toMatchObject({ units: 5, plateCost: 5 })
+    expect(byRecipe.get("r_b")!.foodCostPct).toBeCloseTo(50)
+  })
+
+  it("Menu items shows each recipe's own sold, plate and keep", async () => {
+    asMock(prisma.store.findMany).mockResolvedValue([STORE, { ...STORE, id: "s2", name: "Glendale" }])
+    asMock(prisma.dailyCogsItem.groupBy).mockImplementation(cogsGroupBy(SPLIT))
+    asMock(prisma.dailyCogsItem.findMany).mockImplementation(cogsFindMany(SPLIT))
+    asMock(prisma.recipe.findMany).mockResolvedValue(
+      ["r_a", "r_b"].map((id) => ({ ...RECIPES[0], id, itemName: `Recipe ${id}` })),
+    )
+    asMock(getItemDiscounts).mockResolvedValue(new Map())
+    const d = await loadMenuItems({ ...input, now: TODAY })
+    const a = d.items.find((i) => i.id === "r_a")!
+    const b = d.items.find((i) => i.id === "r_b")!
+    expect([a.sold, a.plateCost, a.keep]).toEqual([10, "$3.00", "$7.00"])
+    expect([b.sold, b.plateCost, b.keep]).toEqual([5, "$5.00", "$5.00"])
+  })
+})
+
+describe("a deal is the store's that ran it", () => {
+  it("never discounts a store's costed sales by another store's deal", () => {
+    const rows = [
+      cogsRow({ storeId: "s1", itemName: "Slider", qtySold: 10, salesRevenue: 100, lineCost: 30 }),
+      cogsRow({ storeId: "s2", itemName: "Slider", recipeId: null, status: "UNMAPPED", qtySold: 10, salesRevenue: 100 }),
+    ]
+    const deal = new Map([
+      [
+        "Slider",
+        {
+          gross: 200,
+          discount: 50,
+          byPlatform: new Map(),
+          // The BOGO ran at s2 only, where nothing costed the item.
+          byStore: new Map([
+            ["s1", { gross: 100, discount: 0 }],
+            ["s2", { gross: 100, discount: 50 }],
+          ]),
+        },
+      ],
+    ])
+    const s = foldItemEconomics(rows, deal).items.get("Slider")!
+    expect(s.costed!.collected).toBe(100)
+    expect(s.foodCostPct).toBeCloseTo(30)
+    // The item still reports what it collected overall.
+    expect(s.collected).toBe(150)
+    expect(s.discountShare).toBeCloseTo(0.25)
+  })
+})
+
+describe("menuMargin uses the per-item rule", () => {
+  it("leaves out a COSTED item whose booked cost is $0, as its own cell does", () => {
+    const { items } = foldItemEconomics(
+      [
+        cogsRow({ itemName: "Burger", qtySold: 10, salesRevenue: 100, lineCost: 40 }),
+        cogsRow({ itemName: "Water", qtySold: 10, salesRevenue: 100, lineCost: 0 }),
+      ],
+      new Map(),
+    )
+    expect(items.get("Water")!.marginPct).toBeNull()
+    const m = menuMargin(items.values())
+    expect(m.items).toBe(1)
+    expect(m.marginPct).toBeCloseTo(60)
+  })
+})
+
+describe("the three Blended margin cells agree for any selection", () => {
+  it("an inactive store reads empty on the hub, mix and profit alike", async () => {
+    asMock(prisma.store.findMany).mockResolvedValue([{ ...STORE, isActive: false }])
+    const scoped = { ...input, storeId: "s1" }
+    const hub = await getMenuHubSectionPromises(scoped, "Oct 1 – Oct 2").headline
+    const mix = await getProductMixSectionPromises(scoped).headline
+    const profit = await getMenuProfitSectionPromises(scoped).headline
+    expect([hasData(hub), hasData(mix), hasData(profit)]).toEqual([false, false, false])
+  })
+
+  it("Product mix's bridge ends on the Blended margin cell, zero-unit costed items included", async () => {
+    const rows = [
+      ...BOGO_ROWS,
+      // Booked cost and collected revenue with no units — a correction row.
+      cogsRow({ itemName: "Adjustment", qtySold: 0, salesRevenue: 10, lineCost: 4 }),
+    ]
+    asMock(prisma.dailyCogsItem.groupBy).mockImplementation(cogsGroupBy(rows))
+    const s = getProductMixSectionPromises(input)
+    const [head, bridge] = await Promise.all([s.headline, s.bridge])
+    if (!hasData(head) || !hasData(bridge)) throw new Error("mix")
+    const cell = head.data.cells.find((c) => c.label === "Blended margin")!.value
+    const expected = pct(100 - ((230 + 4) / (924.5 + 10)) * 100, { scaled: true })
+    expect(cell).toBe(expected)
+    expect(bridge.data.rows.find((r) => r.key === "now")!.value).toBe(expected)
+  })
+})

@@ -12,6 +12,9 @@ import { describe, it, expect, vi } from "vitest"
 vi.mock("@/app/actions/forecasts/menu-engineering-actions", () => ({
   getMenuEngineering: vi.fn(async () => null),
 }))
+vi.mock("@/lib/account-stores", () => ({
+  getScopedStores: vi.fn(async (_a: string, id: string | null) => [{ id: id ?? "holly" }]),
+}))
 vi.mock("@/lib/counter/statement", () => ({
   loadStatement: vi.fn(async () => ({ rows: [], grossSales: 0 })),
   rowValues: vi.fn(() => []),

@@ -74,9 +74,18 @@ export function bogoDiscounts(): Map<string, ItemDiscountEntry> {
         gross: 1349,
         discount: 674.5,
         byPlatform: new Map([["ubereats", { gross: 1349, discount: 674.5 }]]),
+        byStore: new Map([["s1", { gross: 1349, discount: 674.5 }]]),
       },
     ],
-    [FRIES, { gross: 250, discount: 0, byPlatform: new Map([["ubereats", { gross: 250, discount: 0 }]]) }],
+    [
+      FRIES,
+      {
+        gross: 250,
+        discount: 0,
+        byPlatform: new Map([["ubereats", { gross: 250, discount: 0 }]]),
+        byStore: new Map([["s1", { gross: 250, discount: 0 }]]),
+      },
+    ],
   ])
 }
 

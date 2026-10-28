@@ -422,6 +422,9 @@ async function foldCogsRows(input: {
     prisma.dailyCogsItem.findMany({
       where: { storeId: { in: storeIds }, date: { gte: startDate, lte: endDate } },
       select: {
+        // The discount share is per (store, item): one store's deal must not
+        // discount another store's sales (`item-economics.ts`).
+        storeId: true,
         date: true,
         itemName: true,
         category: true,
