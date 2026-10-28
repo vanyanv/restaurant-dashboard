@@ -8,6 +8,12 @@ import { getAccountStoreRows } from "@/lib/account-stores"
 import type { Prisma } from "@/generated/prisma/client"
 import { persistOrderItems } from "@/lib/otter-orders-sync"
 import { HOUSE_PLATFORMS } from "@/lib/counter/channel-mix"
+import {
+  fulfillmentKind,
+  totalCommission,
+  type OrderFeeGroup,
+  type StoreCommissionRates,
+} from "@/lib/counter/commission-core"
 
 /** Distinct platforms across an account's orders, cached for an hour.
  * The previous shape was a `distinct: ["platform"]` findMany inside every
@@ -90,8 +96,21 @@ export type OrderListRow = {
 export type OrderListTotals = {
   /** Σ subtotal + Σ discount — the column is stored NEGATIVE. See `order-signs.ts`. */
   netSales: number
-  /** −Σ commission: the POSITIVE amount the marketplaces took. */
-  commission: number
+  /**
+   * What the marketplaces took, by the one commission rule
+   * (`@/lib/counter/commission-core`): recorded fees, plus the store's rate
+   * for platform and mode × the after-discount ticket on orders that came
+   * without one. Cancelled orders excluded. `null` when not one marketplace
+   * order could be priced.
+   */
+  commission: number | null
+  /** The recorded half of `commission`. */
+  commissionRecorded: number
+  /** The estimated half, and how many orders it covers. */
+  commissionEstimated: number
+  thirdPartyEstimatedCount: number
+  /** Marketplace orders with no recorded fee and no rate on file. */
+  thirdPartyUnknownCount: number
   /** Σ subtotal + Σ discount, over matched orders whose platform is not in-house. */
   thirdPartyNetSales: number
   /**
@@ -112,6 +131,10 @@ export type OrderListTotals = {
 const ZERO_TOTALS: OrderListTotals = {
   netSales: 0,
   commission: 0,
+  commissionRecorded: 0,
+  commissionEstimated: 0,
+  thirdPartyEstimatedCount: 0,
+  thirdPartyUnknownCount: 0,
   thirdPartyNetSales: 0,
   thirdPartyCount: 0,
   thirdPartyWithFees: 0,
@@ -256,7 +279,28 @@ export async function getOrdersList(
         },
       })
 
-  const [rows, undrainedCount, platforms, overallSums, thirdPartySums, thirdPartyWithFees] =
+  /*
+   * The commission groups: marketplace orders under the reader's own filter,
+   * cancelled ones out, split by platform, mode and whether a fee landed —
+   * the shape `totalCommission` folds. Prisma cannot group on an expression,
+   * so the ticket is Σ subtotal + Σ discount per group rather than the
+   * per-order `max(0, …)` the SQL loader uses; the two differ only on an
+   * order whose discount exceeds its subtotal.
+   */
+  const notCancelled: Prisma.OtterOrderWhereInput = {
+    OR: [{ orderStatus: null }, { orderStatus: { not: "OFO_STATUS_CANCELED" } }],
+  }
+  const feeGroups = (recorded: boolean) =>
+    prisma.otterOrder.groupBy({
+      by: ["storeId", "platform", "fulfillmentMode"],
+      where: {
+        AND: [thirdPartyWhere, notCancelled, recorded ? { commission: { not: 0 } } : { commission: 0 }],
+      },
+      _count: { _all: true },
+      _sum: { subtotal: true, discount: true, commission: true },
+    })
+
+  const [rows, undrainedCount, platforms, overallSums, thirdPartySums, thirdPartyWithFees, recordedGroups, unrecordedGroups] =
     await Promise.all([
       summaryOnly
         ? Promise.resolve([] as Awaited<ReturnType<typeof listRows>>)
@@ -306,7 +350,27 @@ export async function getOrdersList(
         : prisma.otterOrder.count({
             where: { AND: [thirdPartyWhere, { commission: { not: 0 } }] },
           }),
+      summaryOnly ? Promise.resolve([]) : feeGroups(true),
+      summaryOnly ? Promise.resolve([]) : feeGroups(false),
     ])
+
+  const groups: OrderFeeGroup[] = [
+    ...recordedGroups.map((g) => ({ g, recorded: true })),
+    ...unrecordedGroups.map((g) => ({ g, recorded: false })),
+  ].map(({ g, recorded }) => ({
+    storeId: g.storeId,
+    day: "",
+    platform: g.platform,
+    mode: fulfillmentKind(g.fulfillmentMode),
+    recorded,
+    orders: g._count._all,
+    fee: Math.max(0, -(g._sum.commission ?? 0)),
+    ticket: Math.max(0, (g._sum.subtotal ?? 0) + (g._sum.discount ?? 0)),
+  }))
+  const fees = totalCommission(
+    groups,
+    new Map<string, StoreCommissionRates>(stores.map((s) => [s.id, s])),
+  )
 
   const totalCount = overallSums._count
   const thirdPartyCount = thirdPartySums?._count ?? 0
@@ -345,8 +409,13 @@ export async function getOrdersList(
       // sales by twice the discounts given. See `src/lib/counter/order-signs.ts`.
       netSales: (overallSums._sum.subtotal ?? 0) + (overallSums._sum.discount ?? 0),
       // Reported as the POSITIVE amount the marketplaces took, so the strip's
-      // "Marketplace fees" is a fee and not a negative number.
-      commission: Math.max(0, -(overallSums._sum.commission ?? 0)),
+      // "Marketplace fees" is a fee and not a negative number. A summary load
+      // fetched no groups and keeps the recorded sum alone.
+      commission: summaryOnly ? Math.max(0, -(overallSums._sum.commission ?? 0)) : fees.amount,
+      commissionRecorded: summaryOnly ? Math.max(0, -(overallSums._sum.commission ?? 0)) : fees.recorded,
+      commissionEstimated: fees.estimated,
+      thirdPartyEstimatedCount: fees.ordersEstimated,
+      thirdPartyUnknownCount: fees.unknownOrders,
       thirdPartyNetSales:
         (thirdPartySums?._sum.subtotal ?? 0) + (thirdPartySums?._sum.discount ?? 0),
       thirdPartyCount,

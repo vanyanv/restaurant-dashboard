@@ -13,15 +13,15 @@ import {
  * `./recipe.ts`, `./stock-count.ts` and `./settings.ts`.
  *
  * `updateStore` validates the whole store, so the name has to travel with any
- * change or its `min(1)` rejects it. Its `parseRate` reads a commission
- * greater than 1 as a percentage and divides by 100, so the form can send
- * either 21 or 0.21 and mean the same thing.
+ * change or its `min(1)` rejects it. Commission rates arrive here as
+ * PERCENTS (25 = 25%) and leave as fractions — see `saveStoreFile`.
  *
  * `targetCogsPct` is deliberately absent: `updateStoreSchema` does not accept
  * it, so no form can set it and the store file says so rather than offering a
  * field that silently does nothing.
  */
 export interface StoreFileEdit {
+  /* Commission rates below are PERCENTS, e.g. 25 for 25%. */
   name: string
   address: string | null
   phone: string | null
@@ -31,6 +31,11 @@ export interface StoreFileEdit {
   fixedMonthlyCleaning: number | null
   uberCommissionRate: number
   doordashCommissionRate: number
+  /** Blank (null) clears it: "not known", never free. */
+  uberPickupCommissionRate: number | null
+  doordashPickupCommissionRate: number | null
+  grubhubCommissionRate: number | null
+  lifecycleStage: "pre_open" | "warming_up" | "ready"
 }
 
 /** A blank clears the value; `updateStore` reads "" as null and absent as unchanged. */
@@ -51,8 +56,16 @@ export async function saveStoreFile(
   put(form, "fixedMonthlyLabor", edit.fixedMonthlyLabor)
   put(form, "fixedMonthlyTowels", edit.fixedMonthlyTowels)
   put(form, "fixedMonthlyCleaning", edit.fixedMonthlyCleaning)
-  put(form, "uberCommissionRate", edit.uberCommissionRate)
-  put(form, "doordashCommissionRate", edit.doordashCommissionRate)
+  // Sent as FRACTIONS. `parseRate` reads anything above 1 as a percent, which
+  // means a 1% rate typed as "1" would land as 100%; dividing here first
+  // makes every percent the form sends unambiguous.
+  const frac = (pct: number | null) => (pct === null ? null : pct / 100)
+  put(form, "uberCommissionRate", frac(edit.uberCommissionRate))
+  put(form, "doordashCommissionRate", frac(edit.doordashCommissionRate))
+  put(form, "uberPickupCommissionRate", frac(edit.uberPickupCommissionRate))
+  put(form, "doordashPickupCommissionRate", frac(edit.doordashPickupCommissionRate))
+  put(form, "grubhubCommissionRate", frac(edit.grubhubCommissionRate))
+  form.set("lifecycleStage", edit.lifecycleStage)
 
   const result = await updateStore(storeId, form)
   if ("error" in result && result.error) return { ok: false, error: result.error }

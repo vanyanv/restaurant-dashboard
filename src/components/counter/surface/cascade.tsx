@@ -62,16 +62,45 @@ export interface CascadeEnd {
   sub?: string
 }
 
+/**
+ * The lines ABOVE `start`: gross sales, then what came off it before the
+ * statement's own top line (discounts, refunds). Optional.
+ *
+ * Bars are drawn against `lead.amount`, so the money visibly runs down from
+ * gross; every PERCENT stays on `start.amount`, which is the statement's
+ * denominator — food as a share of net sales here reads the same as it does
+ * in the table under it. `start` is printed at its own amount and is the
+ * caller's to reconcile with `lead.amount − Σ lead.cuts`; the adapter builds
+ * both from one rollup.
+ */
+export interface CascadeLead {
+  name: string
+  sub?: string
+  amount: number
+  cuts: CascadeCut[]
+}
+
 export function Cascade({
+  lead,
   start,
   cuts,
   end,
 }: {
+  lead?: CascadeLead
   start: CascadeStart
   cuts: CascadeCut[]
   end: CascadeEnd
 }) {
   const top = start.amount
+  // What the bars are drawn against. Never below `top`, so a lead whose cuts
+  // ADD money (an adjustment credit) cannot push the start bar past 100%.
+  const scale = lead ? Math.max(lead.amount, top) : top
+
+  let leadRunning = lead?.amount ?? 0
+  const leadRows = (lead?.cuts ?? []).map((c) => {
+    leadRunning -= c.amount
+    return { ...c, left: leadRunning }
+  })
 
   let running = top
   const middle = cuts.map((c) => {
@@ -82,7 +111,24 @@ export function Cascade({
 
   return (
     <div className="wf">
-      <Row name={start.name} sub={start.sub} left={top} top={top} total pct={pctOf(top, top)} />
+      {lead ? (
+        <>
+          <Row name={lead.name} sub={lead.sub} left={lead.amount} top={scale} total pct={pctOf(lead.amount, top)} />
+          {leadRows.map((c, i) => (
+            <Row
+              key={`lead-${i}`}
+              name={c.name}
+              sub={c.sub}
+              left={c.left}
+              cut={c.amount}
+              over={c.over}
+              top={scale}
+              pct={pctOf(c.amount, top)}
+            />
+          ))}
+        </>
+      ) : null}
+      <Row name={start.name} sub={start.sub} left={top} top={scale} total pct={pctOf(top, top)} />
       {/* Keyed by index, not name: two "Other" lines are plausible in a
           statement, and the order never changes at runtime. */}
       {middle.map((c, i) => (
@@ -93,7 +139,7 @@ export function Cascade({
           left={c.left}
           cut={c.amount}
           over={c.over}
-          top={top}
+          top={scale}
           pct={pctOf(c.amount, top)}
         />
       ))}
@@ -101,7 +147,7 @@ export function Cascade({
         name={end.name}
         sub={end.sub}
         left={bottom}
-        top={top}
+        top={scale}
         total
         good={bottom > 0}
         pct={pctOf(bottom, top)}
@@ -152,7 +198,10 @@ function Row({
         )}
       </span>
       {/* U+2212 MINUS, not a hyphen — this is a column of figures. */}
-      <span className="wf__v">{cut === undefined ? money(left) : `−${money(cut)}`}</span>
+      {/* A NEGATIVE cut gives money back (an adjustment credit) and prints a plus. */}
+      <span className="wf__v">
+        {cut === undefined ? money(left) : cut < 0 ? `+${money(-cut)}` : `−${money(cut)}`}
+      </span>
       <span className="wf__p">{pct.toFixed(1)}%</span>
     </div>
   )

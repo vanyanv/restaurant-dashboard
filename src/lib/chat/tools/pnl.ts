@@ -17,6 +17,11 @@ import {
 } from "@/lib/pnl"
 import { CogsStatus } from "@/generated/prisma/client"
 import {
+  bucketCommission,
+  loadOrderFeeGroups,
+  type StoreCommissionRates,
+} from "@/lib/counter/commission"
+import {
   dateRangeSchema,
   parseDateRange,
   resolveStoreIds,
@@ -72,6 +77,9 @@ type StoreFixed = {
   fixedMonthlyCleaning: number | null
   uberCommissionRate: number
   doordashCommissionRate: number
+  uberPickupCommissionRate: number | null
+  doordashPickupCommissionRate: number | null
+  grubhubCommissionRate: number | null
   targetCogsPct: number | null
 }
 
@@ -246,7 +254,8 @@ function buildTotals(input: {
   const laborSum = rowSum(rows, "6200") // negative
   const rentSum = rowSum(rows, "7200")   // negative
   const uberComm = rowSum(rows, "COM_UBER")    // negative
-  const doordashComm = rowSum(rows, "COM_DD")  // negative
+  const doordashComm =
+    rowSum(rows, "COM_DD") + rowSum(rows, "COM_GH") + rowSum(rows, "COM_OTHER") // negative, every other marketplace
   const cardSales = rowSum(rows, "4010")
   const cashSales = rowSum(rows, "4011")
 
@@ -380,7 +389,7 @@ async function computeWindow(input: {
   const overallStart = periods[0].startDate
   const overallEnd = periods[periods.length - 1].endDate
 
-  const [summaries, cogsRows, harriRows, fixedExpenseRows] = await Promise.all([
+  const [summaries, cogsRows, harriRows, fixedExpenseRows, feeGroups] = await Promise.all([
     ctx.prisma.otterDailySummary.findMany({
       where: {
         storeId: { in: storeIds },
@@ -399,6 +408,7 @@ async function computeWindow(input: {
         tpDiscounts: true,
         fpServiceCharges: true,
         tpServiceCharges: true,
+        tpRefundsAdjustments: true,
         fpOrderCount: true,
         tpOrderCount: true,
       },
@@ -428,7 +438,13 @@ async function computeWindow(input: {
       orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
       select: { id: true, storeId: true, label: true, amount: true, frequency: true },
     }),
+    // The dashboard's commission: recorded fees + the store-rate estimate.
+    loadOrderFeeGroups(
+      { accountId: ctx.accountId, storeIds, startDate: overallStart, endDate: overallEnd },
+      ctx.prisma,
+    ),
   ])
+  const ratesByStore = new Map<string, StoreCommissionRates>(stores.map((s) => [s.id, s]))
 
   const summariesByStore = new Map<string, SummaryRow[]>()
   for (const s of summaries as SummaryRow[]) {
@@ -508,6 +524,11 @@ async function computeWindow(input: {
       cogsValues,
       harriLaborByPeriod,
       customFixedExpenses,
+      commission: bucketCommission(
+        feeGroups.filter((g) => g.storeId === store.id),
+        periods,
+        ratesByStore,
+      ),
     })
 
     // Refill-gap detection: any period with sales but no cogs rows.
@@ -650,6 +671,9 @@ export const getPnlSummary: ChatTool<typeof params, PnlSummaryResult> = {
         fixedMonthlyCleaning: true,
         uberCommissionRate: true,
         doordashCommissionRate: true,
+        uberPickupCommissionRate: true,
+        doordashPickupCommissionRate: true,
+        grubhubCommissionRate: true,
         targetCogsPct: true,
       },
       orderBy: { name: "asc" },

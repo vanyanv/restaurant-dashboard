@@ -8,6 +8,7 @@ import { getAccountStoreRows } from "@/lib/account-stores"
 import { z } from "zod"
 import { invalidateOwnerStoreCache } from "@/lib/chat/owner-scope"
 import { cache } from "react"
+import { bustTags } from "@/lib/cache/cached"
 
 const createStoreSchema = z.object({
   name: z.string().min(1, "Store name is required").max(100),
@@ -24,8 +25,15 @@ const updateStoreSchema = z.object({
   fixedMonthlyRent: z.number().min(0).max(1_000_000).nullable().optional(),
   fixedMonthlyTowels: z.number().min(0).max(1_000_000).nullable().optional(),
   fixedMonthlyCleaning: z.number().min(0).max(1_000_000).nullable().optional(),
+  // Delivery rates — required columns, so a blank leaves them unchanged.
   uberCommissionRate: z.number().min(0).max(1).optional(),
   doordashCommissionRate: z.number().min(0).max(1).optional(),
+  // Nullable: a blank CLEARS the rate, which the P&L reads as "not known"
+  // and flags rather than charging 0.
+  uberPickupCommissionRate: z.number().min(0).max(1).nullable().optional(),
+  doordashPickupCommissionRate: z.number().min(0).max(1).nullable().optional(),
+  grubhubCommissionRate: z.number().min(0).max(1).nullable().optional(),
+  lifecycleStage: z.enum(["pre_open", "warming_up", "ready"]).optional(),
 })
 
 export async function createStore(formData: FormData) {
@@ -167,6 +175,13 @@ export async function updateStore(storeId: string, formData: FormData) {
       return n > 1 ? n / 100 : n
     }
 
+    const parseNullableRate = (v: FormDataEntryValue | null): number | null | undefined => {
+      if (v == null) return undefined
+      if (String(v).trim() === "") return null
+      return parseRate(v)
+    }
+    const stage = formData.get("lifecycleStage")
+
     const validatedData = updateStoreSchema.parse({
       name: formData.get("name"),
       address: formData.get("address") || undefined,
@@ -178,6 +193,10 @@ export async function updateStore(storeId: string, formData: FormData) {
       fixedMonthlyCleaning: parseOptionalNumber(formData.get("fixedMonthlyCleaning")),
       uberCommissionRate: parseRate(formData.get("uberCommissionRate")),
       doordashCommissionRate: parseRate(formData.get("doordashCommissionRate")),
+      uberPickupCommissionRate: parseNullableRate(formData.get("uberPickupCommissionRate")),
+      doordashPickupCommissionRate: parseNullableRate(formData.get("doordashPickupCommissionRate")),
+      grubhubCommissionRate: parseNullableRate(formData.get("grubhubCommissionRate")),
+      lifecycleStage: stage == null || String(stage) === "" ? undefined : String(stage),
     })
 
     const existingStore = await prisma.store.findFirst({
@@ -199,6 +218,9 @@ export async function updateStore(storeId: string, formData: FormData) {
     invalidateOwnerStoreCache(session.user.accountId)
     revalidatePath("/dashboard/stores")
     revalidatePath(`/dashboard/stores/${storeId}`)
+    // Commission rates price every P&L range, so a rate edit must not wait out
+    // the rollup's 600s cache. Fire-and-forget, as the fixed-expense edits do.
+    void bustTags(["pnl"])
     return { success: true, store: updatedStore }
   } catch (error) {
     if (error instanceof z.ZodError) {

@@ -225,7 +225,7 @@ function headlineOf(
         value: money(totalSales),
         // The statement's, not the menu's — the prototype asks for exactly
         // this and names the reason itself.
-        delta: "Total Sales, as the P&L reads it",
+        delta: "Net sales, as the P&L reads it",
         deltaTone: "is-flat",
       },
       {
@@ -233,7 +233,7 @@ function headlineOf(
         value: money(foodCost),
         delta:
           totalSales > 0
-            ? `${pct((foodCost / totalSales) * 100, { scaled: true })} of Total Sales`
+            ? `${pct((foodCost / totalSales) * 100, { scaled: true })} of net sales`
             : "no sales in range",
         deltaTone: "is-flat",
       },

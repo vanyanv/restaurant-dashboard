@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma"
+import { rowSales } from "@/lib/pnl"
 import { cached } from "@/lib/cache/cached"
 import { businessCalendarDate, businessQueryDate } from "@/lib/counter/business-date"
 import { getShellStatus } from "@/lib/counter/adapters/shell-status"
@@ -87,14 +88,29 @@ function queryDate(local: Date): Date {
 const WEEKDAY = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
 const WEEKDAY_SHORT = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
 
+/**
+ * The statement's Net sales for one day — `rowSales` in `@/lib/pnl`, the
+ * figure the Overview and P&L print — not Otter's `fpNetSales + tpNetSales`,
+ * so a signal here and the headline the owner then opens agree.
+ */
 async function netSalesOn(storeIds: string[], day: Date): Promise<number | null> {
-  const sums = await prisma.otterDailySummary.aggregate({
+  const rows = await prisma.otterDailySummary.findMany({
     where: { storeId: { in: storeIds }, date: queryDate(day) },
-    _sum: { fpNetSales: true, tpNetSales: true },
-    _count: { _all: true },
+    select: {
+      platform: true,
+      fpGrossSales: true,
+      tpGrossSales: true,
+      fpDiscounts: true,
+      tpDiscounts: true,
+      fpServiceCharges: true,
+      tpServiceCharges: true,
+      tpRefundsAdjustments: true,
+      fpTaxCollected: true,
+      tpTaxCollected: true,
+    },
   })
-  if (sums._count._all === 0) return null
-  return (sums._sum.fpNetSales ?? 0) + (sums._sum.tpNetSales ?? 0)
+  if (rows.length === 0) return null
+  return rows.reduce((t, r) => t + rowSales(r).net, 0)
 }
 
 async function salesSignal(storeIds: string[], today: Date): Promise<AskSignal | null> {

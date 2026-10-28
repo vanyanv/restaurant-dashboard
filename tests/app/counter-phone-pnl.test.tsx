@@ -99,7 +99,7 @@ const sections: PnlSections = {
     comparisonLabel: "the prior period",
     fixedInRange: "$3,340",
     lines: [
-      { key: "gross", name: "Gross sales", strong: true, amount: "$25,879", share: "100.0%", comparison: "$24,860", change: "▲ 4.1%", loud: false, worth: "+$1,019" },
+      { key: "gross", name: "Net sales", strong: true, amount: "$25,879", share: "100.0%", comparison: "$24,860", change: "▲ 4.1%", loud: false, worth: "+$1,019" },
       { key: "commissions", name: "Marketplace commissions", amount: "−$4,632", share: "17.9%", comparison: "17.4%", change: "▲ 0.5 pts", loud: false, worth: "+$129" },
       { key: "net", name: "Net revenue", strong: true, amount: "$21,247", share: "82.1%", comparison: "82.6%", change: "▼ 0.5 pts", loud: false, worth: "−$129" },
       { key: "food", name: "Food", sub: "target 29.0%", amount: "−$8,120", share: "31.4%", comparison: "30.1%", change: "▲ 1.3 pts", loud: true, over: true, worth: "+$336" },
@@ -311,11 +311,14 @@ describe("Counter P&L — the phone", () => {
 
   /* ── The statement ─────────────────────────────────────────────────── */
 
-  it("prints the prototype's SEVEN lines, dropping the two subtotals the desk keeps", () => {
+  it("prints the statement's lines, dropping the two subtotals the desk keeps", () => {
     const { container } = renderPhone()
     const lines = container.querySelectorAll(".moneyline")
+    // The `gross` key is the statement's NET sales (after discounts and
+    // refunds) since 2026-10-28; this fixture carries no gross/discount/refund
+    // lines above it, so none are printed.
     expect(Array.from(lines).map((l) => l.querySelector("span")?.textContent)).toEqual([
-      "Gross sales",
+      "Net sales",
       "Commissions",
       "Food",
       "Labor",

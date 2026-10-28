@@ -16,6 +16,7 @@ import {
   loadChannelMixByStore,
   type ChannelReading,
 } from "@/lib/counter/channel-mix"
+import { addCommission } from "@/lib/counter/commission-core"
 import { loadStripTargets, type StripTargets, type Target } from "@/lib/counter/targets"
 import {
   granularityFor,
@@ -660,12 +661,20 @@ function buildStrip(
   }
 
   if (channels) {
-    const withRate = channels.filter((c) => c.commission !== null)
-    const withoutRate = channels.filter((c) => c.commission === null)
+    // MARKETPLACE channels only. In-house carries a commission of 0, and
+    // counting it diluted the ratio with sales no marketplace touched: a store
+    // half in-house read "89% kept" when the marketplaces were keeping 25%.
+    const market = channels.filter((c) => c.channel !== "house")
+    const withRate = market.filter((c) => c.commission !== null)
+    const withoutRate = market.filter((c) => c.commission === null)
     const rated = withRate.reduce((t, c) => t + c.net, 0)
     if (withRate.length > 0 && rated > 0) {
       const fees = withRate.reduce((t, c) => t + (c.commission ?? 0), 0)
       const keptPct = ((rated - fees) / rated) * 100
+      const basis = addCommission(
+        withRate.flatMap((c) => (c.commissionBasis ? [c.commissionBasis] : [])),
+      )
+      const estPct = basis.orders > 0 ? Math.round((basis.ordersEstimated / basis.orders) * 100) : 0
       cells.push({
         label: "Kept after fees",
         value: pct(keptPct, { scaled: true }),
@@ -685,7 +694,9 @@ function buildStrip(
         caption:
           withoutRate.length > 0
             ? `excludes ${withoutRate.map((c) => c.channel).join(", ")}`
-            : undefined,
+            : estPct > 0
+              ? `of 3P sales · ${estPct}% est.`
+              : "of marketplace sales",
         /*
          * NO REFERENCE, deliberately, and `targets.marketplaceFees` is not
          * quietly reused here.
@@ -1912,9 +1923,10 @@ function buildStoreCards(input: {
         if (rated.length === 0) return null
         return rated.reduce((t, c) => t + c.net - (c.commission as number), 0)
       })(),
-      // Passed through from loadChannelMix — the one place commission is
-      // derived (store contract rate × gross, null when the schema
-      // publishes no rate).
+      // Passed through from loadChannelMix, whose commission is the one
+      // commission function's (recorded fees + store-rate estimate, null
+      // where nothing could be priced). `kept` above is DOLLARS, so in-house
+      // belongs in it — it is the ratio that must not count it.
       channels: mix.map((c) => ({
         id: c.channel, net: c.net, orders: c.orders,
         commission: c.commission, ticket: c.ticket,

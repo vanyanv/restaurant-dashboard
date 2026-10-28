@@ -5,6 +5,15 @@ import { toQueryBounds, type DateRange } from "@/lib/counter/date-range"
 import { otterRangeTags, rangeTtl } from "@/lib/cache/range"
 import { cached, stableKey } from "@/lib/cache/cached"
 import { getScopedStores } from "@/lib/account-stores"
+import { rowSales } from "@/lib/pnl"
+import {
+  loadOrderFeeGroups,
+  storeRateFor,
+  totalCommission,
+  type CommissionTotals,
+  type OrderFeeGroup,
+  type StoreCommissionRates,
+} from "@/lib/counter/commission"
 
 /**
  * Per-channel net, orders, commission and average ticket for a range.
@@ -25,25 +34,27 @@ import { getScopedStores } from "@/lib/account-stores"
 
 export interface ChannelReading {
   channel: ChannelId
-  /** Net sales on this channel over the range. */
+  /**
+   * Net sales on this channel over the range — the statement's figure:
+   * gross + service charges + discounts + refunds, via `rowSales` in
+   * `@/lib/pnl`. Summed over the four channels it is the P&L's Net Sales less
+   * any slug with no Counter channel. NOT Otter's `fpNetSales`/`tpNetSales`.
+   */
   net: number
   orders: number
   /**
-   * What the marketplace kept.
+   * What the marketplace kept, from `@/lib/counter/commission` — the same
+   * function the P&L's commission lines come from: recorded fees, plus the
+   * store's rate for the platform and mode × the after-discount ticket on
+   * orders that came without one.
    *
-   * `0` for in-house — there is no marketplace, so the answer is genuinely
-   * zero. `null` for Grubhub, where the schema publishes NO rate: `Store` has
-   * `uberCommissionRate` and `doordashCommissionRate` and nothing else, and a
-   * commission column that quietly reads $0 for Grubhub is the claim that
-   * Grubhub works for free. Same rule as `ticket` below.
-   *
-   * Uber and DoorDash are the store's configured rate applied to GROSS, which
-   * is what the P&L's commission lines do (`computePnL`, and the schema's own
-   * note on those columns: "Applied to tpGrossSales on the P&L"). One figure,
-   * one derivation — a commission that disagreed with the P&L for the same
-   * range would be note 60 all over again.
+   * `0` for in-house — there is no marketplace. `null` when not one order on
+   * the channel could be priced (no recorded fee and no rate on file); never
+   * a quiet $0, which would claim the marketplace works for free.
    */
   commission: number | null
+  /** How `commission` was arrived at. Absent for in-house. */
+  commissionBasis?: CommissionTotals
   /**
    * `net / orders`, and `null` when there were no orders.
    *
@@ -128,41 +139,33 @@ const FIRST_PARTY: ReadonlySet<ChannelId> = new Set<ChannelId>(["house"])
 interface SummaryRow {
   storeId: string
   platform: string
-  fpNetSales: number | null
   fpGrossSales: number | null
   fpOrderCount: number | null
-  tpNetSales: number | null
   tpGrossSales: number | null
   tpOrderCount: number | null
+  fpDiscounts: number | null
+  tpDiscounts: number | null
+  fpServiceCharges: number | null
+  tpServiceCharges: number | null
+  fpTaxCollected: number | null
+  tpTaxCollected: number | null
+  tpRefundsAdjustments: number | null
 }
 
-export interface StoreRates {
-  id: string
-  uberCommissionRate: number
-  doordashCommissionRate: number
-}
+export type StoreRates = StoreCommissionRates & { id: string }
 
 /**
- * The commission rate this store has on this channel, or `null` where the
- * schema publishes none. Not a lookup into `channels.ts` — the `commission`
- * field there is the design system's identity constant from the prototype,
- * not this restaurant's contract.
- *
- * Exported because the menu-item page prices an item's marketplace cut and
- * must price it the same way — and because `computeStorePnL` charges the
- * `COM_UBER` and `COM_DD` lines at these same two columns, so "what does this
- * marketplace take" has one answer in the product rather than one per page.
- * A `null` store is an unknown rate, never a free channel.
+ * The DELIVERY commission rate this store has set for a channel, or `null`
+ * where it has none — the menu-item page's "what does a marketplace take of
+ * this item" uses it. Delegates to `storeRateFor` in `commission-core.ts`, the
+ * one rule for rates; `0` for in-house, `null` for a missing store.
  */
 export function commissionRateFor(
   channel: ChannelId,
   store: StoreRates | null,
 ): number | null {
   if (channel === "house") return 0
-  if (!store) return null
-  if (channel === "ubereats") return store.uberCommissionRate
-  if (channel === "doordash") return store.doordashCommissionRate
-  return null
+  return storeRateFor(store, channel, "delivery")
 }
 
 export async function loadChannelMix(
@@ -182,9 +185,12 @@ export async function loadChannelMix(
   const ratesByStore = new Map<string, StoreRates>(stores.map((s) => [s.id, s]))
   const storeIds = stores.map((s) => s.id)
 
-  const rows = await queryChannelRows(storeIds, startDate, endDate)
+  const [rows, groups] = await Promise.all([
+    queryChannelRows(storeIds, startDate, endDate),
+    loadOrderFeeGroups({ accountId, storeIds, startDate, endDate }),
+  ])
 
-  return foldToChannels(rows, ratesByStore)
+  return foldToChannels(rows, groups, ratesByStore)
 }
 
 /**
@@ -212,11 +218,11 @@ export async function loadChannelMixByStore(
   if (stores.length === 0) return new Map()
 
   const ratesByStore = new Map<string, StoreRates>(stores.map((s) => [s.id, s]))
-  const rows = await queryChannelRows(
-    stores.map((s) => s.id),
-    startDate,
-    endDate,
-  )
+  const storeIds = stores.map((s) => s.id)
+  const [rows, groups] = await Promise.all([
+    queryChannelRows(storeIds, startDate, endDate),
+    loadOrderFeeGroups({ accountId, storeIds, startDate, endDate }),
+  ])
 
   const byStore = new Map<string, SummaryRow[]>()
   for (const r of rows) {
@@ -224,9 +230,18 @@ export async function loadChannelMixByStore(
     list.push(r)
     byStore.set(r.storeId, list)
   }
+  const groupsByStore = new Map<string, OrderFeeGroup[]>()
+  for (const g of groups) {
+    const list = groupsByStore.get(g.storeId) ?? []
+    list.push(g)
+    groupsByStore.set(g.storeId, list)
+  }
 
   return new Map(
-    stores.map((s) => [s.id, foldToChannels(byStore.get(s.id) ?? [], ratesByStore)]),
+    stores.map((s) => [
+      s.id,
+      foldToChannels(byStore.get(s.id) ?? [], groupsByStore.get(s.id) ?? [], ratesByStore),
+    ]),
   )
 }
 
@@ -257,7 +272,7 @@ function queryChannelRows(
     // Store ids rather than the account: `getScopedStores` has already resolved
     // the account and the store filter into this exact list, so two readers with
     // different scopes cannot collide on one key.
-    `counter:chanrows:${stableKey({
+    `counter:chanrows2:${stableKey({
       ids: [...storeIds].sort(),
       from: startDate,
       to: endDate,
@@ -277,12 +292,17 @@ function queryChannelRowsUncached(
     SELECT
       "storeId",
       "platform",
-      SUM(COALESCE("fpNetSales", 0))::double precision   AS "fpNetSales",
-      SUM(COALESCE("fpGrossSales", 0))::double precision AS "fpGrossSales",
-      SUM(COALESCE("fpOrderCount", 0))::integer          AS "fpOrderCount",
-      SUM(COALESCE("tpNetSales", 0))::double precision   AS "tpNetSales",
-      SUM(COALESCE("tpGrossSales", 0))::double precision AS "tpGrossSales",
-      SUM(COALESCE("tpOrderCount", 0))::integer          AS "tpOrderCount"
+      SUM(COALESCE("fpGrossSales", 0))::double precision         AS "fpGrossSales",
+      SUM(COALESCE("fpOrderCount", 0))::integer                  AS "fpOrderCount",
+      SUM(COALESCE("tpGrossSales", 0))::double precision         AS "tpGrossSales",
+      SUM(COALESCE("tpOrderCount", 0))::integer                  AS "tpOrderCount",
+      SUM(COALESCE("fpDiscounts", 0))::double precision          AS "fpDiscounts",
+      SUM(COALESCE("tpDiscounts", 0))::double precision          AS "tpDiscounts",
+      SUM(COALESCE("fpServiceCharges", 0))::double precision     AS "fpServiceCharges",
+      SUM(COALESCE("tpServiceCharges", 0))::double precision     AS "tpServiceCharges",
+      SUM(COALESCE("fpTaxCollected", 0))::double precision       AS "fpTaxCollected",
+      SUM(COALESCE("tpTaxCollected", 0))::double precision       AS "tpTaxCollected",
+      SUM(COALESCE("tpRefundsAdjustments", 0))::double precision AS "tpRefundsAdjustments"
     FROM "OtterDailySummary"
     WHERE "storeId" IN (${Prisma.join(storeIds)})
       AND "date" >= ${startDate}
@@ -301,36 +321,43 @@ function queryChannelRowsUncached(
  */
 function foldToChannels(
   rows: SummaryRow[],
+  groups: OrderFeeGroup[],
   ratesByStore: Map<string, StoreRates>,
 ): ChannelReading[] {
-  const acc = new Map<ChannelId, { net: number; orders: number; commission: number | null }>()
+  const acc = new Map<
+    ChannelId,
+    { net: number; orders: number; commission: number | null; basis?: CommissionTotals }
+  >()
 
   for (const r of rows) {
     const channel = CHANNEL_FOR_PLATFORM[r.platform]
     if (!channel) continue
 
     const firstParty = FIRST_PARTY.has(channel)
-    const net = (firstParty ? r.fpNetSales : r.tpNetSales) ?? 0
-    const gross = (firstParty ? r.fpGrossSales : r.tpGrossSales) ?? 0
+    const net = rowSales(r).net
     const orders = (firstParty ? r.fpOrderCount : r.tpOrderCount) ?? 0
     // A platform that traded nothing in the range is not a row. Otter keeps
     // emitting zeroed rows for channels a store once used.
     if (net === 0 && orders === 0) continue
 
-    const bucket = acc.get(channel) ?? { net: 0, orders: 0, commission: null }
+    const bucket = acc.get(channel) ?? { net: 0, orders: 0, commission: firstParty ? 0 : null }
     bucket.net += net
     bucket.orders += orders
-
-    const rate = commissionRateFor(channel, ratesByStore.get(r.storeId) ?? {
-      id: r.storeId,
-      uberCommissionRate: 0,
-      doordashCommissionRate: 0,
-    })
-    // An unrateable channel stays null however many stores contribute to it:
-    // a sum that treats "no published rate" as zero is a fabricated total.
-    if (rate !== null) bucket.commission = (bucket.commission ?? 0) + rate * gross
-
     acc.set(channel, bucket)
+  }
+
+  // Commission per marketplace channel, off the order rows, by the one rule.
+  for (const [channel, bucket] of acc) {
+    if (FIRST_PARTY.has(channel)) continue
+    const basis = totalCommission(
+      groups,
+      ratesByStore,
+      (g) => CHANNEL_FOR_PLATFORM[g.platform] === channel,
+    )
+    bucket.basis = basis
+    // Sales on file and not one order to price them from is a sync gap, not
+    // a free marketplace — the P&L flags the same case on its line.
+    bucket.commission = basis.orders === 0 && bucket.net > 0 ? null : basis.amount
   }
 
   // CHANNELS order, not size order. The band is fixed to the channel (notes
@@ -345,6 +372,7 @@ function foldToChannels(
         net: bucket.net,
         orders: bucket.orders,
         commission: bucket.commission,
+        ...(bucket.basis ? { commissionBasis: bucket.basis } : {}),
         ticket: bucket.orders > 0 ? bucket.net / bucket.orders : null,
       },
     ]

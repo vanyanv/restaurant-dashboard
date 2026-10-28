@@ -375,7 +375,7 @@ describe("absences", () => {
     // These two carry no reference at all — no band and no spark, exactly as
     // the prototype leaves them.
     expect(cellOf(s, "Bottom line")?.reference).toBeUndefined()
-    expect(cellOf(s, "Gross sales")?.reference).toBeUndefined()
+    expect(cellOf(s, "Net sales")?.reference).toBeUndefined()
   })
 
   it("draws no meter on food either when the store has set no target", async () => {
@@ -405,7 +405,7 @@ describe("absences", () => {
     expect(cellOf(s, "Food")?.reference?.series).toHaveLength(8)
     expect(cellOf(s, "Labor")?.reference?.series).toHaveLength(8)
     expect(cellOf(s, "Bottom line")?.reference).toBeUndefined()
-    expect(cellOf(s, "Gross sales")?.reference).toBeUndefined()
+    expect(cellOf(s, "Net sales")?.reference).toBeUndefined()
     // Points, not fractions — the scale the cell prints and the scale the
     // sparkline is drawn at have to be one scale.
     expect(cellOf(s, "Food")?.reference?.series?.[0]).toBeCloseTo(31.4, 1)
@@ -426,7 +426,7 @@ describe("absences", () => {
     expect(s.weeks.status).toBe("failed")
     // Every figure still there, in full.
     expect(must(s.headline, "headline").cells.map((c) => c.label)).toEqual([
-      "Bottom line", "Prime cost", "Food", "Labor", "Gross sales",
+      "Bottom line", "Prime cost", "Food", "Labor", "Net sales",
     ])
     expect(cellOf(s, "Prime cost")?.value).toBe("56.2%")
     // And the judgement survives too — it comes from the targets, not the weeks.
@@ -548,14 +548,16 @@ describe("the cascade", () => {
 
   it("counts the orders from the same rows the Overview counts them from", async () => {
     const s = await load()
-    expect(must(s.cascade, "cascade").start.sub).toBe("6,000 orders")
+    // On the cascade's Gross sales line now — the top of gross → discounts →
+    // refunds → net sales — and on the table's Net sales line, as before.
+    expect(must(s.cascade, "cascade").lead?.sub).toBe("6,000 orders")
     expect(lineOf(s, "gross")?.sub).toBe("6,000 orders")
   })
 
   it("leaves the order count out rather than printing a zero when the mix fails", async () => {
     vi.mocked(loadChannelMix).mockRejectedValue(new Error("Otter is down"))
     const s = await load()
-    expect(must(s.cascade, "cascade").start.sub).toBeUndefined()
+    expect(must(s.cascade, "cascade").lead?.sub).toBeUndefined()
     // The cascade itself still draws: the dollars did not come from the mix.
     expect(must(s.cascade, "cascade").start.amount).toBe(GROSS)
   })

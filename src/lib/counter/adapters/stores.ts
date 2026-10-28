@@ -8,7 +8,12 @@ import {
   type StreamedSections,
 } from "@/lib/counter/adapters/types"
 import { mapReady, type SectionData } from "@/lib/counter/section-data"
-import { dayCount, type DateRange } from "@/lib/counter/date-range"
+import { dayCount, toQueryBounds, type DateRange } from "@/lib/counter/date-range"
+import {
+  loadObservedRates,
+  type FulfillmentKind,
+  type ObservedRate,
+} from "@/lib/counter/commission"
 import { PRIME_CEILING_PCT } from "@/lib/counter/prime-cost"
 import type {
   Column,
@@ -123,6 +128,9 @@ interface StoreRow {
   cogsTarget: number | null
   uber: number | null
   doordash: number | null
+  uberPickup: number | null
+  doordashPickup: number | null
+  grubhub: number | null
   geocoded: boolean
   openedAt: Date | null
 }
@@ -199,6 +207,9 @@ const SELECT = {
   targetCogsPct: true,
   uberCommissionRate: true,
   doordashCommissionRate: true,
+  uberPickupCommissionRate: true,
+  doordashPickupCommissionRate: true,
+  grubhubCommissionRate: true,
   latitude: true,
   openedAt: true,
 } as const
@@ -236,6 +247,9 @@ const shape = (s: {
   targetCogsPct: number | null
   uberCommissionRate: number | null
   doordashCommissionRate: number | null
+  uberPickupCommissionRate: number | null
+  doordashPickupCommissionRate: number | null
+  grubhubCommissionRate: number | null
   latitude: number | null
   openedAt: Date | null
 }): StoreRow => ({
@@ -251,6 +265,9 @@ const shape = (s: {
   cogsTarget: s.targetCogsPct,
   uber: s.uberCommissionRate,
   doordash: s.doordashCommissionRate,
+  uberPickup: s.uberPickupCommissionRate,
+  doordashPickup: s.doordashPickupCommissionRate,
+  grubhub: s.grubhubCommissionRate,
   geocoded: s.latitude !== null,
   openedAt: s.openedAt,
 })
@@ -562,6 +579,18 @@ export interface StoreFileEditable {
   cleaning: number | null
   uber: number
   doordash: number
+  /** Pickup and Grubhub rates. `null` is "not known" — the P&L flags it, never charges 0. */
+  uberPickup: number | null
+  doordashPickup: number | null
+  grubhub: number | null
+  /**
+   * What this store's RECORDED orders show each rate actually running at
+   * over the last 90 days, keyed like the rate fields — "your orders: 25.3%".
+   * Read-only, for drift; never used to price anything.
+   */
+  observed: Record<CommissionRateKey, string>
+  /** `Store.lifecycleStage`. */
+  stage: "pre_open" | "warming_up" | "ready"
   /** Stated, not offered: `updateStoreSchema` does not accept it. */
   cogsTarget: number | null
   /**
@@ -615,6 +644,36 @@ export interface StoreFileRate {
   /** Rendered before the value rather than after. */
   unitLeads?: boolean
   note?: string
+}
+
+/** The five commission settings, by the key the edit form and the table share. */
+export type CommissionRateKey = "doordash" | "doordashPickup" | "uber" | "uberPickup" | "grubhub"
+
+const COMMISSION_RATES: ReadonlyArray<{
+  key: CommissionRateKey
+  label: string
+  platform: string
+  mode: FulfillmentKind
+}> = [
+  { key: "doordash", label: "DoorDash delivery", platform: "doordash", mode: "delivery" },
+  { key: "doordashPickup", label: "DoorDash pickup", platform: "doordash", mode: "pickup" },
+  { key: "uber", label: "Uber Eats delivery", platform: "ubereats", mode: "delivery" },
+  { key: "uberPickup", label: "Uber Eats pickup", platform: "ubereats", mode: "pickup" },
+  { key: "grubhub", label: "Grubhub", platform: "grubhub", mode: "delivery" },
+]
+
+/** "your orders: 25.3%", or what is missing. Grubhub pools both modes, as its one rate does. */
+function observedText(rates: ObservedRate[], platform: string, mode: FulfillmentKind): string {
+  const hits = rates.filter((r) => r.platform === platform && (platform === "grubhub" || r.mode === mode))
+  const orders = hits.reduce((t, r) => t + r.orders, 0)
+  if (orders === 0) return "no recorded fees in 90 days"
+  // Pooled from the parts — Σfee / Σticket — not a mean of two rates.
+  const fee = hits.reduce((t, r) => t + r.fee, 0)
+  const ticket = hits.reduce((t, r) => t + r.ticket, 0)
+  const rate = ticket > 0 ? fee / ticket : null
+  return rate === null
+    ? "no recorded fees in 90 days"
+    : `your orders: ${(rate * 100).toFixed(1)}% · ${count(orders)} with a fee`
 }
 
 export interface StoreFileRates {
@@ -683,9 +742,28 @@ export function getStoreFileSectionPromises(
       "retryStoreFile",
     )
 
+  // What the recorded orders show, for the drift note beside each rate. A
+  // failure here costs the note, never the section.
+  const observedP: Promise<ObservedRate[]> = loadObservedRates({
+    accountId: input.accountId,
+    storeId: input.storeId,
+    asOf: toQueryBounds(input.range).endDate,
+  }).catch(() => [])
+  const observedFor = (rates: ObservedRate[]) =>
+    Object.fromEntries(
+      COMMISSION_RATES.map((r) => [r.key, observedText(rates, r.platform, r.mode)]),
+    ) as Record<CommissionRateKey, string>
+  const withObserved = <T,>(f: (s: StoreFileRow, o: Record<CommissionRateKey, string>) => T) =>
+    guardSection(
+      Promise.all([dataP, observedP]).then(([sd, rates]) =>
+        mapReady(sd, (v) => f(v as StoreFileRow, observedFor(rates))),
+      ),
+      "retryStoreFile",
+    )
+
 
   return {
-    editable: s((store) => ({
+    editable: withObserved((store, observed) => ({
       storeId: store.id,
       name: store.name,
       rent: store.rent,
@@ -694,6 +772,12 @@ export function getStoreFileSectionPromises(
       cleaning: store.cleaning,
       uber: store.uber ?? DEFAULT_UBER,
       doordash: store.doordash ?? DEFAULT_DOORDASH,
+      uberPickup: store.uberPickup,
+      doordashPickup: store.doordashPickup,
+      grubhub: store.grubhub,
+      observed,
+      stage:
+        store.stage === "warming_up" || store.stage === "ready" ? store.stage : "pre_open",
       cogsTarget: store.cogsTarget,
       expenseLines: store.expenses,
     })),
@@ -959,22 +1043,31 @@ export function getStoreFileSectionPromises(
     ),
 
     /**
-     * Two rates, not the prototype's three: `Store` carries
-     * `uberCommissionRate` and `doordashCommissionRate` and there is no
-     * Grubhub column. Drawing a third from nothing would be inventing a
-     * contract.
+     * Five rates — delivery and pickup for DoorDash and Uber Eats, and one for
+     * Grubhub — each the owner's own setting, each charged on the price AFTER
+     * discounts, and each used only for an order the marketplace sent without
+     * a recorded fee (`commission-core.ts`). Beside each, what the recorded
+     * orders actually show over 90 days, so drift is visible.
      */
-    commissions: s((store) => ({
-      rows: [
-        pctRow("uber", "Uber Eats", store.uber),
-        pctRow("doordash", "DoorDash", store.doordash),
-      ],
-      note: defaultRates(store)
-        ? `Both rates are the platform default to the digit, and nothing in the product ` +
-          `distinguishes a default from a rate read off a contract. Every page that ` +
-          `prices a marketplace order reads these two.`
-        : `Every page that prices a marketplace order reads these two.`,
-    })),
+    commissions: withObserved((store, observed) => {
+      const value: Record<CommissionRateKey, number | null> = {
+        doordash: store.doordash,
+        doordashPickup: store.doordashPickup,
+        uber: store.uber,
+        uberPickup: store.uberPickup,
+        grubhub: store.grubhub,
+      }
+      return {
+        rows: COMMISSION_RATES.map((r) => ({
+          ...pctRow(r.key, r.label, value[r.key]),
+          note: observed[r.key],
+        })),
+        note:
+          `Charged on the price after discounts. A fee the marketplace recorded on an order ` +
+          `always wins; these price the orders that arrive without one. A blank rate is ` +
+          `"not known", and the P&L flags that line rather than charging nothing.`,
+      }
+    }),
 
     targets: s((store) => ({
       rows: [

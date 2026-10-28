@@ -166,3 +166,46 @@ describe("Cascade", () => {
     expect(container.querySelectorAll(".wf__p")).toHaveLength(7)
   })
 })
+
+describe("Cascade — the lines above net sales", () => {
+  // Gross → discounts → refunds → net sales, then the statement as before.
+  const LEAD = {
+    name: "Gross sales",
+    sub: "1,024 orders",
+    amount: 32_000,
+    cuts: [
+      { name: "Discounts", amount: 5_800 },
+      { name: "Refunds", amount: 321 },
+    ],
+  }
+  const NET = { name: "Net sales", amount: 25_879 }
+
+  it("prints gross, discounts and refunds above net sales, in order", () => {
+    const { container } = render(<Cascade lead={LEAD} start={NET} cuts={CUTS} end={END} />)
+    const names = readRows(container).map((r) => r.name)
+    expect(names.slice(0, 4)).toEqual(["Gross sales1,024 orders", "Discounts", "Refunds", "Net sales"])
+  })
+
+  it("keeps every percent on NET sales, the statement's denominator", () => {
+    const { container } = render(<Cascade lead={LEAD} start={NET} cuts={CUTS} end={END} />)
+    const rows = readRows(container)
+    expect(rows[3].pct).toBe("100.0%")
+    // Food is 8,126 / 25,879 = 31.4% — the same figure the table prints.
+    expect(rows.find((r) => r.name.startsWith("Food"))?.pct).toBe("31.4%")
+    // The bars scale to gross, so net sales is drawn short of full width.
+    expect(rows[3].stay).toBe(`${((25_879 / 32_000) * 100).toFixed(2)}%`)
+  })
+
+  it("still reconciles to the bottom line from net sales", () => {
+    const { container } = render(<Cascade lead={LEAD} start={NET} cuts={CUTS} end={END} />)
+    const rows = readRows(container)
+    const bottom = NET.amount - CUTS.reduce((t, c) => t + c.amount, 0)
+    expect(figure(rows[rows.length - 1].value)).toBe(bottom)
+  })
+
+  it("prints an adjustment that ADDED money with a plus, not a minus", () => {
+    const lead = { ...LEAD, cuts: [{ name: "Refunds", amount: -40 }] }
+    const { container } = render(<Cascade lead={lead} start={NET} cuts={[]} end={END} />)
+    expect(readRows(container)[1].value).toBe("+$40")
+  })
+})

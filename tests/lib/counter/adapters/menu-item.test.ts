@@ -32,6 +32,12 @@ vi.mock("@/lib/prisma", () => ({
   },
 }))
 vi.mock("@/lib/account-stores", () => ({ getScopedStores: vi.fn() }))
+// No order-fee groups in these fixtures: every marketplace channel prices at
+// the store's delivery rate, on the after-discount revenue.
+vi.mock("@/lib/counter/commission", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/counter/commission")>()),
+  loadOrderFeeGroups: vi.fn(async () => []),
+}))
 vi.mock("@/lib/counter/item-discounts", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/counter/item-discounts")>()),
   getItemDiscounts: vi.fn(async () => new Map()),
@@ -222,11 +228,13 @@ describe("menu item — Kept", () => {
     )
     const { headline, channels } = await load()
     expect(cell(headline, "Charged")?.delta).toBe("before $300 of discounts")
-    // $700 collected less 21% of Uber's $600.
-    expect(cell(headline, "Kept")?.value).toBe("$574")
+    // $700 collected less 21% of what Uber's customers PAID ($300 after the
+    // BOGO) — commission is charged on the discounted ticket. It was 21% of
+    // the $600 rung up, $574, which overstated the fee by $63.
+    expect(cell(headline, "Kept")?.value).toBe("$637")
     expect(cell(headline, "Counter margin")?.delta).toMatch(/^deal running · 30\.0% off/)
-    // Uber's unit brought in $5, not $10.
-    expect(row(channels, "ubereats")?.netEach).toBe("$2.90")
+    // Uber's unit brought in $5, not $10, and the 21% is on that $5.
+    expect(row(channels, "ubereats")?.netEach).toBe("$3.95")
   })
 
   it("withholds itself when any channel the item sold on has no rate", async () => {

@@ -22,6 +22,14 @@ import type { UnmappedMenuItem } from "@/types/cogs"
 import { recomputeDailyCogsForRange } from "@/lib/cogs-materializer"
 import { CogsStatus } from "@/generated/prisma/client"
 import { cached, monthTags, stableKey } from "@/lib/cache/cached"
+import {
+  addCommission,
+  bucketCommission,
+  COMMISSION_LINES,
+  loadOrderFeeGroups,
+  type OrderFeeGroup,
+  type StoreCommissionRates,
+} from "@/lib/counter/commission"
 import type {
   PnLMover,
   StorePnLResult,
@@ -58,6 +66,9 @@ function periodLines(
     const at = (pick: (c: ReturnType<typeof computeStorePnL>) => number[]) =>
       total(computeds.map((c) => pick(c)[i] ?? 0))
     const gross = at((c) => c.totalSales)
+    const commission = addCommission(
+      computeds.flatMap((c) => (c.commission[i] ? COMMISSION_LINES.map((l) => c.commission[i][l]) : [])),
+    )
     const cogs = at((c) => c.cogsValues)
     const labor = at((c) => c.laborValues)
     const rent = at((c) => c.rentValues)
@@ -77,6 +88,11 @@ function periodLines(
     const r = (v: number) => (gross <= 0 ? 0 : v / gross)
     return {
       grossSales: gross,
+      salesBeforeDiscounts: at((c) => c.grossBeforeDiscounts),
+      discounts: at((c) => c.discounts),
+      refunds: at((c) => c.refunds),
+      taxCollected: at((c) => c.taxCollected),
+      commission,
       netAfterCommissions: at((c) => c.netAfterCommissions),
       fixedCosts: fixed,
       bottomLine: bottom,
@@ -89,6 +105,21 @@ function periodLines(
       rentPct: r(rent),
     }
   })
+}
+
+/** The sales cascade and commission over a whole range, summed from its periods. */
+function rangeSalesLines(per: PnLPeriodLines[]): Pick<
+  PnLPeriodLines,
+  "salesBeforeDiscounts" | "discounts" | "refunds" | "taxCollected" | "commission"
+> {
+  const total = (pick: (p: PnLPeriodLines) => number) => per.reduce((a, p) => a + pick(p), 0)
+  return {
+    salesBeforeDiscounts: total((p) => p.salesBeforeDiscounts),
+    discounts: total((p) => p.discounts),
+    refunds: total((p) => p.refunds),
+    taxCollected: total((p) => p.taxCollected),
+    commission: addCommission(per.map((p) => p.commission)),
+  }
 }
 
 type FixedExpenseRow = {
@@ -342,6 +373,9 @@ export async function getStorePnL(input: {
         fixedMonthlyCleaning: true,
         uberCommissionRate: true,
         doordashCommissionRate: true,
+        uberPickupCommissionRate: true,
+        doordashPickupCommissionRate: true,
+        grubhubCommissionRate: true,
       },
     })
     if (!store) return { error: "Store not found" }
@@ -395,10 +429,17 @@ export async function getStorePnL(input: {
         tpDiscounts: true,
         fpServiceCharges: true,
         tpServiceCharges: true,
+        tpRefundsAdjustments: true,
       },
     })
 
     const bucketed = bucketSummariesByPeriod(summaries, periods)
+    const feeGroups = await loadOrderFeeGroups({
+      accountId: session.user.accountId,
+      storeIds: [store.id],
+      startDate: overallStart,
+      endDate: overallEnd,
+    })
     const fixedExpenseRows = await prisma.storeFixedExpense.findMany({
       where: { storeId: store.id, isActive: true },
       orderBy: FIXED_EXPENSE_ORDER,
@@ -453,6 +494,7 @@ export async function getStorePnL(input: {
       cogsValues: cogs.cogsValues,
       harriLaborByPeriod,
       customFixedExpenses,
+      commission: bucketCommission(feeGroups, periods, new Map([[store.id, store]])),
     })
 
     const refillFailedPeriodIndexes: number[] = []
@@ -562,7 +604,9 @@ export async function getAllStoresPnL(input: {
   const accountId = session.user.accountId
 
   return cached(
-    `pnl:account:${accountId}:${stableKey({
+    // `pnl2:` since 2026-10-28: the answer's shape grew the sales cascade and
+    // the commission basis, and a pre-change entry would lack both.
+    `pnl2:account:${accountId}:${stableKey({
       s: input.startDate.toISOString(),
       e: input.endDate.toISOString(),
       g: input.granularity,
@@ -586,6 +630,7 @@ export async function getAllStoresPnL(input: {
         storeCount: 0,
         combined: {
           grossSales: 0,
+          ...rangeSalesLines([]),
           netAfterCommissions: 0,
           fixedCosts: 0,
           bottomLine: 0,
@@ -626,8 +671,26 @@ export async function getAllStoresPnL(input: {
         tpDiscounts: true,
         fpServiceCharges: true,
         tpServiceCharges: true,
+        tpRefundsAdjustments: true,
       },
     })
+
+    // ONE grouped OtterOrder read for every store's commission — see
+    // `@/lib/counter/commission`. Cached on its own key, and inside this
+    // rollup's cache too.
+    const allFeeGroups = await loadOrderFeeGroups({
+      accountId,
+      storeIds,
+      startDate: overallStart,
+      endDate: overallEnd,
+    })
+    const feeGroupsByStore = new Map<string, OrderFeeGroup[]>()
+    for (const g of allFeeGroups) {
+      const arr = feeGroupsByStore.get(g.storeId) ?? []
+      arr.push(g)
+      feeGroupsByStore.set(g.storeId, arr)
+    }
+    const ratesByStore = new Map<string, StoreCommissionRates>(stores.map((s) => [s.id, s]))
 
     const byStore = new Map<string, typeof allSummaries>()
     for (const s of allSummaries) {
@@ -713,6 +776,7 @@ export async function getAllStoresPnL(input: {
         cogsValues: storeCogs.cogsValues,
         harriLaborByPeriod,
         customFixedExpenses: toCustomFixedExpenses(expensesByStore.get(store.id) ?? []),
+        commission: bucketCommission(feeGroupsByStore.get(store.id) ?? [], periods, ratesByStore),
       })
       perStoreComputed.push(computed)
 
@@ -741,10 +805,12 @@ export async function getAllStoresPnL(input: {
         []
       )
 
+      const storePeriods = periodLines([computed], periods)
       return {
         storeId: store.id,
         storeName: store.name,
         grossSales,
+        ...rangeSalesLines(storePeriods),
         netAfterCommissions,
         fixedCosts,
         bottomLine,
@@ -761,7 +827,7 @@ export async function getAllStoresPnL(input: {
         rows: computed.rows,
         // This store's own periods, by the same route `perPeriod` takes for
         // the account. See `periodLines`.
-        perPeriod: periodLines([computed], periods),
+        perPeriod: storePeriods,
       }
     })
 
@@ -769,8 +835,10 @@ export async function getAllStoresPnL(input: {
     const combinedCogs = sum(perStore.map((p) => p.cogsValue))
     const combinedLabor = sum(perStore.map((p) => p.laborValue))
     const combinedRent = sum(perStore.map((p) => p.rentValue))
+    const perPeriod = periodLines(perStoreComputed, periods)
     const combined = {
       grossSales: combinedGross,
+      ...rangeSalesLines(perPeriod),
       netAfterCommissions: sum(perStore.map((p) => p.netAfterCommissions)),
       fixedCosts: sum(perStore.map((p) => p.fixedCosts)),
       bottomLine: sum(perStore.map((p) => p.bottomLine)),
@@ -791,8 +859,6 @@ export async function getAllStoresPnL(input: {
       perStore.map((s) => s.rows),
       periods
     )
-
-    const perPeriod = periodLines(perStoreComputed, periods)
 
     return {
       storeCount: stores.length,

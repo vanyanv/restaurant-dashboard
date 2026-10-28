@@ -8,6 +8,13 @@ import { isAfter, isBefore } from "date-fns"
 // the day (any negative offset) — isAfter/isBefore are the exception, since
 // they compare instants and are already timezone-safe.
 import {
+  COMMISSION_LINES,
+  estimateFromSales,
+  type CommissionLine,
+  type CommissionTotals,
+  type PeriodCommission,
+} from "@/lib/counter/commission-core"
+import {
   addDaysUTC as addDays,
   differenceInCalendarDaysUTC as differenceInCalendarDays,
   endOfMonthUTC as endOfMonth,
@@ -37,6 +44,12 @@ export interface PnLRow {
   isFixed?: boolean
   /** True when the value represents "unknown / not configured" rather than zero. */
   isUnknown?: boolean[]
+  /**
+   * A memo line printed for information and NOT part of any sum — sales tax
+   * collected, which Otter's gross already excludes. Nothing that totals rows
+   * may add it in.
+   */
+  isMemo?: boolean
 }
 
 // ─── GL row metadata ───
@@ -44,6 +57,19 @@ export interface PnLRow {
 export const UBER_ROW_INDEX = 2
 export const DOORDASH_ROW_INDEX = 3
 
+/**
+ * The sales lines, in order. Every one of them is part of Net Sales: the sum
+ * of `salesRowValues` IS Total Sales, by construction, so nothing that totals
+ * these lines can disagree with the statement.
+ *
+ * Sales tax (4100) is NOT here any more. Otter's `fpGrossSales` /
+ * `tpGrossSales` EXCLUDE tax — measured 2026-10-28: per store and platform,
+ * gross + discounts + `tpRefundsAdjustments` reconciles to Otter's net to the
+ * dollar, and in-house gross matches Σ `OtterOrder.subtotal` with tax stored
+ * apart — so posting tax as a negative line understated Total Sales by the
+ * whole tax (~8%, ~$17k a month at Hollywood). Tax is now a memo row
+ * (`TAX_MEMO_CODE`) printed after Net Sales and summed into nothing.
+ */
 export const GL_ROWS = [
   { code: "4010", label: "SALES-FOOD - Credit Cards" },
   { code: "4011", label: "SALES-FOOD - Cash" },
@@ -58,9 +84,12 @@ export const GL_ROWS = [
   { code: "4018P", label: "SALES-FOOD - Otter Prepaid" },
   { code: "4020", label: "SALES-BEVERAGE" },
   { code: "4040", label: "SERVICE CHARGE" },
-  { code: "4100", label: "SALES TAXES" },
   { code: "4110", label: "DISCOUNTS (GUEST)" },
+  { code: "4120", label: "REFUNDS & ADJUSTMENTS" },
 ] as const
+
+/** Index of the last line that is part of GROSS sales (service charge); discounts and refunds follow. */
+const GROSS_LINE_COUNT = 13
 
 // The four channel sales lines `channel-series.ts` reads to build the mix —
 // named here so a second file never spells the GL code as a string literal.
@@ -69,10 +98,21 @@ export const SALES_CASH_CODE = "4011"
 export const SALES_UBER_CODE = "4012"
 export const SALES_DOORDASH_CODE = "4013"
 export const SALES_GRUBHUB_CODE = "4014"
+export const SALES_PREPAID_CODE = "4018P"
+export const DISCOUNTS_CODE = "4110"
+export const REFUNDS_CODE = "4120"
+/** Sales tax collected — a memo row, outside every total. See `GL_ROWS`. */
+export const TAX_MEMO_CODE = "4100"
+/** Gross sales before discounts and refunds: the channel lines plus service charges. */
+export const GROSS_SALES_CODE = "GROSS_SALES"
 
+/** Net sales: gross less discounts and refunds. The denominator of every percent on the statement. */
 export const TOTAL_SALES_CODE = "TOTAL_SALES"
 export const UBER_COMMISSION_CODE = "COM_UBER"
 export const DOORDASH_COMMISSION_CODE = "COM_DD"
+export const GRUBHUB_COMMISSION_CODE = "COM_GH"
+/** ChowNow, Caviar and any other marketplace. Emitted only when one traded. */
+export const OTHER_COMMISSION_CODE = "COM_OTHER"
 export const NET_AFTER_COMMISSIONS_CODE = "NET_COM"
 export const COGS_CODE = "6100"
 export const GROSS_PROFIT_CODE = "GROSS_PROFIT"
@@ -238,9 +278,41 @@ export type OtterSummaryRow = {
   tpDiscounts: number | null
   fpServiceCharges: number | null
   tpServiceCharges: number | null
+  /** Signed: refunds and adjustments arrive NEGATIVE. Optional so older callers still type-check. */
+  tpRefundsAdjustments?: number | null
 }
 
 const FP_PLATFORMS = new Set(["css-pos", "bnm-web"])
+
+/**
+ * What one summary row contributes to the statement — the one place a
+ * channel's "net sales" is defined.
+ *
+ *   gross    = fpGrossSales on an in-house platform, tpGrossSales elsewhere
+ *   + service charges (fp + tp)
+ *   + discounts       (fp + tp, signed negative — not negated)
+ *   + refunds         (tpRefundsAdjustments, signed negative)
+ *   = net
+ *
+ * Tax is returned beside it and is in none of the above. Summing `net` over
+ * any set of rows gives the same Net Sales `salesRowValues` totals for them,
+ * so a per-channel net and the statement cannot disagree.
+ */
+export function rowSales(r: Omit<OtterSummaryRow, "paymentMethod"> & { paymentMethod?: string }): {
+  gross: number
+  serviceCharges: number
+  discounts: number
+  refunds: number
+  net: number
+  tax: number
+} {
+  const gross = (FP_PLATFORMS.has(r.platform) ? r.fpGrossSales : r.tpGrossSales) ?? 0
+  const serviceCharges = (r.fpServiceCharges ?? 0) + (r.tpServiceCharges ?? 0)
+  const discounts = (r.fpDiscounts ?? 0) + (r.tpDiscounts ?? 0)
+  const refunds = r.tpRefundsAdjustments ?? 0
+  const tax = (r.fpTaxCollected ?? 0) + (r.tpTaxCollected ?? 0)
+  return { gross, serviceCharges, discounts, refunds, net: gross + serviceCharges + discounts + refunds, tax }
+}
 
 /** Sum-by-predicate over a list of Otter rows. Treats null as 0. */
 function sumBy(
@@ -257,50 +329,67 @@ function sumBy(
   return s
 }
 
+/** The GL line an in-house payment method posts to. PREPAID (gift cards, house accounts) is 4018P. */
+function houseLine(paymentMethod: string): number {
+  if (paymentMethod === "CASH") return 1 // 4011
+  if (paymentMethod === "PREPAID") return 10 // 4018P
+  return 0 // 4010 — CARD, and any method Otter adds next, rather than dropping it
+}
+
+const TP_LINE: Record<string, number> = {
+  ubereats: 2,
+  doordash: 3,
+  grubhub: 4,
+  chownow: 5,
+  caviar: 6,
+  ezcater: 7,
+  fooda: 8,
+}
+
 /**
- * Map a bucket of OtterDailySummary rows to the 14 GL sales lines.
- * Returns an array of length GL_ROWS.length, in the same order.
+ * Map a bucket of OtterDailySummary rows to the GL sales lines.
+ * Returns an array of length GL_ROWS.length, in the same order, whose SUM is
+ * Net Sales (see `rowSales`).
+ *
+ * In-house: EVERY payment method on an in-house platform counts — CARD to
+ * 4010, CASH to 4011, PREPAID to 4018P (about $700 a month on css-pos, which
+ * used to be dropped), anything else to 4010. A marketplace with no line of
+ * its own posts to 4018 "Otter Online" rather than vanishing while its
+ * discounts still counted.
  */
 export function salesRowValues(rows: OtterSummaryRow[]): number[] {
-  const creditCards = sumBy(
-    rows,
-    (r) => r.fpGrossSales,
-    (r) => FP_PLATFORMS.has(r.platform) && r.paymentMethod === "CARD"
-  )
-  const cash = sumBy(
-    rows,
-    (r) => r.fpGrossSales,
-    (r) => FP_PLATFORMS.has(r.platform) && r.paymentMethod === "CASH"
-  )
-  const uber = sumBy(rows, (r) => r.tpGrossSales, (r) => r.platform === "ubereats")
-  const doordash = sumBy(rows, (r) => r.tpGrossSales, (r) => r.platform === "doordash")
-  const grubhub = sumBy(rows, (r) => r.tpGrossSales, (r) => r.platform === "grubhub")
-  const chownow = sumBy(rows, (r) => r.tpGrossSales, (r) => r.platform === "chownow")
-  const caviar = sumBy(rows, (r) => r.tpGrossSales, (r) => r.platform === "caviar")
+  const out = GL_ROWS.map(() => 0)
+  for (const r of rows) {
+    const s = rowSales(r)
+    const line = FP_PLATFORMS.has(r.platform)
+      ? houseLine(r.paymentMethod)
+      : (TP_LINE[r.platform] ?? 9) // 4018
+    out[line] += s.gross
+    out[12] += s.serviceCharges // 4040
+    out[13] += s.discounts // 4110
+    out[14] += s.refunds // 4120
+  }
+  return out
+}
 
-  const serviceCharge =
-    sumBy(rows, (r) => r.fpServiceCharges) + sumBy(rows, (r) => r.tpServiceCharges)
-  const tax = -(sumBy(rows, (r) => r.fpTaxCollected) + sumBy(rows, (r) => r.tpTaxCollected))
-  // fp/tpDiscounts come back signed negative from Otter — do not negate.
-  const discounts = sumBy(rows, (r) => r.fpDiscounts) + sumBy(rows, (r) => r.tpDiscounts)
+/** Sales tax collected over a bucket — the memo row, never in a total. */
+export function taxCollected(rows: OtterSummaryRow[]): number {
+  return rows.reduce((t, r) => t + rowSales(r).tax, 0)
+}
 
-  return [
-    creditCards, // 4010
-    cash,        // 4011
-    uber,        // 4012
-    doordash,    // 4013
-    grubhub,     // 4014
-    chownow,     // 4015
-    caviar,      // 4015C
-    0,           // 4016 EZ Cater (no source)
-    0,           // 4017 Fooda (no source)
-    0,           // 4018 Otter Online (no source)
-    0,           // 4018P Otter Prepaid (no source)
-    0,           // 4020 Beverage (not separately tracked)
-    serviceCharge, // 4040
-    tax,         // 4100
-    discounts,   // 4110
-  ]
+/** Net sales per commission line over a bucket — the base the fallback estimate prices. */
+function salesByCommissionLine(rows: OtterSummaryRow[]): Record<CommissionLine, number> {
+  const out: Record<CommissionLine, number> = { ubereats: 0, doordash: 0, grubhub: 0, other: 0 }
+  for (const r of rows) {
+    if (FP_PLATFORMS.has(r.platform)) continue
+    const s = rowSales(r)
+    const line: CommissionLine =
+      r.platform === "ubereats" || r.platform === "doordash" || r.platform === "grubhub"
+        ? r.platform
+        : "other"
+    out[line] += s.gross + s.discounts
+  }
+  return out
 }
 
 /**
@@ -361,20 +450,38 @@ export function channelMix(salesValues: number[]): Array<{ channel: string; amou
 // ─── Core P&L computation (shared by per-store and all-stores actions) ───
 
 export interface StoreFixedInputs {
+  id?: string
   fixedMonthlyLabor: number | null
   fixedMonthlyRent: number | null
   fixedMonthlyTowels: number | null
   fixedMonthlyCleaning: number | null
+  /** Delivery rates. See `commission-core.ts` — used only by the no-orders fallback here. */
   uberCommissionRate: number
   doordashCommissionRate: number
+  uberPickupCommissionRate?: number | null
+  doordashPickupCommissionRate?: number | null
+  grubhubCommissionRate?: number | null
 }
 
 export interface ComputedPnL {
   rows: PnLRow[]
   perPeriodSalesValues: number[][]
+  /** Net sales — gross less discounts and refunds. The name predates the fix and is kept for its callers. */
   totalSales: number[]
+  /** Gross sales before discounts and refunds (channel lines + service charges). */
+  grossBeforeDiscounts: number[]
+  /** Signed negative. */
+  discounts: number[]
+  /** Signed: negative is money given back. */
+  refunds: number[]
+  /** Sales tax collected. Memo only — in no total. */
+  taxCollected: number[]
   uberCommission: number[] // already negative
   doordashCommission: number[] // already negative
+  grubhubCommission: number[] // already negative
+  otherCommission: number[] // already negative
+  /** Per period, the commission behind the four lines, with its coverage. */
+  commission: PeriodCommission[]
   netAfterCommissions: number[]
   cogsValues: number[] // positive magnitude (may be 0s if no recipes)
   grossProfit: number[]
@@ -425,14 +532,29 @@ export function computeStorePnL(input: {
   /** Optional owner-managed custom fixed expenses. Each becomes one prorated
    *  `isFixed` row (code `FX_<id>`) after Towels, and reduces the bottom line. */
   customFixedExpenses?: CustomFixedExpense[]
+  /**
+   * Per-period commission from `bucketCommission` (`@/lib/counter/commission`)
+   * — recorded fees plus the store-rate estimate for orders without one.
+   * Every page caller passes it. Absent, each platform is estimated at the
+   * store's delivery rate on its after-discount sales, the same rule with
+   * nothing recorded.
+   */
+  commission?: PeriodCommission[]
 }): ComputedPnL {
   const { bucketed, periods, store, cogsValues, harriLaborByPeriod } = input
   const customFixedExpenses = input.customFixedExpenses ?? []
 
   const perPeriodSalesValues = bucketed.map((rows) => salesRowValues(rows))
   const totalSales = perPeriodSalesValues.map((vals) => vals.reduce((a, b) => a + b, 0))
+  const grossBeforeDiscounts = perPeriodSalesValues.map((vals) =>
+    vals.slice(0, GROSS_LINE_COUNT).reduce((a, b) => a + b, 0)
+  )
+  const discounts = perPeriodSalesValues.map((v) => v[13])
+  const refunds = perPeriodSalesValues.map((v) => v[14])
+  const tax = bucketed.map((rows) => taxCollected(rows))
 
-  const rows: PnLRow[] = GL_ROWS.map((meta, rowIdx) => {
+  const glRow = (rowIdx: number): PnLRow => {
+    const meta = GL_ROWS[rowIdx]
     const values = perPeriodSalesValues.map((v) => v[rowIdx])
     return {
       code: meta.code,
@@ -440,38 +562,80 @@ export function computeStorePnL(input: {
       values,
       percents: values.map((v, i) => pctOfSales(v, totalSales[i])),
     }
+  }
+
+  const rows: PnLRow[] = []
+  for (let i = 0; i < GROSS_LINE_COUNT; i++) rows.push(glRow(i))
+  rows.push({
+    code: GROSS_SALES_CODE,
+    label: "Gross Sales",
+    values: grossBeforeDiscounts,
+    percents: grossBeforeDiscounts.map((v, i) => pctOfSales(v, totalSales[i])),
+    isSubtotal: true,
   })
+  for (let i = GROSS_LINE_COUNT; i < GL_ROWS.length; i++) rows.push(glRow(i))
 
   rows.push({
     code: TOTAL_SALES_CODE,
-    label: "Total Sales",
+    label: "Net Sales",
     values: totalSales,
     percents: totalSales.map(() => 1),
     isSubtotal: true,
   })
-
-  const uberGross = perPeriodSalesValues.map((v) => v[UBER_ROW_INDEX])
-  const doordashGross = perPeriodSalesValues.map((v) => v[DOORDASH_ROW_INDEX])
-  const uberCommission = uberGross.map((g) => -(g * store.uberCommissionRate))
-  const doordashCommission = doordashGross.map((g) => -(g * store.doordashCommissionRate))
-
   rows.push({
-    code: UBER_COMMISSION_CODE,
-    label: `Uber Commission (${(store.uberCommissionRate * 100).toFixed(0)}%)`,
-    values: uberCommission,
-    percents: uberCommission.map((v, i) => pctOfSales(v, totalSales[i])),
-    isFixed: true,
+    code: TAX_MEMO_CODE,
+    label: "Sales tax collected (not in sales)",
+    values: tax,
+    percents: tax.map((v, i) => pctOfSales(v, totalSales[i])),
+    isMemo: true,
   })
-  rows.push({
-    code: DOORDASH_COMMISSION_CODE,
-    label: `DoorDash Commission (${(store.doordashCommissionRate * 100).toFixed(0)}%)`,
-    values: doordashCommission,
-    percents: doordashCommission.map((v, i) => pctOfSales(v, totalSales[i])),
-    isFixed: true,
-  })
+
+  const commission: PeriodCommission[] =
+    input.commission && input.commission.length === periods.length
+      ? input.commission
+      : bucketed.map((rows) => estimateFromSales(salesByCommissionLine(rows), store))
+  const lineSales = bucketed.map((rows) => salesByCommissionLine(rows))
+
+  const commissionLine = (line: CommissionLine) => {
+    const values = commission.map((c) => -(c[line].amount ?? 0))
+    // Unknown when the figure is short of something: orders with no fee and
+    // no rate, a platform no rate covers, or marketplace sales with no orders
+    // on file to price — that last is a sync gap, and $0 would hide it.
+    const isUnknown = commission.map((c, i) => {
+      const t: CommissionTotals = c[line]
+      return t.amount === null || t.unknownOrders > 0 || (t.orders === 0 && t.amount === 0 && lineSales[i][line] > 0 && input.commission != null)
+    })
+    return { values, isUnknown }
+  }
+
+  const COMMISSION_ROWS: Array<{ line: CommissionLine; code: string; label: string }> = [
+    { line: "ubereats", code: UBER_COMMISSION_CODE, label: "Uber Eats commission" },
+    { line: "doordash", code: DOORDASH_COMMISSION_CODE, label: "DoorDash commission" },
+    { line: "grubhub", code: GRUBHUB_COMMISSION_CODE, label: "Grubhub commission" },
+    { line: "other", code: OTHER_COMMISSION_CODE, label: "Other marketplace commission" },
+  ]
+  const byLine = {} as Record<CommissionLine, number[]>
+  for (const r of COMMISSION_ROWS) {
+    const { values, isUnknown } = commissionLine(r.line)
+    byLine[r.line] = values
+    const traded = commission.some((c) => c[r.line].orders > 0) || lineSales.some((s) => s[r.line] !== 0)
+    if (r.line === "other" && !traded) continue
+    rows.push({
+      code: r.code,
+      label: r.label,
+      values,
+      percents: values.map((v, i) => pctOfSales(v, totalSales[i])),
+      isFixed: true,
+      isUnknown: isUnknown.some(Boolean) ? isUnknown : undefined,
+    })
+  }
+  const uberCommission = byLine.ubereats
+  const doordashCommission = byLine.doordash
+  const grubhubCommission = byLine.grubhub
+  const otherCommission = byLine.other
 
   const netAfterCommissions = totalSales.map(
-    (ts, i) => ts + uberCommission[i] + doordashCommission[i]
+    (ts, i) => ts + COMMISSION_LINES.reduce((acc, line) => acc + byLine[line][i], 0)
   )
   rows.push({
     code: NET_AFTER_COMMISSIONS_CODE,
@@ -639,8 +803,15 @@ export function computeStorePnL(input: {
     rows,
     perPeriodSalesValues,
     totalSales,
+    grossBeforeDiscounts,
+    discounts,
+    refunds,
+    taxCollected: tax,
     uberCommission,
     doordashCommission,
+    grubhubCommission,
+    otherCommission,
+    commission,
     netAfterCommissions,
     cogsValues: cogs,
     grossProfit,
@@ -730,6 +901,7 @@ export function consolidateRows(
       percents: values.map((v, i) => pctOfSales(v, combinedGrossPerPeriod[i])),
       isSubtotal: meta.isSubtotal,
       isFixed: meta.isFixed,
+      isMemo: meta.isMemo,
       isUnknown: anyUnknown ? combinedUnknown : undefined,
     }
   })

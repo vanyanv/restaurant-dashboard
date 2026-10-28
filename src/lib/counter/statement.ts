@@ -3,6 +3,11 @@ import type { AllStoresPnLResult } from "@/app/actions/store/pnl-types"
 import type { Period, PnLRow } from "@/lib/pnl"
 import { primeCost, type PrimeCost } from "@/lib/counter/prime-cost"
 import {
+  addCommission,
+  NO_COMMISSION,
+  type CommissionTotals,
+} from "@/lib/counter/commission-core"
+import {
   bucketFor,
   comparisonWindows,
   dayCount,
@@ -91,9 +96,24 @@ export function granularityFor(range: DateRange): Granularity {
  * rollup states it, and a second derivation is a second number.
  */
 export interface StatementLines {
+  /**
+   * NET SALES — gross less discounts and refunds, tax excluded. Every surface
+   * prints it as "Net sales"; the field keeps its old name because twenty
+   * modules read it. It is the denominator of every percent on the statement.
+   */
   grossSales: number
-  /** Gross less net-after-commissions, as a POSITIVE cost. */
+  /** Gross sales BEFORE discounts and refunds: channel sales plus service charges. */
+  salesBeforeDiscounts: number
+  /** Discounts given, as a POSITIVE amount taken off gross. */
+  discounts: number
+  /** Refunds and adjustments, as a POSITIVE amount taken off gross (negative if adjustments added money). */
+  refunds: number
+  /** Sales tax collected. Not in any line above or below — printed for information. */
+  taxCollected: number
+  /** Net-sales less net-after-commissions, as a POSITIVE cost. */
   commissions: number
+  /** What `commissions` is made of: recorded vs estimated, and orders no rate covers. */
+  commission: CommissionTotals
   cogsValue: number
   /** The whole blended wage bill — see `prime-cost.ts`'s "WHICH LABOUR". */
   laborValue: number
@@ -188,9 +208,19 @@ type RollupLines = RollupOk["combined"]
 
 function linesFrom(k: RollupLines): StatementLines {
   const occupancy = k.rentValue
+  // The sales cascade and the commission basis arrived after the rest of the
+  // rollup's shape; a rollup without them (a hand-built fixture) reads as
+  // "no discounts, nothing known about how commission was priced", never a
+  // crash. Production rollups always carry them — the cache key moved with
+  // the shape (`pnl2:` in pnl-actions).
   return {
     grossSales: k.grossSales,
+    salesBeforeDiscounts: k.salesBeforeDiscounts ?? k.grossSales,
+    discounts: -(k.discounts ?? 0),
+    refunds: -(k.refunds ?? 0),
+    taxCollected: k.taxCollected ?? 0,
     commissions: k.grossSales - k.netAfterCommissions,
+    commission: k.commission ?? NO_COMMISSION,
     cogsValue: k.cogsValue,
     laborValue: k.laborValue,
     occupancy,
@@ -230,7 +260,12 @@ function storeStatement(s: RollupOk["perStore"][number]): StoreStatement {
 
 const NO_LINES: StatementLines = {
   grossSales: 0,
+  salesBeforeDiscounts: 0,
+  discounts: 0,
+  refunds: 0,
+  taxCollected: 0,
   commissions: 0,
+  commission: NO_COMMISSION,
   cogsValue: 0,
   laborValue: 0,
   occupancy: 0,
@@ -481,7 +516,12 @@ export async function loadComparisonStatement(input: {
   const laborValue = total((p) => p.laborValue)
   const lines: StatementLines = {
     grossSales,
+    salesBeforeDiscounts: total((p) => p.salesBeforeDiscounts),
+    discounts: total((p) => p.discounts),
+    refunds: total((p) => p.refunds),
+    taxCollected: total((p) => p.taxCollected),
     commissions: total((p) => p.commissions),
+    commission: addCommission(parts.map((p) => p.commission)),
     cogsValue,
     laborValue,
     occupancy: total((p) => p.occupancy),
