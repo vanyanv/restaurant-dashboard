@@ -112,3 +112,109 @@ export function isNonIngredientRow(name: string | null | undefined): boolean {
   if (!name) return false
   return NON_INGREDIENT_RE.test(name.trim())
 }
+
+// ─── Tie-out ───
+//
+// Whether an invoice's extracted lines add up to the document, asked ONCE for
+// the sync's REVIEW rule, the Approve gate, Needs you and the vendor pages.
+// Until 2026-10-28 there were five copies — the sync allowed 2% (or $1) and
+// the four Counter adapters allowed 2¢ — so an invoice could import as
+// MATCHED, show as "does not add up", and refuse to be approved.
+//
+// The exact-name `isChargeRow` set above cannot keep up with vendors: IFS's
+// new layout prints "Freight/Misc.", Sysco prints its fuel surcharge under
+// six spellings, and which side of the subtotal a fee sits on varies by
+// vendor and even by invoice (the table at the top of this file). So instead
+// of deciding in advance, the tie-out tries each reading of the fee rows —
+// every subset of them counted inside the subtotal — and accepts the
+// invoice when any reading lands within a dollar. Fee rows are few (never
+// more than three on this account), so that is at most a handful of sums.
+// Only fee-shaped rows with no SKU move: a product line never does, so an
+// unnamed extra line still shows as a gap (see the "UNNAMED extra line" test).
+// Deliberately NOT tried: all lines plus tax against the total. That was the
+// three-reference escape hatch removed on 2026-08-28.
+//
+// Measured on this account's 277 invoices (2026-10-28): the old 2¢
+// exact-name check failed 9; this fails 4, and all four are real — a credit
+// read twice, a header with no lines, an invoice $124.68 over, and a Sysco
+// subtotal read $83.10 short.
+
+/** Largest gap, in dollars, that still counts as adding up. */
+export const TIE_OUT_TOLERANCE = 1
+
+const FEE_LIKE_RE =
+  /\b(fuel|freight|pallet|delivery)\b|surcharge|^misc(ellaneous|\.|\b)|sales\s+tax|^total\s+sales\s+tax$/i
+
+/** Most fee rows the tie-out will try readings over (2^n sums). */
+const MAX_FEE_ROWS = 6
+
+/**
+ * A delivery fee, tax or surcharge row: no SKU and a fee-shaped name. These
+ * are the rows whose side of the subtotal varies, so the tie-out tries both.
+ */
+export function isFeeRow(line: { productName: string | null | undefined; sku?: string | null }): boolean {
+  const name = line.productName?.trim() ?? ""
+  // The four exact names stay fees whatever the SKU, as they always were.
+  if (isChargeRow(name)) return true
+  if (line.sku != null && line.sku.trim() !== "") return false
+  return FEE_LIKE_RE.test(name)
+}
+
+export interface TieOut {
+  /** True when some reading of the fee rows lands within TIE_OUT_TOLERANCE. */
+  reconciles: boolean
+  /** Lines counted as goods under the chosen reading. */
+  goods: number
+  /** What `goods` was compared against: the subtotal, or total less tax. */
+  reference: number
+  referenceKind: "subtotal" | "total less tax"
+  /** goods − reference under the closest reading (signed). */
+  gap: number
+  /** Indexes into the input of the rows treated as outside the goods. */
+  outside: ReadonlySet<number>
+}
+
+/**
+ * Do these lines add up to what the document prints?
+ *
+ * Returns the closest reading even when none ties out, so a page can show
+ * how far off the invoice is on its most charitable reading.
+ */
+export function tieOut(
+  lines: ReadonlyArray<{ productName: string; sku?: string | null; extendedPrice: unknown }>,
+  head: { subtotal: number | null; taxAmount: number | null; totalAmount: number }
+): TieOut {
+  let base = 0
+  const fees: Array<{ index: number; price: number }> = []
+  lines.forEach((line, index) => {
+    const price = readPrice(line.extendedPrice)
+    if (price === null) return
+    if (isFeeRow(line) && fees.length < MAX_FEE_ROWS) fees.push({ index, price })
+    else base += price
+  })
+
+  const tax = head.taxAmount ?? 0
+  const reference = head.subtotal ?? head.totalAmount - tax
+  const referenceKind = head.subtotal != null ? "subtotal" : "total less tax"
+
+  let best: TieOut | null = null
+  const consider = (candidate: TieOut) => {
+    if (!best || Math.abs(candidate.gap) < Math.abs(best.gap)) best = candidate
+  }
+
+  // Every subset of fee rows counted inside the reference. Mask bit i set
+  // means fee i is INSIDE (counted as goods).
+  for (let mask = 0; mask < 1 << fees.length; mask++) {
+    let goods = base
+    const outside = new Set<number>()
+    fees.forEach((fee, i) => {
+      if (mask & (1 << i)) goods += fee.price
+      else outside.add(fee.index)
+    })
+    consider({ reconciles: false, goods, reference, referenceKind, gap: goods - reference, outside })
+  }
+
+  const chosen = best as unknown as TieOut
+  // In whole cents: 100.99 − 100 is 0.98999…, which must not read as over.
+  return { ...chosen, reconciles: Math.round(Math.abs(chosen.gap) * 100) <= TIE_OUT_TOLERANCE * 100 }
+}

@@ -191,7 +191,7 @@ describe("Invoices · one invoice", () => {
     render(<CounterInvoiceClient stores={[]} title="448812" vendor="Sysco" sections={s} />)
     const approve = screen.getByRole("button", { name: "Approve and post" }) as HTMLButtonElement
     expect(approve.disabled).toBe(true)
-    expect(screen.getByText(/Approve unlocks when the gap is zero/)).toBeTruthy()
+    expect(screen.getByText(/Approve unlocks when the gap is under a dollar/)).toBeTruthy()
     expect(screen.getByText("The lines are $212.40 short")).toBeTruthy()
     expect(screen.getByText("Does not add up")).toBeTruthy()
   })

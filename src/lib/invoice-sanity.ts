@@ -1,7 +1,8 @@
 // Sanity checks applied to OpenAI-extracted invoice data before persistence.
 
 import type { InvoiceExtraction } from "@/types/invoice"
-import { goodsLines, goodsSum } from "@/lib/invoice-charges"
+import { goodsLines, tieOut, TIE_OUT_TOLERANCE } from "@/lib/invoice-charges"
+import { convert } from "@/lib/unit-conversion"
 
 export const PAST_DATE_TOLERANCE_DAYS = 60
 export const FUTURE_DATE_TOLERANCE_DAYS = 30
@@ -22,6 +23,20 @@ const MEAT_LINE_RE =
 const GRAM_UOMS = new Set(["G", "GR", "GM", "GRM", "GRAM", "GRAMS"])
 const PAPER_COUNT_PACK_RE =
   /\b(bag|bags|bath\s+tissue|tissue|toilet|napkin|towel|roll|wrap|wrapper|cup|cups|lid|lids|glove|gloves|paper|liner|liners|foil|film|sheet|sheets|straw|straws)\b/i
+
+// Disposables counted by the piece, for the pack-shape rules only. Narrower
+// than PAPER_COUNT_PACK_RE on purpose: "bag", "roll", "wrap" and "plate" are
+// also food ("FRIES 6/5 LB BAG", "HAMBURGER ROLL", "BEEF PLATE"), and these
+// rules excuse or accuse a line on the strength of the name alone.
+const DISPOSABLE_NAME_RE =
+  /\b(cup|cups|lid|lids|liner|liners|napkin|napkins|tissue|towel|towels|glove|gloves|straw|straws|paper|cutlery|fork|forks|knife|knives|spoon|spoons|spork|sporks|container|containers|cont|clamshell|tray|trays|carrier|label|labels)\b/i
+
+function isDisposable(line: { productName: string; description?: string | null; category: string | null }): boolean {
+  return (
+    line.category?.trim().toLowerCase() === "paper/supplies" ||
+    DISPOSABLE_NAME_RE.test(`${line.productName} ${line.description ?? ""}`)
+  )
+}
 
 /**
  * Returns the extracted invoiceDate as a Date, or null if it's obviously wrong.
@@ -101,14 +116,11 @@ export function findLineMathMismatches(
   return mismatches
 }
 
-// Maximum allowed relative drift between the sum of line extendedPrice and the
-// invoice's own printed totals before the whole extraction is considered
-// unreliable. Sized (with a $1 floor) to absorb rounding and per-line CRV noise
-// while still catching dropped/duplicated/shifted lines — e.g. IFS #I28402-00,
-// where a fused-column misread dropped ~$120 of lines yet stored a correct
-// header total.
-export const TOTAL_RECONCILIATION_TOLERANCE = 0.02
-export const TOTAL_RECONCILIATION_MIN_GAP_DOLLARS = 1
+// The tolerance used to be 2% of the total with a $1 floor — about $20 on a
+// typical IFS delivery, which is room for a whole dropped line. It is now
+// `TIE_OUT_TOLERANCE` ($1) from `@/lib/invoice-charges`, the same figure the
+// Approve gate reads; trying each reading of the fee rows is what absorbs the
+// vendor-layout noise the wide percentage used to.
 
 export interface TotalReconciliationMismatch {
   /** Sum of every finite line extendedPrice, charge rows excluded. */
@@ -150,6 +162,14 @@ export interface TotalReconciliationMismatch {
  * subtotal is the correct and only reference, and `total − tax` is the
  * fallback for invoices that print no subtotal at all.
  *
+ * **3. (2026-10-28) The fee rows are now tried both ways.** The exact-name
+ * set missed IFS's new "Freight/Misc." and Sysco's six spellings of a fuel
+ * surcharge, and it is the Approve gate's arithmetic too, so `tieOut` tries
+ * each fee row inside and outside the subtotal. That is still not point 2's
+ * three free chances: fee rows are a few dollars each, the tolerance fell
+ * from 2% to $1, and the one extra reading (all lines plus tax against the
+ * total) is the document's own identity. See `tieOut` for the measurement.
+ *
  * A sum that misses it means lines were dropped, duplicated, or had
  * quantities corrupted — the extraction can't be trusted even when each
  * surviving line looks internally consistent.
@@ -167,35 +187,32 @@ export function findTotalReconciliationMismatch(
   >
 ): TotalReconciliationMismatch | null {
   const totalAmount = Number(extraction.totalAmount)
-  if (!Number.isFinite(totalAmount) || Math.abs(totalAmount) < 0.01) return null
-
+  if (!Number.isFinite(totalAmount)) return null
   const priced = goodsLines(extraction.lineItems)
+  // No lines is `findEmptyExtraction`'s finding (the page shows the same gap).
+  // A zero total is NOT skipped any more: the Approve gate reads `tieOut` on
+  // it, so the sync must too or a $0 header over $100 of lines imports clean
+  // and can never be approved.
   if (priced.length === 0) return null
-  const lineSum = goodsSum(extraction.lineItems)
 
   const subtotal = extraction.subtotal != null ? Number(extraction.subtotal) : null
   const taxAmount = extraction.taxAmount != null ? Number(extraction.taxAmount) : null
-
-  // The subtotal is what the goods side is supposed to add up to. Only when a
-  // vendor prints none do we fall back to backing tax out of the total.
-  const closestReference =
-    subtotal != null && Number.isFinite(subtotal) ? subtotal : totalAmount - (taxAmount ?? 0)
-  const gap = Math.abs(lineSum - closestReference)
-
-  const tolerance = Math.max(
-    TOTAL_RECONCILIATION_MIN_GAP_DOLLARS,
-    TOTAL_RECONCILIATION_TOLERANCE * Math.abs(totalAmount)
-  )
-  if (gap <= tolerance) return null
-
+  // Since 2026-10-28 the same `tieOut` the Approve gate reads, so an invoice
+  // the sync lets through is one the owner can approve, and the reverse.
+  const t = tieOut(extraction.lineItems, {
+    subtotal: subtotal != null && Number.isFinite(subtotal) ? subtotal : null,
+    taxAmount: taxAmount != null && Number.isFinite(taxAmount) ? taxAmount : null,
+    totalAmount,
+  })
+  if (t.reconciles) return null
   return {
-    lineSum,
-    subtotal,
+    lineSum: t.goods,
+    subtotal: t.referenceKind === "subtotal" ? subtotal : null,
     taxAmount,
     totalAmount,
-    closestReference,
-    gap,
-    tolerance,
+    closestReference: t.reference,
+    gap: Math.abs(t.gap),
+    tolerance: TIE_OUT_TOLERANCE,
     goodsLineCount: priced.length,
   }
 }
@@ -592,27 +609,73 @@ export interface PackShapeAnomaly {
   reasons: string[]
 }
 
+/** A case of more than this many units is a misread whatever the goods. */
+const ABSURD_PACK_SIZE = 10_000
+/** Heaviest / largest believable single case, in base units (lb, fl oz). */
+const MAX_CASE_LB = 200
+const MAX_CASE_FL_OZ = 60 * 128
+
 /**
- * Rules below target known fused-column OCR bug signatures (e.g. Sysco lettuce
- * "112 CT" parsed as packSize=112 instead of packSize=1, unitSize=12). They are
- * intentionally narrow to avoid false-flagging legitimate cases like
- * "30 × 1-LB butter solids" or "9 × 8-count rolls".
+ * Pack fields as one case's total in a base unit, or null when the uom is not
+ * a weight or volume this module can convert.
+ */
+function caseTotalInBase(
+  packSize: number,
+  unitSize: number,
+  uom: string
+): { amount: number; limit: number } | null {
+  const lb = convert(packSize * unitSize, uom, "lb")
+  if (lb != null) return { amount: lb, limit: MAX_CASE_LB }
+  const flOz = convert(packSize * unitSize, uom, "fl oz")
+  if (flOz != null) return { amount: flOz, limit: MAX_CASE_FL_OZ }
+  return null
+}
+
+/**
+ * Lines whose pack fields look misread — the ones that would distort an
+ * ingredient's $/unit if they were trusted.
  *
- * When any rule fires the line is reported as an anomaly; the sync route uses
- * the presence of anomalies to route the invoice to REVIEW status instead of
- * auto-MATCHED.
+ * Until 2026-10-28 rule 1 flagged ANY case of more than 50 units. On this
+ * account that was 19 of the 25 pack-shape holds, and every one was a real
+ * case: the house sauce ships 180 cups to a case, can liners 100, napkins
+ * 6,000, cups 1,000. A rule that fires on every Vitco invoice is not a check,
+ * it is a queue. The rules now ask whether the case could physically exist:
+ *
+ *   1. A case of more than 10,000 units (KEVIDKO's fork read as 1,000,000).
+ *      Below that, a high count on paper and count goods is ordinary; on
+ *      other goods with no weight or volume (the Sysco lettuce "112 CT"
+ *      fusion) it is still flagged.
+ *   2. A weight or volume case heavier than 200 lb or larger than 60 gal
+ *      (an IFS can liner read as 100 × 55 GAL).
+ *   3. The lettuce-bug shape, high pack × size ≤ 2 CT, on food only. On
+ *      paper goods 6000 × 1 CT and 1 × 6000 CT are the same case.
+ *   4. A single unit far beyond any container for its uom.
+ *   5. Paper or count goods carrying a weight or volume size: the model has
+ *      copied a size out of the product name ("CUP PET 20 OZ") into the pack.
+ *
+ * `isConfirmed` lets the caller exempt lines whose shape matches this SKU's
+ * own accepted history (`lineMatchesPrior` in `@/lib/invoice-pack-prior`).
+ * History beats every heuristic here: a shape the vendor has shipped and the
+ * account has accepted three or more times is not a misread.
  */
 export function findPackShapeAnomalies(
-  lineItems: InvoiceExtraction["lineItems"]
+  lineItems: InvoiceExtraction["lineItems"],
+  options?: { isConfirmed?: (line: InvoiceExtraction["lineItems"][number]) => boolean }
 ): PackShapeAnomaly[] {
   const anomalies: PackShapeAnomaly[] = []
   for (const li of lineItems) {
+    if (options?.isConfirmed?.(li)) continue
     const reasons: string[] = []
 
-    // Rule 1 — implausibly high packSize on case-goods. Real-world case-goods
-    // almost never exceed 50/pack; values >50 are essentially always a fused-
-    // column mis-split (e.g. "112 CT" → packSize=112).
     const unitSizeUom = li.unitSizeUom?.trim().toUpperCase() ?? null
+    // Catch-weight lines ordered by the pound: packSize counts cartons and the
+    // product is the delivery's weight, not one case.
+    const soldByWeight = convert(1, li.unit ?? "", "lb") != null
+    const paperOrCount = isDisposable(li)
+    const caseTotal =
+      li.packSize != null && li.unitSize != null && li.packSize > 0 && li.unitSize > 0 && unitSizeUom
+        ? caseTotalInBase(li.packSize, li.unitSize, unitSizeUom)
+        : null
     const isSmallGramPacketCase =
       unitSizeUom != null &&
       GRAM_UOMS.has(unitSizeUom) &&
@@ -621,32 +684,37 @@ export function findPackShapeAnomalies(
       li.unitSize <= 10 &&
       li.packSize != null &&
       li.packSize <= 1_000
-    const isLargePaperCountPackCase =
-      (unitSizeUom == null || unitSizeUom === "CT") &&
-      li.packSize != null &&
-      li.packSize <= 200 &&
-      li.unitSize != null &&
-      li.unitSize >= 100 &&
-      li.unitSize <= 2_000 &&
-      looksLikePaperCountPack(li)
 
-    if (
+    // Rule 1 — a case count no case could hold.
+    if (li.packSize != null && li.packSize > ABSURD_PACK_SIZE) {
+      reasons.push(`packSize=${li.packSize} is more than any case holds — the pack count was misread`)
+    } else if (
       li.unit === "CS" &&
       li.packSize != null &&
       li.packSize > 50 &&
-      !isSmallGramPacketCase &&
-      !isLargePaperCountPackCase
+      caseTotal == null &&
+      !looksLikePaperCountPack(li) &&
+      !paperOrCount &&
+      !isSmallGramPacketCase
     ) {
       reasons.push(
-        `packSize=${li.packSize} for unit=CS is implausibly high — likely a fused PACK/SIZE split`
+        `packSize=${li.packSize} for unit=CS is implausibly high for food sold by count — likely a fused PACK/SIZE split`
       )
     }
 
-    // Rule 2 — CT-packed goods with the lettuce-bug shape (high pack, low size).
-    // Produce/case-goods CT almost always has packSize=1 with unitSize=count.
-    // The fusion bug flips this: "1 CS × 12 CT" misreads as packSize≥10, unitSize≤2.
+    // Rule 2 — a case heavier or larger than anything a vendor ships. Not on
+    // catch-weight lines ordered by the pound: there packSize counts cartons
+    // and the product is the delivery's total weight, not one case.
+    if (caseTotal != null && !soldByWeight && caseTotal.amount > caseTotal.limit) {
+      reasons.push(
+        `${li.packSize} × ${li.unitSize} ${li.unitSizeUom} is more than one case can weigh or hold`
+      )
+    }
+
+    // Rule 3 — the lettuce-bug shape on food (paper goods are counted either way).
     if (
-      li.unitSizeUom === "CT" &&
+      unitSizeUom === "CT" &&
+      !paperOrCount &&
       li.unitSize != null &&
       li.packSize != null &&
       li.unitSize <= 2 &&
@@ -658,22 +726,29 @@ export function findPackShapeAnomalies(
       )
     }
 
-    // Rule 3 — implausibly large unitSize on weight/volume goods. unitSize values
-    // beyond reasonable container size for the UoM indicate a mis-split where the
-    // model dragged extra digits into unitSize.
-    if (li.unitSize != null && li.unitSizeUom != null) {
+    // Rule 4 — one unit far beyond any container for its uom.
+    if (li.unitSize != null && unitSizeUom != null) {
       const limits: Record<string, number> = {
         OZ: 256,
         "FL OZ": 128,
         LB: 50,
         GAL: 10,
       }
-      const limit = limits[li.unitSizeUom.toUpperCase()]
+      const limit = limits[unitSizeUom]
       if (limit != null && li.unitSize > limit * 4) {
         reasons.push(
           `unitSize=${li.unitSize} ${li.unitSizeUom} exceeds plausible container size (≤${limit} typical)`
         )
       }
+    }
+
+    // Rule 5 — a size from the product name copied into a counted case.
+    // Disposables only: the "cleaning" category also covers sanitiser sold by
+    // the gallon, and "bag"/"roll" also name food.
+    if (caseTotal != null && !soldByWeight && !isSmallGramPacketCase && paperOrCount) {
+      reasons.push(
+        `${li.unitSizeUom} on a counted item — the size in the product name was read as the pack`
+      )
     }
 
     if (reasons.length > 0) {

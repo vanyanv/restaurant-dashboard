@@ -172,9 +172,25 @@ describe("invoices adapter · the list's status shapes", () => {
 })
 
 describe("invoices adapter · tie-out in whole cents", () => {
-  it("counts a two-cent gap that float subtraction reads as 0.01999", async () => {
-    const rows = [invoice("two", { lines: [100.02], subtotal: 100, total: 100 })]
+  // The tolerance moved from 2¢ to $1 on 2026-10-28 (`TIE_OUT_TOLERANCE`), so
+  // the float edge it pins moved with it: 101.01 − 100 is 1.0099999…, which a
+  // float compare would call inside a dollar.
+  it("counts a gap one cent past the dollar that float subtraction reads as 1.00999", async () => {
+    const rows = [invoice("over", { lines: [101.01], subtotal: 100, total: 100 })]
     const list = await ready((await sectionsOf(rows)).list)
-    expect(list.rows[0].gap).toBe("$0.02 over")
+    expect(list.rows[0].gap).toBe("$1.01 over")
+  })
+
+  it("ties out a gap of exactly a dollar", async () => {
+    const rows = [invoice("edge", { lines: [101], subtotal: 100, total: 100 })]
+    const list = await ready((await sectionsOf(rows)).list)
+    expect(list.rows[0].gap).toBeNull()
+  })
+
+  it("ties out IFS's new layout, whose freight row sits outside the subtotal", async () => {
+    const row = invoice("ifs", { lines: [1020.67], subtotal: 1020.67, total: 1047.82 })
+    row.lineItems.push({ ...row.lineItems[0], productName: "Freight/Misc.", extendedPrice: 7.75, unitPrice: 7.75 })
+    const list = await ready((await sectionsOf([row])).list)
+    expect(list.rows[0].gap).toBeNull()
   })
 })

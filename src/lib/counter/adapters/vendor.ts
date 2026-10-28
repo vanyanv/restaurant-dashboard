@@ -5,7 +5,7 @@ import {
   BASKET_WEEKS,
   getVendorBasketTrends,
 } from "@/lib/counter/vendor-basket"
-import { isChargeRow, isNonIngredientRow } from "@/lib/invoice-charges"
+import { isNonIngredientRow, tieOut } from "@/lib/invoice-charges"
 import { normalizeVendorName, vendorMatchKey } from "@/lib/vendor-normalize"
 import { displayName } from "@/lib/counter/adapters/vendors"
 import { count, money, pct, plural, titleCase, unitCost } from "@/lib/counter/format"
@@ -60,8 +60,6 @@ const BASKET_ROWS = 8
 const PHONE_ROWS = 4
 /** Weeks the spend chart buckets into. */
 const WEEKS = 8
-/** A line reconciles when it lands inside half a cent. */
-const EPSILON = 0.02
 /** A basket gap smaller than this is not worth a reader's attention. */
 const GAP_PCT = 2
 
@@ -184,9 +182,10 @@ async function loadVendor(input: VendorInput): Promise<Loaded | null> {
       invoiceDate: true,
       totalAmount: true,
       subtotal: true,
+      taxAmount: true,
       status: true,
       pdfBlobPathname: true,
-      lineItems: { select: { productName: true, extendedPrice: true } },
+      lineItems: { select: { productName: true, sku: true, extendedPrice: true } },
     },
     orderBy: { invoiceDate: "desc" },
   })
@@ -204,19 +203,15 @@ async function loadVendor(input: VendorInput): Promise<Loaded | null> {
   const spendRange = mine.reduce((t, i) => t + i.totalAmount, 0)
 
   const invoices: InvoiceRow[] = mine.map((i) => {
-    const goods = i.lineItems.reduce(
-      (t, l) => (isChargeRow(l.productName) ? t : t + l.extendedPrice),
-      0,
-    )
-    const reference = i.subtotal ?? i.totalAmount
-    const delta = goods - reference
+    // `tieOut`, the one rule the Invoices page and the Approve gate read.
+    const tie = tieOut(i.lineItems, { subtotal: i.subtotal, taxAmount: i.taxAmount, totalAmount: i.totalAmount })
     return {
       id: i.id,
       number: i.invoiceNumber,
       date: i.invoiceDate,
       total: i.totalAmount,
       lines: i.lineItems.length,
-      gap: Math.round(Math.abs(delta) * 100) >= Math.round(EPSILON * 100) ? delta : null,
+      gap: tie.reconciles ? null : tie.gap,
       status: i.status,
       hasPdf: i.pdfBlobPathname !== null,
     }

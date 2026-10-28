@@ -6,7 +6,7 @@ import {
   foldBasketTrends,
   loadVendorBasketWeeks,
 } from "@/lib/counter/vendor-basket"
-import { isChargeRow } from "@/lib/invoice-charges"
+import { tieOut } from "@/lib/invoice-charges"
 import { normalizeVendorName, vendorMatchKey } from "@/lib/vendor-normalize"
 import { count, money, pct, plural } from "@/lib/counter/format"
 import { rangeLabel, toQueryBounds, type DateRange } from "@/lib/counter/date-range"
@@ -42,8 +42,6 @@ const SERIES = 4
 const PHONE_ROWS = 5
 /** A trend smaller than this reads "flat". */
 const FLAT_PCT = BASKET_FLAT_PCT
-/** A line reconciles when it lands inside half a cent — the Invoices page's own. */
-const EPSILON = 0.02
 /** Characters a legend name is cut to. */
 const LEGEND_CHARS = 20
 
@@ -139,8 +137,9 @@ async function loadVendors(input: VendorsInput): Promise<VendorData> {
         invoiceDate: true,
         totalAmount: true,
         subtotal: true,
+        taxAmount: true,
         status: true,
-        lineItems: { select: { productName: true, extendedPrice: true } },
+        lineItems: { select: { productName: true, sku: true, extendedPrice: true } },
       },
       orderBy: { invoiceDate: "asc" },
     }),
@@ -182,15 +181,10 @@ async function loadVendors(input: VendorsInput): Promise<VendorData> {
     if (inv.invoiceDate) acc.dates.push(inv.invoiceDate)
     if (inv.status === "REVIEW") acc.inReview += 1
 
-    // The Invoices page's own check, and the same `isChargeRow` set: goods
-    // against the printed subtotal, delivery surcharges taken off the goods
-    // side. One definition, three pages.
-    const goods = inv.lineItems.reduce(
-      (t, l) => (isChargeRow(l.productName) ? t : t + l.extendedPrice),
-      0,
-    )
-    const reference = inv.subtotal ?? inv.totalAmount
-    if (Math.round(Math.abs(goods - reference) * 100) >= Math.round(EPSILON * 100)) acc.broken += 1
+    // The Invoices page's own check: `tieOut`, one definition for every page
+    // and for the Approve gate.
+    const tie = tieOut(inv.lineItems, { subtotal: inv.subtotal, taxAmount: inv.taxAmount, totalAmount: inv.totalAmount })
+    if (!tie.reconciles) acc.broken += 1
 
     folded.set(key, acc)
   }

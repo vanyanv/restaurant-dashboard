@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma"
 import { getScopedStores } from "@/lib/account-stores"
-import { isChargeRow } from "@/lib/invoice-charges"
+import { isFeeRow, tieOut, type TieOut } from "@/lib/invoice-charges"
 import { normalizeVendorName } from "@/lib/vendor-normalize"
 import { count, money, pct, plural, pluralWord, titleCase, unitCost } from "@/lib/counter/format"
 import { comparisonRange, rangeLabel, toQueryBounds, type DateRange } from "@/lib/counter/date-range"
@@ -54,7 +54,7 @@ const PHONE_ROWS = 4
  * The meta says "3 of 19", so the queue is a lead rather than the list.
  */
 const QUEUE_ITEMS = 3
-/** A line reconciles when it lands inside half a cent. */
+/** Two amounts read as the same figure (the doubled-line and raw-sum checks). */
 const EPSILON = 0.02
 /** How near a printed due date has to be before the row is marked. */
 const DUE_SOON_DAYS = 7
@@ -265,6 +265,7 @@ export interface InvoicesInput {
 
 interface LoadedLine {
   productName: string
+  sku: string | null
   canonicalId: string | null
   canonicalName: string | null
   quantity: number
@@ -282,6 +283,7 @@ interface LoadedInvoice {
   dueDate: Date | null
   totalAmount: number
   subtotal: number | null
+  taxAmount: number | null
   status: InvoiceStatusId
   hasPdf: boolean
   reviewReasons: ReviewReason[]
@@ -356,12 +358,14 @@ async function loadInvoices(input: InvoicesInput): Promise<InvoiceData> {
           dueDate: true,
           totalAmount: true,
           subtotal: true,
+          taxAmount: true,
           status: true,
           pdfBlobPathname: true,
           reviewReasons: true,
           lineItems: {
             select: {
               productName: true,
+              sku: true,
               canonicalIngredientId: true,
               canonicalIngredient: { select: { name: true } },
               quantity: true,
@@ -390,11 +394,13 @@ async function loadInvoices(input: InvoicesInput): Promise<InvoiceData> {
     dueDate: r.dueDate,
     totalAmount: r.totalAmount,
     subtotal: r.subtotal,
+    taxAmount: r.taxAmount,
     status: isStatus(r.status) ? r.status : "MATCHED",
     hasPdf: r.pdfBlobPathname !== null,
     reviewReasons: reasonsOf(r.reviewReasons),
     lines: r.lineItems.map((l) => ({
       productName: l.productName,
+      sku: l.sku,
       canonicalId: l.canonicalIngredientId,
       canonicalName: l.canonicalIngredient?.name ?? null,
       quantity: l.quantity,
@@ -428,20 +434,29 @@ async function loadInvoices(input: InvoicesInput): Promise<InvoiceData> {
 
 /* -- reconciliation --------------------------------------------------- */
 
-/** What the invoice PRINTS as the goods total: its subtotal, or its total when it has none. */
-const printedOf = (i: LoadedInvoice) => i.subtotal ?? i.totalAmount
-
-/** What the extracted lines say the goods came to, with the four charge rows removed. */
-function goodsOf(i: LoadedInvoice): number {
-  let sum = 0
-  for (const l of i.lines) if (!isChargeRow(l.productName)) sum += l.extendedPrice
-  return sum
+/**
+ * Whether the lines add up to the document — `tieOut`, the one rule the sync,
+ * the invoice page's Approve gate and the vendor pages also read. Cached per
+ * invoice because the queue, the desk and the headline all ask.
+ */
+const tieCache = new WeakMap<LoadedInvoice, TieOut>()
+function tieOf(i: LoadedInvoice): TieOut {
+  let t = tieCache.get(i)
+  if (!t) {
+    t = tieOut(i.lines, { subtotal: i.subtotal, taxAmount: i.taxAmount, totalAmount: i.totalAmount })
+    tieCache.set(i, t)
+  }
+  return t
 }
 
-const gapOf = (i: LoadedInvoice) => goodsOf(i) - printedOf(i)
-// In whole cents: `100.02 - 100` is 0.01999…, which a float compare would call
-// under two cents and tie out.
-const reconciles = (i: LoadedInvoice) => Math.round(Math.abs(gapOf(i)) * 100) < Math.round(EPSILON * 100)
+/** What the document prints as the goods total, on the reading that ties out best. */
+const printedOf = (i: LoadedInvoice) => tieOf(i).reference
+
+/** What the extracted lines say the goods came to, fee rows placed as the tie-out placed them. */
+const goodsOf = (i: LoadedInvoice) => tieOf(i).goods
+
+const gapOf = (i: LoadedInvoice) => tieOf(i).gap
+const reconciles = (i: LoadedInvoice) => tieOf(i).reconciles
 /**
  * Still on the worklist for its gap: it does not reconcile and the owner has
  * not rejected it. A rejected invoice is a decision already made, so its gap
@@ -903,7 +918,7 @@ function reviewOf(d: InvoiceData): InvoiceReview {
 
   const goods = d.all.reduce((t, i) => t + goodsOf(i), 0)
   const charges = d.all.reduce(
-    (t, i) => t + i.lines.filter((l) => isChargeRow(l.productName)).reduce((s, l) => s + l.extendedPrice, 0),
+    (t, i) => t + i.lines.filter((_, n) => tieOf(i).outside.has(n)).reduce((s, l) => s + l.extendedPrice, 0),
     0,
   )
   const printed = d.all.reduce((t, i) => t + printedOf(i), 0)
@@ -930,8 +945,8 @@ function reviewOf(d: InvoiceData): InvoiceReview {
         ? `${count(shown.length)} of ${count(candidates.length)} · worst first`
         : `${count(candidates.length)} open`,
     note:
-      `${count(ok)} of ${count(d.all.length)} invoices tie out to the cent once the four ` +
-      `delivery and tax rows are taken off the goods side. Checked without that rule the count ` +
+      `${count(ok)} of ${count(d.all.length)} invoices tie out to within a dollar once delivery, ` +
+      `fuel and tax rows are placed on the side of the subtotal they belong. Checked without that rule the count ` +
       `is ${count(d.all.filter((i) => Math.abs(i.lines.reduce((t, l) => t + l.extendedPrice, 0) - printedOf(i)) < EPSILON).length)}, ` +
       `and the difference is invoices that were never wrong. ` +
       `Of the ${count(d.all.length - ok)} that remain, ` +
@@ -1061,7 +1076,7 @@ function productsOf(d: InvoiceData): InvoiceProducts {
     const by = new Map<string, Agg>()
     for (const i of list) {
       for (const l of i.lines) {
-        if (isChargeRow(l.productName)) continue
+        if (isFeeRow(l)) continue
         const key = l.canonicalId ?? `raw:${l.productName}`
         const a = by.get(key) ?? {
           name: l.canonicalName ?? l.productName,
