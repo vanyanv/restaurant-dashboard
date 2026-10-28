@@ -418,6 +418,13 @@ describe("findTotalReconciliationMismatch", () => {
     expect(result!.gap).toBeCloseTo(7.75, 2)
   })
 
+  it("flags $100 of lines under a $0 header, as the Approve gate does", () => {
+    const result = findTotalReconciliationMismatch(
+      extraction({ lineItems: [li(1, 100)], subtotal: 0, taxAmount: null, totalAmount: 0 })
+    )
+    expect(result).not.toBeNull()
+  })
+
   it("flags the Premier Meats 2250793 shape: one credit line extracted twice", () => {
     // A $2,691.45 credit memo for 623 lb of Creekstone beef whose single
     // return line was stored twice. Anything reading lines rather than the
@@ -507,11 +514,14 @@ describe("findTotalReconciliationMismatch", () => {
         extraction({ lineItems: [], subtotal: null, taxAmount: null, totalAmount: 100 })
       )
     ).toBeNull()
+    // A $0 header over priced lines used to be skipped here too. Since
+    // 2026-10-28 it is flagged: the Approve gate reads the same `tieOut`, and
+    // an invoice the sync lets through must be one the owner can approve.
     expect(
       findTotalReconciliationMismatch(
         extraction({ lineItems: [li(1, 50)], subtotal: null, taxAmount: null, totalAmount: 0 })
       )
-    ).toBeNull()
+    ).not.toBeNull()
   })
 })
 

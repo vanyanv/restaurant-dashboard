@@ -21,11 +21,22 @@ const CATCH_WEIGHT_VENDOR_RE =
 const MEAT_LINE_RE =
   /\b(meat|beef|ground\s+beef|angus|chuck|brisket|ribeye|steak|sirloin|pork|bacon|ham|chicken|turkey|poultry|seafood|fish|salmon|tuna)\b/i
 const GRAM_UOMS = new Set(["G", "GR", "GM", "GRM", "GRAM", "GRAMS"])
-// Disposables counted by the piece. Cutlery, containers, trays and labels
-// joined on 2026-10-28: IFS forks (100 × 10) and bagasse containers (200 a
-// case) were being held as "implausible" food counts.
 const PAPER_COUNT_PACK_RE =
-  /\b(bag|bags|bath\s+tissue|tissue|toilet|napkin|towel|roll|wrap|wrapper|cup|cups|lid|lids|glove|gloves|paper|liner|liners|foil|film|sheet|sheets|straw|straws|cutlery|fork|forks|knife|knives|spoon|spoons|spork|sporks|container|containers|cont|tray|trays|clamshell|bowl|bowls|plate|plates|carrier|label|labels)\b/i
+  /\b(bag|bags|bath\s+tissue|tissue|toilet|napkin|towel|roll|wrap|wrapper|cup|cups|lid|lids|glove|gloves|paper|liner|liners|foil|film|sheet|sheets|straw|straws)\b/i
+
+// Disposables counted by the piece, for the pack-shape rules only. Narrower
+// than PAPER_COUNT_PACK_RE on purpose: "bag", "roll", "wrap" and "plate" are
+// also food ("FRIES 6/5 LB BAG", "HAMBURGER ROLL", "BEEF PLATE"), and these
+// rules excuse or accuse a line on the strength of the name alone.
+const DISPOSABLE_NAME_RE =
+  /\b(cup|cups|lid|lids|liner|liners|napkin|napkins|tissue|towel|towels|glove|gloves|straw|straws|paper|cutlery|fork|forks|knife|knives|spoon|spoons|spork|sporks|container|containers|cont|clamshell|tray|trays|carrier|label|labels)\b/i
+
+function isDisposable(line: { productName: string; description?: string | null; category: string | null }): boolean {
+  return (
+    line.category?.trim().toLowerCase() === "paper/supplies" ||
+    DISPOSABLE_NAME_RE.test(`${line.productName} ${line.description ?? ""}`)
+  )
+}
 
 /**
  * Returns the extracted invoiceDate as a Date, or null if it's obviously wrong.
@@ -176,8 +187,12 @@ export function findTotalReconciliationMismatch(
   >
 ): TotalReconciliationMismatch | null {
   const totalAmount = Number(extraction.totalAmount)
-  if (!Number.isFinite(totalAmount) || Math.abs(totalAmount) < 0.01) return null
+  if (!Number.isFinite(totalAmount)) return null
   const priced = goodsLines(extraction.lineItems)
+  // No lines is `findEmptyExtraction`'s finding (the page shows the same gap).
+  // A zero total is NOT skipped any more: the Approve gate reads `tieOut` on
+  // it, so the sync must too or a $0 header over $100 of lines imports clean
+  // and can never be approved.
   if (priced.length === 0) return null
 
   const subtotal = extraction.subtotal != null ? Number(extraction.subtotal) : null
@@ -653,7 +668,10 @@ export function findPackShapeAnomalies(
     const reasons: string[] = []
 
     const unitSizeUom = li.unitSizeUom?.trim().toUpperCase() ?? null
-    const paperOrCount = looksLikePaperCountPack(li)
+    // Catch-weight lines ordered by the pound: packSize counts cartons and the
+    // product is the delivery's weight, not one case.
+    const soldByWeight = convert(1, li.unit ?? "", "lb") != null
+    const paperOrCount = isDisposable(li)
     const caseTotal =
       li.packSize != null && li.unitSize != null && li.packSize > 0 && li.unitSize > 0 && unitSizeUom
         ? caseTotalInBase(li.packSize, li.unitSize, unitSizeUom)
@@ -675,6 +693,7 @@ export function findPackShapeAnomalies(
       li.packSize != null &&
       li.packSize > 50 &&
       caseTotal == null &&
+      !looksLikePaperCountPack(li) &&
       !paperOrCount &&
       !isSmallGramPacketCase
     ) {
@@ -686,7 +705,6 @@ export function findPackShapeAnomalies(
     // Rule 2 — a case heavier or larger than anything a vendor ships. Not on
     // catch-weight lines ordered by the pound: there packSize counts cartons
     // and the product is the delivery's total weight, not one case.
-    const soldByWeight = convert(1, li.unit ?? "", "lb") != null
     if (caseTotal != null && !soldByWeight && caseTotal.amount > caseTotal.limit) {
       reasons.push(
         `${li.packSize} × ${li.unitSize} ${li.unitSizeUom} is more than one case can weigh or hold`
@@ -724,13 +742,10 @@ export function findPackShapeAnomalies(
       }
     }
 
-    // Rule 5 — a size from the product name copied into a counted case. By
-    // name only: the "cleaning" category also covers sanitiser sold by the gallon.
-    if (
-      caseTotal != null &&
-      !isSmallGramPacketCase &&
-      PAPER_COUNT_PACK_RE.test(`${li.productName} ${li.description ?? ""}`)
-    ) {
+    // Rule 5 — a size from the product name copied into a counted case.
+    // Disposables only: the "cleaning" category also covers sanitiser sold by
+    // the gallon, and "bag"/"roll" also name food.
+    if (caseTotal != null && !soldByWeight && !isSmallGramPacketCase && paperOrCount) {
       reasons.push(
         `${li.unitSizeUom} on a counted item — the size in the product name was read as the pack`
       )

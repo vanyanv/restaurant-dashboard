@@ -67,8 +67,9 @@ describe("isFeeRow", () => {
     (name) => expect(isFeeRow({ productName: name, sku: null })).toBe(true),
   )
 
-  it("never treats a line with a SKU as a fee", () => {
-    expect(isFeeRow({ productName: "Fuel Charge", sku: "123" })).toBe(false)
+  it("keeps the four exact names as fees even with a SKU, and nothing else", () => {
+    expect(isFeeRow({ productName: "Fuel Charge", sku: "FUEL" })).toBe(true)
+    expect(isFeeRow({ productName: "Fuel Surcharge", sku: "123" })).toBe(false)
   })
 
   it("leaves products alone", () => {

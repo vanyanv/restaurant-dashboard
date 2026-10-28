@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma"
-import { tieOut } from "@/lib/invoice-charges"
+import { isFeeRow, tieOut } from "@/lib/invoice-charges"
 import { normalizeVendorName } from "@/lib/vendor-normalize"
 import { bytes, count, money, pct, plural, pluralWord, titleCase, unitCost } from "@/lib/counter/format"
 import {
@@ -429,7 +429,7 @@ async function loadInvoice(input: InvoiceInput): Promise<Loaded | null> {
     subtotal: inv.subtotal,
     tax: inv.taxAmount,
     isReturn: inv.isReturn,
-    lines: inv.lineItems.map((l, n) => ({
+    lines: inv.lineItems.map((l) => ({
       lineNumber: l.lineNumber,
       sku: l.sku,
       productName: l.productName,
@@ -442,11 +442,12 @@ async function loadInvoice(input: InvoiceInput): Promise<Loaded | null> {
       unitSizeUom: l.unitSizeUom,
       matchedTo: l.canonicalIngredient?.name ?? null,
       matchSource: l.matchSource,
-      isCharge: tie.outside.has(n),
+      // A fee is never an ingredient, whichever side of the subtotal it sits.
+      isCharge: isFeeRow(l),
     })),
     goods: tie.goods,
     reference: tie.reference,
-    referenceLabel: tie.referenceKind === "subtotal" ? "subtotal" : "total less tax",
+    referenceLabel: tie.referenceKind === "subtotal" ? "subtotal" : "total, less tax",
     gap: tie.reconciles ? null : tie.gap,
     reasons,
     matchConfidence: inv.matchConfidence,
@@ -817,7 +818,7 @@ function checksOf(d: Loaded): InvoiceCheck[] {
           key: "ties",
           tone: "good",
           title: `The lines tie to the printed ${printedWord}`,
-          body: `${plural(goodsLines.length, "goods line")} ${pluralWord(goodsLines.length, "comes", "come")} to ${money(d.goods, { cents: true })}, within a dollar of what the document prints. Delivery, fuel and tax rows are placed on the side of the ${printedWord} they print on.`,
+          body: `${plural(goodsLines.length, "goods line")} ${pluralWord(goodsLines.length, "comes", "come")} to ${money(d.goods, { cents: true })}, within a dollar of what the document prints.`,
         }
       : {
           key: "ties",

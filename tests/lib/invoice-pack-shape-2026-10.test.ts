@@ -33,6 +33,10 @@ describe("findPackShapeAnomalies · real cases are not flagged", () => {
     ["IFS forks, 1,000 a case", line({ productName: "Cutlery Fork Full Size Extra Heavy Black PP", packSize: 100, unitSize: 10, unitSizeUom: "CT" })],
     ["Sysco sanitiser by the gallon", line({ productName: "keyston sanitizer multi quat liquid", category: "cleaning", packSize: 2, unitSize: 1, unitSizeUom: "GAL" })],
     ["Premier catch-weight beef, 9 cartons by the pound", line({ productName: "GROUND BEEF FINE GRND 73/27 CREEKSTONE", unit: "LB", packSize: 9, unitSize: 71.27, unitSizeUom: "LB" })],
+    ["Fries in a bag, 6 × 5 lb", line({ productName: "FRIES SHOESTRING 6/5 LB BAG", category: "Frozen", packSize: 6, unitSize: 5, unitSizeUom: "LB" })],
+    ["Hamburger rolls, 12 × 4 oz", line({ productName: "HAMBURGER ROLL", category: "Bakery", packSize: 12, unitSize: 4, unitSizeUom: "OZ" })],
+    ["Catch-weight beef plate by the pound", line({ productName: "BEEF PLATE", unit: "LB", packSize: 2, unitSize: 10, unitSizeUom: "LB" })],
+    ["IFS bagasse containers, 200 a case", line({ productName: "VB Container Hinged No PFAS 9X9X3 Bagasse", packSize: 200, unitSize: 1, unitSizeUom: "CT" })],
     ["IFS ketchup packets", line({ productName: "Ketchup Packets Foil 1000/9GR", packSize: 1000, unitSize: 9, unitSizeUom: "GR" })],
   ])("%s", (_, l) => {
     expect(findPackShapeAnomalies([l])).toEqual([])

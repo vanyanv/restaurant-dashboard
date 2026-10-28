@@ -153,9 +153,11 @@ const MAX_FEE_ROWS = 6
  * are the rows whose side of the subtotal varies, so the tie-out tries both.
  */
 export function isFeeRow(line: { productName: string | null | undefined; sku?: string | null }): boolean {
-  if (line.sku != null && line.sku.trim() !== "") return false
   const name = line.productName?.trim() ?? ""
-  return isChargeRow(name) || FEE_LIKE_RE.test(name)
+  // The four exact names stay fees whatever the SKU, as they always were.
+  if (isChargeRow(name)) return true
+  if (line.sku != null && line.sku.trim() !== "") return false
+  return FEE_LIKE_RE.test(name)
 }
 
 export interface TieOut {
