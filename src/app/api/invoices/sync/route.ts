@@ -8,7 +8,7 @@ import { extractInvoiceData } from "@/lib/gemini-invoice"
 import { matchInvoiceToStore } from "@/lib/address-matcher"
 import type { InvoiceSyncProgressEvent } from "@/types/invoice"
 import { isCronRequest, rateLimit, RATE_LIMIT_TIERS } from "@/lib/rate-limit"
-import { sanitizeInvoiceDate, findLineMathMismatches, findPackShapeAnomalies, findTotalReconciliationMismatch, findEmptyExtraction, composeReviewReasons, describeMoneyProblems, moneyProblemScore, type ReviewReason } from "@/lib/invoice-sanity"
+import { sanitizeInvoiceDate, findLineMathMismatches, findPackShapeAnomalies, findTotalReconciliationMismatch, findEmptyExtraction, composeReviewReasons, isAccountPaper, describeMoneyProblems, moneyProblemScore, type ReviewReason } from "@/lib/invoice-sanity"
 import {
   applyPackShapePriors,
   buildPackShapePriors,
@@ -701,10 +701,16 @@ async function runSync(
     // never marked done and, as the oldest pending, was re-read and re-uploaded
     // first on every run of the September backfill. It is stored set aside
     // instead, so the message dedup skips it from then on.
-    const notAnInvoice =
+    const blankPdf =
       !inv.extraction.invoiceNumber?.trim() &&
       inv.extraction.lineItems.length === 0 &&
       !inv.extraction.totalAmount
+    // A statement or payment receipt lists invoice numbers and amounts, not
+    // goods: Premier Deli's "Statement" and "Payment Receipt ZELLE" PDFs
+    // (2026-10-28) read as $3,948 and $8,091 bills whose lines were only
+    // invoice numbers. Stored, they would count those bills' spend again.
+    const accountPaper = isAccountPaper(inv.subject, inv.attachmentName, inv.extraction.lineItems)
+    const notAnInvoice = blankPdf || accountPaper
     const notASupplier =
       !notAnInvoice &&
       knownVendors !== null &&
@@ -734,7 +740,9 @@ async function runSync(
       ? [
           {
             kind: "not_an_invoice",
-            message: "No invoice number, lines or total on this PDF — it is a letter or notice, not a bill. Set aside.",
+            message: accountPaper
+              ? "A statement or payment receipt, not a bill: its lines are invoice numbers, not goods. Set aside so that spend is not counted twice."
+              : "No invoice number, lines or total on this PDF — it is a letter or notice, not a bill. Set aside.",
           },
         ]
       : notASupplier

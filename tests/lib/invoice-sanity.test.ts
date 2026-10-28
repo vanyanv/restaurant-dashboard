@@ -9,6 +9,7 @@ import {
   normalizeCatchWeightMeatLines,
   normalizeCountPackLines,
   foldFractionalPackSizes,
+  isAccountPaper,
   parsePerCaseWeights,
 } from "@/lib/invoice-sanity"
 
@@ -745,5 +746,33 @@ describe("composeReviewReasons", () => {
       matchConfidence: 0.6,
     })
     expect(withSanity.map((r) => r.kind)).toEqual(["date_suspect"])
+  })
+})
+
+describe("isAccountPaper", () => {
+  const ref = (n: string) => ({ productName: null, description: null, sku: n })
+
+  it("sets aside a payment receipt whose lines are invoice numbers", () => {
+    expect(
+      isAccountPaper(
+        "Fw: Payment Receipt ZELLE from Premier Deli Services Inc.",
+        "Payment_Receipt_ZELLE_from_Premier_Deli_Services_Inc._11096.pdf",
+        [ref("902881"), ref("902923")]
+      )
+    ).toBe(true)
+  })
+
+  it("reads the word from the file name alone", () => {
+    expect(isAccountPaper("Fw: from Premier Deli", "Statement1_from_Premier.pdf", [{ productName: "903134" }])).toBe(true)
+  })
+
+  it("keeps a receipt that lists goods", () => {
+    expect(
+      isAccountPaper("Your Restaurant Depot receipt", "receipt.pdf", [{ productName: "AMERICAN CHEESE 160 SL" }])
+    ).toBe(false)
+  })
+
+  it("keeps an ordinary invoice", () => {
+    expect(isAccountPaper("Inv #: 43704487", "INV43704487IF09886.PDF", [ref("1")])).toBe(false)
   })
 })

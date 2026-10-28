@@ -256,3 +256,30 @@ describe("applyPackShapePriors", () => {
     expect(corrections).toHaveLength(0)
   })
 })
+
+describe("vendor aliases", () => {
+  it("applies an IFS prior to a read that names the vendor Imperial Brady", () => {
+    const priors = buildPackShapePriors([
+      { vendorName: "Individual FoodService", sku: "61250CS", productName: "CUP PORTION PLAST", category: "Paper/Supplies", unit: "CS", packSize: 20, unitSize: 125, unitSizeUom: "CT", approved: true },
+    ])
+    const { corrections } = applyPackShapePriors(
+      {
+        vendorName: "Imperial Brady",
+        invoiceNumber: "43704487",
+        invoiceDate: null,
+        dueDate: null,
+        deliveryAddress: null,
+        subtotal: null,
+        taxAmount: null,
+        totalAmount: 28.68,
+        isReturn: false,
+        lineItems: [
+          { lineNumber: 5, sku: "61250CS", productName: "CUP PORTION PLAST 2 OZ CLEAR", description: null, category: "Paper/Supplies", quantity: 1, unit: "CS", packSize: 20, unitSize: 2, unitSizeUom: "OZ", unitPrice: 28.68, extendedPrice: 28.68 },
+        ],
+      },
+      priors
+    )
+    expect(corrections).toHaveLength(1)
+    expect(corrections[0].to).toEqual({ packSize: 20, unitSize: 125, unitSizeUom: "CT" })
+  })
+})

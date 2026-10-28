@@ -16,6 +16,7 @@
 import type { InvoiceExtraction, InvoiceExtractionLineItem } from "@/types/invoice"
 import { canonicalizeUnit } from "@/lib/unit-conversion"
 import { looksLikePaperCountPack } from "@/lib/invoice-sanity"
+import { normalizeVendorName } from "@/lib/vendor-normalize"
 
 /** Minimum agreeing prior lines before a shape is trusted as a prior. */
 export const PRIOR_MIN_SUPPORT = 3
@@ -184,11 +185,14 @@ export function derivePackShapePrior(rows: PriorShapeRow[]): PackShapePrior | nu
 /**
  * Vendors print under several name variants ("Sysco" vs "Sysco Los Angeles,
  * Inc."), so priors key on the brand stem: the first alphanumeric token of
- * the lowercased vendor name.
+ * the lowercased vendor name, after aliases: IFS's fresh reads say "Imperial
+ * Brady" while its stored invoices say "Individual FoodService", and keyed on
+ * the raw name the portion cups approved as 20 × 125 CT never met the next
+ * delivery read as 20 × 2 OZ (IFS 43704487, 2026-10-28).
  */
 function vendorStem(vendorName: string | null | undefined): string | null {
   if (!vendorName) return null
-  const token = vendorName
+  const token = normalizeVendorName(vendorName)
     .toLowerCase()
     .replace(/[^a-z0-9\s]/g, " ")
     .trim()
