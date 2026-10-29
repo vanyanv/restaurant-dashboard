@@ -216,8 +216,7 @@ export function CheckDetail({ store, label, cell }: { store: string; label: stri
       <dl className="ck-kv">
         {cell.submittedAt && (<><dt>Submitted</dt><dd>{cell.submittedAt}{cell.by ? ` by ${cell.by}` : ""}</dd></>)}
         {cell.total > 0 && (<><dt>Tasks</dt><dd>{cell.done} of {cell.total} done</dd></>)}
-        <dt>Closes</dt>
-        <dd>{cell.dueLabel}</dd>
+        {!cell.submittedAt && (<><dt>Closes</dt><dd>{cell.dueLabel}</dd></>)}
         {cell.meta && !cell.submittedAt && (<><dt>Now</dt><dd>{cell.meta}</dd></>)}
       </dl>
       {cell.people.length > 0 && (

@@ -6,7 +6,7 @@ import { ChecksTodayClient } from "@/app/dashboard/(counter)/checks/checks-today
 
 export const dynamic = "force-dynamic"
 
-/** Store checks on a phone — Today: every store by its three checks, missed ones first. Same adapter and client as the desk page. */
+/** Store checks on a phone — Today: every store by its Morning and Night check, missed ones summed up first. Same adapter and client as the desk page. */
 export default async function Page() {
   const session = await getServerSession(authOptions)
   if (!session) redirect("/login")

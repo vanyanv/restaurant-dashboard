@@ -1,5 +1,6 @@
 "use client"
 
+import { shortStoreName } from "@/lib/checks/names"
 import { useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
 import { Section, useCounterTransition, usePageChrome } from "@/components/counter"
@@ -61,7 +62,7 @@ function PosterCard({ store }: { store: PosterStore }) {
       setOutcome({ ok: false, text: "Couldn't copy. Select the link below instead." })
     }
   }
-  const message = `${store.name} store checks. Open this, enter your PIN, and tick your tasks: ${store.link}`
+  const message = `${shortStoreName(store.name)} store checks. Open this, enter your PIN, and tick your tasks: ${store.link}`
   // A phone opens Messages with the text filled in; the owner picks who.
   const smsHref = `sms:?&body=${encodeURIComponent(message)}`
   const share = async () => {
