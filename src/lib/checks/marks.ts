@@ -45,7 +45,7 @@ export async function loadMarkRows(store: CrewStore, kind: ActiveCheck["kind"], 
       itemId: true, itemText: true, sectionName: true, done: true, note: true, crewName: true, at: true,
       photoKey: true, photoType: true, photoSize: true,
     },
-    orderBy: { at: "asc" },
+    orderBy: [{ at: "asc" }, { id: "asc" }],
   })
 }
 

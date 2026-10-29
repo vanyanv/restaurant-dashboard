@@ -90,7 +90,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       note,
       crewMemberId: crew.id,
       crewName: crew.name,
-      at: now,
+      // `at` is the database's clock at insert, after any photo upload, so
+      // the latest row per task really is the last thing anyone did.
       photoKey: photo?.key ?? null,
       photoType: photo?.type ?? null,
       photoSize: photo?.size ?? null,

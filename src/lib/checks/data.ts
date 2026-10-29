@@ -149,7 +149,7 @@ export async function loadCheckGrid(opts: {
         id: true, storeId: true, kind: true, businessDate: true, itemId: true, itemText: true, sectionName: true,
         done: true, note: true, crewName: true, at: true, photoKey: true,
       },
-      orderBy: { at: "asc" },
+      orderBy: [{ at: "asc" }, { id: "asc" }],
     }),
   ])
 

@@ -89,7 +89,7 @@ UPDATE "CheckSection" SET "photoRequired" = false WHERE "photoRequired" = true;
 -- Who gets the email when a check is submitted.
 UPDATE "Account"
    SET "checkReportEmails" = ARRAY['chris@chrisneddys.com', 'vardan.vanyan@gmail.com']
- WHERE cardinality("checkReportEmails") = 0;
+ WHERE "id" = 'acc_default_chrisneddys' AND cardinality("checkReportEmails") = 0;
 
 -- Old per-check alerts are replaced by one alert per store per day.
 UPDATE "Alert" SET "status" = 'DISMISSED'

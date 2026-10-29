@@ -8,8 +8,9 @@ import { addDays, CHECK_LABEL, dayLabel, dueAtFor, laInstant, clockLabel, todayL
  * bad day reads as one line instead of one card per check.
  *
  * Idempotent through `Alert.dedupeKey` (`STORE_CHECK:<store>:<day>`). A row
- * still OPEN is rewritten when a second check that day goes wrong; once the
- * owner has acknowledged or dismissed it, it is left alone. Pre-open stores
+ * still OPEN is rewritten when a second check that day goes wrong; one the
+ * owner already acknowledged or dismissed is reopened only for a check that
+ * went wrong after that, never for the same news again. Pre-open stores
  * never get one, because their checks are "closed" in the grid. Runs from the
  * checks cron and whenever the owner opens Store checks.
  */
@@ -62,10 +63,21 @@ export async function recordCheckAlerts(opts: { accountId?: string; now: Date; d
         const alert = storeDayAlert(store.name, day, problems)
         const metadata = { day, checks: problems.map((p) => ({ kind: p.kind, status: p.missed ? "missed" : "late" })) }
         const dedupeKey = `STORE_CHECK:${store.id}:${day}`
-        const exists = await prisma.alert.findUnique({ where: { dedupeKey }, select: { id: true, status: true, title: true } })
+        const exists = await prisma.alert.findUnique({
+          where: { dedupeKey },
+          select: { id: true, status: true, title: true, metadata: true },
+        })
         if (exists) {
+          const before = ((exists.metadata as { checks?: unknown[] } | null)?.checks ?? []).length
           if (exists.status === "OPEN" && exists.title !== alert.title) {
             await prisma.alert.update({ where: { id: exists.id }, data: { ...alert, metadata } })
+          } else if (exists.status !== "OPEN" && problems.length > before) {
+            // A check that went wrong after the owner dealt with this day's
+            // alert is news: reopen it, naming everything.
+            await prisma.alert.update({
+              where: { id: exists.id },
+              data: { ...alert, metadata, status: "OPEN", acknowledgedAt: null, detectedAt: new Date() },
+            })
           }
           continue
         }

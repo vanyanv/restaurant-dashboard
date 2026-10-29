@@ -57,7 +57,8 @@ const ChecklistInput = z.object({
       }),
     )
     .min(1, "A check needs at least one section")
-    .max(8),
+    .max(8)
+    .refine((ss) => ss.some((s) => s.items.length > 0), "A check needs at least one task"),
 })
 
 function revalidateChecks() {
@@ -129,7 +130,8 @@ export async function saveChecklist(raw: z.input<typeof ChecklistInput>): Promis
           else await tx.checkItem.create({ data: itemData })
         }
       }
-    })
+      // One query per task over Neon; the 5 s default is too tight for a long list.
+    }, { timeout: 20_000 })
     revalidateChecks()
     return { ok: true, message: "Saved. Crew see the new list straight away." }
   } catch (err) {
