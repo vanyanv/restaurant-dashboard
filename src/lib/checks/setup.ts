@@ -54,18 +54,23 @@ export async function ensureCheckSetup(storeId: string): Promise<void> {
             storeId,
             kind: t.kind,
             opensAtMin: t.opensAtMin,
+            submitFromMin: t.submitFromMin,
             dueAtMin: t.dueAtMin,
+            dueByWeekday: t.dueByWeekday,
             graceMin: t.graceMin,
             sections: {
               create: t.sections.map((s, si) => ({
                 position: si,
                 nameEn: s.nameEn,
                 nameEs: s.nameEs,
-                photoRequired: s.photoRequired,
-                photoHintEn: s.photoHintEn,
-                photoHintEs: s.photoHintEs,
+                photoRequired: false,
                 items: {
-                  create: s.items.map(([en, es], ii) => ({ position: ii, textEn: en, textEs: es })),
+                  create: s.items.map(([en, es, photo], ii) => ({
+                    position: ii,
+                    textEn: en,
+                    textEs: es,
+                    photoRequired: photo === true,
+                  })),
                 },
               })),
             },

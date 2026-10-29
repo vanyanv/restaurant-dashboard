@@ -1,0 +1,86 @@
+/* src/styles/crew-checks.css
+ *
+ * The crew check page at /checks/<code>, in the restaurant's own brand
+ * rather than the dashboard's Counter look: crew reach it from a poster or a
+ * texted link, so it should look like Chris N Eddy's. The colours are the
+ * site's (chrisneddys-site DESIGN.md): counter red, marquee yellow, butcher
+ * paper, griddle ink, ticket green. They are re-pointed here onto the same
+ * aliases counter-checks.css reads, so the crew rules there keep working and
+ * only the palette, type and corners change. Light only, like the poster.
+ *
+ * The values are --ct-brand-* in counter.css, the one place a colour is
+ * decided. Contrast (AA, 4.5:1): ink on paper 16:1, muted ink #6b604f on paper 5.9:1,
+ * ink on yellow 10:1, cream on red 4.6:1 (and only at 15px+ bold), green on
+ * green wash 6.4:1.
+ */
+.ct-root.ckb {
+  color-scheme: light;
+  --surface: var(--ct-brand-surface);     --paper: var(--ct-brand-paper);
+  --chrome: var(--ct-brand-chrome);       --sunk: var(--ct-brand-chrome);
+  --line: var(--ct-brand-line);           --line-strong: var(--ct-brand-line-strong);
+  --scrim: var(--ct-brand-scrim);
+  --ink: var(--ct-brand-ink);             --ink-2: var(--ct-brand-ink-2);   --ink-3: var(--ct-brand-ink-2);
+  --accent: var(--ct-brand-yellow);       --accent-hi: var(--ct-brand-yellow-hi);   --accent-wash: var(--ct-brand-cream);
+  --signal: var(--ct-brand-yellow);       --signal-wash: var(--ct-brand-cream);
+  --good: var(--ct-brand-green);          --good-wash: var(--ct-brand-green-wash);
+  --warn: var(--ct-brand-warn);           --warn-wash: var(--ct-brand-cream);
+  --bad: var(--ct-brand-bad);             --bad-wash: var(--ct-brand-bad-wash);
+  --brand-red: var(--ct-brand-red);       --brand-cream: var(--ct-brand-cream);
+  --display: var(--font-bowlby), Impact, var(--sans);
+  background: var(--paper);
+  padding-left: 0;
+  padding-right: 0;
+}
+.ckb .ckc__col { padding: 0 0 24px; gap: 14px; background: var(--paper) }
+.ckb .ckc__col > :not(.ckb__band):not(.ckc__head):not(.ckc__foot) { margin-inline: 16px }
+.ckb h1, .ckb h2 { font-weight: 400; letter-spacing: .01em; line-height: 1 }
+/* Square corners, like the site. */
+.ckb .ckc__btn, .ckb .ckc__row, .ckb .ckc__row .ck, .ckb .ckc__hero, .ckb .ckc__pad button, .ckb .ckc__dots i,
+.ckb .ckc__photo, .ckb .ckc__sheet > div, .ckb .ckc__receipt, .ckb .ckc__chips button, .ckb .ckc__big,
+.ckb .ckc__bar, .ckb .ckc__lang, .ckb .ckc__lang button, .ckb .ckc__sheet textarea { border-radius: 0 }
+.ckb .ckc__btn { color: var(--ink); font-family: var(--display); font-weight: 400; letter-spacing: .04em; font-size: 17px }
+.ckb .ckc__btn[disabled] { background: var(--sunk); color: var(--ink-2); font-family: var(--sans); font-weight: 700; letter-spacing: 0; font-size: 15px }
+.ckb .ckc__btn--ghost { background: var(--surface); border-color: var(--line-strong) }
+.ckb .ckc__row.done .ck { color: var(--surface) }
+.ckb .ckc__big { color: var(--surface) }
+
+/* The red band: logo and store name, on every screen. */
+.ckb__band { background: var(--brand-red); color: var(--brand-cream); display: grid; justify-items: center; gap: 4px;
+  padding: max(14px, env(safe-area-inset-top, 0px)) 16px 12px; position: relative }
+.ckb__band img { height: 34px; width: auto }
+.ckb__store { font-family: var(--display); font-size: 17px; letter-spacing: .08em; text-transform: uppercase; line-height: 1 }
+.ckb__band .ckc__lang { position: absolute; right: 10px; top: max(10px, env(safe-area-inset-top, 0px)); border-color: var(--ct-brand-cream-line) }
+.ckb__band .ckc__lang button { color: var(--brand-cream); min-height: 32px; padding: 5px 8px; font-size: 11px }
+.ckb__band .ckc__lang button[aria-pressed="true"] { background: var(--brand-cream); color: var(--ink) }
+
+/* Home: one card per check. */
+.ckb__card { display: grid; gap: 6px; padding: 16px; background: var(--surface); border: 1.5px solid var(--line-strong);
+  text-align: left; font: inherit; color: var(--ink); width: auto; cursor: pointer }
+.ckb__card[data-live="true"] { border: 2px solid var(--ink) }
+.ckb__card:disabled { cursor: default; background: var(--chrome); border-color: var(--line) }
+.ckb__card h2 { font-size: 24px }
+.ckb__card .ckb__line { font-size: 15px; font-weight: 700 }
+.ckb__tone-good { color: var(--good) }
+.ckb__tone-bad { color: var(--bad) }
+.ckb__tone-dim { color: var(--ink-2) }
+
+/* Checklist: who else is on it, the next task, photo tasks. */
+.ckb__who { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--ink-2) }
+.ckb__who i { width: 8px; height: 8px; border-radius: 50%; background: var(--good); flex: none }
+.ckb__next { background: var(--ink); color: var(--surface); padding: 16px; display: grid; gap: 12px }
+.ckb__next .ck-mono { color: var(--line) }
+.ckb__next b { font-size: 19px; line-height: 1.25 }
+.ckb__next .ckc__btn { min-height: 54px }
+.ckb__next .ckc__btn--light { background: var(--surface) }
+.ckb__alldone { background: var(--good-wash); border: 1px solid var(--good); color: var(--good); padding: 14px 16px; font-weight: 700 }
+.ckb .ckc__row.cam .ck { border-radius: 0; border-color: var(--accent-hi); background: var(--accent-wash); color: var(--warn) }
+.ckb__need { display: block; font-family: var(--mono); font-size: 10.5px; letter-spacing: .05em; text-transform: uppercase; color: var(--warn); font-weight: 600; margin-top: 2px }
+.ckb__stamp { display: block; font-family: var(--mono); font-size: 11px; color: var(--good); margin-top: 2px }
+.ckb__thumb { width: 44px; height: 44px; object-fit: cover; background: var(--sunk); flex: none }
+.ckb .ckc__row.has-thumb { grid-template-columns: 34px 1fr 44px }
+.ckb__segs { display: flex; gap: 3px }
+.ckb__segs i { flex: 1; height: 6px; background: var(--line) }
+.ckb__segs i.f { background: var(--good) }
+.ckb__preview { width: 100%; aspect-ratio: 3 / 4; object-fit: cover; background: var(--ink) }
+.ckb__toast { position: fixed; left: 16px; right: 16px; bottom: max(96px, calc(env(safe-area-inset-bottom, 0px) + 96px)); z-index: 30;
+  background: var(--ink); color: var(--surface); padding: 12px 14px; font-size: 14px; font-weight: 600; max-width: 448px; margin: 0 auto }

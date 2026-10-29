@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma"
 import { loadCheckGrid, shortName, type GridCell, type GridStore } from "@/lib/checks/data"
 import { recordCheckAlerts } from "@/lib/checks/missed-alerts"
 import { checkLink } from "@/lib/checks/crew"
+import { shortStoreName } from "@/lib/checks/names"
 import { emailConfigured } from "@/lib/checks/email"
 import { ensureCheckSetup } from "@/lib/checks/setup"
 import { onTimeRate, type CellStatus } from "@/lib/checks/status"
@@ -13,6 +14,7 @@ import {
   clockLabel,
   dayLabel,
   durationLabel,
+  minutesLabel,
   windowSummary,
   todayLA,
   windowBounds,
@@ -59,6 +61,27 @@ export type CellView = {
   startedAt: string | null
   by: string | null
   dueLabel: string
+  /** Tasks done out of the list, live for a check in progress. */
+  done: number
+  total: number
+  /** Everyone who ticked a task or submitted. */
+  people: string[]
+  /** Open now: crew can still tick and submit it. */
+  live: boolean
+  /** The Today tile, worked out here so the page never reads `status`. */
+  tile: { tone: "ok" | "miss" | "open" | null; headline: string; sub: string | null; meta: string | null; bar: boolean }
+  /** Every tick, untick and note, oldest first, then the submit. */
+  log: Array<{
+    id: string
+    at: string
+    by: string
+    text: string
+    /** "done", "undone", "note" or "submitted". */
+    action: "done" | "undone" | "note" | "submitted"
+    note: string | null
+    /** The mark's photo, served by /api/checks/mark-photo/<id>. */
+    photo: boolean
+  }>
 }
 
 function cellView(store: GridStore, cell: GridCell, now: Date): CellView {
@@ -68,6 +91,18 @@ function cellView(store: GridStore, cell: GridCell, now: Date): CellView {
   let label: string
   let meta: string | null = null
   let progress: number | null = null
+  const log: CellView["log"] = cell.marks.map((m) => ({
+    id: m.id,
+    at: clockLabel(m.at),
+    by: m.crewName,
+    text: m.itemText,
+    action: !m.done ? "undone" : m.note ? "note" : "done",
+    note: m.note,
+    photo: m.hasPhoto,
+  }))
+  if (sub) {
+    log.push({ id: sub.id, at: clockLabel(sub.submittedAt), by: sub.crewName, text: "Submitted", action: "submitted", note: null, photo: false })
+  }
   switch (cell.status) {
     case "on_time":
       label = "On time"
@@ -80,7 +115,7 @@ function cellView(store: GridStore, cell: GridCell, now: Date): CellView {
       meta = `Due ${clockLabel(b.due)} · nobody submitted`
       break
     case "closed":
-      label = "Store closed"
+      label = store.preOpen ? "Not open yet" : "Store closed"
       break
     case "off":
       label = "Switched off"
@@ -92,17 +127,37 @@ function cellView(store: GridStore, cell: GridCell, now: Date): CellView {
       label = `Opens ${clockLabel(b.opens)}`
       break
     case "open": {
-      const overdue = now.getTime() > b.due.getTime()
-      label = overdue ? "Overdue" : "Open"
-      const span = b.due.getTime() - b.opens.getTime()
-      progress = span > 0 ? Math.min(1, (now.getTime() - b.opens.getTime()) / span) : 1
-      meta = overdue
-        ? `Late now · takes it until ${clockLabel(b.closes)}`
-        : `${durationLabel(b.due.getTime() - now.getTime())} left`
+      const t = now.getTime()
+      progress = cell.total > 0 ? cell.done / cell.total : 0
+      if (t < b.submitFrom.getTime()) {
+        label = `${cell.done} of ${cell.total} done`
+        meta = `Submit opens ${clockLabel(b.submitFrom)}`
+      } else if (t <= b.due.getTime()) {
+        label = `${cell.done} of ${cell.total} · not sent`
+        meta = `Closes ${clockLabel(b.due)} · ${durationLabel(b.due.getTime() - t)} left`
+      } else {
+        label = "Overdue"
+        meta = `Late now · takes it until ${clockLabel(b.closes)}`
+      }
       break
     }
   }
   if (sub) meta = `${clockLabel(sub.submittedAt)} · ${sub.crewName}`
+  const sent = cell.status === "on_time" || cell.status === "late"
+  const live = cell.status === "open"
+  const tile: CellView["tile"] = {
+    tone: sent ? "ok" : cell.status === "missed" ? "miss" : live ? "open" : null,
+    headline: sent && sub ? `Sent ${clockLabel(sub.submittedAt)}` : label,
+    sub: sent
+      ? cell.people.join(", ") || sub?.crewName || null
+      : live
+        ? cell.people.length > 0
+          ? `On it: ${cell.people.join(", ")}`
+          : "Nobody has started"
+        : null,
+    meta: sent ? null : meta,
+    bar: live && progress !== null,
+  }
   return {
     kind: cell.kind,
     day: cell.day,
@@ -117,6 +172,12 @@ function cellView(store: GridStore, cell: GridCell, now: Date): CellView {
     startedAt: sub?.startedAt ? clockLabel(sub.startedAt) : null,
     by: sub?.crewName ?? null,
     dueLabel: clockLabel(b.due),
+    done: cell.done,
+    total: cell.total,
+    people: cell.people,
+    live,
+    tile,
+    log,
   }
 }
 
@@ -129,11 +190,21 @@ export type TodayData = {
   stores: Array<{
     id: string
     name: string
+    preOpen: boolean
     rate7: number | null
     closedToday: boolean
     cells: Array<CellView | null>
+    /** The last seven days, oldest first, one cell per check. */
+    week: Array<{ day: string; top: string; cells: Array<CellView | null> }>
   }>
-  alerts: Array<{ storeId: string; text: string; detail: string; day: string; kind: CheckKindName }>
+  /** Missed checks yesterday and today, folded into one summary. */
+  missed: {
+    count: number
+    /** "Hollywood: Wed morning, Wed night. Van Nuys: Wed night." */
+    line: string
+    days: Array<{ day: string; label: string }>
+    stores: Array<{ id: string; name: string; cells: Array<{ day: string; kind: CheckKindName; status: CellStatus; label: string }> }>
+  } | null
 }
 
 export type TodaySections = { today: SectionData<TodayData> }
@@ -157,29 +228,54 @@ export function getChecksTodaySectionPromises(opts: { accountId: string; now?: D
           }
         })
         const yesterday = addDays(today, -1)
-        const alerts: TodayData["alerts"] = []
+        const recent = [yesterday, today]
+        const short = (day: string, kind: CheckKindName) =>
+          `${new Date(`${day}T12:00:00.000Z`).toLocaleDateString("en-US", { timeZone: "UTC", weekday: "short" })} ${CHECK_LABEL[kind].en.toLowerCase()}`
+        const missedParts: string[] = []
+        let missedCount = 0
         for (const s of grid) {
-          for (const c of s.cells) {
-            if (c.status !== "missed" || (c.day !== today && c.day !== yesterday)) continue
-            const v = cellView(s, c, now)
-            alerts.push({
-              storeId: s.id,
-              kind: c.kind,
-              day: c.day,
-              text: `${s.name} · ${CHECK_LABEL[c.kind].en} check missed ${c.day === today ? "today" : "yesterday"}.`,
-              detail: `Due ${dayLabel(c.day)} at ${v.dueLabel}. Nobody submitted it.`,
-            })
-          }
+          const m = s.cells.filter((c) => c.status === "missed" && recent.includes(c.day))
+          if (m.length === 0) continue
+          missedCount += m.length
+          missedParts.push(`${shortStoreName(s.name)}: ${m.map((c) => short(c.day, c.kind)).join(", ")}.`)
         }
+        const missed: TodayData["missed"] = missedCount === 0
+          ? null
+          : {
+              count: missedCount,
+              line: missedParts.join(" "),
+              days: recent.map((d) => ({ day: d, label: d === today ? "Today" : "Yesterday" })),
+              stores: grid.filter((s) => !s.preOpen).map((s) => ({
+                id: s.id,
+                name: s.name,
+                cells: recent.flatMap((day) =>
+                  CHECK_KINDS.flatMap((kind) => {
+                    const c = s.cells.find((x) => x.day === day && x.kind === kind)
+                    return c ? [{ day, kind, status: c.status, label: short(day, kind) }] : []
+                  }),
+                ),
+              })),
+            }
+        const weekDays: string[] = []
+        for (let d = addDays(today, -6); d <= today; d = addDays(d, 1)) weekDays.push(d)
         return {
           day: today,
           dayLabel: dayLabel(today),
           columns,
-          alerts,
+          missed,
           stores: grid.map((s) => ({
             id: s.id,
             name: s.name,
+            preOpen: s.preOpen,
             closedToday: s.closedDays.includes(today),
+            week: weekDays.map((day) => ({
+              day,
+              top: new Date(`${day}T12:00:00.000Z`).toLocaleDateString("en-US", { timeZone: "UTC", weekday: "short" }),
+              cells: CHECK_KINDS.map((kind) => {
+                const c = s.cells.find((x) => x.day === day && x.kind === kind)
+                return c ? cellView(s, c, now) : null
+              }),
+            })),
             rate7: onTimeRate(s.cells.filter((c) => c.day !== today || c.status !== "open").map((c) => c.status)),
             cells: CHECK_KINDS.map((kind) => {
               const c = s.cells.find((x) => x.day === today && x.kind === kind)
@@ -282,20 +378,21 @@ export function getChecksHistorySectionPromises(opts: {
 
 // ─── Checklists ─────────────────────────────────────────────────────────────
 
-export type EditorItem = { id: string; en: string; es: string }
+export type EditorItem = { id: string; en: string; es: string; photoRequired: boolean }
 export type EditorSection = {
   id: string
   nameEn: string
   nameEs: string
-  photoRequired: boolean
-  hintEn: string
-  hintEs: string
   items: EditorItem[]
 }
 export type EditorTemplate = {
   kind: CheckKindName
   label: string
+  /** Crew can see the list from here. */
   opensAtMin: number
+  /** Submit unlocks here. */
+  submitFromMin: number
+  /** Submit locks here. */
   dueAtMin: number
   /** Empty, or seven due times, Sunday first. */
   dueByWeekday: number[]
@@ -336,6 +433,7 @@ export function getChecksChecklistsSectionPromises(opts: {
               kind,
               label: CHECK_LABEL[kind].en,
               opensAtMin: t.opensAtMin,
+              submitFromMin: t.submitFromMin ?? t.opensAtMin,
               dueAtMin: t.dueAtMin,
               dueByWeekday: t.dueByWeekday,
               graceMin: t.graceMin,
@@ -344,10 +442,7 @@ export function getChecksChecklistsSectionPromises(opts: {
                 id: s.id,
                 nameEn: s.nameEn,
                 nameEs: s.nameEs ?? "",
-                photoRequired: s.photoRequired,
-                hintEn: s.photoHintEn ?? "",
-                hintEs: s.photoHintEs ?? "",
-                items: s.items.map((i) => ({ id: i.id, en: i.textEn, es: i.textEs ?? "" })),
+                items: s.items.map((i) => ({ id: i.id, en: i.textEn, es: i.textEs ?? "", photoRequired: i.photoRequired })),
               })),
             }]
           }),
@@ -443,6 +538,9 @@ export function getChecksCrewSectionPromises(opts: { accountId: string; storeId?
 // ─── QR posters ─────────────────────────────────────────────────────────────
 
 export type PosterData = {
+  /** Where every submitted check is emailed. */
+  reportEmails: string[]
+  emailReady: boolean
   stores: Array<{
     id: string
     name: string
@@ -464,11 +562,14 @@ export function getChecksPostersSectionPromises(opts: { accountId: string }): St
           where: { accountId: opts.accountId, isActive: true },
           select: {
             id: true, name: true, checkCode: true,
-            checkTemplates: { select: { kind: true, opensAtMin: true, dueAtMin: true, dueByWeekday: true, graceMin: true, enabled: true } },
+            checkTemplates: { select: { kind: true, opensAtMin: true, submitFromMin: true, dueAtMin: true, dueByWeekday: true, graceMin: true, enabled: true } },
           },
           orderBy: { name: "asc" },
         })
+        const account = await prisma.account.findUnique({ where: { id: opts.accountId }, select: { checkReportEmails: true } })
         return {
+          reportEmails: account?.checkReportEmails ?? [],
+          emailReady: emailConfigured(),
           stores: rows.filter((r) => r.checkCode).map((r) => {
             const link = checkLink(r.checkCode!)
             // Error correction H: the logo covers the middle and the code still reads.
@@ -484,7 +585,7 @@ export function getChecksPostersSectionPromises(opts: { accountId: string }): St
               windows: CHECK_KINDS.flatMap((kind) => {
                 const t = r.checkTemplates.find((x) => x.kind === kind)
                 if (!t || !t.enabled) return []
-                return [{ label: CHECK_LABEL[kind].en, window: windowSummary(t) }]
+                return [{ label: CHECK_LABEL[kind].en, window: `Opens ${minutesLabel(t.opensAtMin)} · submit ${windowSummary(t)}` }]
               }),
             }
           }),

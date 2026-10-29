@@ -10,7 +10,8 @@ import { windowBounds, windowPhase, type CheckWindow } from "./time"
  *   late      submitted inside the grace period
  *   missed    the grace period ended with nothing submitted
  *   closed    the owner marked the store closed that day
- *   open      taking submissions now (past due counts: it can still come in late)
+ *   open      crew can work on it now: ticking before Submit unlocks, or
+ *             taking submissions (past due counts while grace lasts)
  *   upcoming  not open yet
  *   off       the owner switched this check off
  *   before    the window closed before checks were set up for the store

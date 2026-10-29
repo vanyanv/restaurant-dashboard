@@ -134,11 +134,11 @@ describe("getCleaningChecks", () => {
     // One of three due checks on time; the open one is not due yet.
     expect(store.onTimePct).toBe(33)
     expect(store.problems.map((p) => [p.date, p.check, p.status])).toEqual([
-      ["2026-10-21", "Evening", "late"],
-      ["2026-10-20", "Evening", "missed"],
+      ["2026-10-21", "Night", "late"],
+      ["2026-10-20", "Night", "missed"],
     ])
     expect(store.flagged).toEqual([
-      { date: "2026-10-21", check: "Evening", section: "Kitchen", item: "Clean the fryer", note: "Out of degreaser", submittedBy: "Vardan" },
+      { date: "2026-10-21", check: "Night", section: "Kitchen", item: "Clean the fryer", note: "Out of degreaser", submittedBy: "Vardan" },
     ])
     expect(JSON.stringify(out)).not.toMatch(/photo|pin/i)
   })

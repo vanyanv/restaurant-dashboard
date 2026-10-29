@@ -1,5 +1,6 @@
 /**
- * The PIN email, sent through Resend's HTTP API.
+ * Store check email, sent through Resend's HTTP API: the crew PIN email and
+ * the owners' report on each submitted check (report.ts).
  *
  * Needs RESEND_API_KEY and a sender on a domain Resend has verified
  * (CHECKS_EMAIL_FROM, else EMAIL_FROM). Without them the send reports that
@@ -52,16 +53,25 @@ export function pinEmailContent(e: PinEmail): { subject: string; text: string; h
 }
 
 export async function sendPinEmail(e: PinEmail): Promise<SendResult> {
+  return sendEmail({ to: [e.to], ...pinEmailContent(e) })
+}
+
+export function escapeEmailHtml(s: string): string {
+  return escapeHtml(s)
+}
+
+/** One message through Resend. Never throws: the reason comes back in words. */
+export async function sendEmail(m: { to: string[]; subject: string; text: string; html: string }): Promise<SendResult> {
   const key = process.env.RESEND_API_KEY
   const from = process.env.CHECKS_EMAIL_FROM || process.env.EMAIL_FROM
   if (!key || !from) return { ok: false, reason: "Email isn't set up for the dashboard yet" }
+  if (m.to.length === 0) return { ok: false, reason: "Nobody to send it to" }
 
-  const { subject, text, html } = pinEmailContent(e)
   try {
     const res = await fetch("https://api.resend.com/emails", {
       method: "POST",
       headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ from, to: [e.to], subject, text, html }),
+      body: JSON.stringify({ from, to: m.to, subject: m.subject, text: m.text, html: m.html }),
     })
     if (!res.ok) {
       const body = await res.text().catch(() => "")

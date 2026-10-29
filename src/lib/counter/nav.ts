@@ -204,7 +204,7 @@ export const CHECKS_TABS: readonly SubNavItem[] = [
   { label: "History", href: "/dashboard/checks/history" },
   { label: "Checklists", href: "/dashboard/checks/checklists" },
   { label: "Crew & PINs", href: "/dashboard/checks/crew" },
-  { label: "QR posters", href: "/dashboard/checks/posters" },
+  { label: "Links & email", href: "/dashboard/checks/posters" },
 ] as const
 
 /** Count & waste — the weekly count, the waste log, the report and the setup. */
