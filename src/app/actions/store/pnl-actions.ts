@@ -602,7 +602,7 @@ export async function getAllStoresPnL(input: {
   if (!hasOwnerAccess(session.user.role)) return { error: "P&L is restricted to owners" }
   const accountId = session.user.accountId
 
-  return cached(
+  const result = await cached(
     // `pnl3:` since 2026-10-28 (`pnl2:` before it grew the sales cascade; pnl3 moved labor
     // dollars to `loadLaborCost`): the answer's shape grew the sales cascade and
     // the commission basis, and a pre-change entry would lack both.
@@ -862,6 +862,26 @@ export async function getAllStoresPnL(input: {
   }
     },
   )
+  return reviveAllStoresPnL(result)
+}
+
+/**
+ * `periods[].startDate`/`endDate` are `Date`s on the contract and ISO strings
+ * in Redis, so a cache hit handed callers strings and the first one to call a
+ * Date method on them threw (SPLH's `getUTCMonth`, 2026-10-29). The two known
+ * fields are revived here, explicitly — not a generic reviver; see
+ * `loadVendorBasketWeeks`.
+ */
+function reviveAllStoresPnL(result: AllStoresPnLResult): AllStoresPnLResult {
+  if ("error" in result) return result
+  return {
+    ...result,
+    periods: result.periods.map((p) => ({
+      ...p,
+      startDate: new Date(p.startDate),
+      endDate: new Date(p.endDate),
+    })),
+  }
 }
 
 export async function recomputeCogsForStore(input: {
