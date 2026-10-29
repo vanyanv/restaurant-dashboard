@@ -13,16 +13,25 @@ import { BUSINESS_TIME_ZONE, businessDay } from "@/lib/counter/business-date"
 
 export type CheckKindName = "MORNING" | "TRANSITION" | "EVENING"
 
-export const CHECK_KINDS: readonly CheckKindName[] = ["MORNING", "TRANSITION", "EVENING"]
+/**
+ * The checks a store runs, in order. TRANSITION stays in the database enum
+ * for old rows, but the owner cut checks to Morning and Night on 2026-10-29
+ * and nothing offers it any more.
+ */
+export const CHECK_KINDS: readonly CheckKindName[] = ["MORNING", "EVENING"]
 
 export const CHECK_LABEL: Record<CheckKindName, { en: string; es: string }> = {
   MORNING: { en: "Morning", es: "Mañana" },
   TRANSITION: { en: "Transition", es: "Cambio de turno" },
-  EVENING: { en: "Evening", es: "Noche" },
+  EVENING: { en: "Night", es: "Noche" },
 }
 
 export type CheckWindow = {
+  /** Crew can see the list and tick tasks from here. */
   opensAtMin: number
+  /** Submit unlocks here. Null or missing: from `opensAtMin`. */
+  submitFromMin?: number | null
+  /** Submit locks here (plus any grace). */
   dueAtMin: number
   graceMin: number
   /**
@@ -46,12 +55,18 @@ export function dueAtFor(day: string, w: CheckWindow): number {
   return byDay && byDay.length === 7 ? byDay[weekdayOf(day)] : w.dueAtMin
 }
 
+/** When Submit unlocks, in the same minutes as `opensAtMin`. */
+export function submitFromFor(w: CheckWindow): number {
+  return w.submitFromMin ?? w.opensAtMin
+}
+
 /**
- * "10:00 pm – 1:00 am", or with weekday overrides
- * "10:00 pm – 1:00 am · 2:00 am Fri, Sat, Sun".
+ * "Submit 4:30 – 5:30 pm", or with weekday overrides
+ * "Submit 12:30 – 2:00 am · 3:00 am Fri, Sat, Sun".
  */
 export function windowSummary(w: CheckWindow): string {
-  const base = `${minutesLabel(w.opensAtMin)} – ${minutesLabel(w.dueAtMin)}`
+  const from = submitFromFor(w)
+  const base = `${minutesLabel(from)} – ${minutesLabel(w.dueAtMin)}`
   const byDay = w.dueByWeekday
   if (!byDay || byDay.length !== 7) return base
   const groups = new Map<number, string[]>()
@@ -112,12 +127,13 @@ export function todayLA(now: Date): string {
   return businessDay(now)
 }
 
-export type WindowBounds = { opens: Date; due: Date; closes: Date }
+export type WindowBounds = { opens: Date; submitFrom: Date; due: Date; closes: Date }
 
 export function windowBounds(day: string, w: CheckWindow): WindowBounds {
   const dueAtMin = dueAtFor(day, w)
   return {
     opens: laInstant(day, w.opensAtMin),
+    submitFrom: laInstant(day, submitFromFor(w)),
     due: laInstant(day, dueAtMin),
     closes: laInstant(day, dueAtMin + w.graceMin),
   }
@@ -126,16 +142,18 @@ export function windowBounds(day: string, w: CheckWindow): WindowBounds {
 /**
  * Where `now` sits against one day's window:
  *   upcoming  before it opens
- *   open      open, not yet due
+ *   preview   crew can see the list and tick tasks; Submit is still locked
+ *   open      Submit is open, not yet due
  *   late      past due, inside the grace period — still takes a submission
  *   closed    past due plus grace
  */
-export type WindowPhase = "upcoming" | "open" | "late" | "closed"
+export type WindowPhase = "upcoming" | "preview" | "open" | "late" | "closed"
 
 export function windowPhase(day: string, w: CheckWindow, now: Date): WindowPhase {
   const b = windowBounds(day, w)
   const t = now.getTime()
   if (t < b.opens.getTime()) return "upcoming"
+  if (t < b.submitFrom.getTime()) return "preview"
   if (t <= b.due.getTime()) return "open"
   if (t <= b.closes.getTime()) return "late"
   return "closed"
@@ -162,6 +180,19 @@ export function acceptingDay(w: CheckWindow, now: Date): string | null {
   for (const day of [addDays(today, -1), today]) {
     const phase = windowPhase(day, w, now)
     if (phase === "open" || phase === "late") return day
+  }
+  return null
+}
+
+/**
+ * The business day whose list crew can work on at `now`: the same as
+ * `acceptingDay`, plus the stretch before Submit unlocks.
+ */
+export function visibleDay(w: CheckWindow, now: Date): string | null {
+  const today = todayLA(now)
+  for (const day of [addDays(today, -1), today]) {
+    const phase = windowPhase(day, w, now)
+    if (phase === "preview" || phase === "open" || phase === "late") return day
   }
   return null
 }

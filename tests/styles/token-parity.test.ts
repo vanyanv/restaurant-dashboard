@@ -37,7 +37,10 @@ const STYLE_DIR = join(process.cwd(), "src", "styles")
  * bare `login` class), and it stops being safe if an editorial surface is ever
  * nested inside a Counter root without restating its own tokens.
  */
-const NOT_AN_EDITORIAL_COPY = new Set(["counter-components.css"])
+// crew-checks.css is the same kind of file: it re-points those Counter
+// aliases onto the --ct-brand-* tokens for the crew check page, scoped to
+// `.ct-root.ckb`.
+const NOT_AN_EDITORIAL_COPY = new Set(["counter-components.css", "crew-checks.css"])
 
 function cssFiles(dir: string): string[] {
   return readdirSync(dir)

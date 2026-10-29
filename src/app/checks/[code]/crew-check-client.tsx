@@ -1,23 +1,22 @@
 "use client"
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { useRouter } from "next/navigation"
-import type { ActiveCheck, CrewSection, CrewView } from "@/lib/checks/crew"
-import type { CellStatus } from "@/lib/checks/status"
+import type { ActiveCheck, CrewItem, CrewMarkState, CrewView } from "@/lib/checks/crew"
+import { shortStoreName } from "@/lib/checks/names"
 
 /**
- * The crew flow, one job per screen: store page -> PIN -> checklist ->
- * review -> done. Built for wet or gloved hands: rows 60px tall, keys 64px,
- * and the bottom bar always names what is left.
+ * The crew flow, one job per screen: store page -> PIN -> shared checklist ->
+ * done. Built for wet or gloved hands: rows 60px tall, keys 64px, and the
+ * bottom button always says what is missing.
  *
- * Ticks and flags are saved on the phone as they happen (localStorage, keyed
- * by store, check and day), so a reload or a dropped signal loses nothing.
- * Photos stay in memory; the page says so if they are lost to a reload.
+ * The checklist is one shared form per check per day. Every tap is saved on
+ * the server straight away with the person's name and the time, and every
+ * phone on the check refreshes every few seconds, so two people can split a
+ * list without redoing each other's tasks. Crew can open the list as soon as
+ * the check opens; Submit unlocks only inside its window.
  */
 
 type Lang = "en" | "es"
-type Answer = { done: boolean; flag: string | null }
-type Answers = Record<string, Answer>
 type Who = { pass: string; name: string; firstName: string; startedAt: number }
 type Receipt = {
   store: string
@@ -28,28 +27,30 @@ type Receipt = {
   late: number
   dueLabel: string
   flagged: number
+  tasks: number
+  photos: number
+  people: string[]
   next: CrewView["next"]
 }
-type Screen = "home" | "pin" | "list" | "review" | "done"
+type Screen = "home" | "pin" | "list" | "done"
+
+const POLL_MS = 6_000
 
 const T = {
   en: {
-    openNow: "Open now",
-    overdue: "Overdue · still takes it",
-    closes: (t: string) => `Due ${t}`,
-    left: (d: string) => `${d} left`,
-    lateBy: (d: string) => `${d} late`,
-    start: (c: string) => `Start ${c} check`,
-    continue: (c: string) => `Continue ${c} check`,
-    noneOpen: "No check is open right now",
-    nextOpens: (c: string, t: string) => `${c} check opens at ${t}.`,
-    allDone: "Every check is done for today.",
-    closedToday: "The store is marked closed today. No checks are due.",
-    doneBy: (who: string, at: string) => `Done ${at} by ${who}`,
-    lateDone: (who: string, at: string, m: number) => `Done ${at} by ${who} · ${m} min late`,
+    openUntil: (from: string, to: string) => `Open · submit ${from} – ${to}`,
+    submitNow: (to: string, left: string) => `Submit now · closes ${to} · ${left} left`,
+    opensAt: (t: string) => `Opens at ${t}`,
+    sentBy: (at: string, who: string) => `Sent ${at} by ${who}`,
     missed: "Missed",
-    opens: (w: string) => w,
+    closedNow: "Closed",
     off: "Switched off",
+    progress: (a: number, b: number) => `${a} of ${b} tasks done`,
+    noneOpen: "No check is open right now",
+    nextOpens: (c: string, t: string) => `${c} opens at ${t}.`,
+    allDone: "Every check is done for today.",
+    closedToday: "No checks today. The store is marked closed.",
+    pickHelp: "Tap the check you're doing. Enter your PIN once, then every tick saves on its own.",
     enterPin: "Enter your PIN",
     pinHelp: "4 digits. Your manager sent it to you.",
     forgot: "Forgot?",
@@ -57,11 +58,17 @@ const T = {
     del: "Delete",
     checking: "Checking…",
     hi: (n: string) => `Hi ${n}`,
-    of: (a: number, b: number) => `${a} of ${b}`,
-    photoReq: "photo · required",
-    photoOpt: "photo · optional",
-    takePhoto: "Take photo",
-    retake: "Photo added · tap to retake",
+    doneOf: (a: number, b: number) => `${a} of ${b} done`,
+    alsoOn: (names: string) => `Also on it: ${names}`,
+    nextUp: (s: string) => `Next up · ${s}`,
+    markDone: "Mark done",
+    takePhotoFinish: "Take photo to finish",
+    photoRequired: "Photo required · tap to open camera",
+    stamp: (at: string, by: string, photo: boolean) => `${at} · ${by}${photo ? " · photo" : ""}`,
+    allTasksDone: "All tasks done.",
+    comeBack: (from: string, to: string) => `Come back between ${from} and ${to} to submit.`,
+    tapSubmit: "Tap Submit below.",
+    undoHelp: "Tapped by mistake? Tap a done task again to undo it.",
     problem: "Problem?",
     needsAttention: "Needs attention",
     flagTitle: "What's wrong?",
@@ -70,49 +77,42 @@ const T = {
     saveFlag: "Save note",
     removeFlag: "Remove note",
     cancel: "Cancel",
-    itemsLeft: (n: number) => `${n} item${n === 1 ? "" : "s"} left`,
-    photosLeft: (n: number) => `${n} photo${n === 1 ? "" : "s"} left`,
-    andJoin: " and ",
-    allSet: "Everything is done",
-    review: "Review and submit",
-    ready: "Ready to submit?",
-    back: "‹ Back to list",
-    flaggedN: (n: number) => `${n} need${n === 1 ? "s" : ""} attention`,
-    lockNote: (c: string, s: string) =>
-      `Submitting locks the ${c} check for ${s} for today. Nobody can change it after.`,
-    submitAs: (n: string) => `Submit as ${n}`,
+    submitOpens: (t: string) => `Submit opens at ${t}`,
+    left: (n: number, p: number) =>
+      [n > 0 ? `${n} task${n === 1 ? "" : "s"} left` : "", p > 0 ? `${p} photo${p === 1 ? "" : "s"} left` : ""].filter(Boolean).join(" · "),
+    submitCheck: (c: string) => `Submit ${c} check`,
     sending: "Sending…",
-    doneTitle: (c: string) => `${c} check done`,
+    photoTitle: "Check your photo",
+    photoUse: "Looks good, mark done",
+    retake: "Retake",
+    uploading: "Saving photo…",
+    doneTitle: (c: string) => `${c} check sent`,
     thanks: (n: string) => `Thanks, ${n}. It's saved and locked.`,
-    store: "Store",
+    store: "Tasks",
     submitted: "Submitted",
-    onTime: "On time",
-    yes: (t: string) => `Yes · due ${t}`,
-    no: (m: number) => `No · ${m} min late`,
+    doneBy: "Done by",
+    tasks: (n: number, p: number) => `${n} tasks · ${p} photo${p === 1 ? "" : "s"}`,
     nextCheck: "Next check",
-    backHome: "Done · back to store page",
+    backHome: "Done",
     signsOut: (s: number) => `Signs you out in ${s} s`,
-    photosLost: "The page reloaded, so take the photos again. Your ticks were saved.",
     notYou: "Not you? Sign out",
-    sectionOf: (s: string) => s,
+    offline: "No connection. Try again.",
+    closedWhile: "This check just closed or was submitted.",
   },
   es: {
-    openNow: "Abierta ahora",
-    overdue: "Atrasada · todavía se acepta",
-    closes: (t: string) => `Vence ${t}`,
-    left: (d: string) => `Quedan ${d}`,
-    lateBy: (d: string) => `${d} tarde`,
-    start: (c: string) => `Empezar revisión de ${c.toLowerCase()}`,
-    continue: (c: string) => `Seguir revisión de ${c.toLowerCase()}`,
-    noneOpen: "No hay ninguna revisión abierta ahora",
-    nextOpens: (c: string, t: string) => `La revisión de ${c.toLowerCase()} abre a las ${t}.`,
-    allDone: "Todas las revisiones de hoy están hechas.",
-    closedToday: "La tienda está marcada como cerrada hoy. No hay revisiones.",
-    doneBy: (who: string, at: string) => `Hecha ${at} por ${who}`,
-    lateDone: (who: string, at: string, m: number) => `Hecha ${at} por ${who} · ${m} min tarde`,
+    openUntil: (from: string, to: string) => `Abierta · se envía de ${from} a ${to}`,
+    submitNow: (to: string, left: string) => `Envíala ya · cierra ${to} · quedan ${left}`,
+    opensAt: (t: string) => `Abre a las ${t}`,
+    sentBy: (at: string, who: string) => `Enviada ${at} por ${who}`,
     missed: "No se hizo",
-    opens: (w: string) => w,
+    closedNow: "Cerrada",
     off: "Apagada",
+    progress: (a: number, b: number) => `${a} de ${b} tareas hechas`,
+    noneOpen: "No hay ninguna revisión abierta ahora",
+    nextOpens: (c: string, t: string) => `${c} abre a las ${t}.`,
+    allDone: "Todas las revisiones de hoy están hechas.",
+    closedToday: "No hay revisiones hoy. La tienda está marcada como cerrada.",
+    pickHelp: "Toca la revisión que vas a hacer. Escribe tu PIN una vez y cada marca se guarda sola.",
     enterPin: "Escribe tu PIN",
     pinHelp: "4 dígitos. Tu gerente te lo envió.",
     forgot: "¿Lo olvidaste?",
@@ -120,46 +120,49 @@ const T = {
     del: "Borrar",
     checking: "Revisando…",
     hi: (n: string) => `Hola ${n}`,
-    of: (a: number, b: number) => `${a} de ${b}`,
-    photoReq: "foto · obligatoria",
-    photoOpt: "foto · opcional",
-    takePhoto: "Tomar foto",
-    retake: "Foto lista · toca para repetir",
+    doneOf: (a: number, b: number) => `${a} de ${b} hechas`,
+    alsoOn: (names: string) => `También aquí: ${names}`,
+    nextUp: (s: string) => `Sigue · ${s}`,
+    markDone: "Marcar hecha",
+    takePhotoFinish: "Tomar foto para terminar",
+    photoRequired: "Foto obligatoria · toca para abrir la cámara",
+    stamp: (at: string, by: string, photo: boolean) => `${at} · ${by}${photo ? " · foto" : ""}`,
+    allTasksDone: "Todas las tareas están hechas.",
+    comeBack: (from: string, to: string) => `Vuelve entre ${from} y ${to} para enviarla.`,
+    tapSubmit: "Toca Enviar abajo.",
+    undoHelp: "¿Te equivocaste? Toca otra vez una tarea hecha para quitarla.",
     problem: "¿Problema?",
     needsAttention: "Necesita atención",
     flagTitle: "¿Qué pasa?",
-    flagHelp: "Cuenta como hecho y tu gerente ve la nota.",
+    flagHelp: "Cuenta como hecha y tu gerente ve la nota.",
     flagChips: ["Faltan productos", "Roto", "No hubo tiempo", "No hace falta hoy"],
     saveFlag: "Guardar nota",
     removeFlag: "Quitar nota",
     cancel: "Cancelar",
-    itemsLeft: (n: number) => `Falta${n === 1 ? "" : "n"} ${n} tarea${n === 1 ? "" : "s"}`,
-    photosLeft: (n: number) => `${n} foto${n === 1 ? "" : "s"}`,
-    andJoin: " y ",
-    allSet: "Todo está hecho",
-    review: "Revisar y enviar",
-    ready: "¿Listo para enviar?",
-    back: "‹ Volver a la lista",
-    flaggedN: (n: number) => `${n} necesita${n === 1 ? "" : "n"} atención`,
-    lockNote: (c: string, s: string) =>
-      `Al enviar, la revisión de ${c.toLowerCase()} de ${s} queda cerrada por hoy. Nadie la puede cambiar.`,
-    submitAs: (n: string) => `Enviar como ${n}`,
+    submitOpens: (t: string) => `Se puede enviar desde las ${t}`,
+    left: (n: number, p: number) =>
+      [n > 0 ? `Falta${n === 1 ? "" : "n"} ${n} tarea${n === 1 ? "" : "s"}` : "", p > 0 ? `${p} foto${p === 1 ? "" : "s"}` : ""].filter(Boolean).join(" · "),
+    submitCheck: (c: string) => `Enviar revisión de ${c.toLowerCase()}`,
     sending: "Enviando…",
-    doneTitle: (c: string) => `Revisión de ${c.toLowerCase()} lista`,
+    photoTitle: "Revisa tu foto",
+    photoUse: "Se ve bien, marcar hecha",
+    retake: "Repetir",
+    uploading: "Guardando foto…",
+    doneTitle: (c: string) => `Revisión de ${c.toLowerCase()} enviada`,
     thanks: (n: string) => `Gracias, ${n}. Quedó guardada y cerrada.`,
-    store: "Tienda",
+    store: "Tareas",
     submitted: "Enviada",
-    onTime: "A tiempo",
-    yes: (t: string) => `Sí · vencía ${t}`,
-    no: (m: number) => `No · ${m} min tarde`,
+    doneBy: "Hecha por",
+    tasks: (n: number, p: number) => `${n} tareas · ${p} foto${p === 1 ? "" : "s"}`,
     nextCheck: "Siguiente revisión",
-    backHome: "Listo · volver a la tienda",
+    backHome: "Listo",
     signsOut: (s: number) => `Se cierra tu sesión en ${s} s`,
-    photosLost: "La página se recargó: toma las fotos otra vez. Tus marcas se guardaron.",
     notYou: "¿No eres tú? Salir",
-    sectionOf: (s: string) => s,
+    offline: "Sin conexión. Inténtalo otra vez.",
+    closedWhile: "Esta revisión se acaba de cerrar o enviar.",
   },
 }
+type Tx = (typeof T)["en"]
 
 function readLang(): Lang {
   try {
@@ -204,8 +207,7 @@ async function compress(file: File): Promise<Blob> {
 }
 
 export function CrewCheckClient({ code, initial }: { code: string; initial: CrewView }) {
-  const router = useRouter()
-  const view = initial
+  const [view, setView] = useState<CrewView>(initial)
   const [lang, setLangState] = useState<Lang>("en")
   useEffect(() => setLangState(readLang()), [])
   const setLang = (l: Lang) => {
@@ -215,37 +217,66 @@ export function CrewCheckClient({ code, initial }: { code: string; initial: Crew
     } catch {}
   }
   const t = T[lang]
-  const now = useClock(view.serverNow)
+  const now = useClock(initial.serverNow)
   const [screen, setScreen] = useState<Screen>("home")
   const [who, setWho] = useState<Who | null>(null)
   const [receipt, setReceipt] = useState<Receipt | null>(null)
   const active = view.active
 
+  // Keeps every phone on the check in step: others' ticks, the window
+  // opening or locking, someone else submitting.
+  const refresh = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/checks/${encodeURIComponent(code)}/state`, { cache: "no-store" })
+      if (res.ok) setView(((await res.json()) as { view: CrewView }).view)
+    } catch {}
+  }, [code])
+  useEffect(() => {
+    if (screen === "done") return
+    const id = window.setInterval(() => {
+      if (document.visibilityState === "visible") void refresh()
+    }, POLL_MS)
+    const onShow = () => document.visibilityState === "visible" && void refresh()
+    document.addEventListener("visibilitychange", onShow)
+    return () => {
+      window.clearInterval(id)
+      document.removeEventListener("visibilitychange", onShow)
+    }
+  }, [refresh, screen])
+
   const signOut = useCallback(() => {
     setWho(null)
     setReceipt(null)
     setScreen("home")
-    router.refresh()
-  }, [router])
+    void refresh()
+  }, [refresh])
+
+  // The check closed or was submitted under someone's feet.
+  const listGone = screen === "list" && !active
 
   return (
-    <main className="ct-root ckc" lang={lang}>
+    <main className="ct-root ckc ckb" lang={lang}>
       <div className="ckc__col">
-        {screen !== "list" && (
-          <div className="ckc__top">
-            {/* eslint-disable-next-line @next/next/no-img-element -- static brand asset */}
-            <img className="ckc__logo" src="/checks-logo.png" alt="Chris N Eddy's" />
-            <LangToggle lang={lang} setLang={setLang} />
-          </div>
-        )}
-        {screen === "home" && (
-          <Home view={view} t={t} lang={lang} now={now} onStart={() => setScreen(who ? "list" : "pin")} resume={Boolean(who)} />
+        <header className="ckb__band">
+          {/* eslint-disable-next-line @next/next/no-img-element -- static brand asset */}
+          <img src="/checks-logo.png" alt="Chris N Eddy's" />
+          <span className="ckb__store">{shortStoreName(view.store.name)}</span>
+          <LangToggle lang={lang} setLang={setLang} />
+        </header>
+        {(screen === "home" || listGone) && (
+          <Home
+            view={view}
+            t={t}
+            lang={lang}
+            now={now}
+            notice={listGone ? t.closedWhile : null}
+            onStart={() => setScreen(who && active && who.pass ? "list" : "pin")}
+          />
         )}
         {screen === "pin" && active && (
           <Pin
             code={code}
             t={t}
-            storeName={view.store.name}
             checkLabel={active.label[lang]}
             onBack={() => setScreen("home")}
             onOk={(w) => {
@@ -254,18 +285,15 @@ export function CrewCheckClient({ code, initial }: { code: string; initial: Crew
             }}
           />
         )}
-        {(screen === "list" || screen === "review") && active && who && (
+        {screen === "list" && active && who && (
           <Checklist
             code={code}
             t={t}
             lang={lang}
-            setLang={setLang}
-            view={view}
             active={active}
             who={who}
             now={now}
-            screen={screen}
-            setScreen={setScreen}
+            setView={setView}
             onDone={(r) => {
               setReceipt(r)
               setScreen("done")
@@ -279,30 +307,33 @@ export function CrewCheckClient({ code, initial }: { code: string; initial: Crew
   )
 }
 
-type Tx = (typeof T)["en"]
-
 function LangToggle({ lang, setLang }: { lang: Lang; setLang: (l: Lang) => void }) {
   return (
     <div className="ckc__lang" role="group" aria-label="Language / Idioma">
       <button type="button" aria-pressed={lang === "en"} onClick={() => setLang("en")}>
-        English
+        EN
       </button>
       <button type="button" aria-pressed={lang === "es"} onClick={() => setLang("es")}>
-        Español
+        ES
       </button>
     </div>
   )
 }
 
-const GLYPH: Record<CellStatus, [string, string]> = {
-  on_time: ["ck-gl--ok", "✓"],
-  late: ["ck-gl--late", "!"],
-  missed: ["ck-gl--miss", "✕"],
-  closed: ["ck-gl--closed", "–"],
-  open: ["ck-gl--open", "◷"],
-  upcoming: ["ck-gl--up", "·"],
-  off: ["ck-gl--off", "·"],
-  before: ["ck-gl--off", ""],
+function counts(a: ActiveCheck) {
+  const state = new Map(a.marks.map((m) => [m.itemId, m]))
+  let done = 0
+  let total = 0
+  let photosLeft = 0
+  for (const s of a.sections) {
+    for (const i of s.items) {
+      total += 1
+      const m = state.get(i.id)
+      if (m?.done) done += 1
+      else if (i.photoRequired) photosLeft += 1
+    }
+  }
+  return { done, total, photosLeft, state }
 }
 
 function Home({
@@ -310,69 +341,83 @@ function Home({
   t,
   lang,
   now,
+  notice,
   onStart,
-  resume,
 }: {
   view: CrewView
   t: Tx
   lang: Lang
   now: number
+  notice: string | null
   onStart: () => void
-  resume: boolean
 }) {
   const a = view.active
-  const overdue = a ? now > a.dueAt : false
-  const pct = a ? Math.min(100, Math.max(4, 100 - ((a.dueAt - now) / (a.dueAt - (a.dueAt - 2 * 3600_000))) * 100)) : 0
+  const day = new Date(now).toLocaleDateString(lang === "es" ? "es-US" : "en-US", {
+    timeZone: "America/Los_Angeles",
+    weekday: "long",
+    month: "short",
+    day: "numeric",
+  })
+  const clock = new Date(now)
+    .toLocaleTimeString("en-US", { timeZone: "America/Los_Angeles", hour: "numeric", minute: "2-digit" })
+    .toLowerCase()
   return (
     <>
-      <span className="ckc__store">{view.store.name}</span>
-      {a ? (
+      <p className="ckc__dim" style={{ margin: "4px 16px 0", fontSize: 14 }}>
+        {day} · {clock}
+      </p>
+      {notice && <div className="ckb__alldone" style={{ background: "var(--warn-wash)", color: "var(--warn)", borderColor: "var(--accent-hi)" }}>{notice}</div>}
+      {view.closedToday ? (
         <div className="ckc__hero">
-          <span className={`ckc__pill${overdue ? " ckc__pill--warn" : ""}`}>● {overdue ? t.overdue : t.openNow}</span>
-          <h1>{lang === "es" ? `Revisión de ${a.label.es.toLowerCase()}` : `${a.label.en} check`}</h1>
-          <div className="ckc__bar" aria-hidden>
-            <i style={{ width: `${overdue ? 100 : pct}%` }} />
-          </div>
-          <div style={{ display: "flex", justifyContent: "space-between", gap: 8, fontSize: 13 }}>
-            <span className="ckc__dim">{t.closes(a.dueLabel)}</span>
-            <b>{overdue ? t.lateBy(durationLabel(now - a.dueAt)) : t.left(durationLabel(a.dueAt - now))}</b>
-          </div>
+          <h2>{t.closedToday}</h2>
         </div>
       ) : (
-        <div className="ckc__hero">
-          <h1>{view.closedToday ? t.closedToday : t.noneOpen}</h1>
-          {!view.closedToday && (
-            <p className="ckc__dim">{view.next ? t.nextOpens(view.next.label[lang], view.next.opensLabel) : t.allDone}</p>
-          )}
-        </div>
-      )}
-      <div className="ckc__day">
-        {view.rows.map((r) => {
-          const [cls, mark] = GLYPH[r.status]
-          let sub = t.opens(r.windowLabel)
-          if (r.status === "on_time" && r.doneBy && r.doneAt) sub = t.doneBy(r.doneBy, r.doneAt)
-          if (r.status === "late" && r.doneBy && r.doneAt) sub = t.lateDone(r.doneBy, r.doneAt, r.late)
-          if (r.status === "missed") sub = `${t.missed} · ${r.windowLabel}`
+        view.rows.map((r) => {
+          const live = a?.kind === r.kind
+          let line = t.opensAt(r.opensLabel)
+          let tone = "ckb__tone-dim"
+          if (live && a) {
+            const canSubmit = now >= a.submitFrom && now <= a.closesAt
+            line = canSubmit
+              ? t.submitNow(a.dueLabel, durationLabel(a.dueAt - now))
+              : t.openUntil(a.submitFromLabel, a.dueLabel)
+            tone = "ckb__tone-good"
+          } else if ((r.status === "on_time" || r.status === "late") && r.doneBy && r.doneAt) {
+            line = t.sentBy(r.doneAt, r.doneBy)
+            tone = "ckb__tone-good"
+          } else if (r.status === "missed") {
+            line = t.missed
+            tone = "ckb__tone-bad"
+          } else if (r.status === "closed") line = t.closedNow
+          else if (r.status === "off") line = t.off
+          const c = live && a ? counts(a) : null
           return (
-            <div className="ckc__dl" key={r.kind}>
-              <span className={`ck-gl ${cls}`} aria-hidden>
-                {mark}
+            <button key={r.kind} type="button" className="ckb__card" data-live={live} disabled={!live} onClick={onStart}>
+              <span style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <h2>{r.label[lang]}</h2>
+                {live ? (
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" aria-hidden>
+                    <path d="M9 5l7 7-7 7" />
+                  </svg>
+                ) : (
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+                    <rect x="5" y="11" width="14" height="9" rx="1" />
+                    <path d="M8 11V8a4 4 0 0 1 8 0v3" />
+                  </svg>
+                )}
               </span>
-              <span>
-                {r.status === "open" ? <b>{r.label[lang]}</b> : r.label[lang]}
-                <small>{sub}</small>
-              </span>
-            </div>
+              <span className={`ckb__line ${tone}`}>{line}</span>
+              {c && <span className="ckc__dim" style={{ fontSize: 13.5 }}>{t.progress(c.done, c.total)}</span>}
+            </button>
           )
-        })}
-      </div>
-      {a && (
-        <div className="ckc__push">
-          <button type="button" className="ckc__btn" onClick={onStart}>
-            {resume ? t.continue(a.label[lang]) : t.start(a.label[lang])}
-          </button>
-        </div>
+        })
       )}
+      {!a && !view.closedToday && (
+        <p className="ckc__dim" style={{ fontSize: 14 }}>
+          {view.next ? t.nextOpens(view.next.label[lang], view.next.opensLabel) : t.allDone}
+        </p>
+      )}
+      {a && <p className="ckc__dim" style={{ fontSize: 13.5, lineHeight: 1.5, marginTop: "auto" }}>{t.pickHelp}</p>}
     </>
   )
 }
@@ -380,14 +425,12 @@ function Home({
 function Pin({
   code,
   t,
-  storeName,
   checkLabel,
   onBack,
   onOk,
 }: {
   code: string
   t: Tx
-  storeName: string
   checkLabel: string
   onBack: () => void
   onOk: (w: Who) => void
@@ -418,13 +461,13 @@ function Pin({
         }
         onOk(body as Who)
       } catch {
-        setError("No connection. Try again.")
+        setError(t.offline)
         setDigits("")
       } finally {
         setBusy(false)
       }
     },
-    [code, onOk],
+    [code, onOk, t.offline],
   )
 
   // The fourth digit sends the PIN. Sent from here, never from inside a
@@ -448,10 +491,10 @@ function Pin({
 
   return (
     <>
-      <button type="button" className="ckc__store" style={{ background: "none", border: 0, textAlign: "left", padding: 0 }} onClick={onBack}>
-        ‹ {storeName} · {checkLabel}
+      <button type="button" className="ckc__btn ckc__btn--ghost" style={{ width: "auto", justifySelf: "start", minHeight: 44, fontFamily: "var(--sans)", fontSize: 14, fontWeight: 600 }} onClick={onBack}>
+        ‹ {checkLabel}
       </button>
-      <div style={{ display: "grid", gap: 4, textAlign: "center", marginTop: 12 }}>
+      <div style={{ display: "grid", gap: 4, textAlign: "center", marginTop: 8 }}>
         <h2>{t.enterPin}</h2>
         <p className="ckc__dim" style={{ margin: 0, fontSize: 14 }}>
           {help ? t.forgotHelp : t.pinHelp}
@@ -485,266 +528,287 @@ function Pin({
   )
 }
 
-function storageKey(code: string, a: ActiveCheck) {
-  return `checks.${code}.${a.kind}.${a.day}`
-}
-
-function loadAnswers(key: string): Answers {
-  try {
-    const raw = localStorage.getItem(key)
-    if (raw) return JSON.parse(raw) as Answers
-  } catch {}
-  return {}
-}
-
 function Checklist({
   code,
   t,
   lang,
-  setLang,
-  view,
   active,
   who,
   now,
-  screen,
-  setScreen,
+  setView,
   onDone,
   onSignedOut,
 }: {
   code: string
   t: Tx
   lang: Lang
-  setLang: (l: Lang) => void
-  view: CrewView
   active: ActiveCheck
   who: Who
   now: number
-  screen: Screen
-  setScreen: (s: Screen) => void
+  setView: (v: CrewView) => void
   onDone: (r: Receipt) => void
   onSignedOut: () => void
 }) {
-  const key = storageKey(code, active)
-  const [answers, setAnswers] = useState<Answers>({})
-  const [loaded, setLoaded] = useState(false)
-  const [photos, setPhotos] = useState<Record<string, { blob: Blob; url: string }>>({})
-  const [flagFor, setFlagFor] = useState<string | null>(null)
+  /** Taps sent but not answered yet, shown as if they had landed. */
+  const [pending, setPending] = useState<Record<string, boolean>>({})
+  const [flagFor, setFlagFor] = useState<CrewItem | null>(null)
+  const [photoFor, setPhotoFor] = useState<{ item: CrewItem; blob: Blob; url: string } | null>(null)
   const [error, setError] = useState("")
   const [sending, setSending] = useState(false)
-  const [lostPhotos, setLostPhotos] = useState(false)
-
-  useEffect(() => {
-    const saved = loadAnswers(key)
-    setAnswers(saved)
-    setLostPhotos(Object.keys(saved).length > 0 && active.sections.some((s) => s.photoRequired))
-    setLoaded(true)
-  }, [key, active.sections])
-
-  useEffect(() => {
-    if (!loaded) return
-    try {
-      localStorage.setItem(key, JSON.stringify(answers))
-    } catch {}
-  }, [answers, key, loaded])
+  const camera = useRef<HTMLInputElement>(null)
+  const cameraFor = useRef<CrewItem | null>(null)
 
   const txt = (en: string, es: string | null) => (lang === "es" && es ? es : en)
-  const isDone = (id: string) => Boolean(answers[id]?.done || answers[id]?.flag)
-
-  const stats = useMemo(() => {
-    let itemsLeft = 0
-    let photosLeft = 0
-    const per = active.sections.map((s) => {
-      const done = s.items.filter((i) => isDone(i.id)).length
-      itemsLeft += s.items.length - done
-      if (s.photoRequired && !photos[s.id]) photosLeft += 1
-      return { done, total: s.items.length }
-    })
-    const flagged = Object.values(answers).filter((a) => a.flag).length
-    return { itemsLeft, photosLeft, per, flagged }
+  const base = counts(active)
+  const stateOf = (id: string): { done: boolean; mark: CrewMarkState | undefined } => {
+    const mark = base.state.get(id)
+    return { done: id in pending ? pending[id] : Boolean(mark?.done), mark }
+  }
+  const done = active.sections.reduce((n, s) => n + s.items.filter((i) => stateOf(i.id).done).length, 0)
+  const photosLeft = active.sections.reduce((n, s) => n + s.items.filter((i) => i.photoRequired && !stateOf(i.id).done).length, 0)
+  const tasksLeft = base.total - done - photosLeft
+  const canSubmit = now >= active.submitFrom && now <= active.closesAt
+  const others = active.people.filter((p) => p !== who.name)
+  const next = useMemo(() => {
+    for (const s of active.sections) {
+      for (const i of s.items) {
+        const mark = base.state.get(i.id)
+        const isDone = i.id in pending ? pending[i.id] : Boolean(mark?.done)
+        if (!isDone) return { item: i, section: txt(s.en, s.es) }
+      }
+    }
+    return null
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [answers, photos, active.sections])
+  }, [active, pending, lang])
 
-  const toggle = (id: string) =>
-    setAnswers((a) => {
-      const cur = a[id]
-      if (cur?.flag) return a
-      return { ...a, [id]: { done: !cur?.done, flag: null } }
-    })
+  const send = async (item: CrewItem, opts: { done: boolean; note?: string; photo?: Blob }) => {
+    setError("")
+    setPending((p) => ({ ...p, [item.id]: opts.done }))
+    try {
+      const form = new FormData()
+      form.set("pass", who.pass)
+      form.set("itemId", item.id)
+      form.set("done", opts.done ? "1" : "0")
+      if (opts.note) form.set("note", opts.note)
+      if (opts.photo) form.set("photo", opts.photo, `${item.id}.jpg`)
+      const res = await fetch(`/api/checks/${encodeURIComponent(code)}/mark`, { method: "POST", body: form })
+      const body = (await res.json().catch(() => ({}))) as { error?: string; view?: CrewView }
+      if (body.view) setView(body.view)
+      if (!res.ok) {
+        setError(body.error ?? t.offline)
+        if (res.status === 401) window.setTimeout(onSignedOut, 2500)
+      }
+      return res.ok
+    } catch {
+      setError(t.offline)
+      return false
+    } finally {
+      setPending((p) => {
+        const { [item.id]: _, ...rest } = p
+        return rest
+      })
+    }
+  }
 
-  const setPhoto = async (sectionId: string, file: File | undefined) => {
-    if (!file) return
-    const blob = await compress(file)
-    setPhotos((p) => {
-      if (p[sectionId]) URL.revokeObjectURL(p[sectionId].url)
-      return { ...p, [sectionId]: { blob, url: URL.createObjectURL(blob) } }
-    })
-    setLostPhotos(false)
+  const openCamera = (item: CrewItem) => {
+    cameraFor.current = item
+    camera.current?.click()
+  }
+  const tap = (item: CrewItem) => {
+    const s = stateOf(item.id)
+    if (s.done) void send(item, { done: false })
+    else if (item.photoRequired) openCamera(item)
+    else void send(item, { done: true })
   }
 
   const submit = async () => {
     setSending(true)
     setError("")
     try {
-      const form = new FormData()
-      form.set("pass", who.pass)
-      form.set("startedAt", String(who.startedAt))
-      form.set("answers", JSON.stringify(answers))
-      for (const [sid, p] of Object.entries(photos)) form.set(`photo_${sid}`, p.blob, `${sid}.jpg`)
-      const res = await fetch(`/api/checks/${encodeURIComponent(code)}/submit`, { method: "POST", body: form })
-      const body = await res.json().catch(() => ({}))
-      if (!res.ok) {
-        setError(body.error ?? "That didn't go through. Try again.")
+      const res = await fetch(`/api/checks/${encodeURIComponent(code)}/submit`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pass: who.pass }),
+      })
+      const body = (await res.json().catch(() => ({}))) as { error?: string; view?: CrewView; receipt?: Receipt }
+      if (!res.ok || !body.receipt) {
+        if (body.view) setView(body.view)
+        setError(body.error ?? t.offline)
         if (res.status === 401) window.setTimeout(onSignedOut, 2500)
         return
       }
-      try {
-        localStorage.removeItem(key)
-      } catch {}
-      onDone(body.receipt as Receipt)
+      onDone(body.receipt)
     } catch {
-      setError(lang === "es" ? "Sin conexión. Tus marcas están guardadas; inténtalo otra vez." : "No connection. Your ticks are saved; try again.")
+      setError(t.offline)
     } finally {
       setSending(false)
     }
   }
 
-  const leftParts = [
-    stats.itemsLeft > 0 ? t.itemsLeft(stats.itemsLeft) : "",
-    stats.photosLeft > 0 ? t.photosLeft(stats.photosLeft) : "",
-  ].filter(Boolean)
-  const complete = leftParts.length === 0
-  const overdue = now > active.dueAt
   const label = active.label[lang]
-
-  if (screen === "review") {
-    return (
-      <>
-        <div className="ckc__top">
-          <button type="button" className="ckc__store" style={{ background: "none", border: 0, padding: 0 }} onClick={() => setScreen("list")}>
-            {t.back}
-          </button>
-          <span className="ckc__store">{overdue ? t.lateBy(durationLabel(now - active.dueAt)) : t.left(durationLabel(active.dueAt - now))}</span>
-        </div>
-        <h2>{t.ready}</h2>
-        <div className="ckc__sum">
-          {active.sections.map((s, i) => (
-            <div key={s.id}>
-              <span className="ck-gl ck-gl--ok" aria-hidden>
-                ✓
-              </span>
-              <span>
-                <b>{txt(s.en, s.es)}</b>
-                <small>
-                  {t.of(stats.per[i].done, stats.per[i].total)}
-                  {photos[s.id] ? " · ✓ 📷" : ""}
-                </small>
-              </span>
-              {/* eslint-disable-next-line @next/next/no-img-element -- local preview blob */}
-              {photos[s.id] ? <img src={photos[s.id].url} alt="" /> : <span />}
-            </div>
-          ))}
-          {stats.flagged > 0 && (
-            <div className="warn">
-              <span className="ck-gl ck-gl--late" aria-hidden>
-                <span>!</span>
-              </span>
-              <span>
-                <b>{t.flaggedN(stats.flagged)}</b>
-                {active.sections.flatMap((s) =>
-                  s.items
-                    .filter((i) => answers[i.id]?.flag)
-                    .map((i) => (
-                      <small key={i.id}>
-                        {txt(i.en, i.es)}: {answers[i.id]!.flag}
-                      </small>
-                    )),
-                )}
-              </span>
-              <span />
-            </div>
-          )}
-        </div>
-        <div className="ckc__push">
-          <p className="ckc__dim" style={{ margin: 0, fontSize: 13 }}>
-            {t.lockNote(label, view.store.name)}
-          </p>
-          <div className="ckc__err" role="alert">
-            {error}
-          </div>
-          <button type="button" className="ckc__btn" disabled={sending} onClick={submit}>
-            {sending ? t.sending : t.submitAs(who.name)}
-          </button>
-        </div>
-      </>
-    )
-  }
+  const leftText = t.left(tasksLeft, photosLeft)
 
   return (
     <>
-      <div className="ckc__head">
+      <div className="ckc__head" style={{ marginTop: 0, padding: "12px 16px", top: 0 }}>
         <div className="ckc__top">
           <span>
-            <b style={{ fontFamily: "var(--display)", fontSize: 18 }}>{t.hi(who.firstName)}</b>{" "}
+            <b style={{ fontFamily: "var(--display)", fontSize: 19, fontWeight: 400 }}>{label}</b>{" "}
             <span className="ckc__dim" style={{ fontSize: 13 }}>
-              · {label}
+              · {t.hi(who.firstName)}
             </span>
           </span>
-          <LangToggle lang={lang} setLang={setLang} />
+          <button type="button" className="ckc__flagbtn" onClick={onSignedOut}>
+            {t.notYou}
+          </button>
         </div>
-        <div className="ckc__segs" style={{ gridTemplateColumns: active.sections.map((s) => `${Math.max(1, s.items.length)}fr`).join(" ") }}>
-          {active.sections.map((s, i) => (
-            <div key={s.id}>
-              <div className="ckc__bar ckc__bar--good">
-                <i style={{ width: `${stats.per[i].total ? (stats.per[i].done / stats.per[i].total) * 100 : 100}%` }} />
-              </div>
-              <span className="ck-mono" style={{ fontSize: 9.5 }}>
-                {txt(s.en, s.es)} {stats.per[i].done}/{stats.per[i].total}
-              </span>
-            </div>
+        <div className="ckb__segs" aria-hidden>
+          {active.sections.flatMap((s) => s.items).map((i) => (
+            <i key={i.id} className={stateOf(i.id).done ? "f" : ""} />
           ))}
         </div>
-        <span className="ckc__store" style={{ textAlign: "right" }}>
-          {overdue ? t.lateBy(durationLabel(now - active.dueAt)) : t.left(durationLabel(active.dueAt - now))}
-        </span>
-      </div>
-      {lostPhotos && <p className="ckc__dim" style={{ margin: 0, fontSize: 13 }}>{t.photosLost}</p>}
-      {active.sections.map((s, i) => (
-        <SectionBlock
-          key={s.id}
-          s={s}
-          t={t}
-          txt={txt}
-          stat={stats.per[i]}
-          answers={answers}
-          photo={photos[s.id]?.url}
-          onToggle={toggle}
-          onFlag={setFlagFor}
-          onPhoto={(f) => setPhoto(s.id, f)}
-        />
-      ))}
-      <div className="ckc__foot">
-        <div className="ckc__left">
-          <i />
-          {complete ? t.allSet : leftParts.join(t.andJoin)}
+        <div style={{ display: "flex", justifyContent: "space-between", gap: 8, fontSize: 13.5 }}>
+          <span className="ckc__dim">{t.doneOf(done, base.total)}</span>
+          {others.length > 0 && (
+            <span className="ckb__who">
+              <i />
+              {t.alsoOn(others.join(", "))}
+            </span>
+          )}
         </div>
-        <button type="button" className="ckc__btn" disabled={!complete} onClick={() => setScreen("review")}>
-          {t.review}
-        </button>
-        <button type="button" className="ckc__flagbtn" style={{ justifySelf: "center" }} onClick={onSignedOut}>
-          {t.notYou}
-        </button>
       </div>
+
+      {next ? (
+        <div className="ckb__next">
+          <span className="ck-mono">{t.nextUp(next.section)}</span>
+          <b>{txt(next.item.en, next.item.es)}</b>
+          {next.item.photoRequired ? (
+            <button type="button" className="ckc__btn" onClick={() => openCamera(next.item)}>
+              <CameraIcon /> {t.takePhotoFinish}
+            </button>
+          ) : (
+            <button type="button" className="ckc__btn ckc__btn--light" onClick={() => void send(next.item, { done: true })}>
+              ✓ {t.markDone}
+            </button>
+          )}
+        </div>
+      ) : (
+        <div className="ckb__alldone">
+          {t.allTasksDone} {canSubmit ? t.tapSubmit : t.comeBack(active.submitFromLabel, active.dueLabel)}
+        </div>
+      )}
+
+      {active.sections.map((s) => (
+        <section key={s.id} style={{ display: "grid", gap: 8 }} aria-label={txt(s.en, s.es)}>
+          <div className="ckc__sect">
+            <b>{txt(s.en, s.es)}</b>
+            <span className="ck-mono">
+              {s.items.filter((i) => stateOf(i.id).done).length} / {s.items.length}
+            </span>
+          </div>
+          {s.items.map((i) => {
+            const { done: isDone, mark } = stateOf(i.id)
+            const flagged = isDone && Boolean(mark?.note) && !(i.id in pending)
+            const cls = `ckc__row${isDone ? " done" : ""}${flagged ? " is-flag" : ""}${!isDone && i.photoRequired ? " cam" : ""}`
+            return (
+              <div key={i.id} style={{ display: "grid", gap: 2 }}>
+                <button type="button" className={cls} aria-pressed={isDone} onClick={() => tap(i)}>
+                  <span className="ck">{flagged ? "!" : isDone ? "✓" : i.photoRequired ? <CameraIcon size={16} /> : ""}</span>
+                  <span>
+                    {txt(i.en, i.es)}
+                    {isDone && mark && !(i.id in pending) && (
+                      <span className="ckb__stamp">{t.stamp(mark.at, mark.by, mark.hasPhoto)}</span>
+                    )}
+                    {flagged && (
+                      <small>
+                        {t.needsAttention} · {mark!.note}
+                      </small>
+                    )}
+                    {!isDone && i.photoRequired && <span className="ckb__need">{t.photoRequired}</span>}
+                  </span>
+                </button>
+                {!isDone && (
+                  <button type="button" className="ckc__flagbtn" onClick={() => setFlagFor(i)}>
+                    {t.problem}
+                  </button>
+                )}
+              </div>
+            )
+          })}
+        </section>
+      ))}
+      <p className="ckc__dim" style={{ fontSize: 12.5 }}>{t.undoHelp}</p>
+
+      <div className="ckc__foot" style={{ padding: "10px 16px max(14px, env(safe-area-inset-bottom, 0px))" }}>
+        <div className="ckc__err" role="alert" style={{ minHeight: error ? 20 : 0 }}>
+          {error}
+        </div>
+        {!canSubmit ? (
+          <button type="button" className="ckc__btn" disabled>
+            {t.submitOpens(active.submitFromLabel)}
+          </button>
+        ) : leftText ? (
+          <button type="button" className="ckc__btn" disabled>
+            {leftText}
+          </button>
+        ) : (
+          <button type="button" className="ckc__btn" disabled={sending} onClick={submit}>
+            {sending ? t.sending : t.submitCheck(label)}
+          </button>
+        )}
+      </div>
+
+      <input
+        ref={camera}
+        type="file"
+        accept="image/*"
+        capture="environment"
+        hidden
+        onChange={async (e) => {
+          const file = e.target.files?.[0]
+          e.target.value = ""
+          const item = cameraFor.current
+          if (!file || !item) return
+          const blob = await compress(file)
+          setPhotoFor({ item, blob, url: URL.createObjectURL(blob) })
+        }}
+      />
+      {photoFor && (
+        <PhotoSheet
+          t={t}
+          title={txt(photoFor.item.en, photoFor.item.es)}
+          url={photoFor.url}
+          onRetake={() => {
+            URL.revokeObjectURL(photoFor.url)
+            const item = photoFor.item
+            setPhotoFor(null)
+            openCamera(item)
+          }}
+          onUse={async () => {
+            const ok = await send(photoFor.item, { done: true, photo: photoFor.blob })
+            if (ok) {
+              URL.revokeObjectURL(photoFor.url)
+              setPhotoFor(null)
+            }
+          }}
+          onCancel={() => {
+            URL.revokeObjectURL(photoFor.url)
+            setPhotoFor(null)
+          }}
+          error={error}
+        />
+      )}
       {flagFor && (
         <FlagSheet
           t={t}
-          current={answers[flagFor]?.flag ?? ""}
+          current={stateOf(flagFor.id).mark?.note ?? ""}
           onCancel={() => setFlagFor(null)}
           onSave={(note) => {
-            setAnswers((a) => ({ ...a, [flagFor]: { done: true, flag: note } }))
+            void send(flagFor, { done: true, note })
             setFlagFor(null)
           }}
           onRemove={() => {
-            setAnswers((a) => ({ ...a, [flagFor]: { done: false, flag: null } }))
+            void send(flagFor, { done: false })
             setFlagFor(null)
           }}
         />
@@ -753,103 +817,60 @@ function Checklist({
   )
 }
 
-function SectionBlock({
-  s,
-  t,
-  txt,
-  stat,
-  answers,
-  photo,
-  onToggle,
-  onFlag,
-  onPhoto,
-}: {
-  s: CrewSection
-  t: Tx
-  txt: (en: string, es: string | null) => string
-  stat: { done: number; total: number }
-  answers: Answers
-  photo: string | undefined
-  onToggle: (id: string) => void
-  onFlag: (id: string) => void
-  onPhoto: (f: File | undefined) => void
-}) {
-  const input = useRef<HTMLInputElement>(null)
-  const hint = txt(s.hintEn ?? "", s.hintEs)
+function CameraIcon({ size = 20 }: { size?: number }) {
   return (
-    <section style={{ display: "grid", gap: 8 }} aria-label={txt(s.en, s.es)}>
-      <div className="ckc__sect">
-        <b>{txt(s.en, s.es)}</b>
-        <span className="ck-mono">{t.of(stat.done, stat.total)}</span>
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+      <path d="M3 7h4l2-3h6l2 3h4v13H3z" />
+      <circle cx="12" cy="13" r="4" />
+    </svg>
+  )
+}
+
+function PhotoSheet({
+  t,
+  title,
+  url,
+  error,
+  onUse,
+  onRetake,
+  onCancel,
+}: {
+  t: Tx
+  title: string
+  url: string
+  error: string
+  onUse: () => Promise<void>
+  onRetake: () => void
+  onCancel: () => void
+}) {
+  const [busy, setBusy] = useState(false)
+  return (
+    <div className="ckc__sheet" role="dialog" aria-modal="true" aria-label={t.photoTitle} onClick={busy ? undefined : onCancel}>
+      <div onClick={(e) => e.stopPropagation()}>
+        <span className="ck-mono">{t.photoTitle}</span>
+        <h2>{title}</h2>
+        {/* eslint-disable-next-line @next/next/no-img-element -- local preview blob */}
+        <img className="ckb__preview" src={url} alt="" />
+        <div className="ckc__err" role="alert">
+          {busy ? t.uploading : error}
+        </div>
+        <button
+          type="button"
+          className="ckc__btn"
+          disabled={busy}
+          onClick={async () => {
+            setBusy(true)
+            await onUse()
+            setBusy(false)
+          }}
+        >
+          {busy ? t.uploading : t.photoUse}
+        </button>
+        <button type="button" className="ckc__btn ckc__btn--ghost" disabled={busy} onClick={onRetake}>
+          {t.retake}
+        </button>
       </div>
-      {s.items.map((i) => {
-        const a = answers[i.id]
-        const flagged = Boolean(a?.flag)
-        const done = Boolean(a?.done) && !flagged
-        return (
-          <div key={i.id} style={{ display: "grid", gap: 2 }}>
-            <button
-              type="button"
-              className={`ckc__row${done ? " done" : ""}${flagged ? " is-flag" : ""}`}
-              aria-pressed={done || flagged}
-              onClick={() => (flagged ? onFlag(i.id) : onToggle(i.id))}
-            >
-              <span className="ck">{flagged ? "!" : done ? "✓" : ""}</span>
-              <span>
-                {txt(i.en, i.es)}
-                {flagged && (
-                  <small>
-                    {t.needsAttention} · {a!.flag}
-                  </small>
-                )}
-              </span>
-            </button>
-            {!flagged && (
-              <button type="button" className="ckc__flagbtn" onClick={() => onFlag(i.id)}>
-                {t.problem}
-              </button>
-            )}
-          </div>
-        )
-      })}
-      {(s.photoRequired || s.items.length === 0) && (
-        <>
-          <button type="button" className={`ckc__photo${photo ? " has" : ""}`} onClick={() => input.current?.click()}>
-            {photo ? (
-              // eslint-disable-next-line @next/next/no-img-element -- local preview blob
-              <img src={photo} alt="" />
-            ) : (
-              <span className="cam" aria-hidden>
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M4 8h3l2-3h6l2 3h3v11H4z" />
-                  <circle cx="12" cy="13" r="3.5" />
-                </svg>
-              </span>
-            )}
-            <span>
-              <b>
-                {txt(s.en, s.es)} {s.photoRequired ? t.photoReq : t.photoOpt}
-              </b>
-              <br />
-              <span className="ckc__dim" style={{ fontSize: 13 }}>
-                {photo ? t.retake : hint || t.takePhoto}
-              </span>
-            </span>
-          </button>
-          <input
-            ref={input}
-            type="file"
-            accept="image/*"
-            capture="environment"
-            hidden
-            onChange={(e) => {
-              onPhoto(e.target.files?.[0])
-              e.target.value = ""
-            }}
-          />
-        </>
-      )}
-    </section>
+    </div>
   )
 }
 
@@ -938,20 +959,20 @@ function Done({
         </p>
         <div className="ckc__receipt">
           <div>
-            <span className="ckc__dim">{t.store}</span>
-            <b>{receipt.store}</b>
-          </div>
-          <div>
             <span className="ckc__dim">{t.submitted}</span>
             <b>
               {day} · {receipt.at}
             </b>
           </div>
+          {receipt.people.length > 0 && (
+            <div>
+              <span className="ckc__dim">{t.doneBy}</span>
+              <b>{receipt.people.join(", ")}</b>
+            </div>
+          )}
           <div>
-            <span className="ckc__dim">{t.onTime}</span>
-            <b className={receipt.late > 0 ? "ck-tone-warn" : "ck-tone-good"}>
-              {receipt.late > 0 ? t.no(receipt.late) : t.yes(receipt.dueLabel)}
-            </b>
+            <span className="ckc__dim">{t.store}</span>
+            <b>{t.tasks(receipt.tasks, receipt.photos)}</b>
           </div>
           {receipt.next && (
             <div>

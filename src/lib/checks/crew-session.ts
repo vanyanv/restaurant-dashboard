@@ -18,7 +18,8 @@ export type CrewPass = {
   exp: number
 }
 
-const TTL_MS = 3 * 60 * 60 * 1000
+// Long enough for a morning list opened at 9:00 am and submitted at 5:30 pm.
+const TTL_MS = 10 * 60 * 60 * 1000
 
 function secret(): string {
   const s = process.env.CHECKS_SECRET ?? process.env.NEXTAUTH_SECRET

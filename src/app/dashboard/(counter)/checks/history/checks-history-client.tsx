@@ -1,14 +1,14 @@
 "use client"
 
 import { Fragment, useState } from "react"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import { Section, useCounterTransition, usePageChrome, useSurfaceHref } from "@/components/counter"
 import type { SectionSources } from "@/lib/counter/adapters/types"
-import type { CellView, HistoryData, HistorySections } from "@/lib/counter/adapters/checks"
-import { ChecksHead, Glyph, Legend, Lightbox, photoSrc, StorePicker, type PhotoRef } from "../checks-ui"
+import type { HistoryData, HistorySections } from "@/lib/counter/adapters/checks"
+import { CheckDetail, ChecksHead, Glyph, Legend, StorePicker } from "../checks-ui"
 
 /**
- * Store checks — History. Nine rows (store × check) by day. Clicking a square
+ * Store checks — History. One row per store and check, by day. Clicking a square
  * opens who did it, when, the photos and what was flagged. The right edge is
  * the on-time rate for the range; below the detail, the items crew flag most.
  */
@@ -30,7 +30,11 @@ const RANGES = [7, 14, 30] as const
 function History({ data }: { data: HistoryData }) {
   const router = useRouter()
   const href = useSurfaceHref()
-  const [sel, setSel] = useState<{ row: number; col: number } | null>(() => firstInteresting(data))
+  const params = useSearchParams()
+  const [sel, setSel] = useState<{ row: number; col: number } | null>(
+    // A link from the check email names the day and check to open.
+    () => linked(data, params.get("day"), params.get("kind")) ?? firstInteresting(data),
+  )
   const row = sel ? data.rows[sel.row] : null
   const cell = row && sel ? row.cells[sel.col] : null
   const setRange = (r: number) => {
@@ -100,7 +104,7 @@ function History({ data }: { data: HistoryData }) {
           </div>
         </div>
         <div className="sec">
-          {row && cell ? <Detail store={row.store} label={row.label} cell={cell} /> : (
+          {row && cell ? <CheckDetail store={row.store} label={row.label} cell={cell} /> : (
             <div className="ck-drawer"><span className="ck-meta">Pick a square to see that check.</span></div>
           )}
           {data.topFlags.length > 0 && <TopFlags data={data} />}
@@ -108,6 +112,13 @@ function History({ data }: { data: HistoryData }) {
       </div>
     </div>
   )
+}
+
+function linked(data: HistoryData, day: string | null, kind: string | null): { row: number; col: number } | null {
+  if (!day || !kind) return null
+  const col = data.days.findIndex((d) => d.day === day)
+  const row = data.rows.findIndex((r) => r.kind === kind && (!data.storeId || r.storeId === data.storeId))
+  return col >= 0 && row >= 0 ? { row, col } : null
 }
 
 function firstInteresting(data: HistoryData): { row: number; col: number } | null {
@@ -125,54 +136,6 @@ function rateTone(rate: number | null): string {
   if (rate >= 90) return "ck-tone-good"
   if (rate >= 80) return "ck-tone-warn"
   return "ck-tone-bad"
-}
-
-function Detail({ store, label, cell }: { store: string; label: string; cell: CellView }) {
-  const [open, setOpen] = useState<PhotoRef | null>(null)
-  const caption = `${store} · ${label} · ${cell.day}`
-  return (
-    <div className="ck-drawer">
-      <div>
-        <div className="ck-mono">
-          {store} · {label}
-        </div>
-        <h3>{new Date(`${cell.day}T12:00:00Z`).toLocaleDateString("en-US", { timeZone: "UTC", weekday: "short", month: "short", day: "numeric" })}</h3>
-      </div>
-      <div className="ck-st">
-        <Glyph status={cell.status} flagged={cell.flags.length > 0} />
-        {cell.label}
-      </div>
-      <dl className="ck-kv">
-        {cell.submittedAt && (<><dt>Submitted</dt><dd>{cell.submittedAt}</dd></>)}
-        <dt>Due</dt>
-        <dd>{cell.dueLabel}</dd>
-        {cell.startedAt && (<><dt>Started</dt><dd>{cell.startedAt}</dd></>)}
-        {cell.meta && !cell.submittedAt && (<><dt>Note</dt><dd>{cell.meta}</dd></>)}
-        {cell.by && (<><dt>By</dt><dd>{cell.by}</dd></>)}
-      </dl>
-      {cell.photos.length > 0 && (
-        <div className="ck-big">
-          {cell.photos.map((p) => (
-            <button key={p.id} type="button" onClick={() => setOpen(p)} aria-label={`Open ${p.section} photo`}>
-              {/* eslint-disable-next-line @next/next/no-img-element -- private, session-gated image route */}
-              <img src={photoSrc(p.id)} alt="" loading="lazy" />
-              <span className="ck-mono">{p.section}</span>
-            </button>
-          ))}
-        </div>
-      )}
-      {cell.flags.length > 0 && (
-        <ul style={{ margin: 0, paddingLeft: 16, display: "grid", gap: 4 }}>
-          {cell.flags.map((f) => (
-            <li key={f.item} className="ck-meta">
-              <b className="ck-tone-warn">Flagged</b> {f.item}: “{f.note}”
-            </li>
-          ))}
-        </ul>
-      )}
-      {open && <Lightbox photo={open} caption={caption} onClose={() => setOpen(null)} />}
-    </div>
-  )
 }
 
 function TopFlags({ data }: { data: HistoryData }) {

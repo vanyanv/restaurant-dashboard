@@ -20,6 +20,19 @@ export type GridSubmission = {
   photos: Array<{ id: string; sectionName: string }>
 }
 
+/** One row of a check's log: a tick, an untick or a note, by whom and when. */
+export type GridMark = {
+  id: string
+  itemId: string
+  itemText: string
+  sectionName: string
+  done: boolean
+  note: string | null
+  crewName: string
+  at: Date
+  hasPhoto: boolean
+}
+
 export type GridCell = {
   day: string
   kind: CheckKindName
@@ -27,23 +40,45 @@ export type GridCell = {
   submission: GridSubmission | null
   /** First person to enter a PIN for a check not in yet. */
   startedBy: { name: string; at: Date } | null
+  /** Every tick, untick and note, oldest first. */
+  marks: GridMark[]
+  /** Tasks done so far (the latest mark per task), out of the list's tasks. */
+  done: number
+  total: number
+  /** Everyone who ticked a task or submitted, in the order they joined. */
+  people: string[]
 }
 
-export type GridTemplate = CheckWindow & { kind: CheckKindName; enabled: boolean; createdAt: Date }
+export type GridTemplate = CheckWindow & { kind: CheckKindName; enabled: boolean; createdAt: Date; itemCount: number }
 
 export type GridStore = {
   id: string
   name: string
+  /** Set to "Not open yet" in store settings: checks are paused, never missed. */
+  preOpen: boolean
   templates: GridTemplate[]
   closedDays: string[]
   cells: GridCell[]
+}
+
+/** Latest mark per task, from a log in time order. */
+export function currentMarks<M extends { itemId: string }>(marks: M[]): Map<string, M> {
+  const out = new Map<string, M>()
+  for (const m of marks) out.set(m.itemId, m)
+  return out
+}
+
+function countItems(content: unknown): number {
+  const c = content as SubmissionContent | null
+  return (c?.sections ?? []).reduce((n, s) => n + (s.items?.length ?? 0), 0)
 }
 
 export type SubmissionContent = {
   sections: Array<{
     name: string
     photoRequired: boolean
-    items: Array<{ text: string; done: boolean; flag: string | null }>
+    /** `by`, `at` and `photo` are on checks submitted from the shared form (2026-10-29 on). */
+    items: Array<{ text: string; done: boolean; flag: string | null; by?: string | null; at?: string | null; photo?: boolean }>
   }>
 }
 
@@ -71,7 +106,7 @@ export async function loadCheckGrid(opts: {
       isActive: true,
       ...(opts.storeIds ? { id: { in: opts.storeIds } } : {}),
     },
-    select: { id: true, name: true },
+    select: { id: true, name: true, lifecycleStage: true },
     orderBy: { name: "asc" },
   })
   if (stores.length === 0) return []
@@ -79,10 +114,14 @@ export async function loadCheckGrid(opts: {
 
   const storeIds = stores.map((s) => s.id)
   const range = { gte: dayToDb(opts.fromDay), lte: dayToDb(opts.toDay) }
-  const [templates, submissions, closures, starts] = await Promise.all([
+  const [templates, submissions, closures, starts, marks] = await Promise.all([
     prisma.checkTemplate.findMany({
       where: { storeId: { in: storeIds }, store: { accountId: opts.accountId } },
-      select: { storeId: true, kind: true, opensAtMin: true, dueAtMin: true, dueByWeekday: true, graceMin: true, enabled: true, createdAt: true },
+      select: {
+        storeId: true, kind: true, opensAtMin: true, submitFromMin: true, dueAtMin: true, dueByWeekday: true,
+        graceMin: true, enabled: true, createdAt: true,
+        sections: { select: { _count: { select: { items: true } } } },
+      },
     }),
     prisma.checkSubmission.findMany({
       where: { storeId: { in: storeIds }, businessDate: range, store: { accountId: opts.accountId } },
@@ -104,6 +143,14 @@ export async function loadCheckGrid(opts: {
       },
       orderBy: { startedAt: "asc" },
     }),
+    prisma.checkMark.findMany({
+      where: { storeId: { in: storeIds }, businessDate: range, store: { accountId: opts.accountId } },
+      select: {
+        id: true, storeId: true, kind: true, businessDate: true, itemId: true, itemText: true, sectionName: true,
+        done: true, note: true, crewName: true, at: true, photoKey: true,
+      },
+      orderBy: [{ at: "asc" }, { id: "asc" }],
+    }),
   ])
 
   const days: string[] = []
@@ -115,12 +162,15 @@ export async function loadCheckGrid(opts: {
       .map((t) => ({
         kind: t.kind as CheckKindName,
         opensAtMin: t.opensAtMin,
+        submitFromMin: t.submitFromMin,
         dueAtMin: t.dueAtMin,
         dueByWeekday: t.dueByWeekday,
         graceMin: t.graceMin,
         enabled: t.enabled,
         createdAt: t.createdAt,
+        itemCount: t.sections.reduce((n, s) => n + s._count.items, 0),
       }))
+    const preOpen = store.lifecycleStage === "pre_open"
     const closedDays = closures.filter((c) => c.storeId === store.id).map((c) => dbToDay(c.businessDate))
     const cells: GridCell[] = []
     for (const day of days) {
@@ -131,14 +181,34 @@ export async function loadCheckGrid(opts: {
         const start = starts.find(
           (s) => s.storeId === store.id && s.kind === t.kind && dbToDay(s.businessDate) === day,
         )
+        const log: GridMark[] = marks
+          .filter((m) => m.storeId === store.id && m.kind === t.kind && dbToDay(m.businessDate) === day)
+          .map((m) => ({
+            id: m.id,
+            itemId: m.itemId,
+            itemText: m.itemText,
+            sectionName: m.sectionName,
+            done: m.done,
+            note: m.note,
+            crewName: m.crewName,
+            at: m.at,
+            hasPhoto: Boolean(m.photoKey),
+          }))
+        const done = [...currentMarks(log).values()].filter((m) => m.done).length
+        const people = [...new Set([...log.map((m) => m.crewName), ...(sub ? [sub.crewName] : [])])]
         cells.push({
           day,
           kind: t.kind,
+          marks: log,
+          done: sub ? countItems(sub.content) : done,
+          total: sub ? countItems(sub.content) : t.itemCount,
+          people,
           status: cellStatus({
             day,
             window: t,
             enabled: t.enabled,
-            closed: closedDays.includes(day),
+            // A store that isn't open yet has nothing to miss.
+            closed: preOpen || closedDays.includes(day),
             submission: sub ?? null,
             now: opts.now,
             since: t.createdAt,
@@ -161,7 +231,7 @@ export async function loadCheckGrid(opts: {
         })
       }
     }
-    return { id: store.id, name: store.name, templates: tpls, closedDays, cells }
+    return { id: store.id, name: store.name, preOpen, templates: tpls, closedDays, cells }
   })
 }
 

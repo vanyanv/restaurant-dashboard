@@ -38,6 +38,9 @@ model Account {
   name      String
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  /// Where a summary of every submitted store check is emailed. Edited on
+  /// Store checks > Links & email.
+  checkReportEmails String[] @default([])
 
   users                         User[]
   stores                        Store[]
@@ -240,6 +243,7 @@ model Store {
   checkSubmissions CheckSubmission[]
   checkStarts      CheckStart[]
   checkClosures    CheckClosure[]
+  checkMarks       CheckMark[]
 
   @@index([ownerId])
   @@index([accountId])
@@ -2364,8 +2368,12 @@ model CheckTemplate {
   id           String    @id @default(cuid())
   storeId      String
   kind         CheckKind
-  /// Minutes after LA midnight of the business day the check opens.
+  /// Minutes after LA midnight of the business day crew can open the list
+  /// and start ticking.
   opensAtMin   Int
+  /// Minutes after LA midnight when Submit unlocks (same day rules as
+  /// dueAtMin). Null means Submit is open from `opensAtMin`.
+  submitFromMin Int?
   /// Minutes after LA midnight of the business day the check is due. May
   /// pass 1440: an evening check due at 12:30 am still belongs to the day it
   /// started on.
@@ -2411,6 +2419,8 @@ model CheckItem {
   textEn    String
   /// Null shows crew the English text.
   textEs    String?
+  /// Crew must take a photo to tick this task.
+  photoRequired Boolean @default(false)
 
   section CheckSection @relation(fields: [sectionId], references: [id], onDelete: Cascade)
 
@@ -2502,6 +2512,35 @@ model CheckStart {
 
   @@unique([storeId, kind, businessDate, crewMemberId])
   @@index([storeId, businessDate])
+}
+
+/// One tick, untick or note on one task, by one person, at one time. The log
+/// behind the shared live form: several crew can work on the same check, the
+/// latest row per task is its state, and owners see every row.
+model CheckMark {
+  id           String    @id @default(cuid())
+  storeId      String
+  kind         CheckKind
+  businessDate DateTime  @db.Date
+  /// CheckItem id. Not a foreign key: the row outlives checklist edits.
+  itemId       String
+  /// Wording as crew saw it.
+  itemText     String
+  sectionName  String
+  /// False is an untick.
+  done         Boolean
+  /// "Needs attention" note. A task with a note counts as done.
+  note         String?
+  crewMemberId String?
+  crewName     String
+  at           DateTime  @default(now())
+  photoKey     String?
+  photoType    String?
+  photoSize    Int?
+
+  store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  @@index([storeId, businessDate, kind, at])
 }
 
 /// The store is closed for a business day: none of its checks count as missed.

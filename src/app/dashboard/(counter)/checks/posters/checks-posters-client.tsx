@@ -1,9 +1,10 @@
 "use client"
 
+import { shortStoreName } from "@/lib/checks/names"
 import { useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
 import { Section, useCounterTransition, usePageChrome } from "@/components/counter"
-import { rotateCheckLink } from "@/lib/counter/actions/checks"
+import { rotateCheckLink, saveCheckReportEmails } from "@/lib/counter/actions/checks"
 import type { SectionSources } from "@/lib/counter/adapters/types"
 import type { PosterData, PostersSections } from "@/lib/counter/adapters/checks"
 import { ChecksHead, OutcomeLine, type Outcome } from "../checks-ui"
@@ -15,12 +16,15 @@ import { ChecksHead, OutcomeLine, type Outcome } from "../checks-ui"
  * about 60% it stops reading).
  */
 export function ChecksPostersClient({ sections }: { sections: SectionSources<PostersSections> }) {
-  usePageChrome({ leaf: "QR posters" })
+  usePageChrome({ leaf: "Links & email" })
   const { pending } = useCounterTransition()
   return (
     <>
-      <ChecksHead sub="Print one for each store, and put it by the hand sink" />
-      <Section title="QR posters" meta={(d) => `${d.stores.length} stores`} data={sections.posters} pending={pending}>
+      <ChecksHead sub="Text crew the link, print the poster, and choose who gets each check by email" />
+      <Section title="Check emails" data={sections.posters} pending={pending}>
+        {(d) => <ReportEmails emails={d.reportEmails} ready={d.emailReady} />}
+      </Section>
+      <Section title="Links & QR posters" meta={(d) => `${d.stores.length} stores`} data={sections.posters} pending={pending}>
         {(d) => (
           <div className="ck-posters">
             {d.stores.map((s) => (
@@ -58,6 +62,16 @@ function PosterCard({ store }: { store: PosterStore }) {
       setOutcome({ ok: false, text: "Couldn't copy. Select the link below instead." })
     }
   }
+  const message = `${shortStoreName(store.name)} store checks. Open this, enter your PIN, and tick your tasks: ${store.link}`
+  // A phone opens Messages with the text filled in; the owner picks who.
+  const smsHref = `sms:?&body=${encodeURIComponent(message)}`
+  const share = async () => {
+    try {
+      await navigator.share({ title: `${store.name} store checks`, text: message })
+    } catch {
+      // Dismissed, or not supported: the other buttons still work.
+    }
+  }
   const rotate = () =>
     start(async () => {
       const r = await rotateCheckLink({ storeId: store.id })
@@ -76,6 +90,14 @@ function PosterCard({ store }: { store: PosterStore }) {
         <button type="button" className="btn" onClick={copy}>
           Copy link
         </button>
+        <a className="btn" href={smsHref}>
+          Text to crew
+        </a>
+        {typeof navigator !== "undefined" && "share" in navigator && (
+          <button type="button" className="btn" onClick={share}>
+            Share…
+          </button>
+        )}
         {!confirm ? (
           <button type="button" className="btn btn--quiet" onClick={() => setConfirm(true)}>
             New link…
@@ -173,6 +195,44 @@ function QrCode({ size, cells, label }: { size: number; cells: string; label: st
         {/* eslint-disable-next-line @next/next/no-img-element -- static brand asset, printed */}
         <img src="/checks-logo.png" alt="" />
       </span>
+    </div>
+  )
+}
+
+function ReportEmails({ emails, ready }: { emails: string[]; ready: boolean }) {
+  const router = useRouter()
+  const [text, setText] = useState(emails.join(", "))
+  const [outcome, setOutcome] = useState<Outcome>(null)
+  const [busy, start] = useTransition()
+  const save = () =>
+    start(async () => {
+      const list = text.split(/[\s,;]+/).filter(Boolean)
+      const r = await saveCheckReportEmails({ emails: list })
+      setOutcome(r.ok ? { ok: true, text: r.message ?? "Saved." } : { ok: false, text: r.error })
+      if (r.ok) router.refresh()
+    })
+  return (
+    <div style={{ display: "grid", gap: 10, maxWidth: 640 }}>
+      <span className="ck-meta">
+        Every submitted Morning and Night check is emailed here: who sent it, every task with its time and who did it,
+        notes, and a link to the photos.
+      </span>
+      <label className="ck-field">
+        <span className="ck-mono">Send to (comma between addresses)</span>
+        <input className="ck-input" type="text" inputMode="email" autoComplete="off" value={text} onChange={(e) => setText(e.target.value)} />
+      </label>
+      <div className="ck-row">
+        <button type="button" className="btn btn--primary" disabled={busy || text === emails.join(", ")} onClick={save}>
+          {busy ? "Saving…" : "Save"}
+        </button>
+        <OutcomeLine outcome={outcome} />
+      </div>
+      {!ready && (
+        <span className="ck-meta ck-tone-warn">
+          Email isn&apos;t switched on for the dashboard yet: RESEND_API_KEY and CHECKS_EMAIL_FROM need setting in Vercel.
+          Until then nothing is sent.
+        </span>
+      )}
     </div>
   )
 }

@@ -167,7 +167,7 @@ describe("crew pass", () => {
     const now = Date.now()
     const token = issueCrewPass(pass, now)
     expect(readCrewPass(token, now)).toMatchObject(pass)
-    expect(readCrewPass(token, now + 4 * 60 * 60 * 1000)).toBeNull()
+    expect(readCrewPass(token, now + 11 * 60 * 60 * 1000)).toBeNull()
   })
   it("refuses a tampered pass", () => {
     const token = issueCrewPass(pass)

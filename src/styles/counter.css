@@ -317,6 +317,32 @@
      stale silently. */
   --ct-ask-rail: 206px;
   --ct-ask-gap:  18px;
+
+  /* The restaurant's own brand, for the crew check page at /checks/<code>
+     only (src/styles/crew-checks.css re-points that page's aliases onto
+     these). Crew reach it from a poster or a texted link, so it looks like
+     Chris N Eddy's, not the dashboard: the site's counter red, marquee
+     yellow, butcher paper, griddle ink and ticket green (chrisneddys-site
+     DESIGN.md), converted from its hex values. That page is light only, like
+     the printed poster, so each dark half repeats its light half. */
+  --ct-brand-surface:    light-dark(oklch(99.4% 0.009 94), oklch(99.4% 0.009 94));
+  --ct-brand-paper:      light-dark(oklch(98% 0.024 88), oklch(98% 0.024 88));
+  --ct-brand-chrome:     light-dark(oklch(94.4% 0.028 89), oklch(94.4% 0.028 89));
+  --ct-brand-line:       light-dark(oklch(88.4% 0.039 89), oklch(88.4% 0.039 89));
+  --ct-brand-line-strong: light-dark(oklch(80.7% 0.05 89), oklch(80.7% 0.05 89));
+  --ct-brand-ink:        light-dark(oklch(20.3% 0.01 67), oklch(20.3% 0.01 67));
+  --ct-brand-ink-2:      light-dark(oklch(49.5% 0.03 79), oklch(49.5% 0.03 79));
+  --ct-brand-scrim:      light-dark(oklch(20.3% 0.01 67 / .45), oklch(20.3% 0.01 67 / .45));
+  --ct-brand-yellow:     light-dark(oklch(81.8% 0.157 82), oklch(81.8% 0.157 82));
+  --ct-brand-yellow-hi:  light-dark(oklch(74.4% 0.153 78), oklch(74.4% 0.153 78));
+  --ct-brand-cream:      light-dark(oklch(96.1% 0.055 93), oklch(96.1% 0.055 93));
+  --ct-brand-cream-line: light-dark(oklch(96.1% 0.055 93 / .6), oklch(96.1% 0.055 93 / .6));
+  --ct-brand-red:        light-dark(oklch(60.2% 0.218 29), oklch(60.2% 0.218 29));
+  --ct-brand-green:      light-dark(oklch(47.6% 0.09 152), oklch(47.6% 0.09 152));
+  --ct-brand-green-wash: light-dark(oklch(94% 0.023 137), oklch(94% 0.023 137));
+  --ct-brand-warn:       light-dark(oklch(46.4% 0.099 73), oklch(46.4% 0.099 73));
+  --ct-brand-bad:        light-dark(oklch(49.6% 0.186 29), oklch(49.6% 0.186 29));
+  --ct-brand-bad-wash:   light-dark(oklch(93.8% 0.028 29), oklch(93.8% 0.028 29));
 }
 
 @theme inline {

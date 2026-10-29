@@ -1,8 +1,10 @@
 "use server"
 
 import { revalidatePath } from "next/cache"
+import { getServerSession } from "next-auth"
 import { z } from "zod"
 import { prisma } from "@/lib/prisma"
+import { authOptions, hasOwnerAccess } from "@/lib/auth"
 import { requireOwnerStore } from "@/lib/auth-scope"
 import { checkLink } from "@/lib/checks/crew"
 import { sendPinEmail } from "@/lib/checks/email"
@@ -25,32 +27,38 @@ import { dayToDb } from "@/lib/checks/time"
 
 export type ActionResult = { ok: true; message?: string } | { ok: false; error: string }
 
-const KIND = z.enum(["MORNING", "TRANSITION", "EVENING"])
+const KIND = z.enum(["MORNING", "EVENING"])
 const text = (max: number) => z.string().trim().max(max)
+/** A row that already exists keeps its id, so ticks on today's form stay on their task. */
+const rowId = z.string().max(40).optional()
+
+const MAX_MIN = 1440 + 6 * 60
 
 const ChecklistInput = z.object({
   storeId: z.string().min(1),
   kind: KIND,
-  // Past 1439 opens after midnight and still counts for the night before.
-  opensAtMin: z.number().int().min(0).max(1440 + 6 * 60 - 1, "A check that opens after midnight has to open before 6:00 am"),
-  dueAtMin: z.number().int().min(1).max(1440 + 6 * 60),
-  /** Empty, or seven due times (Sunday first) for stores whose close moves by night. */
-  dueByWeekday: z.array(z.number().int().min(1).max(1440 + 6 * 60)).refine((a) => a.length === 0 || a.length === 7, "Set a due time for every day").optional(),
-  graceMin: z.number().int().min(0).max(240),
+  // Past 1439 is after midnight and still counts for the night before.
+  opensAtMin: z.number().int().min(0).max(MAX_MIN - 1, "A check that opens after midnight has to open before 6:00 am"),
+  submitFromMin: z.number().int().min(0).max(MAX_MIN - 1),
+  dueAtMin: z.number().int().min(1).max(MAX_MIN),
+  /** Empty, or seven submit-until times (Sunday first) for stores whose close moves by night. */
+  dueByWeekday: z.array(z.number().int().min(1).max(MAX_MIN)).refine((a) => a.length === 0 || a.length === 7, "Set a time for every day").optional(),
+  graceMin: z.number().int().min(0).max(240).default(0),
   enabled: z.boolean(),
   sections: z
     .array(
       z.object({
+        id: rowId,
         nameEn: text(60).min(1, "Every section needs a name"),
         nameEs: text(60),
-        photoRequired: z.boolean(),
-        hintEn: text(120),
-        hintEs: text(120),
-        items: z.array(z.object({ en: text(140).min(1, "An item is empty"), es: text(140) })).max(40),
+        items: z
+          .array(z.object({ id: rowId, en: text(140).min(1, "A task is empty"), es: text(140), photoRequired: z.boolean() }))
+          .max(40),
       }),
     )
     .min(1, "A check needs at least one section")
-    .max(8),
+    .max(8)
+    .refine((ss) => ss.some((s) => s.items.length > 0), "A check needs at least one task"),
 })
 
 function revalidateChecks() {
@@ -73,47 +81,59 @@ export async function saveChecklist(raw: z.input<typeof ChecklistInput>): Promis
     // Seven equal days are the same as none, and keep the summary short.
     const byDay = input.dueByWeekday ?? []
     const dueByWeekday = byDay.every((d) => d === input.dueAtMin) ? [] : byDay
+    if (input.submitFromMin < input.opensAtMin) {
+      return { ok: false, error: "Submit can't open before crew can see the list" }
+    }
     for (const due of [input.dueAtMin, ...dueByWeekday]) {
-      if (due <= input.opensAtMin) return { ok: false, error: "The due time has to be after the open time" }
-      // One day's window, grace included, must close before the next day's opens.
+      if (due <= input.submitFromMin) return { ok: false, error: "Submit has to close after it opens" }
+      // One day's window must end before the next day's opens.
       if (due + input.graceMin - input.opensAtMin >= 1440) {
-        return { ok: false, error: "The check window, with its late time, has to be shorter than a day" }
+        return { ok: false, error: "The whole check, from when crew can see it to when Submit closes, has to be shorter than a day" }
       }
     }
     await requireOwnerStore(input.storeId)
     const tpl = await prisma.checkTemplate.findUnique({
       where: { storeId_kind: { storeId: input.storeId, kind: input.kind } },
-      select: { id: true },
+      select: { id: true, sections: { select: { id: true, items: { select: { id: true } } } } },
     })
     if (!tpl) return { ok: false, error: "That check doesn't exist yet. Reload the page." }
-    await prisma.$transaction([
-      prisma.checkSection.deleteMany({ where: { templateId: tpl.id } }),
-      prisma.checkTemplate.update({
+
+    const ownSections = new Set(tpl.sections.map((s) => s.id))
+    const ownItems = new Set(tpl.sections.flatMap((s) => s.items.map((i) => i.id)))
+    const keptSections = new Set(input.sections.map((s) => s.id).filter((id): id is string => Boolean(id && ownSections.has(id))))
+    const keptItems = new Set(
+      input.sections.flatMap((s) => s.items.map((i) => i.id)).filter((id): id is string => Boolean(id && ownItems.has(id))),
+    )
+
+    await prisma.$transaction(async (tx) => {
+      await tx.checkTemplate.update({
         where: { id: tpl.id },
         data: {
           opensAtMin: input.opensAtMin,
+          submitFromMin: input.submitFromMin,
           dueAtMin: input.dueAtMin,
           dueByWeekday,
           graceMin: input.graceMin,
           enabled: input.enabled,
-          sections: {
-            create: input.sections.map((s, si) => ({
-              position: si,
-              nameEn: s.nameEn,
-              nameEs: s.nameEs || null,
-              photoRequired: s.photoRequired,
-              photoHintEn: s.hintEn || null,
-              photoHintEs: s.hintEs || null,
-              items: {
-                create: s.items.map((i, ii) => ({ position: ii, textEn: i.en, textEs: i.es || null })),
-              },
-            })),
-          },
         },
-      }),
-    ])
+      })
+      await tx.checkItem.deleteMany({ where: { section: { templateId: tpl.id }, id: { notIn: [...keptItems] } } })
+      await tx.checkSection.deleteMany({ where: { templateId: tpl.id, id: { notIn: [...keptSections] } } })
+      for (const [si, s] of input.sections.entries()) {
+        const sectionData = { position: si, nameEn: s.nameEn, nameEs: s.nameEs || null, photoRequired: false }
+        const sectionId = s.id && keptSections.has(s.id)
+          ? (await tx.checkSection.update({ where: { id: s.id }, data: sectionData, select: { id: true } })).id
+          : (await tx.checkSection.create({ data: { ...sectionData, templateId: tpl.id }, select: { id: true } })).id
+        for (const [ii, i] of s.items.entries()) {
+          const itemData = { sectionId, position: ii, textEn: i.en, textEs: i.es || null, photoRequired: i.photoRequired }
+          if (i.id && keptItems.has(i.id)) await tx.checkItem.update({ where: { id: i.id }, data: itemData })
+          else await tx.checkItem.create({ data: itemData })
+        }
+      }
+      // One query per task over Neon; the 5 s default is too tight for a long list.
+    }, { timeout: 20_000 })
     revalidateChecks()
-    return { ok: true, message: "Saved. The next check uses this list." }
+    return { ok: true, message: "Saved. Crew see the new list straight away." }
   } catch (err) {
     return fail(err)
   }
@@ -137,10 +157,7 @@ export async function copyChecklistToOtherStores(input: { storeId: string; kind:
       const sections = source.sections.map((s) => ({
         nameEn: s.nameEn,
         nameEs: s.nameEs ?? "",
-        photoRequired: s.photoRequired,
-        hintEn: s.photoHintEn ?? "",
-        hintEs: s.photoHintEs ?? "",
-        items: s.items.map((i) => ({ en: i.textEn, es: i.textEs ?? "" })),
+        items: s.items.map((i) => ({ en: i.textEn, es: i.textEs ?? "", photoRequired: i.photoRequired })),
       }))
       const existing = await prisma.checkTemplate.findUnique({
         where: { storeId_kind: { storeId: t.id, kind } },
@@ -155,6 +172,7 @@ export async function copyChecklistToOtherStores(input: { storeId: string; kind:
         storeId: t.id,
         kind,
         opensAtMin: source.opensAtMin,
+        submitFromMin: source.submitFromMin ?? source.opensAtMin,
         dueAtMin: source.dueAtMin,
         dueByWeekday: source.dueByWeekday,
         graceMin: source.graceMin,
@@ -386,3 +404,20 @@ export async function rotateCheckLink(input: { storeId: string }): Promise<Actio
   }
 }
 
+
+const EmailList = z.array(z.string().trim().toLowerCase().email("One of those isn't an email address")).max(10)
+
+/** Who gets the email for every submitted check, for the whole account. */
+export async function saveCheckReportEmails(input: { emails: string[] }): Promise<ActionResult> {
+  try {
+    const session = await getServerSession(authOptions)
+    if (!session?.user) throw new Error("Unauthorized")
+    if (!hasOwnerAccess(session.user.role)) throw new Error("Forbidden")
+    const emails = [...new Set(EmailList.parse(input.emails.filter((e) => e.trim())))]
+    await prisma.account.update({ where: { id: session.user.accountId }, data: { checkReportEmails: emails } })
+    revalidateChecks()
+    return { ok: true, message: emails.length === 0 ? "Check emails are off." : `Saved. ${emails.length} address${emails.length === 1 ? "" : "es"} get every check.` }
+  } catch (err) {
+    return fail(err)
+  }
+}

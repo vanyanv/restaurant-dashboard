@@ -210,6 +210,39 @@ button.ck-gl:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
   @page{size:A4 portrait;margin:0}
 }
 
+/* ── Today: one summary, store cards, week strip, the timestamped log ── */
+.ck-sum{display:grid;gap:10px;padding:14px 16px;border:1px solid var(--line-strong);border-radius:var(--r);background:var(--surface)}
+.ck-sum h3{margin:0;font-family:var(--display);font-size:var(--t-lg)}
+.ck-sumgrid{display:grid;gap:6px;align-items:center;font-size:var(--t-cap)}
+.ck-sumgrid > span:first-child{font-weight:600}
+.ck-stores{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px;padding:14px}
+.ck-store{display:grid;gap:10px;padding:14px;border:1px solid var(--line);border-radius:var(--r);background:var(--surface);align-content:start}
+.ck-store--off{background:var(--sunk)}
+.ck-store h3{margin:0;font-family:var(--display);font-size:var(--t-lg)}
+.ck-pair{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.ck-tile{display:grid;gap:3px;padding:10px;border-radius:var(--r-sm);border:1px solid var(--line);background:var(--paper);text-align:left;font:inherit;color:var(--ink);cursor:pointer;min-height:44px}
+.ck-tile[aria-pressed="true"]{outline:2px solid var(--accent);outline-offset:1px}
+.ck-tile b{font-size:var(--t-body)}
+.ck-tile--ok{background:var(--good-wash);border-color:var(--good)}
+.ck-tile--miss{background:var(--bad-wash);border-color:var(--bad)}
+.ck-tile--open{background:var(--signal-wash);border-color:var(--signal-line)}
+.ck-week{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:4px}
+.ck-week > div{display:grid;justify-items:center;gap:3px}
+.ck-week .ck-gl{width:20px;height:20px;font-size:10px}
+.ck-week .pair{display:flex;gap:2px}
+.ck-log{display:grid;font-size:var(--t-cap)}
+.ck-log > div{display:grid;grid-template-columns:68px minmax(0,1fr) auto;gap:10px;align-items:center;padding:7px 0;border-top:1px solid var(--line)}
+.ck-log time{font-family:var(--mono);font-size:var(--t-micro);color:var(--ink-2)}
+.ck-log .who{color:var(--ink-2);white-space:nowrap}
+.ck-log .undone{color:var(--ink-3);text-decoration:line-through}
+.ck-log .sent{font-weight:700}
+.ck-log img{width:40px;height:40px;object-fit:cover;border-radius:var(--r-sm);background:var(--sunk)}
+.ck-people{display:flex;flex-wrap:wrap;gap:6px}
+.ck-people span{border:1px solid var(--line);border-radius:var(--r-sm);padding:3px 8px;font-size:var(--t-cap)}
+.ck-phototag{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:var(--r-sm);border:1px solid var(--line);
+  background:var(--surface);color:var(--ink-2);font:inherit;font-size:var(--t-cap);cursor:pointer;min-height:30px}
+.ck-phototag[aria-pressed="true"]{background:var(--signal-wash);border-color:var(--signal-line);color:var(--signal-ink)}
+
 /* ── crew page (phone) ───────────────────────────────────────────────── */
 .ckc{min-height:100dvh;background:var(--surface);color:var(--ink);display:flex;justify-content:center;font-size:15px;
   padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}

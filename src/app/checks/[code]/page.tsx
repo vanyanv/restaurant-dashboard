@@ -16,7 +16,7 @@ export const viewport: Viewport = {
 }
 
 /**
- * The crew page a store's QR poster opens. Public: no account, no store
+ * The crew page a store's QR poster or texted link opens. Public: no account, no store
  * picker. The code in the URL names exactly one store, and only that store's
  * PINs work here. Everything after the PIN is checked again on submit.
  */
@@ -25,13 +25,17 @@ export default async function Page({ params }: { params: Promise<{ code: string 
   const store = await findStoreByCode(code)
   if (!store) {
     return (
-      <main className="ct-root ckc">
-        <div className="ckc__col" style={{ justifyContent: "center", textAlign: "center" }}>
-          {/* eslint-disable-next-line @next/next/no-img-element -- static brand asset */}
-          <img className="ckc__logo" style={{ height: 40, margin: "0 auto" }} src="/checks-logo.png" alt="Chris N Eddy's" />
-          <h1>This QR code isn&apos;t in use</h1>
-          <p className="ckc__dim">Ask your manager for the store&apos;s current poster.</p>
-          <p className="ckc__dim">Este código QR ya no funciona. Pide a tu gerente el cartel nuevo.</p>
+      <main className="ct-root ckc ckb">
+        <div className="ckc__col">
+          <header className="ckb__band">
+            {/* eslint-disable-next-line @next/next/no-img-element -- static brand asset */}
+            <img src="/checks-logo.png" alt="Chris N Eddy's" />
+          </header>
+          <div style={{ display: "grid", gap: 10, textAlign: "center", marginTop: 24 }}>
+            <h1>This link isn&apos;t in use</h1>
+            <p className="ckc__dim">Ask your manager for the store&apos;s current link or poster.</p>
+            <p className="ckc__dim">Este enlace ya no funciona. Pide a tu gerente el enlace o el cartel nuevo.</p>
+          </div>
         </div>
       </main>
     )
