@@ -132,29 +132,57 @@ button.ck-gl:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 /* ── posters ─────────────────────────────────────────────────────────── */
 .ck-posters{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:20px}
 .ck-poster-card{display:grid;gap:10px}
-/* Sized in container units, so the printed A4 is the preview scaled up. */
-.ck-poster{color-scheme:light;container-type:inline-size;aspect-ratio:210/297;width:100%;background:var(--surface);border:1px solid var(--line-strong);border-radius:4px;
-  display:grid;grid-template-rows:auto auto auto 1fr auto;overflow:hidden;color:var(--ink)}
-.ck-poster .lg{display:flex;justify-content:center;padding:3.5cqw 5cqw 2.5cqw}
-.ck-poster .lg img{height:11cqw;width:auto;max-width:100%}
-.ck-poster .band{background:var(--accent);color:var(--surface);padding:3cqw 5cqw;display:flex;justify-content:space-between;align-items:baseline;gap:2cqw}
-.ck-poster .band b{font-family:var(--display);font-size:7cqw;letter-spacing:-.02em}
-.ck-poster .band .ck-mono{font-size:2.6cqw}
-.ck-poster .ttl{padding:3.5cqw 5cqw 0;display:grid;gap:.6cqw;text-align:center}
-.ck-poster .ttl h3{margin:0;font-family:var(--display);font-size:6.6cqw;line-height:1.05}
-.ck-poster .ttl span{font-size:3.6cqw}
-.ck-poster .mid{display:grid;justify-items:center;align-content:center;gap:3.5cqw;padding:2.5cqw 5cqw;min-height:0}
-.ck-qr{position:relative;width:50cqw;aspect-ratio:1;max-width:100%}
+/* The poster: one US Letter sheet (8.5 x 11 in) per store. Sized in
+   container units (100cqw = the sheet's width), so the printed page is the
+   preview scaled up. It wears the restaurant's brand, like the crew page the
+   code opens (crew-checks.css): red band, yellow marks, butcher paper, Bowlby
+   One. Light only, because paper is; backgrounds forced on for print. */
+.ck-letter{
+  --ck-letter-display:var(--font-bowlby),Impact,var(--sans);
+  color-scheme:light;container-type:inline-size;aspect-ratio:8.5/11;width:100%;overflow:hidden;
+  display:grid;grid-template-rows:auto auto 1fr auto;
+  background:var(--ct-brand-paper);color:var(--ct-brand-ink);font-family:var(--sans);border:1px solid var(--ct-brand-line-strong);
+  -webkit-print-color-adjust:exact;print-color-adjust:exact}
+.ck-letter p,.ck-letter h2{margin:0}
+.ck-letter [lang="es"]{color:var(--ct-brand-ink-2)}
+.ck-letter__logo{display:flex;justify-content:center;padding:3.2cqw 6cqw 2.4cqw}
+.ck-letter__logo img{height:9cqw;width:auto;max-width:100%}
+.ck-letter__band{background:var(--ct-brand-red);color:var(--ct-brand-cream);display:grid;justify-items:center;gap:1.2cqw;padding:2.4cqw 6cqw 2.6cqw;text-align:center}
+.ck-letter__band b{font-family:var(--ck-letter-display);font-weight:400;font-size:8.4cqw;line-height:.95;letter-spacing:.03em;text-transform:uppercase}
+.ck-letter__band span{font-family:var(--mono);font-size:2.1cqw;letter-spacing:.16em;text-transform:uppercase;font-weight:600}
+.ck-letter__body{display:grid;grid-template-columns:38cqw 1fr;gap:4.4cqw;padding:4cqw 6cqw 3cqw;align-items:start}
+.ck-letter__scan{display:grid;justify-items:center;gap:.8cqw;text-align:center}
+.ck-letter .ck-qr svg{color:var(--ct-brand-ink)}
+.ck-letter .ck-qr rect{fill:var(--ct-brand-surface)}
+.ck-letter .ck-qr .logo{background:var(--ct-brand-surface)}
+.ck-letter__scan .ck-qr{box-sizing:border-box;width:100%;padding:1.6cqw;background:var(--ct-brand-surface);border:.7cqw solid var(--ct-brand-ink);margin-bottom:1.2cqw}
+.ck-letter__scan > b{font-family:var(--ck-letter-display);font-weight:400;font-size:3.9cqw;line-height:1;text-transform:uppercase;letter-spacing:.02em}
+.ck-letter__scan > span{font-size:2.3cqw;font-weight:600;color:var(--ct-brand-ink-2)}
+.ck-letter__how h2{font-family:var(--ck-letter-display);font-weight:400;font-size:3.3cqw;line-height:1;text-transform:uppercase;letter-spacing:.02em;display:grid;gap:.8cqw;margin-bottom:2.4cqw}
+.ck-letter__how h2 span{font-family:var(--sans);font-size:2.5cqw;font-weight:600;text-transform:none;letter-spacing:0;color:var(--ct-brand-ink-2)}
+.ck-letter__how ol{list-style:none;margin:0;padding:0;display:grid;gap:2.4cqw}
+.ck-letter__how li{display:grid;grid-template-columns:4.8cqw 1fr;gap:2cqw;align-items:start}
+.ck-letter__how li i{font-style:normal;width:4.8cqw;height:4.8cqw;box-sizing:border-box;display:grid;place-items:center;background:var(--ct-brand-yellow);color:var(--ct-brand-ink);
+  border:.35cqw solid var(--ct-brand-ink);font-family:var(--ck-letter-display);font-size:2.8cqw;line-height:1}
+.ck-letter__how li p{font-size:2.5cqw;font-weight:700;line-height:1.22}
+.ck-letter__how li p span{display:block;font-size:2.2cqw;font-weight:500;margin-top:.4cqw}
+.ck-letter__when{display:grid;gap:1.2cqw;width:100%;margin-top:2.6cqw;text-align:left}
+.ck-letter__when > small{font-family:var(--mono);font-size:1.7cqw;letter-spacing:.12em;text-transform:uppercase;color:var(--ct-brand-ink-2);font-weight:600}
+.ck-letter__when > small span{color:inherit}
+.ck-letter__when > div{display:grid;gap:.4cqw;background:var(--ct-brand-surface);border:.35cqw solid var(--ct-brand-ink);padding:1.6cqw 2.2cqw}
+.ck-letter__when b{font-family:var(--ck-letter-display);font-weight:400;font-size:2.7cqw;line-height:1;text-transform:uppercase;letter-spacing:.02em;margin-bottom:.3cqw}
+.ck-letter__when strong{font-size:2.5cqw;font-weight:700;line-height:1.2;font-variant-numeric:tabular-nums}
+.ck-letter__when > div > span{font-size:1.75cqw;line-height:1.3;color:var(--ct-brand-ink-2)}
+.ck-letter__help{display:grid;gap:1.6cqw;margin-top:2.6cqw;padding-top:2.2cqw;border-top:.35cqw dashed var(--ct-brand-ink)}
+.ck-letter__help p{font-size:2.2cqw;font-weight:700;line-height:1.25}
+.ck-letter__help p span{display:block;font-weight:500;margin-top:.3cqw}
+.ck-letter__foot{background:var(--ct-brand-ink);color:var(--ct-brand-cream);padding:1.6cqw 6cqw;text-align:center;font-family:var(--mono);font-size:1.6cqw;letter-spacing:.02em;overflow-wrap:anywhere}
+.ck-letter__foot span{font-weight:600}
+.ck-printsheets{display:none}
+.ck-qr{position:relative;aspect-ratio:1;max-width:100%}
 .ck-qr svg{width:100%;height:100%;display:block;color:var(--ink)}
 .ck-qr .logo{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:54%;height:auto;padding:3% 2%;background:var(--surface);border-radius:4px;display:flex}
 .ck-qr .logo img{width:100%;height:auto}
-.ck-steps{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(3,1fr);gap:3cqw;width:100%}
-.ck-steps li{display:grid;justify-items:center;text-align:center;gap:1.2cqw;font-size:2.9cqw;font-weight:600;line-height:1.2}
-.ck-steps li em{display:block;font-style:normal;font-weight:400;color:var(--ink-2);font-size:2.5cqw}
-.ck-steps li span{width:5.4cqw;height:5.4cqw;border-radius:50%;background:var(--ink);color:var(--surface);display:grid;place-items:center;font-size:3cqw}
-.ck-poster .foot{border-top:1px solid var(--line);padding:2.6cqw 5cqw;display:grid;grid-template-columns:repeat(3,1fr);gap:2cqw}
-.ck-poster .foot div{display:grid;gap:.6cqw;font-size:2.6cqw;font-weight:600;white-space:nowrap}
-.ck-poster .foot .ck-mono{font-size:2.4cqw}
 .ck-url{font-family:var(--mono);font-size:var(--t-micro);color:var(--ink-3);word-break:break-all}
 
 /* ---- Phone width -------------------------------------------------------
@@ -201,13 +229,15 @@ button.ck-gl:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
   .ck-crewform{grid-template-columns:1fr}
 }
 
-/* Printing a poster: the page prints only the poster that asked to. The
-   poster is pinned to the light ground, because paper is. */
+/* Printing posters: only the sheets put under <body> for printing show,
+   one US Letter page each, edge to edge. */
 @media print{
-  body *{visibility:hidden}
-  .ck-print, .ck-print *{visibility:visible}
-  .ck-print{position:fixed;inset:0;width:100%;height:100%;border:0;border-radius:0;color-scheme:light}
-  @page{size:A4 portrait;margin:0}
+  html,body{background:none !important;margin:0 !important;padding:0 !important}
+  body > *:not(.ck-printsheets){display:none !important}
+  .ck-printsheets{display:block}
+  .ck-printsheets .ck-letter{width:8.5in;height:11in;aspect-ratio:auto;border:0;break-after:page;break-inside:avoid}
+  .ck-printsheets .ck-letter:last-child{break-after:auto}
+  @page{size:letter portrait;margin:0}
 }
 
 /* ── Today: one summary, store cards, week strip, the timestamped log ── */

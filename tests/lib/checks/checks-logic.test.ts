@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 vi.mock("@/lib/prisma", () => ({ prisma: {} }))
 
-import { acceptingDay, dueAtFor, laInstant, lateMinutes, windowPhase, windowSummary, type CheckWindow } from "@/lib/checks/time"
+import { acceptingDay, dueAtFor, laInstant, lateMinutes, windowOverrides, windowPhase, windowRange, windowSummary, type CheckWindow } from "@/lib/checks/time"
 import { cellStatus, onTimeRate } from "@/lib/checks/status"
 import { harriIsActive, isWeakPin, newCheckCode, pickPin, slugify } from "@/lib/checks/setup"
 import { issueCrewPass, readCrewPass } from "@/lib/checks/crew-session"
@@ -105,6 +105,13 @@ describe("due time by weekday", () => {
   it("says which nights differ", () => {
     expect(windowSummary(LATE_WEEKEND)).toBe("9:00 pm – 1:00 am · 2:00 am Fri, Sat, Sun")
     expect(windowSummary(EVENING)).toBe("9:00 pm – 12:30 am")
+  })
+
+  it("splits the usual range from the late nights, in Spanish too, for the poster", () => {
+    expect(windowRange(LATE_WEEKEND)).toBe("9:00 pm – 1:00 am")
+    expect(windowOverrides(LATE_WEEKEND)).toEqual(["2:00 am Fri, Sat, Sun"])
+    expect(windowOverrides(LATE_WEEKEND, "es")).toEqual(["2:00 am vie, sáb, dom"])
+    expect(windowOverrides(EVENING)).toEqual([])
   })
 })
 
