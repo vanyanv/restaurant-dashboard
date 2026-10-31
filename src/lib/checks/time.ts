@@ -43,6 +43,8 @@ export type CheckWindow = {
 }
 
 export const WEEKDAY_SHORT = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as const
+/** Spanish weekday shorts, for the bilingual poster. */
+export const WEEKDAY_SHORT_ES = ["dom", "lun", "mar", "mié", "jue", "vie", "sáb"] as const
 
 /** 0 = Sunday, for a business day "YYYY-MM-DD". */
 export function weekdayOf(day: string): number {
@@ -64,19 +66,27 @@ export function submitFromFor(w: CheckWindow): number {
  * "Submit 4:30 – 5:30 pm", or with weekday overrides
  * "Submit 12:30 – 2:00 am · 3:00 am Fri, Sat, Sun".
  */
-export function windowSummary(w: CheckWindow): string {
-  const from = submitFromFor(w)
-  const base = `${minutesLabel(from)} – ${minutesLabel(w.dueAtMin)}`
+export function windowSummary(w: CheckWindow, lang: "en" | "es" = "en"): string {
+  return [windowRange(w), ...windowOverrides(w, lang)].join(" · ")
+}
+
+/** The usual submit range, "12:30 am – 2:00 am", without weekday overrides. */
+export function windowRange(w: CheckWindow): string {
+  return `${minutesLabel(submitFromFor(w))} – ${minutesLabel(w.dueAtMin)}`
+}
+
+/** The days that close at another time: ["3:00 am Fri, Sat, Sun"] (Spanish day names with "es"). */
+export function windowOverrides(w: CheckWindow, lang: "en" | "es" = "en"): string[] {
+  const shorts = lang === "es" ? WEEKDAY_SHORT_ES : WEEKDAY_SHORT
   const byDay = w.dueByWeekday
-  if (!byDay || byDay.length !== 7) return base
+  if (!byDay || byDay.length !== 7) return []
   const groups = new Map<number, string[]>()
   // Monday first reads naturally for a week of closes.
   for (const d of [1, 2, 3, 4, 5, 6, 0]) {
     if (byDay[d] === w.dueAtMin) continue
-    groups.set(byDay[d], [...(groups.get(byDay[d]) ?? []), WEEKDAY_SHORT[d]])
+    groups.set(byDay[d], [...(groups.get(byDay[d]) ?? []), shorts[d]])
   }
-  if (groups.size === 0) return base
-  return [base, ...[...groups].map(([min, days]) => `${minutesLabel(min)} ${days.join(", ")}`)].join(" · ")
+  return [...groups].map(([min, days]) => `${minutesLabel(min)} ${days.join(", ")}`)
 }
 
 const offsetFmt = new Intl.DateTimeFormat("en-US", {

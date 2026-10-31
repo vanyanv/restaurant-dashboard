@@ -15,6 +15,8 @@ import {
   dayLabel,
   durationLabel,
   minutesLabel,
+  windowOverrides,
+  windowRange,
   windowSummary,
   todayLA,
   windowBounds,
@@ -547,7 +549,17 @@ export type PosterData = {
     link: string
     /** QR modules, row-major, true = dark. */
     qr: { size: number; cells: string }
-    windows: Array<{ label: string; window: string }>
+    /** Enabled checks, for the poster: names and submit windows in English and Spanish. */
+    windows: Array<{
+      label: string
+      labelEs: string
+      opens: string
+      /** The usual submit range, "12:30 am – 2:00 am". */
+      submit: string
+      /** Days that close later or earlier, "3:00 am Fri, Sat, Sun", and the same in Spanish. */
+      until: string[]
+      untilEs: string[]
+    }>
   }>
 }
 export type PostersSections = { posters: SectionData<PosterData> }
@@ -585,7 +597,14 @@ export function getChecksPostersSectionPromises(opts: { accountId: string }): St
               windows: CHECK_KINDS.flatMap((kind) => {
                 const t = r.checkTemplates.find((x) => x.kind === kind)
                 if (!t || !t.enabled) return []
-                return [{ label: CHECK_LABEL[kind].en, window: `Opens ${minutesLabel(t.opensAtMin)} · submit ${windowSummary(t)}` }]
+                return [{
+                  label: CHECK_LABEL[kind].en,
+                  labelEs: CHECK_LABEL[kind].es,
+                  opens: minutesLabel(t.opensAtMin),
+                  submit: windowRange(t),
+                  until: windowOverrides(t),
+                  untilEs: windowOverrides(t, "es"),
+                }]
               }),
             }
           }),

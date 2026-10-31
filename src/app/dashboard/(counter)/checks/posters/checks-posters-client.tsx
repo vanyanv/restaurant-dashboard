@@ -1,23 +1,41 @@
 "use client"
 
+import localFont from "next/font/local"
 import { shortStoreName } from "@/lib/checks/names"
-import { useState, useTransition } from "react"
+import { useEffect, useRef, useState, useTransition } from "react"
+import { createPortal } from "react-dom"
 import { useRouter } from "next/navigation"
 import { Section, useCounterTransition, usePageChrome } from "@/components/counter"
 import { rotateCheckLink, saveCheckReportEmails } from "@/lib/counter/actions/checks"
 import type { SectionSources } from "@/lib/counter/adapters/types"
-import type { PosterData, PostersSections } from "@/lib/counter/adapters/checks"
+import type { PostersSections } from "@/lib/counter/adapters/checks"
 import { ChecksHead, OutcomeLine, type Outcome } from "../checks-ui"
+import { Poster, type PosterStore } from "./poster"
 
 /**
- * Store checks — QR posters. One A4 poster per store. The QR carries the
- * logo in its middle; error correction H is what lets a code read with its
- * centre covered, and the logo is held to half the width (tested: past
- * about 60% it stops reading).
+ * The poster wears the restaurant's display face, as the crew page does
+ * (src/app/checks/layout.tsx). Not preloaded: only this page and /checks use
+ * it (see the next/font rule in scripts/counter-lint.ts).
+ */
+const bowlby = localFont({
+  src: "../../../../../fonts/bowlby-one-latin.woff2",
+  variable: "--font-bowlby",
+  display: "swap",
+  preload: false,
+})
+
+/**
+ * Store checks — QR posters. One US Letter poster per store, with the
+ * crew's steps in English and Spanish. The QR carries the logo in its
+ * middle; error correction H is what lets a code read with its centre
+ * covered, and the logo is held to half the width (tested: past about 60%
+ * it stops reading).
  */
 export function ChecksPostersClient({ sections }: { sections: SectionSources<PostersSections> }) {
   usePageChrome({ leaf: "Links & email" })
   const { pending } = useCounterTransition()
+  // The stores being printed right now: one, or every store at once.
+  const [printing, setPrinting] = useState<string[] | null>(null)
   return (
     <>
       <ChecksHead sub="Text crew the link, print the poster, and choose who gets each check by email" />
@@ -26,34 +44,66 @@ export function ChecksPostersClient({ sections }: { sections: SectionSources<Pos
       </Section>
       <Section title="Links & QR posters" meta={(d) => `${d.stores.length} stores`} data={sections.posters} pending={pending}>
         {(d) => (
-          <div className="ck-posters">
-            {d.stores.map((s) => (
-              <PosterCard key={s.id} store={s} />
-            ))}
-          </div>
+          <>
+            <div className="ck-row" style={{ marginBottom: 14 }}>
+              <button type="button" className="btn btn--primary" onClick={() => setPrinting(d.stores.map((s) => s.id))}>
+                Print all {d.stores.length} posters
+              </button>
+              <span className="ck-meta">US Letter, one store per page. Turn on “Background graphics” if the red band prints white.</span>
+            </div>
+            <div className="ck-posters">
+              {d.stores.map((s) => (
+                <PosterCard key={s.id} store={s} onPrint={() => setPrinting([s.id])} />
+              ))}
+            </div>
+            {printing && (
+              <PrintSheets stores={d.stores.filter((s) => printing.includes(s.id))} onDone={() => setPrinting(null)} />
+            )}
+          </>
         )}
       </Section>
     </>
   )
 }
 
-type PosterStore = PosterData["stores"][number]
+/**
+ * The sheets to print, put straight under <body> so print CSS can hide the
+ * rest of the page by display (one sheet per page, page breaks between),
+ * rather than pinning one poster over a hidden page, which can't paginate.
+ */
+function PrintSheets({ stores, onDone }: { stores: PosterStore[]; onDone: () => void }) {
+  // Held in a ref so a parent re-render doesn't reopen the print dialog.
+  const doneRef = useRef(onDone)
+  useEffect(() => {
+    doneRef.current = onDone
+  })
+  useEffect(() => {
+    // Runs after the sheets are in the document, so the dialog sees them.
+    const done = () => doneRef.current()
+    window.addEventListener("afterprint", done, { once: true })
+    // Let the logo and font load before the dialog snapshots the page.
+    const t = window.setTimeout(() => window.print(), 150)
+    return () => {
+      window.clearTimeout(t)
+      window.removeEventListener("afterprint", done)
+    }
+  }, [])
+  return createPortal(
+    <div className={`ck-printsheets ${bowlby.variable}`}>
+      {stores.map((s) => (
+        <Poster key={s.id} store={s} />
+      ))}
+    </div>,
+    document.body,
+  )
+}
 
-function PosterCard({ store }: { store: PosterStore }) {
+function PosterCard({ store, onPrint }: { store: PosterStore; onPrint: () => void }) {
   const router = useRouter()
-  const [printing, setPrinting] = useState(false)
   const [confirm, setConfirm] = useState(false)
   const [outcome, setOutcome] = useState<Outcome>(null)
   const [busy, start] = useTransition()
 
-  const print = () => {
-    setPrinting(true)
-    // Let the print-only class land before the dialog opens.
-    requestAnimationFrame(() => {
-      window.print()
-      setPrinting(false)
-    })
-  }
   const copy = async () => {
     try {
       await navigator.clipboard.writeText(store.link)
@@ -82,9 +132,9 @@ function PosterCard({ store }: { store: PosterStore }) {
 
   return (
     <div className="ck-poster-card">
-      <Poster store={store} printing={printing} />
+      <Poster store={store} className={bowlby.variable} />
       <div className="ck-row">
-        <button type="button" className="btn btn--primary" onClick={print}>
+        <button type="button" className="btn btn--primary" onClick={onPrint}>
           Print poster
         </button>
         <button type="button" className="btn" onClick={copy}>
@@ -120,81 +170,6 @@ function PosterCard({ store }: { store: PosterStore }) {
       )}
       <OutcomeLine outcome={outcome} />
       <span className="ck-url">{store.link}</span>
-    </div>
-  )
-}
-
-function Poster({ store, printing }: { store: PosterStore; printing: boolean }) {
-  return (
-    <div className={`ck-poster${printing ? " ck-print" : ""}`}>
-      <div className="lg">
-        {/* eslint-disable-next-line @next/next/no-img-element -- static brand asset, printed */}
-        <img src="/checks-logo.png" alt="Chris N Eddy's" />
-      </div>
-      <div className="band">
-        <b>{store.name}</b>
-        <span className="ck-mono" style={{ color: "inherit" }}>
-          Store checks
-        </span>
-      </div>
-      <div className="ttl">
-        <h3>Scan to do the check</h3>
-        <span style={{ color: "var(--ink-2)" }}>Escanea para hacer la revisión</span>
-      </div>
-      <div className="mid">
-        <QrCode size={store.qr.size} cells={store.qr.cells} label={`QR code for ${store.name} store checks`} />
-        <ol className="ck-steps">
-          <li>
-            <span>1</span>
-            <div>
-              Scan with your camera<em>Escanea con la cámara</em>
-            </div>
-          </li>
-          <li>
-            <span>2</span>
-            <div>
-              Enter your 4-digit PIN<em>Escribe tu PIN de 4 dígitos</em>
-            </div>
-          </li>
-          <li>
-            <span>3</span>
-            <div>
-              Tick, photo, submit<em>Marca, foto, envía</em>
-            </div>
-          </li>
-        </ol>
-      </div>
-      <div className="foot">
-        {store.windows.map((w) => (
-          <div key={w.label}>
-            <span className="ck-mono">{w.label}</span>
-            {w.window}
-          </div>
-        ))}
-      </div>
-    </div>
-  )
-}
-
-/** The code as one SVG path, with a quiet zone, and the logo over its centre. */
-function QrCode({ size, cells, label }: { size: number; cells: string; label: string }) {
-  let d = ""
-  for (let y = 0; y < size; y++) {
-    for (let x = 0; x < size; x++) {
-      if (cells[y * size + x] === "1") d += `M${x + 2} ${y + 2}h1v1h-1z`
-    }
-  }
-  const box = size + 4
-  return (
-    <div className="ck-qr" role="img" aria-label={label}>
-      <svg viewBox={`0 0 ${box} ${box}`} shapeRendering="crispEdges" aria-hidden>
-        <rect width={box} height={box} fill="var(--surface)" />
-        <path d={d} fill="currentColor" />
-      </svg>
-      <span className="logo">
-        {/* eslint-disable-next-line @next/next/no-img-element -- static brand asset, printed */}
-        <img src="/checks-logo.png" alt="" />
-      </span>
     </div>
   )
 }
