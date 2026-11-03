@@ -47,7 +47,8 @@ function line(unitCost: number, invoiceDate: string) {
     unitSizeUom: null,
     unitPrice: unitCost,
     extendedPrice: unitCost, // quantity 1 → raw cost = extendedPrice
-    invoice: { invoiceDate: new Date(invoiceDate), vendorName: "Sysco" },
+    lineNumber: 1,
+    invoice: { invoiceDate: new Date(invoiceDate), vendorName: "Sysco", status: "MATCHED", reviewReasons: null },
   }
 }
 
@@ -86,7 +87,8 @@ describe("getCanonicalIngredientCost — store scoping", () => {
     expect(result?.unitCost).toBe(3.25)
     expect(prisma.invoiceLineItem.findMany).toHaveBeenCalledTimes(2)
     const secondWhere = vi.mocked(prisma.invoiceLineItem.findMany).mock.calls[1][0]?.where
-    expect(secondWhere?.invoice).toBeUndefined() // no asOf, no store scope
+    // No asOf, no store scope — but still only verified invoices.
+    expect(secondWhere?.invoice).toEqual({ status: { in: ["MATCHED", "APPROVED"] } })
   })
 
   it("clamps the invoice window to asOf in both queries", async () => {
