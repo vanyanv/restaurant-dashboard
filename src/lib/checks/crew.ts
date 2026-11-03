@@ -97,6 +97,8 @@ export type CrewView = {
   closedToday: boolean
   /** Checks are paused for training: the page is practice. See `ActiveCheck.practice`. */
   practice: boolean
+  /** Epoch ms the open pause began; practice clean-up touches only rows after it. */
+  practiceSince: number | null
   serverNow: number
 }
 
@@ -121,12 +123,14 @@ export async function loadCrewView(store: CrewStore, now: Date): Promise<CrewVie
   if (practice) {
     // Practice: any time of day. The check whose list is up now comes first,
     // then today's others, skipping one sent for real before the pause began.
+    // A window that had already closed when the pause began (so it stays
+    // missed) can still be practised: training mid-afternoon must work.
     const visible = templates.filter((t) => t.enabled && visibleDay(t, now))
     const rest = templates.filter((t) => t.enabled && !visibleDay(t, now))
     for (const t of [...visible, ...rest]) {
       const day = visibleDay(t, now) ?? today
       const cell = cellFor(t.kind, day)
-      if (cell && cell.status === "paused" && !cell.submission) {
+      if (cell && !cell.submission && cell.status !== "off" && cell.status !== "closed") {
         active = { kind: t.kind, day, cell }
         break
       }
@@ -194,6 +198,7 @@ export async function loadCrewView(store: CrewStore, now: Date): Promise<CrewVie
     next: upcoming ? { label: upcoming.label, opensLabel: upcoming.opensLabel } : null,
     closedToday: (grid?.preOpen ?? false) || (grid?.closedDays.includes(today) ?? false),
     practice,
+    practiceSince: grid?.pausedSince ? grid.pausedSince.getTime() : null,
     serverNow: now.getTime(),
   }
 }

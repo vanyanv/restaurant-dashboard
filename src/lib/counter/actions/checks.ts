@@ -229,12 +229,14 @@ export async function setChecksPaused(input: { storeId: string; paused: boolean 
     const open = await prisma.checkPause.findFirst({
       where: { storeId: input.storeId, resumedAt: null },
       select: { id: true, pausedAt: true },
+      orderBy: { pausedAt: "asc" },
     })
     if (input.paused) {
       if (!open) await prisma.checkPause.create({ data: { storeId: input.storeId } })
     } else if (open) {
       await prisma.$transaction([
-        prisma.checkPause.update({ where: { id: open.id }, data: { resumedAt: new Date() } }),
+        // Every open pause, in case a double click opened two.
+        prisma.checkPause.updateMany({ where: { storeId: input.storeId, resumedAt: null }, data: { resumedAt: new Date() } }),
         prisma.checkMark.deleteMany({ where: { storeId: input.storeId, at: { gte: open.pausedAt } } }),
         prisma.checkStart.deleteMany({ where: { storeId: input.storeId, startedAt: { gte: open.pausedAt } } }),
       ])
