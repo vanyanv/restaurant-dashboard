@@ -131,6 +131,8 @@ interface StoreRow {
   uberPickup: number | null
   doordashPickup: number | null
   grubhub: number | null
+  /** `Store.employerPayrollTaxRate`, a fraction. `null` adds no tax to labor. */
+  payrollTax: number | null
   geocoded: boolean
   openedAt: Date | null
 }
@@ -210,6 +212,7 @@ const SELECT = {
   uberPickupCommissionRate: true,
   doordashPickupCommissionRate: true,
   grubhubCommissionRate: true,
+  employerPayrollTaxRate: true,
   latitude: true,
   openedAt: true,
 } as const
@@ -250,6 +253,7 @@ const shape = (s: {
   uberPickupCommissionRate: number | null
   doordashPickupCommissionRate: number | null
   grubhubCommissionRate: number | null
+  employerPayrollTaxRate: number | null
   latitude: number | null
   openedAt: Date | null
 }): StoreRow => ({
@@ -268,6 +272,7 @@ const shape = (s: {
   uberPickup: s.uberPickupCommissionRate,
   doordashPickup: s.doordashPickupCommissionRate,
   grubhub: s.grubhubCommissionRate,
+  payrollTax: s.employerPayrollTaxRate,
   geocoded: s.latitude !== null,
   openedAt: s.openedAt,
 })
@@ -584,6 +589,11 @@ export interface StoreFileEditable {
   doordashPickup: number | null
   grubhub: number | null
   /**
+   * `Store.employerPayrollTaxRate`, a fraction (0.0765 = 7.65%). Every labor
+   * dollar is Harri wages × (1 + this). `null` (cleared) adds nothing.
+   */
+  payrollTax: number | null
+  /**
    * What this store's RECORDED orders show each rate actually running at
    * over the last 90 days, keyed like the rate fields — "your orders: 25.3%".
    * Read-only, for drift; never used to price anything.
@@ -775,6 +785,7 @@ export function getStoreFileSectionPromises(
       uberPickup: store.uberPickup,
       doordashPickup: store.doordashPickup,
       grubhub: store.grubhub,
+      payrollTax: store.payrollTax,
       observed,
       stage:
         store.stage === "warming_up" || store.stage === "ready" ? store.stage : "pre_open",
@@ -1079,16 +1090,28 @@ export function getStoreFileSectionPromises(
           unit: "%",
           note: "the trade's ceiling, not this store's",
         },
+        {
+          key: "payrollTax",
+          label: "Employer payroll tax",
+          value: store.payrollTax === null ? "—" : (store.payrollTax * 100).toFixed(2),
+          unit: "%",
+          note:
+            store.payrollTax === null
+              ? "none on file · labor is wages only"
+              : "added to Harri wages in every labor figure",
+        },
       ],
       note:
         `The COGS target drives the band on every food-cost chart. The prime ceiling is ` +
         `${PRIME_CEILING_PCT.toFixed(0)}% for every store — it is a trade constant, and no ` +
-        `column publishes a per-store one.`,
+        `column publishes a per-store one. Employer payroll tax starts at 7.65%, the federal ` +
+        `FICA employer share; raise it by this store's California UI and ETT rates.`,
     })),
 
     lands: s((store) => [
       { label: "Rent", value: "Occupancy" },
       { label: "Fixed labor", value: "Labor" },
+      { label: "Payroll tax", value: "Labor, on Harri wages" },
       { label: "Towels, cleaning", value: "Other operating" },
       {
         label:

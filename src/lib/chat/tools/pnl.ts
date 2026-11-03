@@ -83,6 +83,7 @@ type StoreFixed = {
   uberPickupCommissionRate: number | null
   doordashPickupCommissionRate: number | null
   grubhubCommissionRate: number | null
+  employerPayrollTaxRate: number | null
   targetCogsPct: number | null
 }
 
@@ -658,6 +659,7 @@ export const getPnlSummary: ChatTool<typeof params, PnlSummaryResult> = {
         uberPickupCommissionRate: true,
         doordashPickupCommissionRate: true,
         grubhubCommissionRate: true,
+        employerPayrollTaxRate: true,
         targetCogsPct: true,
       },
       orderBy: { name: "asc" },

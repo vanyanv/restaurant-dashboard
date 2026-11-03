@@ -44,6 +44,7 @@ const EDIT: StoreFileEdit = {
   uberPickupCommissionRate: 10,
   doordashPickupCommissionRate: 6,
   grubhubCommissionRate: null,
+  employerPayrollTaxRate: 7.65,
 }
 
 const sent = () => vi.mocked(updateStore).mock.calls[0][1] as FormData
@@ -112,5 +113,42 @@ describe("updateStore — one unit, strict", () => {
     expect(saved().uberPickupCommissionRate).toBeNull()
     expect("doordashCommissionRate" in saved()).toBe(false)
     expect(saved().lifecycleStage).toBeUndefined()
+  })
+})
+
+describe("employer payroll tax — a store-file setting, in percents", () => {
+  function form(over: Record<string, string>) {
+    const f = new FormData()
+    f.set("name", "Hollywood")
+    f.set("isActive", "true")
+    for (const [k, v] of Object.entries(over)) f.set(k, v)
+    return f
+  }
+  const saved = () =>
+    vi.mocked(prisma.store.update).mock.calls[0][0].data as Record<string, unknown>
+
+  it("travels as the percent the owner typed", async () => {
+    await saveStoreFile("s1", EDIT)
+    expect(sent().get("employerPayrollTaxRate")).toBe("7.65")
+  })
+
+  it("stores 7.65 as 0.0765, and 10.4 (FICA plus UI/ETT) as 0.104", async () => {
+    await realUpdateStore("s1", form({ employerPayrollTaxRate: "7.65" }))
+    expect(saved().employerPayrollTaxRate).toBe(0.0765)
+    vi.mocked(prisma.store.update).mockClear()
+    await realUpdateStore("s1", form({ employerPayrollTaxRate: "10.4" }))
+    expect(saved().employerPayrollTaxRate).toBe(0.104)
+  })
+
+  it("blank clears it; absent leaves it; nonsense is refused", async () => {
+    await realUpdateStore("s1", form({ employerPayrollTaxRate: "" }))
+    expect(saved().employerPayrollTaxRate).toBeNull()
+    vi.mocked(prisma.store.update).mockClear()
+    await realUpdateStore("s1", form({}))
+    expect("employerPayrollTaxRate" in saved()).toBe(false)
+    vi.mocked(prisma.store.update).mockClear()
+    const r = await realUpdateStore("s1", form({ employerPayrollTaxRate: "abc" }))
+    expect(r).toEqual({ error: "Employer payroll tax must be a number, like 25 for 25%" })
+    expect(prisma.store.update).not.toHaveBeenCalled()
   })
 })

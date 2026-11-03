@@ -66,6 +66,9 @@ function numberOf(raw: string): number | null {
 /** A stored fraction as the percent the form edits; blank for "not known". */
 const pctField = (v: number | null): string => (v === null ? "" : String(Math.round(v * 1000) / 10))
 
+/** The payroll tax rate to the hundredth of a percent — 7.65, not 7.7. */
+const pct2Field = (v: number | null): string => (v === null ? "" : String(Math.round(v * 10000) / 100))
+
 /**
  * The five commission settings, in the order the Delivery commission table
  * lists them. Delivery rates are required columns (a blank is an error); the pickup and Grubhub rates may be cleared, which the P&L reads as
@@ -131,6 +134,7 @@ function StoreFileForm({
     uberPickup: pctField(d.uberPickup),
     doordashPickup: pctField(d.doordashPickup),
     grubhub: pctField(d.grubhub),
+    payrollTax: pct2Field(d.payrollTax),
     stage: d.stage,
   })
   const [form, setForm] = useState(() => formOf(data))
@@ -146,7 +150,7 @@ function StoreFileForm({
     setForm(formOf(data))
   }, [
     data.rent, data.labor, data.cleaning, data.towels, data.uber, data.doordash,
-    data.uberPickup, data.doordashPickup, data.grubhub, data.stage,
+    data.uberPickup, data.doordashPickup, data.grubhub, data.payrollTax, data.stage,
   ])
 
   useEffect(() => {
@@ -166,6 +170,11 @@ function StoreFileForm({
       }
       rates[f.key] = r.value
     }
+    const tax = parseRatePercent(form.payrollTax, "Employer payroll tax", { required: false })
+    if (!tax.ok) {
+      setSaid({ ok: false, text: `${tax.error}.` })
+      return
+    }
     startSaving(async () => {
       const result = await saveStoreFile(data.storeId, {
         name: data.name,
@@ -181,6 +190,7 @@ function StoreFileForm({
         uberPickupCommissionRate: rates.uberPickup,
         doordashPickupCommissionRate: rates.doordashPickup,
         grubhubCommissionRate: rates.grubhub,
+        employerPayrollTaxRate: tax.value,
         ...(form.stage !== data.stage ? { lifecycleStage: form.stage } : {}),
       })
       if (!result.ok) {
@@ -275,6 +285,29 @@ function StoreFileForm({
           />
         </div>
       ))}
+
+      {/* Employer payroll tax: loaded onto Harri wages in every labor figure. */}
+      <div className="setrow">
+        <div className="tx">
+          <b>Employer payroll tax</b>
+          <span>
+            Added to Harri wages on every labor figure · 7.65% is federal FICA; add your
+            California UI and ETT rates · blank adds none
+          </span>
+        </div>
+        <input
+          className="inp"
+          type="number"
+          min="0"
+          max="100"
+          step="0.01"
+          inputMode="decimal"
+          aria-label="Employer payroll tax percent"
+          placeholder="None"
+          value={form.payrollTax}
+          onChange={(e) => setForm((p) => ({ ...p, payrollTax: e.target.value }))}
+        />
+      </div>
 
       {/* Lifecycle: what the nightly model and every "trading" badge read. */}
       <div className="setrow">

@@ -379,6 +379,7 @@ export async function getStorePnL(input: {
         uberPickupCommissionRate: true,
         doordashPickupCommissionRate: true,
         grubhubCommissionRate: true,
+        employerPayrollTaxRate: true,
       },
     })
     if (!store) return { error: "Store not found" }
@@ -607,8 +608,9 @@ export async function getAllStoresPnL(input: {
   const result = await cached(
     // `pnl3:` since 2026-10-28 (`pnl2:` before it grew the sales cascade; pnl3 moved labor
     // dollars to `loadLaborCost`): the answer's shape grew the sales cascade and
-    // the commission basis, and a pre-change entry would lack both.
-    `pnl3:account:${accountId}:${stableKey({
+    // the commission basis, and a pre-change entry would lack both. `pnl4:`
+    // since 2026-11-03: labor carries the employer payroll tax and its note.
+    `pnl4:account:${accountId}:${stableKey({
       s: input.startDate.toISOString(),
       e: input.endDate.toISOString(),
       g: input.granularity,
