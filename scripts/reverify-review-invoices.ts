@@ -197,6 +197,13 @@ async function main() {
       }
     }
 
+    if (!APPLY) {
+      console.log(
+        "\n(Dry run: the price list below uses invoice statuses as they stand now. " +
+          "Invoices this run would verify are not counted yet, so --apply can move more prices than listed.)",
+      )
+    }
+
     // Prices: every unlocked, invoice-priced ingredient on the account.
     const canonicals = await prisma.canonicalIngredient.findMany({
       where: {

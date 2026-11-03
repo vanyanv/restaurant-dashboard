@@ -592,7 +592,18 @@ async function foldLaborWeekRows(input: {
     scheduledByDate[key] = (scheduledByDate[key] ?? 0) + s.minutes
   }
 
-  return { hoursByDate, costByDate, missingByDay: missingStoresByDay(laborCost), scheduledByDate, roles: [...roleAgg.values()], overtimeCost }
+  // Role dollars are Harri's per-position wages; the Total row is the shared
+  // labor rule (employer payroll tax included, daily total preferred). Scale
+  // the roles onto that total so the table's rows add up to its Total row.
+  const roles = [...roleAgg.values()]
+  const totalCost = sum(Object.values(costByDate))
+  const roleWages = sum(roles.map((r) => r.cost))
+  if (roleWages > 0 && totalCost > 0) {
+    const scale = totalCost / roleWages
+    for (const r of roles) r.cost *= scale
+  }
+
+  return { hoursByDate, costByDate, missingByDay: missingStoresByDay(laborCost), scheduledByDate, roles, overtimeCost }
 }
 
 /**

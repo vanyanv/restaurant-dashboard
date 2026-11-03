@@ -515,6 +515,16 @@ async function runSync(
   // Holes (never-started tasks) are skipped by filter, nulls are failures.
   const validExtractions = extracted.filter((e): e is ExtractedInvoice => e != null)
 
+  // Give every line the number it will be saved under BEFORE any check runs.
+  // A stray "3a" or a missing number is saved as index + 1; if the checks saw
+  // the raw value, a flag on that line would point at a number no saved line
+  // carries, and the flagged line could still set an ingredient price.
+  for (const inv of validExtractions) {
+    inv.extraction.lineItems.forEach((li, index) => {
+      if (!Number.isInteger(li.lineNumber)) li.lineNumber = index + 1
+    })
+  }
+
   // ─── Phase 2.5: Historical pack-shape priors ───
   // The same (vendor, sku) ships the same physical case every week, but the
   // LLM re-derives the PACK/SIZE split per invoice and is nondeterministic
