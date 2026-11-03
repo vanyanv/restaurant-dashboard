@@ -608,7 +608,13 @@ export function CounterOverviewClient({
         </Section>
       ) : null}
 
-      <Section title="What needs you" data={sections.needsYou} pending={pending} askAbout="what needs me">
+      <Section
+        fold="closed"
+        title="What needs you"
+        meta={(items) => String(items.length)}
+        data={sections.needsYou}
+        pending={pending}
+      >
         {(items) => <Queue items={items.map(toQueueItem)} scope={scope} />}
       </Section>
 

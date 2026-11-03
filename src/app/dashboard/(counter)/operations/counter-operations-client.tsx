@@ -103,6 +103,7 @@ export function CounterOperationsClient({
 
       <div className="split">
         <Section
+          fold="closed"
           title="Needs you across operations"
           meta={(w) => w.meta}
           data={sections.work}

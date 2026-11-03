@@ -22,7 +22,14 @@ export function ShopTodayClient({ sections }: { sections: SectionSources<TodaySe
   return (
     <>
       <ShopHead sub="chrisneddys.com merch · orders, stock and pickup" />
-      <Section bare title="Needs you" data={sections.today} pending={pending}>
+      <Section
+        bare
+        fold="closed"
+        title="Needs you"
+        meta={(d) => (d.late.length > 0 ? `${d.late.length} late` : d.paused ? "Paused" : undefined)}
+        data={sections.today}
+        pending={pending}
+      >
         {(d) => <Top data={d} />}
       </Section>
       <Section title="To ship" meta={(d) => `${d.toShip.length} waiting`} data={sections.today} pending={pending} pad={false}>
