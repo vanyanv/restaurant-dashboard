@@ -548,10 +548,7 @@ export function CounterAlertsClient({
           {(rows) => (
             <>
               {segment === "muted" ? null : (
-                <ClearAll
-                  rows={rows}
-                  scope={{ storeId: counterParams.storeId, severities, sources, search }}
-                />
+                <ClearAll rows={rows} />
               )}
               <Table
                 columns={COLUMNS}
@@ -610,15 +607,13 @@ export function CounterAlertsClient({
  * seconds after. Hidden on Muted, whose rows come from mute rules the server's
  * clear does not apply. See `useClearAlerts`.
  */
-function ClearAll({
-  rows,
-  scope,
-}: {
-  rows: AlertsRow[]
-  scope: Parameters<typeof useClearAlerts>[0]
-}) {
-  const { state, ask, cancel, confirm, undo } = useClearAlerts(scope)
+function ClearAll({ rows }: { rows: AlertsRow[] }) {
   const open = rows.filter((r) => r.closable)
+  // Exactly the alerts behind the open rows on screen: what the confirm
+  // counts is what the server clears.
+  const { state, ask, cancel, confirm, undo } = useClearAlerts({
+    ids: open.flatMap((r) => r.ids),
+  })
   const total = open.reduce((n, r) => n + r.ids.length, 0)
   const critical = open
     .filter((r) => r.severity === "CRITICAL")

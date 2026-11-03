@@ -51,17 +51,18 @@ export async function closeAlert(
  */
 export async function clearAlerts(
   scope: ClearAlertsScope,
-): Promise<{ ok: true; ids: string[] } | { ok: false; error: string }> {
+): Promise<{ ok: true; ids: string[]; at: string } | { ok: false; error: string }> {
   const result = await clearOpenAlerts(scope)
   if (!result.ok) return { ok: false, error: result.error }
-  return { ok: true, ids: result.ids }
+  return { ok: true, ids: result.ids, at: result.at }
 }
 
 /** Undo for `clearAlerts`. */
 export async function undoClearAlerts(
   ids: string[],
+  at: string,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
-  const result = await reopenAlerts({ ids })
+  const result = await reopenAlerts({ ids, at })
   if (!result.ok) return { ok: false, error: result.error }
   return { ok: true }
 }

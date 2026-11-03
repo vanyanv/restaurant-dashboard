@@ -6,6 +6,8 @@ import { authOptions, hasOwnerAccess } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { getAccountStoreRows } from "@/lib/account-stores"
 import { anomalyHorizon } from "@/lib/anomaly-window"
+import { bustTags } from "@/lib/cache/cached"
+import { alertsCacheTag } from "@/lib/alerts/cache-tag"
 import type {
   AlertSeverity,
   AlertSource,
@@ -319,11 +321,15 @@ export async function getOpenAlertCount(): Promise<number | null> {
 }
 
 /**
- * What "Clear all" on Needs you clears: the same rows the Open segment lists
- * under the same store, severity, source and search the reader has applied.
- * Every field is optional; none set is every open alert in the account.
+ * What "Clear all" on Needs you clears.
+ *
+ * `ids` — the desk passes the alerts behind the rows it is showing, so the
+ * count in its confirm is exactly what gets cleared. Otherwise the scope is
+ * re-derived here (the phone, which draws six rows of a longer list): the
+ * store, severity, source and search filters, each optional.
  */
 export interface ClearAlertsScope {
+  ids?: string[]
   storeId?: string | null
   severities?: AlertSeverity[]
   sources?: AlertSource[]
@@ -331,12 +337,12 @@ export interface ClearAlertsScope {
 }
 
 export type ClearAlertsResult =
-  | { ok: true; ids: string[] }
+  | { ok: true; ids: string[]; at: string }
   | { ok: false; error: "unauthorized" }
 
 /**
  * Upper bound on one clear, and on one undo. The inbox is tens of rows today;
- * the cap exists so a forged call cannot hand `reopenAlerts` an unbounded list.
+ * the cap keeps a forged call from handing either action an unbounded list.
  */
 const CLEAR_LIMIT = 1000
 
@@ -347,10 +353,12 @@ const CLEAR_LIMIT = 1000
  * looked at this list", not "never show me this kind of alert again", and the
  * two verbs are kept apart on purpose (see `@/lib/counter/actions/alert`).
  *
- * Scoped exactly like `getAlertInbox`: the account's ACTIVE stores (one of
- * them when `storeId` belongs to the account, every one otherwise), the
- * relevance horizon, and the reader's filters. The ids it cleared come back
- * so the page can offer Undo with `reopenAlerts`.
+ * Scoped like `getAlertInbox`: the account's ACTIVE stores (one of them when
+ * `storeId` belongs to the account), the relevance horizon, OPEN only. Every
+ * row gets ONE `acknowledgedAt` stamp, returned as `at` with the ids the
+ * write actually changed, and `reopenAlerts` matches on both — so Undo can
+ * only reopen what this clear closed, never an acknowledgement someone made
+ * in between.
  */
 export async function clearOpenAlerts(
   scope: ClearAlertsScope = {},
@@ -360,58 +368,60 @@ export async function clearOpenAlerts(
     return { ok: false, error: "unauthorized" }
   }
   const accountId = session.user.accountId
+  const at = new Date()
 
   const stores = (await getAccountStoreRows(accountId)).filter((s) => s.isActive)
   const storeIds =
     scope.storeId && stores.some((s) => s.id === scope.storeId)
       ? [scope.storeId]
       : stores.map((s) => s.id)
-  if (storeIds.length === 0) return { ok: true, ids: [] }
+  if (storeIds.length === 0) return { ok: true, ids: [], at: at.toISOString() }
 
   const search = scope.search?.trim() ?? ""
   const where = {
     storeId: { in: storeIds },
     store: { accountId },
     status: "OPEN" as const,
-    occurredOn: { gte: anomalyHorizon() },
+    occurredOn: { gte: anomalyHorizon(at) },
+    ...(scope.ids ? { id: { in: scope.ids.slice(0, CLEAR_LIMIT) } } : {}),
     ...(scope.severities?.length ? { severity: { in: scope.severities } } : {}),
     ...(scope.sources?.length ? { source: { in: scope.sources } } : {}),
     ...(search ? { title: { contains: search, mode: "insensitive" as const } } : {}),
   }
 
-  const rows = await prisma.alert.findMany({
-    where,
-    select: { id: true },
-    take: CLEAR_LIMIT,
-  })
-  const ids = rows.map((r) => r.id)
-  if (ids.length === 0) return { ok: true, ids: [] }
+  const rows = await prisma.alert.findMany({ where, select: { id: true }, take: CLEAR_LIMIT })
+  if (rows.length === 0) return { ok: true, ids: [], at: at.toISOString() }
 
-  // `status: OPEN` again on the write: a row closed by someone else between
-  // the read and here keeps their decision rather than being overwritten.
-  await prisma.alert.updateMany({
-    where: { id: { in: ids }, store: { accountId }, status: "OPEN" },
-    data: { status: "ACKNOWLEDGED", acknowledgedAt: new Date() },
+  // `status: OPEN` again on the write, and the ids RETURNED by the write: a
+  // row closed by someone else between the read and here keeps their
+  // decision and is left out of what Undo may reopen.
+  const changed = await prisma.alert.updateManyAndReturn({
+    where: { id: { in: rows.map((r) => r.id) }, store: { accountId }, status: "OPEN" },
+    data: { status: "ACKNOWLEDGED", acknowledgedAt: at },
+    select: { id: true },
   })
-  revalidatePath("/dashboard/alerts")
-  revalidatePath("/m/alerts")
-  return { ok: true, ids }
+  await afterWrite(accountId)
+  return { ok: true, ids: changed.map((r) => r.id), at: at.toISOString() }
 }
 
 /**
- * Undo for `clearOpenAlerts`: put the given alerts back to OPEN.
+ * Undo for `clearOpenAlerts`: put back to OPEN the alerts that clear closed.
  *
- * Only rows still ACKNOWLEDGED with no explanation are reopened — exactly what
- * a clear writes — so an alert someone has since explained or dismissed keeps
- * that decision, and an id from another account matches nothing.
+ * Matches the clear's own stamp (`at`) as well as the ids, and only rows still
+ * ACKNOWLEDGED with no explanation — so an alert explained, dismissed or
+ * acknowledged by anything else keeps that decision, and an id from another
+ * account matches nothing.
  */
 export async function reopenAlerts(input: {
   ids: string[]
-}): Promise<{ ok: true; reopened: number } | { ok: false; error: "unauthorized" }> {
+  at: string
+}): Promise<{ ok: true; reopened: number } | { ok: false; error: "unauthorized" | "invalid" }> {
   const session = await getServerSession(authOptions)
   if (!session?.user || !hasOwnerAccess(session.user.role)) {
     return { ok: false, error: "unauthorized" }
   }
+  const at = new Date(input.at)
+  if (Number.isNaN(at.getTime())) return { ok: false, error: "invalid" }
   const ids = input.ids.slice(0, CLEAR_LIMIT)
   if (ids.length === 0) return { ok: true, reopened: 0 }
 
@@ -420,11 +430,18 @@ export async function reopenAlerts(input: {
       id: { in: ids },
       store: { accountId: session.user.accountId },
       status: "ACKNOWLEDGED",
+      acknowledgedAt: at,
       explanation: null,
     },
     data: { status: "OPEN", acknowledgedAt: null },
   })
+  await afterWrite(session.user.accountId)
+  return { ok: true, reopened: result.count }
+}
+
+/** Both inbox pages, and the rail's cached count. */
+async function afterWrite(accountId: string) {
   revalidatePath("/dashboard/alerts")
   revalidatePath("/m/alerts")
-  return { ok: true, reopened: result.count }
+  await bustTags([alertsCacheTag(accountId)])
 }

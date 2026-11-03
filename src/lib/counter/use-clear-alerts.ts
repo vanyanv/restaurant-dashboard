@@ -12,18 +12,17 @@ export type ClearAlertsState =
   | { step: "idle" }
   | { step: "confirm" }
   | { step: "saving" }
-  | { step: "cleared"; ids: string[] }
+  | { step: "cleared"; ids: string[]; at: string }
   | { step: "failed" }
 
 /**
  * "Clear all" on Needs you, shared by the desk and the phone so the two make
  * the same decision in the same three steps: ask, confirm, then offer Undo.
  *
- * The scope is the reader's current view (store, and on the desk the severity,
- * source and search filters). The server re-derives the open rows from it
- * rather than trusting a list of ids from the page, because the page holds a
- * capped window (100 rows on the desk, six on the phone) and "all" has to mean
- * all of them.
+ * The desk passes the ids behind the rows it shows, so its confirm counts
+ * exactly what is cleared. The phone draws six rows of a longer list, so it
+ * passes its store and the server re-derives the open rows; its count is the
+ * inbox's own open tally, not the six.
  */
 export function useClearAlerts(scope: ClearAlertsScope) {
   const router = useRouter()
@@ -43,16 +42,24 @@ export function useClearAlerts(scope: ClearAlertsScope) {
   }
   const cancel = () => setState({ step: "idle" })
 
+  /*
+   * A thrown action (a dropped connection, a database error) lands on
+   * "failed" like a refused one, never on a "Saving…" with no way out.
+   */
   const confirm = () => {
     setState({ step: "saving" })
     startTransition(async () => {
-      const r = await clearAlerts(scope)
-      if (!r.ok) {
+      try {
+        const r = await clearAlerts(scope)
+        if (!r.ok) {
+          setState({ step: "failed" })
+          return
+        }
+        setState({ step: "cleared", ids: r.ids, at: r.at })
+        timer.current = setTimeout(() => setState({ step: "idle" }), UNDO_MS)
+      } catch {
         setState({ step: "failed" })
-        return
       }
-      setState({ step: "cleared", ids: r.ids })
-      timer.current = setTimeout(() => setState({ step: "idle" }), UNDO_MS)
       // The list, the strip and the rail's count all read the same column.
       router.refresh()
     })
@@ -60,12 +67,16 @@ export function useClearAlerts(scope: ClearAlertsScope) {
 
   const undo = () => {
     if (state.step !== "cleared") return
-    const ids = state.ids
+    const { ids, at } = state
     stopTimer()
     setState({ step: "saving" })
     startTransition(async () => {
-      const r = await undoClearAlerts(ids)
-      setState(r.ok ? { step: "idle" } : { step: "failed" })
+      try {
+        const r = await undoClearAlerts(ids, at)
+        setState(r.ok ? { step: "idle" } : { step: "failed" })
+      } catch {
+        setState({ step: "failed" })
+      }
       router.refresh()
     })
   }

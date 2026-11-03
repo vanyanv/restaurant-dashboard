@@ -11,6 +11,7 @@ vi.mock("@/lib/auth", () => ({
   hasOwnerAccess: (role: string) => role === "OWNER" || role === "DEVELOPER",
 }))
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }))
+vi.mock("@/lib/cache/cached", () => ({ bustTags: vi.fn() }))
 
 vi.mock("@/lib/prisma", () => ({
   prisma: {
@@ -21,6 +22,7 @@ vi.mock("@/lib/prisma", () => ({
       findUnique: vi.fn(),
       update: vi.fn(),
       updateMany: vi.fn(),
+      updateManyAndReturn: vi.fn(),
       count: vi.fn(),
     },
     // The account's hard mutes. Zero rows on the live database; the inbox asks
@@ -244,14 +246,19 @@ describe("clearOpenAlerts / reopenAlerts", () => {
       user: { id: "u2", accountId: "acct-A", role: "VIEWER" },
     } as never)
     expect(await clearOpenAlerts()).toEqual({ ok: false, error: "unauthorized" })
-    expect(await reopenAlerts({ ids: ["a1"] })).toEqual({ ok: false, error: "unauthorized" })
+    expect(await reopenAlerts({ ids: ["a1"], at: new Date().toISOString() })).toEqual({
+      ok: false,
+      error: "unauthorized",
+    })
+    expect(prisma.alert.updateManyAndReturn).not.toHaveBeenCalled()
     expect(prisma.alert.updateMany).not.toHaveBeenCalled()
   })
 
-  it("acknowledges the open alerts in the reader's view and returns their ids", async () => {
+  it("acknowledges the open alerts in the reader's view with one stamp", async () => {
     vi.mocked(getServerSession).mockResolvedValue(owner as never)
     vi.mocked(prisma.alert.findMany).mockResolvedValue([{ id: "a1" }, { id: "a2" }] as never)
-    vi.mocked(prisma.alert.updateMany).mockResolvedValue({ count: 2 } as never)
+    // a2 was closed by someone else between the read and the write.
+    vi.mocked(prisma.alert.updateManyAndReturn).mockResolvedValue([{ id: "a1" }] as never)
 
     const result = await clearOpenAlerts({
       storeId: "s1",
@@ -259,7 +266,8 @@ describe("clearOpenAlerts / reopenAlerts", () => {
       sources: ["PRICE_DELTA"],
       search: " beef ",
     })
-    expect(result).toEqual({ ok: true, ids: ["a1", "a2"] })
+    // Only what the write changed comes back, so Undo cannot reopen a2.
+    expect(result).toEqual({ ok: true, ids: ["a1"], at: expect.any(String) })
 
     const where = vi.mocked(prisma.alert.findMany).mock.calls[0][0]!.where as Record<string, unknown>
     expect(where).toMatchObject({
@@ -272,36 +280,60 @@ describe("clearOpenAlerts / reopenAlerts", () => {
     })
     expect(where.occurredOn).toEqual({ gte: expect.any(Date) })
 
-    // Seen, not "never show me this again" — and only rows still open.
-    expect(prisma.alert.updateMany).toHaveBeenCalledWith({
-      where: { id: { in: ["a1", "a2"] }, store: { accountId: "acct-A" }, status: "OPEN" },
-      data: { status: "ACKNOWLEDGED", acknowledgedAt: expect.any(Date) },
+    const write = vi.mocked(prisma.alert.updateManyAndReturn).mock.calls[0][0] as {
+      where: unknown
+      data: { status: string; acknowledgedAt: Date }
+    }
+    expect(write.where).toEqual({
+      id: { in: ["a1", "a2"] },
+      store: { accountId: "acct-A" },
+      status: "OPEN",
     })
+    // Seen, not "never show me this again".
+    expect(write.data.status).toBe("ACKNOWLEDGED")
+    expect(write.data.acknowledgedAt.toISOString()).toBe((result as { at: string }).at)
+  })
+
+  it("clears only the ids the page passed, still inside the account", async () => {
+    vi.mocked(getServerSession).mockResolvedValue(owner as never)
+    vi.mocked(prisma.alert.findMany).mockResolvedValue([] as never)
+
+    expect(await clearOpenAlerts({ ids: ["a9"] })).toMatchObject({ ok: true, ids: [] })
+    const where = vi.mocked(prisma.alert.findMany).mock.calls[0][0]!.where as Record<string, unknown>
+    expect(where).toMatchObject({ id: { in: ["a9"] }, store: { accountId: "acct-A" }, status: "OPEN" })
+    expect(prisma.alert.updateManyAndReturn).not.toHaveBeenCalled()
   })
 
   it("falls back to every account store when the storeId is someone else's", async () => {
     vi.mocked(getServerSession).mockResolvedValue(owner as never)
     vi.mocked(prisma.alert.findMany).mockResolvedValue([] as never)
 
-    expect(await clearOpenAlerts({ storeId: "s-other" })).toEqual({ ok: true, ids: [] })
+    await clearOpenAlerts({ storeId: "s-other" })
     const where = vi.mocked(prisma.alert.findMany).mock.calls[0][0]!.where as Record<string, unknown>
     expect(where.storeId).toEqual({ in: ["s1"] })
-    expect(prisma.alert.updateMany).not.toHaveBeenCalled()
   })
 
-  it("undo reopens only what a clear wrote, inside the account", async () => {
+  it("undo reopens only what that clear wrote, inside the account", async () => {
     vi.mocked(getServerSession).mockResolvedValue(owner as never)
     vi.mocked(prisma.alert.updateMany).mockResolvedValue({ count: 2 } as never)
+    const at = "2026-11-03T21:00:00.000Z"
 
-    expect(await reopenAlerts({ ids: ["a1", "a2"] })).toEqual({ ok: true, reopened: 2 })
+    expect(await reopenAlerts({ ids: ["a1", "a2"], at })).toEqual({ ok: true, reopened: 2 })
     expect(prisma.alert.updateMany).toHaveBeenCalledWith({
       where: {
         id: { in: ["a1", "a2"] },
         store: { accountId: "acct-A" },
         status: "ACKNOWLEDGED",
+        acknowledgedAt: new Date(at),
         explanation: null,
       },
       data: { status: "OPEN", acknowledgedAt: null },
     })
+  })
+
+  it("refuses an undo without a valid stamp", async () => {
+    vi.mocked(getServerSession).mockResolvedValue(owner as never)
+    expect(await reopenAlerts({ ids: ["a1"], at: "nope" })).toEqual({ ok: false, error: "invalid" })
+    expect(prisma.alert.updateMany).not.toHaveBeenCalled()
   })
 })

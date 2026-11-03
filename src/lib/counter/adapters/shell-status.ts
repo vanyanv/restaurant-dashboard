@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma"
 import { cached } from "@/lib/cache/cached"
 import { anomalyHorizon } from "@/lib/anomaly-window"
+import { alertsCacheTag } from "@/lib/alerts/cache-tag"
 import type { SyncState } from "@/components/counter/shell/sync-chip"
 
 /**
@@ -48,7 +49,9 @@ export async function getShellStatus(
   const raw = await cached<{ startedAt: string | null; completedAt: string | null; status: string | null; open: number }>(
     `counter:shell-status:${accountId}`,
     60,
-    [],
+    // Busted by the alert inbox's writes, so the rail's count follows a
+    // Clear all or an Undo at once instead of a minute later.
+    [alertsCacheTag(accountId)],
     async () => {
       const [run, open] = await Promise.all([
         prisma.jobRun.findFirst({
