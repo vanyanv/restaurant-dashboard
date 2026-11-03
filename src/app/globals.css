@@ -25,6 +25,7 @@
  * scripts/extract-prototype-css.ts. AFTER counter.css, so its alias layer
  * resolves against tokens that are already declared. */
 @import "../styles/counter-components.css";
+@import "../styles/counter-fold.css";
 @import "../styles/counter-repairs.css";
 @import "../styles/counter-checks.css";
 @import "../styles/crew-checks.css";
