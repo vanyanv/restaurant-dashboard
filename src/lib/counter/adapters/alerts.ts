@@ -224,6 +224,12 @@ export interface PhoneAlertList {
   rows: PhoneAlertRow[]
   /** The section head's qualifier — "6 of 77", "last 30 days". */
   meta: string
+  /**
+   * Open alerts behind the list, uncapped, and how many are critical — what
+   * the phone's "Clear all" counts and names in its confirm. Set on the Open
+   * list only.
+   */
+  clearable?: { total: number; critical: number }
 }
 
 export interface PhoneAlertsHead {
@@ -856,6 +862,10 @@ export async function getAlertsSections(input: AlertsQuery = {}): Promise<Alerts
       return {
         rows,
         meta: phoneListMeta(rows.length, buildRows(open, today).length, open.length),
+        clearable: {
+          total: open.length,
+          critical: open.filter((a) => a.severity === "CRITICAL").length,
+        },
       }
     }),
     /*

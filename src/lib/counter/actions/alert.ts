@@ -1,6 +1,12 @@
 "use server"
 
-import { acknowledgeAlert, dismissAlert } from "@/app/actions/alerts/inbox-actions"
+import {
+  acknowledgeAlert,
+  clearOpenAlerts,
+  dismissAlert,
+  reopenAlerts,
+  type ClearAlertsScope,
+} from "@/app/actions/alerts/inbox-actions"
 
 /**
  * The Counter layer's write path for the alert inbox — same shape as
@@ -34,6 +40,28 @@ export async function closeAlert(
     how === "dismiss"
       ? await dismissAlert({ alertId })
       : await acknowledgeAlert({ alertId, explanation })
+  if (!result.ok) return { ok: false, error: result.error }
+  return { ok: true }
+}
+
+/**
+ * "Clear all" on Needs you. Acknowledges every open alert in the reader's
+ * current view and returns their ids, which is everything `undoClearAlerts`
+ * needs to put them back.
+ */
+export async function clearAlerts(
+  scope: ClearAlertsScope,
+): Promise<{ ok: true; ids: string[] } | { ok: false; error: string }> {
+  const result = await clearOpenAlerts(scope)
+  if (!result.ok) return { ok: false, error: result.error }
+  return { ok: true, ids: result.ids }
+}
+
+/** Undo for `clearAlerts`. */
+export async function undoClearAlerts(
+  ids: string[],
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const result = await reopenAlerts({ ids })
   if (!result.ok) return { ok: false, error: result.error }
   return { ok: true }
 }

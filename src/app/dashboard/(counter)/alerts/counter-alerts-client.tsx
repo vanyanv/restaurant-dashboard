@@ -31,6 +31,7 @@ import type {
 } from "@/lib/counter/adapters/alerts"
 import type { SectionSources } from "@/lib/counter/adapters/types"
 import { closeAlert } from "@/lib/counter/actions/alert"
+import { clearQuestion, useClearAlerts } from "@/lib/counter/use-clear-alerts"
 import type { AlertSeverity, AlertSource, AlertStatus } from "@/generated/prisma/client"
 
 /**
@@ -546,6 +547,12 @@ export function CounterAlertsClient({
         <Section bare title="Alerts" data={sections.table} pending={pending}>
           {(rows) => (
             <>
+              {segment === "muted" ? null : (
+                <ClearAll
+                  rows={rows}
+                  scope={{ storeId: counterParams.storeId, severities, sources, search }}
+                />
+              )}
               <Table
                 columns={COLUMNS}
                 rows={alertRows(rows, selectedAlert, selectAlert, leaving)}
@@ -592,6 +599,67 @@ export function CounterAlertsClient({
         )}
       </Section>
     </>
+  )
+}
+
+/**
+ * "Clear all" — acknowledge every open alert in the current view at once.
+ *
+ * Counts the open alerts behind the rows on screen (a row can stand for
+ * fourteen), names the critical ones in the confirm, and offers Undo for ten
+ * seconds after. Hidden on Muted, whose rows come from mute rules the server's
+ * clear does not apply. See `useClearAlerts`.
+ */
+function ClearAll({
+  rows,
+  scope,
+}: {
+  rows: AlertsRow[]
+  scope: Parameters<typeof useClearAlerts>[0]
+}) {
+  const { state, ask, cancel, confirm, undo } = useClearAlerts(scope)
+  const open = rows.filter((r) => r.closable)
+  const total = open.reduce((n, r) => n + r.ids.length, 0)
+  const critical = open
+    .filter((r) => r.severity === "CRITICAL")
+    .reduce((n, r) => n + r.ids.length, 0)
+
+  if (total === 0 && (state.step === "idle" || state.step === "confirm")) return null
+
+  return (
+    <div className="btnrow" style={{ justifyContent: "flex-end", alignItems: "center", padding: "9px 0" }}>
+      {state.step === "idle" ? (
+        <button className="btn btn--quiet" type="button" onClick={ask}>
+          Clear all {total}
+        </button>
+      ) : state.step === "confirm" ? (
+        <>
+          <span>{clearQuestion(total, critical)}</span>
+          <button className="btn btn--primary" type="button" onClick={confirm}>
+            Yes, clear
+          </button>
+          <button className="btn" type="button" onClick={cancel}>
+            Cancel
+          </button>
+        </>
+      ) : state.step === "saving" ? (
+        <span>Saving…</span>
+      ) : state.step === "cleared" ? (
+        <>
+          <span>Cleared {state.ids.length}. They are under All.</span>
+          <button className="btn" type="button" onClick={undo}>
+            Undo
+          </button>
+        </>
+      ) : (
+        <>
+          <span>That did not save.</span>
+          <button className="btn" type="button" onClick={cancel}>
+            OK
+          </button>
+        </>
+      )}
+    </div>
   )
 }
 

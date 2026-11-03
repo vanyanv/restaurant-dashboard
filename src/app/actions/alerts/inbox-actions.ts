@@ -317,3 +317,114 @@ export async function getOpenAlertCount(): Promise<number | null> {
     return null
   }
 }
+
+/**
+ * What "Clear all" on Needs you clears: the same rows the Open segment lists
+ * under the same store, severity, source and search the reader has applied.
+ * Every field is optional; none set is every open alert in the account.
+ */
+export interface ClearAlertsScope {
+  storeId?: string | null
+  severities?: AlertSeverity[]
+  sources?: AlertSource[]
+  search?: string
+}
+
+export type ClearAlertsResult =
+  | { ok: true; ids: string[] }
+  | { ok: false; error: "unauthorized" }
+
+/**
+ * Upper bound on one clear, and on one undo. The inbox is tens of rows today;
+ * the cap exists so a forged call cannot hand `reopenAlerts` an unbounded list.
+ */
+const CLEAR_LIMIT = 1000
+
+/**
+ * Close every open alert in scope at once — the owner's "Clear all".
+ *
+ * Writes ACKNOWLEDGED ("seen"), never DISMISSED: a bulk clear says "I have
+ * looked at this list", not "never show me this kind of alert again", and the
+ * two verbs are kept apart on purpose (see `@/lib/counter/actions/alert`).
+ *
+ * Scoped exactly like `getAlertInbox`: the account's ACTIVE stores (one of
+ * them when `storeId` belongs to the account, every one otherwise), the
+ * relevance horizon, and the reader's filters. The ids it cleared come back
+ * so the page can offer Undo with `reopenAlerts`.
+ */
+export async function clearOpenAlerts(
+  scope: ClearAlertsScope = {},
+): Promise<ClearAlertsResult> {
+  const session = await getServerSession(authOptions)
+  if (!session?.user || !hasOwnerAccess(session.user.role)) {
+    return { ok: false, error: "unauthorized" }
+  }
+  const accountId = session.user.accountId
+
+  const stores = (await getAccountStoreRows(accountId)).filter((s) => s.isActive)
+  const storeIds =
+    scope.storeId && stores.some((s) => s.id === scope.storeId)
+      ? [scope.storeId]
+      : stores.map((s) => s.id)
+  if (storeIds.length === 0) return { ok: true, ids: [] }
+
+  const search = scope.search?.trim() ?? ""
+  const where = {
+    storeId: { in: storeIds },
+    store: { accountId },
+    status: "OPEN" as const,
+    occurredOn: { gte: anomalyHorizon() },
+    ...(scope.severities?.length ? { severity: { in: scope.severities } } : {}),
+    ...(scope.sources?.length ? { source: { in: scope.sources } } : {}),
+    ...(search ? { title: { contains: search, mode: "insensitive" as const } } : {}),
+  }
+
+  const rows = await prisma.alert.findMany({
+    where,
+    select: { id: true },
+    take: CLEAR_LIMIT,
+  })
+  const ids = rows.map((r) => r.id)
+  if (ids.length === 0) return { ok: true, ids: [] }
+
+  // `status: OPEN` again on the write: a row closed by someone else between
+  // the read and here keeps their decision rather than being overwritten.
+  await prisma.alert.updateMany({
+    where: { id: { in: ids }, store: { accountId }, status: "OPEN" },
+    data: { status: "ACKNOWLEDGED", acknowledgedAt: new Date() },
+  })
+  revalidatePath("/dashboard/alerts")
+  revalidatePath("/m/alerts")
+  return { ok: true, ids }
+}
+
+/**
+ * Undo for `clearOpenAlerts`: put the given alerts back to OPEN.
+ *
+ * Only rows still ACKNOWLEDGED with no explanation are reopened — exactly what
+ * a clear writes — so an alert someone has since explained or dismissed keeps
+ * that decision, and an id from another account matches nothing.
+ */
+export async function reopenAlerts(input: {
+  ids: string[]
+}): Promise<{ ok: true; reopened: number } | { ok: false; error: "unauthorized" }> {
+  const session = await getServerSession(authOptions)
+  if (!session?.user || !hasOwnerAccess(session.user.role)) {
+    return { ok: false, error: "unauthorized" }
+  }
+  const ids = input.ids.slice(0, CLEAR_LIMIT)
+  if (ids.length === 0) return { ok: true, reopened: 0 }
+
+  const result = await prisma.alert.updateMany({
+    where: {
+      id: { in: ids },
+      store: { accountId: session.user.accountId },
+      status: "ACKNOWLEDGED",
+      explanation: null,
+    },
+    data: { status: "OPEN", acknowledgedAt: null },
+  })
+  revalidatePath("/dashboard/alerts")
+  revalidatePath("/m/alerts")
+  return { ok: true, reopened: result.count }
+}

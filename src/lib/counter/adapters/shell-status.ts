@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma"
 import { cached } from "@/lib/cache/cached"
+import { anomalyHorizon } from "@/lib/anomaly-window"
 import type { SyncState } from "@/components/counter/shell/sync-chip"
 
 /**
@@ -60,7 +61,11 @@ export async function getShellStatus(
         }),
         storeIds.length === 0
           ? Promise.resolve(0)
-          : prisma.alert.count({ where: { status: "OPEN", storeId: { in: storeIds } } }),
+          : // Same horizon the Needs you page lists over, so the rail's count
+          // and the page agree and "Clear all" brings it to zero.
+          prisma.alert.count({
+              where: { status: "OPEN", storeId: { in: storeIds }, occurredOn: { gte: anomalyHorizon(now) } },
+            }),
       ])
       // Dates do not survive the cache (see the Counter cache notes), so
       // they travel as ISO strings and are revived below.
