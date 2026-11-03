@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache"
 import { getServerSession } from "next-auth"
 import { authOptions, hasOwnerAccess } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { FOOD_COST_ROWS } from "@/lib/counter/food-cost-scope"
 import { getAccountStoreRows } from "@/lib/account-stores"
 import {
   buildPeriods,
@@ -453,6 +454,7 @@ export async function getStorePnL(input: {
       where: {
         storeId: store.id,
         date: { gte: overallStart, lte: overallEnd },
+        ...FOOD_COST_ROWS,
       },
       select: {
         date: true,
@@ -706,6 +708,7 @@ export async function getAllStoresPnL(input: {
       where: {
         storeId: { in: storeIds },
         date: { gte: overallStart, lte: overallEnd },
+        ...FOOD_COST_ROWS,
       },
       select: {
         storeId: true,

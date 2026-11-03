@@ -30,6 +30,7 @@ import {
   storeIdsSchema,
 } from "./_shared"
 import type { ChatTool, ChatToolContext } from "./types"
+import { FOOD_COST_ROWS } from "@/lib/counter/food-cost-scope"
 
 /**
  * P&L summary for the chat assistant.
@@ -419,6 +420,8 @@ async function computeWindow(input: {
       where: {
         storeId: { in: storeIds },
         date: { gte: overallStart, lte: overallEnd },
+        // Packaging out, as on the dashboard's food line (`food-cost-scope.ts`).
+        ...FOOD_COST_ROWS,
       },
       select: {
         storeId: true,
