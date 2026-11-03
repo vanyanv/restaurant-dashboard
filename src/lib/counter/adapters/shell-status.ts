@@ -1,5 +1,7 @@
 import { prisma } from "@/lib/prisma"
 import { cached } from "@/lib/cache/cached"
+import { anomalyHorizon } from "@/lib/anomaly-window"
+import { alertsCacheTag } from "@/lib/alerts/cache-tag"
 import type { SyncState } from "@/components/counter/shell/sync-chip"
 
 /**
@@ -47,7 +49,9 @@ export async function getShellStatus(
   const raw = await cached<{ startedAt: string | null; completedAt: string | null; status: string | null; open: number }>(
     `counter:shell-status:${accountId}`,
     60,
-    [],
+    // Busted by the alert inbox's writes, so the rail's count follows a
+    // Clear all or an Undo at once instead of a minute later.
+    [alertsCacheTag(accountId)],
     async () => {
       const [run, open] = await Promise.all([
         prisma.jobRun.findFirst({
@@ -60,7 +64,11 @@ export async function getShellStatus(
         }),
         storeIds.length === 0
           ? Promise.resolve(0)
-          : prisma.alert.count({ where: { status: "OPEN", storeId: { in: storeIds } } }),
+          : // Same horizon the Needs you page lists over, so the rail's count
+          // and the page agree and "Clear all" brings it to zero.
+          prisma.alert.count({
+              where: { status: "OPEN", storeId: { in: storeIds }, occurredOn: { gte: anomalyHorizon(now) } },
+            }),
       ])
       // Dates do not survive the cache (see the Counter cache notes), so
       // they travel as ISO strings and are revived below.

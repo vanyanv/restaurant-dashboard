@@ -224,6 +224,12 @@ export interface PhoneAlertList {
   rows: PhoneAlertRow[]
   /** The section head's qualifier — "6 of 77", "last 30 days". */
   meta: string
+  /**
+   * Open alerts in the store, from the inbox's own counts, and how many are critical — what
+   * the phone's "Clear all" counts and names in its confirm. Set on the Open
+   * list only.
+   */
+  clearable?: { total: number; critical: number }
 }
 
 export interface PhoneAlertsHead {
@@ -856,6 +862,9 @@ export async function getAlertsSections(input: AlertsQuery = {}): Promise<Alerts
       return {
         rows,
         meta: phoneListMeta(rows.length, buildRows(open, today).length, open.length),
+        // The groupBy's tallies, not the loaded window: the window is 100 rows
+        // shared with closed ones, and the phone's clear is server-scoped.
+        clearable: { total: d.counts.open, critical: d.counts.critical },
       }
     }),
     /*

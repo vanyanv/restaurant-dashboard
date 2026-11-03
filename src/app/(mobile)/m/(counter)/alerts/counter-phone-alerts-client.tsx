@@ -15,6 +15,7 @@ import type { AlertsSections, PhoneAlertRow } from "@/lib/counter/adapters/alert
 import type { SectionSources } from "@/lib/counter/adapters/types"
 import { useRouter } from "next/navigation"
 import { closeAlert } from "@/lib/counter/actions/alert"
+import { clearQuestion, useClearAlerts } from "@/lib/counter/use-clear-alerts"
 
 /**
  * Counter Needs-you — "Open right now", the phone (`P.alerts.phone`,
@@ -171,6 +172,62 @@ function PhoneAlertDecision({
   )
 }
 
+/**
+ * "Clear all" on the phone — the desk's three steps (ask, confirm, Undo) in
+ * `.mbtn` shape. The phone has no filters, so its scope is the store the
+ * shell is showing, and the count is the uncapped open total rather than the
+ * six rows drawn above it. See `useClearAlerts`.
+ */
+function PhoneClearAll({
+  total,
+  critical,
+  storeId,
+}: {
+  total: number
+  critical: number
+  storeId: string | null
+}) {
+  const { state, ask, cancel, confirm, undo } = useClearAlerts({ storeId })
+
+  if (total === 0 && (state.step === "idle" || state.step === "confirm")) return null
+
+  return (
+    <div className="msec__body">
+      {state.step === "idle" ? (
+        <button className="mbtn" type="button" onClick={ask}>
+          Clear all {total}
+        </button>
+      ) : state.step === "confirm" ? (
+        <>
+          <p className="msub">{clearQuestion(total, critical)}</p>
+          <button className="mbtn mbtn--primary" type="button" onClick={confirm}>
+            Yes, clear
+          </button>
+          <button className="mbtn" type="button" onClick={cancel}>
+            Cancel
+          </button>
+        </>
+      ) : state.step === "saving" ? (
+        <p className="msub">Saving…</p>
+      ) : state.step === "cleared" ? (
+        <>
+          <p className="msub">Cleared {state.ids.length}. They are under Closed.</p>
+          <button className="mbtn" type="button" onClick={undo}>
+            Undo
+          </button>
+        </>
+      ) : (
+        <>
+          <p className="msub">That did not save.</p>
+          <button className="mbtn" type="button" onClick={cancel}>
+            OK
+          </button>
+        </>
+      )}
+    </div>
+  )
+}
+
 export function CounterPhoneAlertsClient({
   params: paramsString,
   today,
@@ -186,7 +243,6 @@ export function CounterPhoneAlertsClient({
   // page was rendered for are the params the adapter was asked with, and
   // reading them here is what proves the two agree.
   const counterParams = useMemo(() => readCounterParams(params, today), [params, today])
-  void counterParams
 
   /*
    * This page owns no `push` of its own — the date sheet and the store picker
@@ -237,6 +293,13 @@ export function CounterPhoneAlertsClient({
                 />
               ) : null
             })()}
+            {l.clearable ? (
+              <PhoneClearAll
+                total={l.clearable.total}
+                critical={l.clearable.critical}
+                storeId={counterParams.storeId}
+              />
+            ) : null}
           </>
         )}
       </Section>
