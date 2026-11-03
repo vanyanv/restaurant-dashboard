@@ -32,6 +32,7 @@ const GLYPH: Record<CellStatus, { cls: string; mark: ReactNode; label: string }>
   upcoming: { cls: "ck-gl--up", mark: "·", label: "Not open yet" },
   off: { cls: "ck-gl--off", mark: "·", label: "Switched off" },
   before: { cls: "ck-gl--off", mark: "", label: "Before checks began" },
+  paused: { cls: "ck-gl--paused", mark: "‖", label: "Paused for training" },
 }
 
 export function statusLabel(s: CellStatus): string {
@@ -72,7 +73,7 @@ export function Glyph({
 export function Legend() {
   return (
     <div className="ck-legend">
-      {(["on_time", "late", "missed", "closed"] as const).map((s) => (
+      {(["on_time", "late", "missed", "closed", "paused"] as const).map((s) => (
         <span key={s}>
           <Glyph status={s} small />
           {GLYPH[s].label}
@@ -223,7 +224,7 @@ export function CheckDetail({ store, label, cell }: { store: string; label: stri
         <div className="ck-people" aria-label="Who worked on it">
           {cell.people.map((p) => (
             <span key={p}>
-              {p} · {cell.log.filter((l) => l.by === p && (l.action === "done" || l.action === "note")).length} tasks
+              {p} · {taskCount(cell.log.filter((l) => l.by === p && (l.action === "done" || l.action === "note")).length)}
             </span>
           ))}
         </div>
@@ -282,4 +283,8 @@ export function CheckDetail({ store, label, cell }: { store: string; label: stri
       )}
     </div>
   )
+}
+
+function taskCount(n: number): string {
+  return `${n} task${n === 1 ? "" : "s"}`
 }

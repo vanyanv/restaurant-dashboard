@@ -15,8 +15,19 @@ import { windowBounds, windowPhase, type CheckWindow } from "./time"
  *   upcoming  not open yet
  *   off       the owner switched this check off
  *   before    the window closed before checks were set up for the store
+ *   paused    the window closes inside a pause (the owner is training crew):
+ *             practice only, never on time, late or missed
  */
-export type CellStatus = "on_time" | "late" | "missed" | "closed" | "open" | "upcoming" | "off" | "before"
+export type CellStatus =
+  | "on_time"
+  | "late"
+  | "missed"
+  | "closed"
+  | "open"
+  | "upcoming"
+  | "off"
+  | "before"
+  | "paused"
 
 export type CellInput = {
   day: string
@@ -31,9 +42,28 @@ export type CellInput = {
    * miss and never an alert.
    */
   since?: Date
+  /**
+   * The store's check pauses. A window that closes inside one is "paused",
+   * even with a submission: work done while the owner was training crew is
+   * practice and counts for nothing.
+   */
+  pauses?: PauseSpan[]
+}
+
+/** One pause of a store's checks. `resumedAt` null is a pause still on. */
+export type PauseSpan = { pausedAt: Date; resumedAt: Date | null }
+
+/** Whether this check's window closes inside a pause. */
+export function windowPaused(day: string, window: CheckWindow, pauses: PauseSpan[] | undefined): boolean {
+  if (!pauses || pauses.length === 0) return false
+  const closes = windowBounds(day, window).closes.getTime()
+  return pauses.some(
+    (p) => p.pausedAt.getTime() <= closes && (p.resumedAt === null || closes < p.resumedAt.getTime()),
+  )
 }
 
 export function cellStatus(input: CellInput): CellStatus {
+  if (windowPaused(input.day, input.window, input.pauses)) return "paused"
   if (input.submission) return input.submission.lateMinutes > 0 ? "late" : "on_time"
   if (input.closed) return "closed"
   if (!input.enabled) return "off"

@@ -29,6 +29,7 @@ import {
 } from "@/lib/counter/actions/store"
 import { storesViewTabs } from "@/lib/counter/nav"
 import { parseRatePercent } from "@/lib/counter/commission-rate-input"
+import { setChecksPaused } from "@/lib/counter/actions/checks"
 import type { SectionSources } from "@/lib/counter/adapters/types"
 import type {
   StoreFileEditable,
@@ -298,6 +299,8 @@ function StoreFileForm({
         </select>
       </div>
 
+      <ChecksPauseRow storeId={data.storeId} since={data.checksPausedSince} />
+
       {/*
         * `.setrow`, like the five fields above it — not `.editrow`.
         *
@@ -368,6 +371,48 @@ function StoreFileForm({
   )
 }
 
+/**
+ * Store checks on or paused, for training crew. Its own button rather than a
+ * field under "Save the inputs": pausing is an immediate switch the owner
+ * flips at the store, and resuming clears the practice ticks, so it should
+ * never ride along with an unrelated save.
+ */
+function ChecksPauseRow({ storeId, since }: { storeId: string; since: string | null }) {
+  const router = useRouter()
+  const [busy, start] = useTransition()
+  const [error, setError] = useState<string | null>(null)
+  const paused = since !== null
+  const flip = () => {
+    setError(null)
+    start(async () => {
+      const r = await setChecksPaused({ storeId, paused: !paused })
+      if (!r.ok) setError(r.error)
+      else router.refresh()
+    })
+  }
+  return (
+    <div className="setrow">
+      <div className="tx">
+        <b>Store checks{paused ? " \u00b7 paused" : ""}</b>
+        <span>
+          {error ??
+            (paused
+              ? `Paused since ${since} for training. Nothing counts as missed or late, and the crew page is practice only. Resuming clears the practice ticks.`
+              : "Pause while you teach crew the checks. Nothing counts as missed or late until you resume.")}
+        </span>
+      </div>
+      <button
+        className={paused ? "btn btn--primary" : "btn"}
+        type="button"
+        disabled={busy}
+        aria-pressed={paused}
+        onClick={flip}
+      >
+        {busy ? (paused ? "Resuming\u2026" : "Pausing\u2026") : paused ? "Resume checks" : "Pause checks"}
+      </button>
+    </div>
+  )
+}
 
 /**
  * ADDING, EDITING AND REMOVING A FIXED EXPENSE.

@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma"
-import { cellStatus, type CellStatus } from "./status"
+import { cellStatus, type CellStatus, type PauseSpan } from "./status"
 import { addDays, CHECK_KINDS, dayToDb, dbToDay, type CheckKindName, type CheckWindow } from "./time"
 import { ensureCheckSetup } from "./setup"
 
@@ -56,6 +56,11 @@ export type GridStore = {
   name: string
   /** Set to "Not open yet" in store settings: checks are paused, never missed. */
   preOpen: boolean
+  /**
+   * When the owner paused this store's checks to train crew, if they still
+   * are. Set and cleared in Stores settings; see `CheckPause`.
+   */
+  pausedSince: Date | null
   templates: GridTemplate[]
   closedDays: string[]
   cells: GridCell[]
@@ -114,7 +119,7 @@ export async function loadCheckGrid(opts: {
 
   const storeIds = stores.map((s) => s.id)
   const range = { gte: dayToDb(opts.fromDay), lte: dayToDb(opts.toDay) }
-  const [templates, submissions, closures, starts, marks] = await Promise.all([
+  const [templates, submissions, closures, starts, marks, pauses] = await Promise.all([
     prisma.checkTemplate.findMany({
       where: { storeId: { in: storeIds }, store: { accountId: opts.accountId } },
       select: {
@@ -151,6 +156,17 @@ export async function loadCheckGrid(opts: {
       },
       orderBy: [{ at: "asc" }, { id: "asc" }],
     }),
+    // Every pause that could cover a window in range: one still on, or one
+    // that ended after the range began.
+    prisma.checkPause.findMany({
+      where: {
+        storeId: { in: storeIds },
+        store: { accountId: opts.accountId },
+        OR: [{ resumedAt: null }, { resumedAt: { gte: dayToDb(opts.fromDay) } }],
+      },
+      select: { storeId: true, pausedAt: true, resumedAt: true },
+      orderBy: { pausedAt: "asc" },
+    }),
   ])
 
   const days: string[] = []
@@ -171,6 +187,10 @@ export async function loadCheckGrid(opts: {
         itemCount: t.sections.reduce((n, s) => n + s._count.items, 0),
       }))
     const preOpen = store.lifecycleStage === "pre_open"
+    const storePauses: PauseSpan[] = pauses
+      .filter((p) => p.storeId === store.id)
+      .map((p) => ({ pausedAt: p.pausedAt, resumedAt: p.resumedAt }))
+    const pausedSince = storePauses.find((p) => p.resumedAt === null)?.pausedAt ?? null
     const closedDays = closures.filter((c) => c.storeId === store.id).map((c) => dbToDay(c.businessDate))
     const cells: GridCell[] = []
     for (const day of days) {
@@ -212,6 +232,7 @@ export async function loadCheckGrid(opts: {
             submission: sub ?? null,
             now: opts.now,
             since: t.createdAt,
+            pauses: storePauses,
           }),
           submission: sub
             ? {
@@ -231,7 +252,7 @@ export async function loadCheckGrid(opts: {
         })
       }
     }
-    return { id: store.id, name: store.name, preOpen, templates: tpls, closedDays, cells }
+    return { id: store.id, name: store.name, preOpen, pausedSince, templates: tpls, closedDays, cells }
   })
 }
 

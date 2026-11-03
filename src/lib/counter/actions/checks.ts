@@ -216,6 +216,38 @@ export async function setStoreClosed(input: { storeId: string; day: string; clos
   }
 }
 
+/**
+ * Pause or resume a store's checks while the owner trains crew. While paused,
+ * no check counts as missed or late, nothing reaches Needs you or the report
+ * email, and the crew page is practice. On resume, every tick and PIN start
+ * made during the pause is cleared: it was practice, and leaving it would
+ * hand the next real check a list that is already half ticked.
+ */
+export async function setChecksPaused(input: { storeId: string; paused: boolean }): Promise<ActionResult> {
+  try {
+    await requireOwnerStore(input.storeId)
+    const open = await prisma.checkPause.findFirst({
+      where: { storeId: input.storeId, resumedAt: null },
+      select: { id: true, pausedAt: true },
+    })
+    if (input.paused) {
+      if (!open) await prisma.checkPause.create({ data: { storeId: input.storeId } })
+    } else if (open) {
+      await prisma.$transaction([
+        prisma.checkPause.update({ where: { id: open.id }, data: { resumedAt: new Date() } }),
+        prisma.checkMark.deleteMany({ where: { storeId: input.storeId, at: { gte: open.pausedAt } } }),
+        prisma.checkStart.deleteMany({ where: { storeId: input.storeId, startedAt: { gte: open.pausedAt } } }),
+      ])
+    }
+    revalidateChecks()
+    revalidatePath("/dashboard/stores", "layout")
+    revalidatePath("/m/stores", "layout")
+    return { ok: true, message: input.paused ? "Checks paused." : "Checks are back on." }
+  } catch (err) {
+    return fail(err)
+  }
+}
+
 // ─── Crew ───────────────────────────────────────────────────────────────────
 
 const CrewInput = z.object({

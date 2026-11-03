@@ -136,7 +136,23 @@ describe("cellStatus", () => {
   })
   it("counts only on-time, late and missed toward the rate", () => {
     expect(onTimeRate(["on_time", "late", "missed", "closed", "off", "open"])).toBe(33)
-    expect(onTimeRate(["closed", "upcoming", "before"])).toBeNull()
+    expect(onTimeRate(["closed", "upcoming", "before", "paused"])).toBeNull()
+  })
+  it("pauses a window that closes while checks are paused for training", () => {
+    // This morning window closes 10:30 am LA (17:30Z).
+    const on = { pausedAt: new Date("2026-10-25T16:00:00Z"), resumedAt: null }
+    expect(cellStatus({ ...base, now: noon, pauses: [on] })).toBe("paused")
+    // Practice submissions count for nothing either.
+    expect(cellStatus({ ...base, submission: { lateMinutes: 12 }, now: noon, pauses: [on] })).toBe("paused")
+    // Resumed before the window closed: it counts again.
+    const back = { pausedAt: on.pausedAt, resumedAt: new Date("2026-10-25T17:00:00Z") }
+    expect(cellStatus({ ...base, now: noon, pauses: [back] })).toBe("missed")
+    // Paused only after it had already closed: the miss stands.
+    const late = { pausedAt: new Date("2026-10-25T18:00:00Z"), resumedAt: null }
+    expect(cellStatus({ ...base, now: noon, pauses: [late] })).toBe("missed")
+    // Resumed after it closed: still paused, never retroactively missed.
+    const after = { pausedAt: on.pausedAt, resumedAt: new Date("2026-10-25T18:00:00Z") }
+    expect(cellStatus({ ...base, now: noon, pauses: [after] })).toBe("paused")
   })
 })
 
