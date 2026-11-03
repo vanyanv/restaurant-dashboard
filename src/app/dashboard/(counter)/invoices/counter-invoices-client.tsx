@@ -1,8 +1,8 @@
-"use client"
+"use client";
 
-import { useState, useTransition } from "react"
-import Link from "next/link"
-import { useRouter } from "next/navigation"
+import { useState, useTransition } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   Section,
   Table,
@@ -10,12 +10,16 @@ import {
   usePageChrome,
   useSurfaceHref,
   type Column,
-} from "@/components/counter"
-import type { SectionSources } from "@/lib/counter/adapters/types"
-import type { DeskItem, InvoiceWeek, InvoicesSections } from "@/lib/counter/adapters/invoices"
-import type { PriceSections } from "@/lib/counter/adapters/prices"
-import { confirmInvoiceStore } from "@/lib/counter/actions/invoice"
-import { InvoicesHead, useScoped } from "./invoices-ui"
+} from "@/components/counter";
+import type { SectionSources } from "@/lib/counter/adapters/types";
+import type {
+  DeskItem,
+  InvoiceWeek,
+  InvoicesSections,
+} from "@/lib/counter/adapters/invoices";
+import type { PriceSections } from "@/lib/counter/adapters/prices";
+import { confirmInvoiceStore } from "@/lib/counter/actions/invoice";
+import { InvoicesHead, useScoped } from "./invoices-ui";
 
 /**
  * Invoices — This week. Invoices mostly check themselves now, so the page
@@ -27,37 +31,41 @@ import { InvoicesHead, useScoped } from "./invoices-ui"
  * are `week` (whose worklist is `deskOf`'s, the same one the phone queue
  * cuts), and the price box is the Price monitor's own `movers`.
  */
-export type CounterInvoicesSections = SectionSources<Pick<InvoicesSections, "week">>
-export type InvoicePriceSections = SectionSources<Pick<PriceSections, "movers">>
+export type CounterInvoicesSections = SectionSources<
+  Pick<InvoicesSections, "week">
+>;
+export type InvoicePriceSections = SectionSources<
+  Pick<PriceSections, "movers">
+>;
 
 const ASK_SUGGESTIONS = [
   "Which invoices need me, and why?",
   "What did I spend the most on this month?",
   "Which ingredient prices moved against last period?",
-]
+];
 
 const PRICE_COLUMNS: Column[] = [
   { key: "ingredient", label: "Item" },
   { key: "median", label: "Usual", numeric: true },
   { key: "latest", label: "Now", numeric: true },
   { key: "costs", label: "Costs you, 30d", numeric: true },
-]
+];
 
-const PRICE_ROWS = 5
+const PRICE_ROWS = 5;
 
 export function CounterInvoicesClient({
   sub,
   sections,
   prices,
 }: {
-  sub: string
-  sections: CounterInvoicesSections
-  prices: InvoicePriceSections
+  sub: string;
+  sections: CounterInvoicesSections;
+  prices: InvoicePriceSections;
 }) {
-  usePageChrome({ leaf: "Invoices", askSuggestions: ASK_SUGGESTIONS })
-  const surface = useSurfaceHref()
-  const scoped = useScoped()
-  const { pending } = useCounterTransition()
+  usePageChrome({ leaf: "Invoices", askSuggestions: ASK_SUGGESTIONS });
+  const surface = useSurfaceHref();
+  const scoped = useScoped();
+  const { pending } = useCounterTransition();
 
   return (
     <>
@@ -72,9 +80,14 @@ export function CounterInvoicesClient({
           title="Needs you"
           fold="closed"
           meta={(w) =>
-            w.needs.length + (w.unlinked ? 1 : 0) === 0
-              ? "nothing waiting"
-              : `${plural(w.needs.length + (w.unlinked ? 1 : 0), "thing")}${w.needs.length > 0 ? ` · ${w.needsTotal}` : ""}`
+            [
+              w.needs.length > 0
+                ? `${plural(w.needs.length, "invoice")} · ${w.needsTotal}`
+                : null,
+              w.unlinked ? `${plural(w.unlinked.lines, "line")} to link` : null,
+            ]
+              .filter(Boolean)
+              .join(" · ") || "nothing waiting"
           }
           data={sections.week}
           pending={pending}
@@ -107,9 +120,14 @@ export function CounterInvoicesClient({
           >
             {(m) => (
               <>
-                <Table columns={PRICE_COLUMNS} rows={m.rows.slice(0, PRICE_ROWS)} />
+                <Table
+                  columns={PRICE_COLUMNS}
+                  rows={m.rows.slice(0, PRICE_ROWS)}
+                />
                 <p className="sh-empty">
-                  <Link href={surface("/dashboard/invoices/prices")}>Every price that changed</Link>
+                  <Link href={surface("/dashboard/invoices/prices")}>
+                    Every price that changed
+                  </Link>
                 </p>
               </>
             )}
@@ -129,14 +147,21 @@ export function CounterInvoicesClient({
                     <div className="iv-bar" key={v.name}>
                       <span className="n">{v.name}</span>
                       <span className="track" aria-hidden="true">
-                        <span className="fill" style={{ width: `${Math.round(v.share * 1000) / 10}%` }} />
+                        <span
+                          className="fill"
+                          style={{
+                            width: `${Math.round(v.share * 1000) / 10}%`,
+                          }}
+                        />
                       </span>
                       <span className="v">{v.amount}</span>
                     </div>
                   ))}
                 </div>
                 <p className="sh-empty">
-                  <Link href={scoped("/dashboard/operations/vendors")}>Every vendor</Link>
+                  <Link href={scoped("/dashboard/operations/vendors")}>
+                    Every vendor
+                  </Link>
                 </p>
               </>
             )}
@@ -144,105 +169,182 @@ export function CounterInvoicesClient({
         </div>
       </div>
     </>
-  )
+  );
 }
 
 function plural(n: number, word: string) {
-  return `${n} ${n === 1 ? word : `${word}s`}`
+  return `${n} ${n === 1 ? word : `${word}s`}`;
 }
 
 /** Opens the folded Needs you and brings it into view. */
 function openNeeds() {
-  const box = document.getElementById("iv-needs")
-  const fold = box?.querySelector("details")
-  if (fold) fold.open = true
-  box?.scrollIntoView?.({ behavior: "smooth", block: "start" })
+  const box = document.getElementById("iv-needs");
+  const fold = box?.querySelector("details");
+  if (fold) fold.open = true;
+  box?.scrollIntoView?.({ behavior: "smooth", block: "start" });
 }
 
 function Lede({ week }: { week: InvoiceWeek }) {
-  const scoped = useScoped()
+  const scoped = useScoped();
   return (
     <section className="iv-lede" aria-label="This week in one sentence">
       <p>
-        {week.lede.map((part, i) => (part.strong ? <b key={i}>{part.text}</b> : <span key={i}>{part.text}</span>))}
+        {week.lede.map((part, i) =>
+          part.strong ? (
+            <b key={i}>{part.text}</b>
+          ) : (
+            <span key={i}>{part.text}</span>
+          ),
+        )}
       </p>
       <div className="iv-pills">
         {week.pills.map((p) =>
           p.href.includes("#iv-needs") ? (
-            <button key={p.label} type="button" className={`iv-pill iv-pill--${p.tone} iv-pill--dot`} onClick={openNeeds}>
+            <button
+              key={p.label}
+              type="button"
+              className={`iv-pill iv-pill--${p.tone} iv-pill--dot`}
+              onClick={openNeeds}
+            >
               {p.label}
             </button>
           ) : (
-            <Link key={p.label} className={`iv-pill iv-pill--${p.tone} iv-pill--dot`} href={scoped(p.href)}>
+            <Link
+              key={p.label}
+              className={`iv-pill iv-pill--${p.tone} iv-pill--dot`}
+              href={scoped(p.href)}
+            >
               {p.label}
             </Link>
           ),
         )}
       </div>
     </section>
-  )
+  );
 }
 
 function Needs({ week }: { week: InvoiceWeek }) {
-  const surface = useSurfaceHref()
+  const scoped = useScoped();
+  // Held here, not in the task: a saved task leaves the list on refresh, and
+  // its own confirmation would leave with it.
+  const [notes, setNotes] = useState<
+    Array<{ tone: "good" | "bad"; text: string }>
+  >([]);
+  const note = (tone: "good" | "bad", text: string) =>
+    setNotes((n) => [...n.slice(-2), { tone, text }]);
+  const banner =
+    notes.length > 0 ? (
+      <div className="iv-notes" role="status">
+        {notes.map((x, i) => (
+          <span
+            key={i}
+            className={x.tone === "good" ? "iv-task__done" : "iv-task__err"}
+          >
+            {x.tone === "good" ? "✓ " : ""}
+            {x.text}
+          </span>
+        ))}
+      </div>
+    ) : null;
   if (week.needs.length === 0 && !week.unlinked) {
-    return <p className="sh-empty">Nothing needs you. Every invoice checked itself and every line is linked.</p>
+    return (
+      <>
+        {banner}
+        <p className="sh-empty">
+          Nothing needs you. Every invoice is checked and every line is linked.
+        </p>
+      </>
+    );
   }
   return (
-    <ol className="iv-tasks">
-      {week.needs.map((it, i) => (
-        <Task key={it.key} n={i + 1} item={it} stores={week.stores} />
-      ))}
-      {week.unlinked ? (
-        <li className="iv-task">
-          <span className="iv-task__n">{week.needs.length + 1}</span>
-          <div className="iv-task__body">
-            <b>
-              Link {plural(week.unlinked.lines, "supply line")} so {week.unlinked.lines === 1 ? "it counts" : "they count"} in
-              your costs
-            </b>
-            <span className="iv-task__d">
-              {week.unlinked.total} this week reached no ingredient. Biggest: {week.unlinked.top}.
-            </span>
-            <div className="btnrow">
-              <Link className="btn btn--primary" href={surface("/dashboard/ingredients")}>
-                Link them
-              </Link>
+    <>
+      {banner}
+      <ol className="iv-tasks">
+        {week.needs.map((it, i) => (
+          <Task
+            key={it.key}
+            n={i + 1}
+            item={it}
+            stores={week.stores}
+            onNote={note}
+          />
+        ))}
+        {week.unlinked ? (
+          <li className="iv-task">
+            <span className="iv-task__n">{week.needs.length + 1}</span>
+            <div className="iv-task__body">
+              <b>
+                Link {plural(week.unlinked.lines, "supply line")} so{" "}
+                {week.unlinked.lines === 1 ? "it counts" : "they count"} in your
+                costs
+              </b>
+              <span className="iv-task__d">
+                {week.unlinked.total} this week reached no ingredient. Biggest:{" "}
+                {week.unlinked.top}.
+              </span>
+              <div className="btnrow">
+                <Link
+                  className="btn btn--primary"
+                  href={scoped("/dashboard/ingredients")}
+                >
+                  Link them
+                </Link>
+              </div>
             </div>
-          </div>
-        </li>
-      ) : null}
-    </ol>
-  )
+          </li>
+        ) : null}
+      </ol>
+    </>
+  );
 }
 
-function Task({ n, item, stores }: { n: number; item: DeskItem; stores: InvoiceWeek["stores"] }) {
-  const surface = useSurfaceHref()
-  const router = useRouter()
-  const [saving, startSaving] = useTransition()
-  const [error, setError] = useState<string | null>(null)
-  const [done, setDone] = useState<string | null>(null)
-  const [picking, setPicking] = useState(false)
-  const others = stores.filter((s) => s.id !== item.confirmStore?.storeId)
-  const [moveTo, setMoveTo] = useState(others[0]?.id ?? "")
+const SAVE_ERRORS: Record<string, string> = {
+  "not-in-review": "was already settled, so nothing changed.",
+  "not-store-only": "is held for more than its store. Open it to review.",
+  "does-not-tie-out":
+    "doesn't add up, so it can't be approved here. Open it to fix.",
+};
+
+function Task({
+  n,
+  item,
+  stores,
+  onNote,
+}: {
+  n: number;
+  item: DeskItem;
+  stores: InvoiceWeek["stores"];
+  onNote: (tone: "good" | "bad", text: string) => void;
+}) {
+  const surface = useSurfaceHref();
+  const router = useRouter();
+  const [saving, startSaving] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+  const [done, setDone] = useState<string | null>(null);
+  const [picking, setPicking] = useState(false);
+  const others = stores.filter((s) => s.id !== item.confirmStore?.storeId);
+  const [moveTo, setMoveTo] = useState(others[0]?.id ?? "");
 
   const save = (storeId: string, name: string) => {
-    setError(null)
+    setError(null);
     startSaving(async () => {
-      const result = await confirmInvoiceStore(item.key, storeId)
+      const result = await confirmInvoiceStore(item.key, storeId);
+      const label = `${item.vendor} #${item.number}`;
       if (!result.ok) {
-        setError(
-          result.error === "not-in-review"
-            ? "Someone already settled this invoice. Refreshing."
-            : "That didn't save. Try again, or open the invoice.",
-        )
-        router.refresh()
-        return
+        const known = SAVE_ERRORS[result.error];
+        if (known) {
+          onNote("bad", `${label} ${known}`);
+          router.refresh();
+        } else {
+          setError("That didn't save. Try again, or open the invoice.");
+        }
+        return;
       }
-      setDone(`Saved to ${name} and approved.`)
-      router.refresh()
-    })
-  }
+      setDone(`Saved to ${name} and approved.`);
+      onNote("good", `${label} saved to ${name} and approved.`);
+      router.refresh();
+    });
+  };
 
   return (
     <li className={`iv-task${item.glyph === "miss" ? " iv-task--bad" : ""}`}>
@@ -265,12 +367,20 @@ function Task({ n, item, stores }: { n: number; item: DeskItem; stores: InvoiceW
                 type="button"
                 className="btn btn--primary"
                 disabled={saving}
-                onClick={() => save(item.confirmStore!.storeId, item.confirmStore!.storeName)}
+                onClick={() =>
+                  save(item.confirmStore!.storeId, item.confirmStore!.storeName)
+                }
               >
                 {saving ? "Saving…" : `Yes, ${item.confirmStore.storeName}`}
               </button>
               {others.length > 0 ? (
-                <button type="button" className="btn" disabled={saving} onClick={() => setPicking((p) => !p)} aria-expanded={picking}>
+                <button
+                  type="button"
+                  className="btn"
+                  disabled={saving}
+                  onClick={() => setPicking((p) => !p)}
+                  aria-expanded={picking}
+                >
                   Different store
                 </button>
               ) : null}
@@ -281,7 +391,11 @@ function Task({ n, item, stores }: { n: number; item: DeskItem; stores: InvoiceW
             {picking ? (
               <div className="iv-move">
                 <label htmlFor={`move-${item.key}`}>Move it to</label>
-                <select id={`move-${item.key}`} value={moveTo} onChange={(e) => setMoveTo(e.target.value)}>
+                <select
+                  id={`move-${item.key}`}
+                  value={moveTo}
+                  onChange={(e) => setMoveTo(e.target.value)}
+                >
                   {others.map((s) => (
                     <option key={s.id} value={s.id}>
                       {s.name}
@@ -292,7 +406,12 @@ function Task({ n, item, stores }: { n: number; item: DeskItem; stores: InvoiceW
                   type="button"
                   className="btn btn--primary"
                   disabled={saving || !moveTo}
-                  onClick={() => save(moveTo, others.find((s) => s.id === moveTo)?.name ?? "that store")}
+                  onClick={() =>
+                    save(
+                      moveTo,
+                      others.find((s) => s.id === moveTo)?.name ?? "that store",
+                    )
+                  }
                 >
                   Move and approve
                 </button>
@@ -313,14 +432,14 @@ function Task({ n, item, stores }: { n: number; item: DeskItem; stores: InvoiceW
         ) : null}
       </div>
     </li>
-  )
+  );
 }
 
 function CameIn({ week }: { week: InvoiceWeek }) {
-  const surface = useSurfaceHref()
-  const scoped = useScoped()
+  const surface = useSurfaceHref();
+  const scoped = useScoped();
   if (week.days.length === 0) {
-    return <p className="sh-empty">No invoices in the last 7 days.</p>
+    return <p className="sh-empty">No invoices in the last 7 days.</p>;
   }
   return (
     <>
@@ -336,16 +455,20 @@ function CameIn({ week }: { week: InvoiceWeek }) {
                 </span>
                 <span className="where">{r.store}</span>
                 <span className="amt">{r.total}</span>
-                <span className={`st st--${r.status.tone}`}>{r.status.label}</span>
+                <span className={`st st--${r.status.tone}`}>
+                  {r.status.label}
+                </span>
               </Link>
             ))}
           </div>
         ))}
       </div>
       <p className="sh-empty">
-        {week.more > 0 ? `${plural(week.more, "more invoice")} this week · ` : null}
+        {week.more > 0
+          ? `${plural(week.more, "more invoice")} this week · `
+          : null}
         <Link href={scoped("/dashboard/invoices/all")}>See all invoices</Link>
       </p>
     </>
-  )
+  );
 }

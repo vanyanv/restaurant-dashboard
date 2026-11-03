@@ -108,3 +108,4 @@ a.iv-pill:focus-visible,button.iv-pill:focus-visible{outline:2px solid var(--acc
 .iv-bar .track{height:10px;border-radius:3px;background:var(--sunk);overflow:hidden}
 .iv-bar .fill{display:block;height:100%;background:var(--ink-3)}
 .iv-bar .v{font-variant-numeric:tabular-nums;font-weight:600;text-align:right;min-width:64px}
+.iv-notes{display:grid;gap:4px;padding:10px 16px;border-bottom:1px solid var(--line);background:var(--sunk)}

@@ -14,6 +14,7 @@ import {
 import { mapReady, type SectionData } from "@/lib/counter/section-data"
 import { reasonLabel } from "@/lib/counter/invoice-reasons"
 import { shortStoreName } from "@/lib/checks/names"
+import { businessQueryDate } from "@/lib/counter/business-date"
 import type { FigureProps, MListRow, MoneyLine, QueueItem, Row } from "@/components/counter"
 
 /**
@@ -1162,7 +1163,9 @@ const unlinkedLine = (l: LoadedLine) => l.canonicalId === null && !isFeeRow(l) &
  * where a line is linked.
  */
 function weekOf(d: InvoiceData): InvoiceWeek {
-  const end = utcDay(d.today)
+  // The reader's LA calendar day, not the UTC day of the instant: after
+  // 4-5pm in LA the UTC day is already tomorrow.
+  const end = businessQueryDate(d.today).getTime()
   const start = end - (WEEK_DAYS - 1) * 86_400_000
   const inWeek = d.all.filter(
     (i) => i.invoiceDate !== null && utcDay(i.invoiceDate) >= start && utcDay(i.invoiceDate) <= end,
@@ -1170,7 +1173,12 @@ function weekOf(d: InvoiceData): InvoiceWeek {
   const live = inWeek.filter((i) => i.status !== "REJECTED")
   const desk = deskOf(d)
   const needIds = new Set(desk.items.map((x) => x.key))
-  const checked = live.filter((i) => !needIds.has(i.id))
+  // Settled (by the sync or the owner) and tying out. PENDING is not settled.
+  const isChecked = (i: LoadedInvoice) =>
+    (i.status === "MATCHED" || i.status === "APPROVED") && !needIds.has(i.id) && !openGap(i)
+  const checked = live.filter(isChecked)
+  const needsThisWeek = live.filter((i) => needIds.has(i.id)).length
+  const needsEarlier = desk.items.length - needsThisWeek
   const needTotal = d.all.filter((i) => needIds.has(i.id)).reduce((t, i) => t + i.totalAmount, 0)
 
   const unlinkedLines = live.flatMap((i) => i.lines.filter(unlinkedLine))
@@ -1196,17 +1204,25 @@ function weekOf(d: InvoiceData): InvoiceWeek {
       text: `${plural(live.length, "invoice")} came in this week for ${money(sum(live), { cents: true })}.`,
       strong: true,
     })
+    const counted = unlinkedLines.length === 0 ? " checked and counted in food cost." : " checked."
     lede.push({
       text:
         checked.length === live.length
-          ? " Every one is checked and counted in food cost."
-          : ` ${count(checked.length)} ${checked.length === 1 ? "is" : "are"} checked and counted in food cost.`,
+          ? ` Every one is${counted}`
+          : ` ${count(checked.length)} ${checked.length === 1 ? "is" : "are"}${counted}`,
     })
   }
   if (desk.items.length > 0) {
     lede.push({ text: " " })
     lede.push({ text: `${plural(desk.items.length, "invoice")} ${desk.items.length === 1 ? "needs" : "need"} you`, strong: true })
-    lede.push({ text: "." })
+    lede.push({
+      text:
+        needsEarlier > 0 && needsThisWeek > 0
+          ? ` (${count(needsEarlier)} from before this week).`
+          : needsEarlier > 0
+            ? `, from before this week.`
+            : ".",
+    })
   }
   if (unlinkedLines.length > 0) {
     lede.push({ text: " " })
@@ -1214,9 +1230,14 @@ function weekOf(d: InvoiceData): InvoiceWeek {
     lede.push({ text: " isn't linked to an ingredient yet, so your food cost is missing it." })
   }
 
-  const pills: InvoiceWeek["pills"] = [
-    { tone: "good", label: `${count(checked.length)} checked and counted`, href: "/dashboard/invoices/all" },
-  ]
+  const pills: InvoiceWeek["pills"] = []
+  if (checked.length > 0) {
+    pills.push({
+      tone: "good",
+      label: `${count(checked.length)} checked${unlinkedLines.length === 0 ? " and counted" : ""}`,
+      href: "/dashboard/invoices/all",
+    })
+  }
   if (desk.items.length > 0) {
     pills.push({
       tone: "warn",
@@ -1241,6 +1262,7 @@ function weekOf(d: InvoiceData): InvoiceWeek {
     }
     const n = i.lines.filter(unlinkedLine).length
     if (n > 0) return { tone: "warn", label: `Link ${plural(n, "line")}` }
+    if (!isChecked(i)) return { tone: "off", label: "Being read" }
     if (i.isReturn) return { tone: "good", label: "Credit" }
     return { tone: "good", label: "Checked" }
   }

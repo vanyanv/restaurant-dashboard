@@ -115,7 +115,7 @@ describe("Invoices · This week", () => {
     const fold = container.querySelector("#iv-needs details") as HTMLDetailsElement
     expect(fold).toBeTruthy()
     expect(fold.open).toBe(false)
-    expect(within(fold).getByText("2 things · $812.40")).toBeTruthy()
+    expect(within(fold).getByText("2 invoices · $812.40")).toBeTruthy()
     const fix = within(fold).getByRole("link", { name: "Open and fix" })
     expect(fix.getAttribute("href")).toBe("/dashboard/invoices/short")
     expect(within(fold).getByRole("link", { name: "Check it" }).getAttribute("href")).toBe("/dashboard/invoices/held")
@@ -158,7 +158,7 @@ describe("Invoices · This week", () => {
     expect((screen.getByLabelText("Move it to") as HTMLSelectElement).value).toBe("store_a")
     fireEvent.click(screen.getByRole("button", { name: "Yes, Glendale" }))
     expect(confirmInvoiceStore).toHaveBeenCalledWith("glen", "store_g")
-    expect(await screen.findByText(/Saved to Glendale and approved/)).toBeTruthy()
+    expect((await screen.findAllByText(/saved to Glendale and approved/i)).length).toBeGreaterThan(0)
   })
 })
 
