@@ -679,7 +679,7 @@ describe("getOverviewSections", () => {
     // what is still held up.
     expect(s.invoices.data.map((l) => l.label)).toEqual([
       "Received",
-      "Posted to COGS",
+      "Cleared",
       "In review",
     ])
     expect(s.invoices.data[0].value).toBe("34 · $63,203")
