@@ -97,11 +97,26 @@ export function verifyInvoice(input: VerifyInput): VerifyResult {
     ]),
   ].sort((a, b) => a - b)
 
+  // No printed total read at all: nothing proves the money, so it is held.
+  const totalAmount = Number(extraction.totalAmount)
+  const totalMissing = extraction.totalAmount == null || !Number.isFinite(totalAmount)
+
   // The money or the date is not proved: held, every reason recorded.
-  if (input.dateSuspect || totalMismatch || emptyExtraction) {
+  if (input.dateSuspect || totalMismatch || emptyExtraction || totalMissing) {
     return {
       status: "REVIEW",
-      reviewReasons: composeReviewReasons({
+      reviewReasons: [
+        ...(totalMissing
+          ? [
+              {
+                kind: "total_reconciliation" as const,
+                message:
+                  "The invoice's printed total could not be read, so its lines can't be checked against it. " +
+                  "Compare the line list against the PDF before approving.",
+              },
+            ]
+          : []),
+        ...composeReviewReasons({
         dateSuspect: input.dateSuspect,
         mathMismatches,
         packAnomalies,
@@ -109,7 +124,8 @@ export function verifyInvoice(input: VerifyInput): VerifyResult {
         emptyExtraction,
         matchConfidence: input.match?.confidence ?? null,
         matched: Boolean(input.match),
-      }),
+        }),
+      ],
       unpricedLines,
     }
   }

@@ -140,3 +140,19 @@ describe("isLinePriceable", () => {
     expect(unpricedLineNumbers([null, { kind: "pack_shape", lineNumbers: "3" }]).size).toBe(0)
   })
 })
+
+describe("verifyInvoice: missing printed total", () => {
+  it("holds an invoice whose total could not be read", async () => {
+    const { verifyInvoice } = await import("@/lib/invoice-verify")
+    const r = verifyInvoice({
+      extraction: {
+        totalAmount: undefined,
+        lineItems: [{ lineNumber: 1, productName: "Fries", quantity: 1, unitPrice: 10, extendedPrice: 10 }],
+      },
+      match: { storeId: "s1", confidence: 1 },
+      dateSuspect: false,
+    } as never)
+    expect(r.status).toBe("REVIEW")
+    expect(r.reviewReasons[0].message).toContain("printed total could not be read")
+  })
+})
