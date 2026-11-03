@@ -1317,3 +1317,23 @@ width:340px; height:718px; flex:none;
 @keyframes cur{50%{border-color:transparent}}
 @keyframes skm{from{background-position:220% 0}to{background-position:-20% 0}}
 @keyframes tpulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.35;transform:scale(.7)}}
+
+/* ── Section fold: <Section fold="closed|open">. The head is a <summary>; a
+   chevron says it opens. Bare blocks get a plain summary line instead. ── */
+.sec--fold > details > summary{cursor:pointer;list-style:none}
+.sec--fold > details > summary::-webkit-details-marker,
+.sec-fold-bare > summary::-webkit-details-marker{display:none}
+.sec--fold > details:not([open]) > summary{border-bottom:0}
+.sec--fold > details > summary::after,
+.sec-fold-bare > summary::after{content:"";width:7px;height:7px;flex:none;
+  border-right:1.5px solid var(--ink-3);border-bottom:1.5px solid var(--ink-3);transform:rotate(45deg) translateY(-2px);transition:transform .15s}
+.sec--fold > details[open] > summary::after,
+.sec-fold-bare[open] > summary::after{transform:rotate(225deg) translateY(-1px)}
+.sec--fold > details > summary{justify-content:flex-start}
+.sec--fold > details > summary h3{margin-right:auto}
+.sec--fold > details > summary:focus-visible,
+.sec-fold-bare > summary:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+.sec-fold-bare > summary{display:flex;align-items:center;gap:12px;cursor:pointer;list-style:none;padding:10px 2px}
+.sec-fold-bare > summary .t{margin-right:auto;font-size:var(--t-mid);font-weight:600;letter-spacing:-.015em}
+.sec-fold-bare > summary .k{font-family:var(--mono);font-size:9.5px;letter-spacing:.15em;text-transform:uppercase;color:var(--ink-3)}
+@media (prefers-reduced-motion:reduce){.sec--fold > details > summary::after,.sec-fold-bare > summary::after{transition:none}}
