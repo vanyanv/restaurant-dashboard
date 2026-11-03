@@ -19,10 +19,12 @@ vi.mock("@/lib/account-stores", () => ({ getScopedStores: vi.fn() }))
 vi.mock("@/lib/counter/actions/invoice", () => ({
   markInvoiceReturn: vi.fn(),
   resolveInvoiceReview: vi.fn(),
+  confirmInvoiceStore: vi.fn(),
 }))
 
 import { prisma } from "@/lib/prisma"
 import { getScopedStores } from "@/lib/account-stores"
+import { confirmInvoiceStore } from "@/lib/counter/actions/invoice"
 import { getInvoicesSectionPromises } from "@/lib/counter/adapters/invoices"
 import { getInvoiceSectionPromises } from "@/lib/counter/adapters/invoice"
 import { ready } from "@/lib/counter/section-data"
@@ -100,20 +102,63 @@ const movers = ready({
   note: "Ranked by money.",
 })
 
-describe("Invoices · Needs you", () => {
+describe("Invoices · This week", () => {
   beforeEach(() => vi.clearAllMocks())
 
-  it("draws the tiles, the alert and every open invoice with its next step", async () => {
+  it("opens on one sentence, keeps Needs you folded, and lists the week by day", async () => {
     const s = await invoicesSections()
-    render(<CounterInvoicesClient sub="All stores" sections={{ headline: s.headline, desk: s.desk }} prices={{ movers }} />)
-    expect(screen.getByText("Matched and costed")).toBeTruthy()
-    expect(screen.getByText(/1 invoice does not add up/)).toBeTruthy()
-    const short = screen.getByText("The lines are $212.40 short of the printed subtotal.")
-    expect(short).toBeTruthy()
-    const fix = screen.getByRole("link", { name: "Open and fix" })
+    const { container } = render(<CounterInvoicesClient sub="All stores" sections={{ week: s.week }} prices={{ movers }} />)
+    // 3 of 4 are live (one rejected); "short" and "held" need the owner.
+    expect(screen.getByText("3 invoices came in this week for $1,012.40.")).toBeTruthy()
+    expect(screen.getByText(/1 is checked and counted in food cost/)).toBeTruthy()
+    expect(screen.getByText("2 invoices need you")).toBeTruthy()
+    const fold = container.querySelector("#iv-needs details") as HTMLDetailsElement
+    expect(fold).toBeTruthy()
+    expect(fold.open).toBe(false)
+    expect(within(fold).getByText("2 invoices · $812.40")).toBeTruthy()
+    const fix = within(fold).getByRole("link", { name: "Open and fix" })
     expect(fix.getAttribute("href")).toBe("/dashboard/invoices/short")
-    expect(screen.getByRole("link", { name: "Check it" }).getAttribute("href")).toBe("/dashboard/invoices/held")
-    expect(screen.getByRole("link", { name: "Every price that moved" }).getAttribute("href")).toBe("/dashboard/invoices/prices")
+    expect(within(fold).getByRole("link", { name: "Check it" }).getAttribute("href")).toBe("/dashboard/invoices/held")
+    // The pill opens the fold.
+    fireEvent.click(screen.getByRole("button", { name: "2 need you · $812.40" }))
+    expect(fold.open).toBe(true)
+    expect(screen.getByText("Doesn't add up")).toBeTruthy()
+    expect(screen.getByText("Set aside")).toBeTruthy()
+    expect(screen.getByRole("link", { name: "Every price that changed" }).getAttribute("href")).toBe("/dashboard/invoices/prices")
+  })
+
+  it("answers a store-only hold in one tap, and counts lines with no ingredient", async () => {
+    const held = {
+      ...inv("glen", "REVIEW", [1779], 1779),
+      storeId: "store_g",
+      reviewReasons: [{ kind: "low_match_confidence", message: "Store auto-match confidence is 75%." }],
+    }
+    const supplies = inv("ifs", "MATCHED", [100], 140)
+    supplies.lineItems.push({ ...listLine(40), productName: "CONT BAGASSE PF", canonicalIngredientId: null, canonicalIngredient: null } as never)
+    asMock(prisma.invoice.findMany).mockResolvedValue([held, supplies])
+    asMock(getScopedStores).mockResolvedValue([
+      { id: "store_a", name: "Chris N Eddys - Van Nuys" },
+      { id: "store_g", name: "Chris N Eddys - Glendale" },
+    ])
+    asMock(confirmInvoiceStore).mockResolvedValue({ ok: true })
+    const s = await resolved(
+      getInvoicesSectionPromises({
+        range: { start: new Date("2026-10-14T00:00:00.000Z"), end: new Date("2026-10-20T00:00:00.000Z") },
+        presetId: "d7",
+        storeId: null,
+        accountId: "acct_ours",
+        today: TODAY,
+      }),
+    )
+    render(<CounterInvoicesClient sub="All stores" sections={{ week: s.week }} prices={{ movers }} />)
+    expect(screen.getByText("$40.00 of supplies")).toBeTruthy()
+    expect(screen.getByText(/Is this Glendale\?/)).toBeTruthy()
+    expect(screen.getByRole("link", { name: "Link them" }).getAttribute("href")).toBe("/dashboard/ingredients")
+    fireEvent.click(screen.getByRole("button", { name: "Different store" }))
+    expect((screen.getByLabelText("Move it to") as HTMLSelectElement).value).toBe("store_a")
+    fireEvent.click(screen.getByRole("button", { name: "Yes, Glendale" }))
+    expect(confirmInvoiceStore).toHaveBeenCalledWith("glen", "store_g")
+    expect((await screen.findAllByText(/saved to Glendale and approved/i)).length).toBeGreaterThan(0)
   })
 })
 

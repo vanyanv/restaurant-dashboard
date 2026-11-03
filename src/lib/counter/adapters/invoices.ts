@@ -13,6 +13,8 @@ import {
 } from "@/lib/counter/adapters/types"
 import { mapReady, type SectionData } from "@/lib/counter/section-data"
 import { reasonLabel } from "@/lib/counter/invoice-reasons"
+import { shortStoreName } from "@/lib/checks/names"
+import { businessQueryDate } from "@/lib/counter/business-date"
 import type { FigureProps, MListRow, MoneyLine, QueueItem, Row } from "@/components/counter"
 
 /**
@@ -230,6 +232,12 @@ export interface DeskItem {
   gap: string | null
   /** The one next step, as the button says it. */
   act: string
+  /**
+   * Set when the ONLY thing holding the invoice is the store guess (the sync's
+   * `low_match_confidence`): the item is then answered in one tap, "Yes,
+   * Glendale", or moved with "Different store", without opening the invoice.
+   */
+  confirmStore: { storeId: string; storeName: string } | null
 }
 
 export interface InvoiceDesk {
@@ -239,6 +247,42 @@ export interface InvoiceDesk {
   broken: number
   brokenNet: string | null
   meta: string
+  /** Every store on the account, for "Different store". */
+  stores: Array<{ id: string; name: string }>
+}
+
+/** One invoice on This week's "What came in" list. */
+export interface WeekRow {
+  key: string
+  href: string
+  vendor: string
+  /** "#2357698 · 2 lines" or "#43788710 · 5 of 10 lines not linked". */
+  note: string
+  store: string
+  total: string
+  status: { tone: "good" | "warn" | "bad" | "off"; label: string }
+}
+
+/** This week: the page's opening sentence and everything under it. */
+export interface InvoiceWeek {
+  /** "Oct 28 to Nov 3". */
+  window: string
+  /** The opening sentence, in parts so the client can bold the figures. */
+  lede: Array<{ text: string; strong?: boolean }>
+  pills: Array<{ tone: "good" | "warn" | "bad"; label: string; href: string }>
+  days: Array<{ label: string; rows: WeekRow[] }>
+  /** Invoices in the window the list stopped short of. */
+  more: number
+  /** Lines this week with no ingredient behind them. Null when there are none. */
+  unlinked: { lines: number; total: string; top: string } | null
+  /** Who was paid, the trailing 30 days, biggest first. */
+  vendors: Array<{ name: string; amount: string; share: number }>
+  vendorsTotal: string
+  /** The Needs you worklist (`deskOf`'s items), carried so one section draws both. */
+  needs: DeskItem[]
+  /** Its money, for the folded head. */
+  needsTotal: string
+  stores: Array<{ id: string; name: string }>
 }
 
 export interface InvoicesSections {
@@ -250,6 +294,7 @@ export interface InvoicesSections {
   review: SectionData<InvoiceReview>
   products: SectionData<InvoiceProducts>
   phoneQueues: SectionData<InvoicePhoneQueues>
+  week: SectionData<InvoiceWeek>
 }
 
 export interface InvoicesInput {
@@ -264,6 +309,7 @@ export interface InvoicesInput {
 /* -- loading ---------------------------------------------------------- */
 
 interface LoadedLine {
+  id: string
   productName: string
   sku: string | null
   canonicalId: string | null
@@ -288,6 +334,7 @@ interface LoadedInvoice {
   hasPdf: boolean
   reviewReasons: ReviewReason[]
   lines: LoadedLine[]
+  storeId: string | null
   storeName: string | null
   isReturn: boolean
 }
@@ -311,6 +358,8 @@ interface InvoiceData {
   rangeLabelText: string
   /** The reader's today, carried so `listOf` can judge a due date against it. */
   today: Date
+  /** Every store on the account, whatever the reader's scope ("Different store"). */
+  accountStores: Array<{ id: string; name: string }>
 }
 
 function isStatus(v: string): v is InvoiceStatusId {
@@ -343,6 +392,7 @@ async function loadInvoices(input: InvoicesInput): Promise<InvoiceData> {
 
   const stores = await getScopedStores(accountId, storeId ?? null)
   const storeIds = stores.map((s) => s.id)
+  const everyStore = storeId ? await getScopedStores(accountId, null) : stores
 
   const rows = storeIds.length === 0
     ? []
@@ -364,6 +414,7 @@ async function loadInvoices(input: InvoicesInput): Promise<InvoiceData> {
           reviewReasons: true,
           lineItems: {
             select: {
+              id: true,
               productName: true,
               sku: true,
               canonicalIngredientId: true,
@@ -382,6 +433,7 @@ async function loadInvoices(input: InvoicesInput): Promise<InvoiceData> {
 
   const all: LoadedInvoice[] = rows.map((r) => ({
     id: r.id,
+    storeId: r.storeId,
     storeName: r.storeId ? (storeNames.get(r.storeId) ?? null) : null,
     isReturn: r.isReturn ?? false,
     number: r.invoiceNumber,
@@ -399,6 +451,7 @@ async function loadInvoices(input: InvoicesInput): Promise<InvoiceData> {
     hasPdf: r.pdfBlobPathname !== null,
     reviewReasons: reasonsOf(r.reviewReasons),
     lines: r.lineItems.map((l) => ({
+      id: l.id,
       productName: l.productName,
       sku: l.sku,
       canonicalId: l.canonicalIngredientId,
@@ -429,6 +482,7 @@ async function loadInvoices(input: InvoicesInput): Promise<InvoiceData> {
     prior: priorRange ? within(all, priorRange) : null,
     rangeLabelText: rangeLabel(range, "custom"),
     today,
+    accountStores: everyStore.map((s) => ({ id: s.id, name: s.name ?? s.id })),
   }
 }
 
@@ -969,7 +1023,9 @@ function reviewOf(d: InvoiceData): InvoiceReview {
  */
 function deskOf(d: InvoiceData): InvoiceDesk {
   const where = (i: LoadedInvoice) =>
-    [i.storeName, i.invoiceDate ? D(i.invoiceDate) : null].filter(Boolean).join(" · ") || "no store, no date"
+    [i.storeName ? shortStoreName(i.storeName) : null, i.invoiceDate ? D(i.invoiceDate) : null]
+      .filter(Boolean)
+      .join(" · ") || "no store, no date"
 
   const ranked: Array<{ weight: number; item: DeskItem }> = []
   const broken = d.all.filter(openGap)
@@ -1006,6 +1062,7 @@ function deskOf(d: InvoiceData): InvoiceDesk {
         total: money(i.totalAmount, { cents: true }),
         gap: off,
         act: "Open and fix",
+        confirmStore: null,
       },
     })
   }
@@ -1013,6 +1070,15 @@ function deskOf(d: InvoiceData): InvoiceDesk {
   for (const i of d.all.filter((x) => x.status === "REVIEW" && !brokenIds.has(x.id))) {
     const reason = i.reviewReasons[0]
     const at = reason?.lines[0]
+    // Held only because the address half-matched a store: that is a yes/no
+    // question, so it is asked as one.
+    const storeOnly =
+      i.storeId !== null &&
+      i.storeName !== null &&
+      i.reviewReasons.length > 0 &&
+      i.reviewReasons.every((r) => r.kind === "low_match_confidence")
+    const store = storeOnly && i.storeName ? shortStoreName(i.storeName) : null
+    const goods = i.lines.filter((l) => !isFeeRow(l) && l.extendedPrice !== 0)
     ranked.push({
       weight: Math.abs(i.totalAmount) / 100,
       item: {
@@ -1022,17 +1088,21 @@ function deskOf(d: InvoiceData): InvoiceDesk {
         vendor: i.vendor,
         number: i.number,
         where: where(i),
-        reason: reason
-          ? `${reasonLabel(reason.kind)}${at === undefined ? "" : ` (line ${at})`}.`
-          : "Held for review before the sync recorded why.",
-        detail:
-          reason?.message ??
-          (i.hasPdf
-            ? "It ties out and its PDF is on file. It needs a look, not a fix."
-            : "It ties out, but no PDF is on file. It needs a look, not a fix."),
+        reason: store
+          ? `Is this ${store}?`
+          : reason
+            ? `${reasonLabel(reason.kind)}${at === undefined ? "" : ` (line ${at})`}.`
+            : "Held for review before the sync recorded why.",
+        detail: store
+          ? `${goods.length > 0 ? `${goodsSummary(goods)}. ` : ""}The delivery address only partly matched ${store}, so it waited for you.`
+          : (reason?.message ??
+            (i.hasPdf
+              ? "It ties out and its PDF is on file. It needs a look, not a fix."
+              : "It ties out, but no PDF is on file. It needs a look, not a fix.")),
         total: money(i.totalAmount, { cents: true }),
         gap: null,
         act: "Check it",
+        confirmStore: store && i.storeId ? { storeId: i.storeId, storeName: store } : null,
       },
     })
   }
@@ -1048,6 +1118,216 @@ function deskOf(d: InvoiceData): InvoiceDesk {
       ranked.length === 0
         ? "nothing waiting"
         : `${count(ranked.length)} waiting · biggest money first`,
+    stores: d.accountStores.map((s) => ({ id: s.id, name: shortStoreName(s.name) })),
+  }
+}
+
+/** "484.74 lb ground beef fine grnd 73/27 at $3.67" — the biggest line, said plainly. */
+function goodsSummary(lines: LoadedLine[]): string {
+  const top = [...lines].sort((a, b) => Math.abs(b.extendedPrice) - Math.abs(a.extendedPrice))[0]
+  const what = (top.canonicalName ?? top.productName).toLowerCase()
+  const qty = Number.isInteger(top.quantity) ? String(top.quantity) : top.quantity.toFixed(2)
+  const unit = top.unit ? ` ${top.unit.toLowerCase()}` : ""
+  const rest = lines.length > 1 ? ` and ${plural(lines.length - 1, "more line")}` : ""
+  return `${qty}${unit} ${what} at ${money(top.unitPrice, { cents: true })}${rest}`
+}
+
+/* -- this week -------------------------------------------------------- */
+
+/** Days the This week list covers, today included. */
+const WEEK_DAYS = 7
+/** Rows "What came in" prints before it hands over to All invoices. */
+const WEEK_ROWS = 10
+/** Vendors the "Who you paid" bars print. */
+const VENDOR_ROWS = 6
+
+const utcDay = (d: Date) => Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate())
+
+/** A line that is goods (not a fee row, not a $0 line) and has no ingredient behind it. */
+const unlinkedLine = (l: LoadedLine) => l.canonicalId === null && !isFeeRow(l) && l.extendedPrice !== 0
+
+/**
+ * This week — the page's opening sentence, the invoices that came in by day,
+ * and who was paid.
+ *
+ * Invoices now mostly check themselves (the sync ties each one out and only
+ * holds what it cannot settle), so the page opens on what happened rather
+ * than on a strip of counts. "Checked" is what the sync or the owner settled
+ * that also ties out; "need you" is the Needs you worklist itself
+ * (`deskOf`), so the sentence and the list under it can never disagree.
+ *
+ * The one thing a "checked" invoice can still hide is a line with no
+ * ingredient behind it: the invoice is in spend, but that money reaches no
+ * food cost. Those lines are counted here (goods only; fee rows and $0 lines
+ * are not ingredients) and sent to the Ingredients review inbox, which is
+ * where a line is linked.
+ */
+function weekOf(d: InvoiceData): InvoiceWeek {
+  // The reader's LA calendar day, not the UTC day of the instant: after
+  // 4-5pm in LA the UTC day is already tomorrow.
+  const end = businessQueryDate(d.today).getTime()
+  const start = end - (WEEK_DAYS - 1) * 86_400_000
+  const inWeek = d.all.filter(
+    (i) => i.invoiceDate !== null && utcDay(i.invoiceDate) >= start && utcDay(i.invoiceDate) <= end,
+  )
+  const live = inWeek.filter((i) => i.status !== "REJECTED")
+  const desk = deskOf(d)
+  const needIds = new Set(desk.items.map((x) => x.key))
+  // Settled (by the sync or the owner) and tying out. PENDING is not settled.
+  const isChecked = (i: LoadedInvoice) =>
+    (i.status === "MATCHED" || i.status === "APPROVED") && !needIds.has(i.id) && !openGap(i)
+  const checked = live.filter(isChecked)
+  const needsThisWeek = live.filter((i) => needIds.has(i.id)).length
+  const needsEarlier = desk.items.length - needsThisWeek
+  const needTotal = d.all.filter((i) => needIds.has(i.id)).reduce((t, i) => t + i.totalAmount, 0)
+
+  const unlinkedLines = live.flatMap((i) => i.lines.filter(unlinkedLine))
+  const unlinkedTotal = unlinkedLines.reduce((t, l) => t + l.extendedPrice, 0)
+  // Biggest spellings first, merged on the printed name so "CONT BAGASSE PF"
+  // on three invoices is one figure.
+  const byName = new Map<string, number>()
+  for (const l of unlinkedLines) {
+    const k = l.productName.trim()
+    byName.set(k, (byName.get(k) ?? 0) + l.extendedPrice)
+  }
+  const top = [...byName.entries()]
+    .sort((a, b) => Math.abs(b[1]) - Math.abs(a[1]))
+    .slice(0, 3)
+    .map(([n, v]) => `${titleCase(n.toLowerCase())} ${money(v, { cents: true })}`)
+    .join(", ")
+
+  const lede: InvoiceWeek["lede"] = []
+  if (live.length === 0) {
+    lede.push({ text: "No invoices came in this week." })
+  } else {
+    lede.push({
+      text: `${plural(live.length, "invoice")} came in this week for ${money(sum(live), { cents: true })}.`,
+      strong: true,
+    })
+    const counted = unlinkedLines.length === 0 ? " checked and counted in food cost." : " checked."
+    lede.push({
+      text:
+        checked.length === live.length
+          ? ` Every one is${counted}`
+          : ` ${count(checked.length)} ${checked.length === 1 ? "is" : "are"}${counted}`,
+    })
+  }
+  if (desk.items.length > 0) {
+    lede.push({ text: " " })
+    lede.push({ text: `${plural(desk.items.length, "invoice")} ${desk.items.length === 1 ? "needs" : "need"} you`, strong: true })
+    lede.push({
+      text:
+        needsEarlier > 0 && needsThisWeek > 0
+          ? ` (${count(needsEarlier)} from before this week).`
+          : needsEarlier > 0
+            ? `, from before this week.`
+            : ".",
+    })
+  }
+  if (unlinkedLines.length > 0) {
+    lede.push({ text: " " })
+    lede.push({ text: `${money(unlinkedTotal, { cents: true })} of supplies`, strong: true })
+    lede.push({ text: " isn't linked to an ingredient yet, so your food cost is missing it." })
+  }
+
+  const pills: InvoiceWeek["pills"] = []
+  if (checked.length > 0) {
+    pills.push({
+      tone: "good",
+      label: `${count(checked.length)} checked${unlinkedLines.length === 0 ? " and counted" : ""}`,
+      href: "/dashboard/invoices/all",
+    })
+  }
+  if (desk.items.length > 0) {
+    pills.push({
+      tone: "warn",
+      label: `${count(desk.items.length)} need you · ${money(needTotal, { cents: true })}`,
+      href: "/dashboard/invoices#iv-needs",
+    })
+  }
+  if (unlinkedLines.length > 0) {
+    pills.push({
+      tone: "bad",
+      label: `${plural(unlinkedLines.length, "line")} not linked · ${money(unlinkedTotal, { cents: true })}`,
+      href: "/dashboard/ingredients",
+    })
+  }
+
+  const statusOf = (i: LoadedInvoice): WeekRow["status"] => {
+    if (i.status === "REJECTED") return { tone: "off", label: "Set aside" }
+    if (openGap(i)) return { tone: "bad", label: "Doesn't add up" }
+    if (i.status === "REVIEW") {
+      const item = desk.items.find((x) => x.key === i.id)
+      return { tone: "warn", label: item?.confirmStore ? "Confirm store" : "Needs a look" }
+    }
+    const n = i.lines.filter(unlinkedLine).length
+    if (n > 0) return { tone: "warn", label: `Link ${plural(n, "line")}` }
+    if (!isChecked(i)) return { tone: "off", label: "Being read" }
+    if (i.isReturn) return { tone: "good", label: "Credit" }
+    return { tone: "good", label: "Checked" }
+  }
+
+  const noteOf = (i: LoadedInvoice) => {
+    const n = i.lines.filter(unlinkedLine).length
+    const lines =
+      n > 0 ? `${count(n)} of ${plural(i.lines.length, "line")} not linked` : plural(i.lines.length, "line")
+    return [i.number ? `#${i.number}` : null, lines].filter(Boolean).join(" · ")
+  }
+
+  const ordered = [...inWeek].sort(
+    (a, b) => utcDay(b.invoiceDate as Date) - utcDay(a.invoiceDate as Date) || b.totalAmount - a.totalAmount,
+  )
+  const shown = ordered.slice(0, WEEK_ROWS)
+  const days: InvoiceWeek["days"] = []
+  for (const i of shown) {
+    const label = (i.invoiceDate as Date).toLocaleDateString("en-US", {
+      weekday: "short",
+      month: "short",
+      day: "numeric",
+      timeZone: "UTC",
+    })
+    let day = days[days.length - 1]
+    if (!day || day.label !== label) {
+      day = { label, rows: [] }
+      days.push(day)
+    }
+    day.rows.push({
+      key: i.id,
+      href: `/dashboard/invoices/${i.id}`,
+      vendor: i.vendor,
+      note: noteOf(i),
+      store: i.storeName ? shortStoreName(i.storeName) : "No store",
+      total: money(i.totalAmount, { cents: true }),
+      status: statusOf(i),
+    })
+  }
+
+  const byVendor = new Map<string, number>()
+  for (const i of d.received.filter((x) => x.status !== "REJECTED")) {
+    byVendor.set(i.vendor, (byVendor.get(i.vendor) ?? 0) + i.totalAmount)
+  }
+  const vendorRows = [...byVendor.entries()].sort((a, b) => b[1] - a[1])
+  const maxVendor = vendorRows[0]?.[1] ?? 0
+
+  return {
+    window: `${D(new Date(start))} to ${D(new Date(end))}`,
+    lede,
+    pills,
+    days,
+    more: Math.max(0, ordered.length - shown.length),
+    unlinked:
+      unlinkedLines.length === 0
+        ? null
+        : { lines: unlinkedLines.length, total: money(unlinkedTotal, { cents: true }), top },
+    vendors: vendorRows.slice(0, VENDOR_ROWS).map(([name, v]) => ({
+      name,
+      amount: money(v),
+      share: maxVendor > 0 ? Math.max(0, v / maxVendor) : 0,
+    })),
+    vendorsTotal: money(vendorRows.reduce((t, [, v]) => t + v, 0), { cents: true }),
+    needs: desk.items,
+    needsTotal: money(needTotal, { cents: true }),
+    stores: desk.stores,
   }
 }
 
@@ -1254,6 +1534,7 @@ export function getInvoicesSectionPromises(
     review: s(reviewOf),
     products: s(productsOf),
     phoneQueues: s(phoneQueuesOf),
+    week: s(weekOf),
   }
 }
 

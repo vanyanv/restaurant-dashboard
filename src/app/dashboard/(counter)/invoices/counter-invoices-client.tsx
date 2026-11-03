@@ -1,6 +1,8 @@
-"use client"
+"use client";
 
-import Link from "next/link"
+import { useState, useTransition } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   Section,
   Table,
@@ -8,159 +10,465 @@ import {
   usePageChrome,
   useSurfaceHref,
   type Column,
-} from "@/components/counter"
-import type { SectionSources } from "@/lib/counter/adapters/types"
-import type { DeskItem, InvoiceDesk, InvoicesSections } from "@/lib/counter/adapters/invoices"
-import type { PriceSections } from "@/lib/counter/adapters/prices"
-import { InvoiceGlyph, InvoiceLegend, InvoicesHead, Tiles, useScoped } from "./invoices-ui"
+} from "@/components/counter";
+import type { SectionSources } from "@/lib/counter/adapters/types";
+import type {
+  DeskItem,
+  InvoiceWeek,
+  InvoicesSections,
+} from "@/lib/counter/adapters/invoices";
+import type { PriceSections } from "@/lib/counter/adapters/prices";
+import { confirmInvoiceStore } from "@/lib/counter/actions/invoice";
+import { InvoicesHead, useScoped } from "./invoices-ui";
 
 /**
- * Invoices — Needs you. The desk in one screen, the way Shop's Today is: the
- * counts, a red line when something does not add up, then every invoice that
- * needs the owner with its one next step, biggest money first. What the
- * prices did sits underneath, ranked by dollars, because a price move is a
- * glance and the queue is a job.
+ * Invoices — This week. Invoices mostly check themselves now, so the page
+ * opens on what happened in one sentence, then the short list of things that
+ * still need the owner (folded shut until asked for: owner, 2026-11-03), then
+ * what came in by day, what prices did, and who was paid.
  *
- * Every figure is the adapter's: the tiles are `headline.cells`, the queue is
- * `desk.items` (the same worklist `review` cuts to three for the phone), and
- * the price box is the Price monitor's own `movers`.
+ * Every figure is the adapter's: the sentence, the list and the vendor bars
+ * are `week` (whose worklist is `deskOf`'s, the same one the phone queue
+ * cuts), and the price box is the Price monitor's own `movers`.
  */
-export type CounterInvoicesSections = SectionSources<Pick<InvoicesSections, "headline" | "desk">>
-export type InvoicePriceSections = SectionSources<Pick<PriceSections, "movers">>
+export type CounterInvoicesSections = SectionSources<
+  Pick<InvoicesSections, "week">
+>;
+export type InvoicePriceSections = SectionSources<
+  Pick<PriceSections, "movers">
+>;
 
 const ASK_SUGGESTIONS = [
-  "Which invoices do not reconcile, and by how much?",
+  "Which invoices need me, and why?",
   "What did I spend the most on this month?",
   "Which ingredient prices moved against last period?",
-]
-
-/** Where each strip tile goes when tapped, in `headlineOf`'s order. */
-const TILE_HREFS = [
-  "/dashboard/invoices/all",
-  "/dashboard/invoices/all?view=matched",
-  "/dashboard/invoices/all?view=review",
-  "/dashboard/invoices/all?view=gaps",
-  null,
-]
+];
 
 const PRICE_COLUMNS: Column[] = [
-  { key: "ingredient", label: "Ingredient" },
-  { key: "move", label: "Move", numeric: true },
+  { key: "ingredient", label: "Item" },
+  { key: "median", label: "Usual", numeric: true },
+  { key: "latest", label: "Now", numeric: true },
   { key: "costs", label: "Costs you, 30d", numeric: true },
-]
+];
 
-const PRICE_ROWS = 5
+const PRICE_ROWS = 5;
 
 export function CounterInvoicesClient({
   sub,
   sections,
   prices,
 }: {
-  sub: string
-  sections: CounterInvoicesSections
-  prices: InvoicePriceSections
+  sub: string;
+  sections: CounterInvoicesSections;
+  prices: InvoicePriceSections;
 }) {
-  usePageChrome({ leaf: "Invoices", askSuggestions: ASK_SUGGESTIONS })
-  const surface = useSurfaceHref()
-  const { pending } = useCounterTransition()
+  usePageChrome({ leaf: "Invoices", askSuggestions: ASK_SUGGESTIONS });
+  const surface = useSurfaceHref();
+  const scoped = useScoped();
+  const { pending } = useCounterTransition();
 
   return (
     <>
       <InvoicesHead sub={sub} />
 
-      <Section bare title="The figures" data={sections.headline} pending={pending}>
-        {(h) => <Tiles cells={h.cells} hrefs={TILE_HREFS} />}
+      <Section bare title="This week" data={sections.week} pending={pending}>
+        {(w) => <Lede week={w} />}
       </Section>
 
-      <Section bare title="Does not add up" data={sections.desk} pending={pending}>
-        {(d) => <Alert desk={d} />}
-      </Section>
+      <div id="iv-needs" className="iv-needs">
+        <Section
+          title="Needs you"
+          fold="closed"
+          meta={(w) =>
+            [
+              w.needs.length > 0
+                ? `${plural(w.needs.length, "invoice")} · ${w.needsTotal}`
+                : null,
+              w.unlinked ? `${plural(w.unlinked.lines, "line")} to link` : null,
+            ]
+              .filter(Boolean)
+              .join(" · ") || "nothing waiting"
+          }
+          data={sections.week}
+          pending={pending}
+          pad={false}
+        >
+          {(w) => <Needs week={w} />}
+        </Section>
+      </div>
 
-      <Section
-        title="To review"
-        meta={(d) => d.meta}
-        data={sections.desk}
-        pending={pending}
-        pad={false}
-        askAbout="which invoices do not reconcile"
-      >
-        {(d) => <Queue items={d.items} />}
-      </Section>
+      <div className="iv-split">
+        <Section
+          title="What came in"
+          meta={(w) => w.window}
+          data={sections.week}
+          pending={pending}
+          pad={false}
+          askAbout="what invoices came in this week"
+        >
+          {(w) => <CameIn week={w} />}
+        </Section>
 
-      <Section
-        title="Prices that moved"
-        meta={() => "all stores · ranked by dollars, not percent"}
-        data={prices.movers}
-        pending={pending}
-        pad={false}
-        askAbout="which ingredient prices moved"
-      >
-        {(m) => (
-          <>
-            <Table columns={PRICE_COLUMNS} rows={m.rows.slice(0, PRICE_ROWS)} />
-            <p className="sh-empty">
-              <Link href={surface("/dashboard/invoices/prices")}>Every price that moved</Link>
-            </p>
-          </>
-        )}
-      </Section>
+        <div className="iv-stack">
+          <Section
+            title="Prices that changed"
+            meta={() => "ranked by dollars"}
+            data={prices.movers}
+            pending={pending}
+            pad={false}
+            askAbout="which ingredient prices moved"
+          >
+            {(m) => (
+              <>
+                <Table
+                  columns={PRICE_COLUMNS}
+                  rows={m.rows.slice(0, PRICE_ROWS)}
+                />
+                <p className="sh-empty">
+                  <Link href={surface("/dashboard/invoices/prices")}>
+                    Every price that changed
+                  </Link>
+                </p>
+              </>
+            )}
+          </Section>
 
-      <div style={{ padding: "4px 2px" }}>
-        <InvoiceLegend />
+          <Section
+            title="Who you paid"
+            meta={(w) => `last 30 days · ${w.vendorsTotal}`}
+            data={sections.week}
+            pending={pending}
+            pad={false}
+          >
+            {(w) => (
+              <>
+                <div className="iv-bars">
+                  {w.vendors.map((v) => (
+                    <div className="iv-bar" key={v.name}>
+                      <span className="n">{v.name}</span>
+                      <span className="track" aria-hidden="true">
+                        <span
+                          className="fill"
+                          style={{
+                            width: `${Math.round(v.share * 1000) / 10}%`,
+                          }}
+                        />
+                      </span>
+                      <span className="v">{v.amount}</span>
+                    </div>
+                  ))}
+                </div>
+                <p className="sh-empty">
+                  <Link href={scoped("/dashboard/operations/vendors")}>
+                    Every vendor
+                  </Link>
+                </p>
+              </>
+            )}
+          </Section>
+        </div>
       </div>
     </>
-  )
+  );
 }
 
-function Alert({ desk }: { desk: InvoiceDesk }) {
-  const scoped = useScoped()
-  if (desk.broken === 0) return null
+function plural(n: number, word: string) {
+  return `${n} ${n === 1 ? word : `${word}s`}`;
+}
+
+/** Opens the folded Needs you and brings it into view. */
+function openNeeds() {
+  const box = document.getElementById("iv-needs");
+  const fold = box?.querySelector("details");
+  if (fold) fold.open = true;
+  box?.scrollIntoView?.({ behavior: "smooth", block: "start" });
+}
+
+function Lede({ week }: { week: InvoiceWeek }) {
+  const scoped = useScoped();
   return (
-    <div className="ck-alerts">
-      <div className="ck-alert">
-        <InvoiceGlyph kind="miss" />
-        <span>
-          <b>
-            {desk.broken === 1 ? "1 invoice does not add up" : `${desk.broken} invoices do not add up`}
-            {desk.brokenNet ? `: ${desk.brokenNet} in all.` : "."}
-          </b>{" "}
-          <span className="ck-meta">Approve stays locked on each until its lines match what it prints.</span>
-        </span>
-        <Link className="btn" href={scoped("/dashboard/invoices/all?view=gaps")}>
-          Show them
-        </Link>
+    <section className="iv-lede" aria-label="This week in one sentence">
+      <p>
+        {week.lede.map((part, i) =>
+          part.strong ? (
+            <b key={i}>{part.text}</b>
+          ) : (
+            <span key={i}>{part.text}</span>
+          ),
+        )}
+      </p>
+      <div className="iv-pills">
+        {week.pills.map((p) =>
+          p.href.includes("#iv-needs") ? (
+            <button
+              key={p.label}
+              type="button"
+              className={`iv-pill iv-pill--${p.tone} iv-pill--dot`}
+              onClick={openNeeds}
+            >
+              {p.label}
+            </button>
+          ) : (
+            <Link
+              key={p.label}
+              className={`iv-pill iv-pill--${p.tone} iv-pill--dot`}
+              href={scoped(p.href)}
+            >
+              {p.label}
+            </Link>
+          ),
+        )}
       </div>
-    </div>
-  )
+    </section>
+  );
 }
 
-function Queue({ items }: { items: DeskItem[] }) {
-  const surface = useSurfaceHref()
-  if (items.length === 0) {
-    return <p className="sh-empty">Nothing needs you. Every invoice ties out and none is held for review.</p>
+function Needs({ week }: { week: InvoiceWeek }) {
+  const scoped = useScoped();
+  // Held here, not in the task: a saved task leaves the list on refresh, and
+  // its own confirmation would leave with it.
+  const [notes, setNotes] = useState<
+    Array<{ tone: "good" | "bad"; text: string }>
+  >([]);
+  const note = (tone: "good" | "bad", text: string) =>
+    setNotes((n) => [...n.slice(-2), { tone, text }]);
+  const banner =
+    notes.length > 0 ? (
+      <div className="iv-notes" role="status">
+        {notes.map((x, i) => (
+          <span
+            key={i}
+            className={x.tone === "good" ? "iv-task__done" : "iv-task__err"}
+          >
+            {x.tone === "good" ? "✓ " : ""}
+            {x.text}
+          </span>
+        ))}
+      </div>
+    ) : null;
+  if (week.needs.length === 0 && !week.unlinked) {
+    return (
+      <>
+        {banner}
+        <p className="sh-empty">
+          Nothing needs you. Every invoice is checked and every line is linked.
+        </p>
+      </>
+    );
   }
   return (
-    <div className="sh-queue">
-      {items.map((it) => (
-        <div className="sh-order" key={it.key}>
-          <InvoiceGlyph kind={it.glyph} />
-          <Link href={surface(it.href)} className="who" style={{ color: "inherit", textDecoration: "none" }}>
-            <b>
-              {it.vendor} · {it.number}
-            </b>
-            <span className="ck-mono">{it.where}</span>
-          </Link>
-          <span className="what">
-            <b>{it.reason}</b> {it.detail}
+    <>
+      {banner}
+      <ol className="iv-tasks">
+        {week.needs.map((it, i) => (
+          <Task
+            key={it.key}
+            n={i + 1}
+            item={it}
+            stores={week.stores}
+            onNote={note}
+          />
+        ))}
+        {week.unlinked ? (
+          <li className="iv-task">
+            <span className="iv-task__n">{week.needs.length + 1}</span>
+            <div className="iv-task__body">
+              <b>
+                Link {plural(week.unlinked.lines, "supply line")} so{" "}
+                {week.unlinked.lines === 1 ? "it counts" : "they count"} in your
+                costs
+              </b>
+              <span className="iv-task__d">
+                {week.unlinked.total} this week reached no ingredient. Biggest:{" "}
+                {week.unlinked.top}.
+              </span>
+              <div className="btnrow">
+                <Link
+                  className="btn btn--primary"
+                  href={scoped("/dashboard/ingredients")}
+                >
+                  Link them
+                </Link>
+              </div>
+            </div>
+          </li>
+        ) : null}
+      </ol>
+    </>
+  );
+}
+
+const SAVE_ERRORS: Record<string, string> = {
+  "not-in-review": "was already settled, so nothing changed.",
+  "not-store-only": "is held for more than its store. Open it to review.",
+  "does-not-tie-out":
+    "doesn't add up, so it can't be approved here. Open it to fix.",
+};
+
+function Task({
+  n,
+  item,
+  stores,
+  onNote,
+}: {
+  n: number;
+  item: DeskItem;
+  stores: InvoiceWeek["stores"];
+  onNote: (tone: "good" | "bad", text: string) => void;
+}) {
+  const surface = useSurfaceHref();
+  const router = useRouter();
+  const [saving, startSaving] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+  const [done, setDone] = useState<string | null>(null);
+  const [picking, setPicking] = useState(false);
+  const others = stores.filter((s) => s.id !== item.confirmStore?.storeId);
+  const [moveTo, setMoveTo] = useState(others[0]?.id ?? "");
+
+  const save = (storeId: string, name: string) => {
+    setError(null);
+    startSaving(async () => {
+      const result = await confirmInvoiceStore(item.key, storeId);
+      const label = `${item.vendor} #${item.number}`;
+      if (!result.ok) {
+        const known = SAVE_ERRORS[result.error];
+        if (known) {
+          onNote("bad", `${label} ${known}`);
+          router.refresh();
+        } else {
+          setError("That didn't save. Try again, or open the invoice.");
+        }
+        return;
+      }
+      setDone(`Saved to ${name} and approved.`);
+      onNote("good", `${label} saved to ${name} and approved.`);
+      router.refresh();
+    });
+  };
+
+  return (
+    <li className={`iv-task${item.glyph === "miss" ? " iv-task--bad" : ""}`}>
+      <span className="iv-task__n">{n}</span>
+      <div className="iv-task__body">
+        <b>
+          {item.reason} {item.vendor} #{item.number}, {item.total}
+        </b>
+        <span className="iv-task__d">
+          {item.where} · {item.detail}
+        </span>
+        {done ? (
+          <span className="iv-task__done" role="status">
+            ✓ {done}
           </span>
-          <span className="amt">{it.total}</span>
-          <span className="act">
-            <Link className="btn btn--primary" href={surface(it.href)}>
-              {it.act}
+        ) : item.confirmStore ? (
+          <>
+            <div className="btnrow">
+              <button
+                type="button"
+                className="btn btn--primary"
+                disabled={saving}
+                onClick={() =>
+                  save(item.confirmStore!.storeId, item.confirmStore!.storeName)
+                }
+              >
+                {saving ? "Saving…" : `Yes, ${item.confirmStore.storeName}`}
+              </button>
+              {others.length > 0 ? (
+                <button
+                  type="button"
+                  className="btn"
+                  disabled={saving}
+                  onClick={() => setPicking((p) => !p)}
+                  aria-expanded={picking}
+                >
+                  Different store
+                </button>
+              ) : null}
+              <Link className="btn btn--quiet" href={surface(item.href)}>
+                Open invoice
+              </Link>
+            </div>
+            {picking ? (
+              <div className="iv-move">
+                <label htmlFor={`move-${item.key}`}>Move it to</label>
+                <select
+                  id={`move-${item.key}`}
+                  value={moveTo}
+                  onChange={(e) => setMoveTo(e.target.value)}
+                >
+                  {others.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  className="btn btn--primary"
+                  disabled={saving || !moveTo}
+                  onClick={() =>
+                    save(
+                      moveTo,
+                      others.find((s) => s.id === moveTo)?.name ?? "that store",
+                    )
+                  }
+                >
+                  Move and approve
+                </button>
+              </div>
+            ) : null}
+          </>
+        ) : (
+          <div className="btnrow">
+            <Link className="btn btn--primary" href={surface(item.href)}>
+              {item.act}
             </Link>
+          </div>
+        )}
+        {error ? (
+          <span className="iv-task__err" role="alert">
+            {error}
           </span>
-        </div>
-      ))}
-    </div>
-  )
+        ) : null}
+      </div>
+    </li>
+  );
+}
+
+function CameIn({ week }: { week: InvoiceWeek }) {
+  const surface = useSurfaceHref();
+  const scoped = useScoped();
+  if (week.days.length === 0) {
+    return <p className="sh-empty">No invoices in the last 7 days.</p>;
+  }
+  return (
+    <>
+      <div className="iv-days">
+        {week.days.map((d) => (
+          <div key={d.label} className="iv-day">
+            <div className="iv-day__h">{d.label}</div>
+            {d.rows.map((r) => (
+              <Link key={r.key} href={surface(r.href)} className="iv-row">
+                <span className="who">
+                  <b>{r.vendor}</b>
+                  <span>{r.note}</span>
+                </span>
+                <span className="where">{r.store}</span>
+                <span className="amt">{r.total}</span>
+                <span className={`st st--${r.status.tone}`}>
+                  {r.status.label}
+                </span>
+              </Link>
+            ))}
+          </div>
+        ))}
+      </div>
+      <p className="sh-empty">
+        {week.more > 0
+          ? `${plural(week.more, "more invoice")} this week · `
+          : null}
+        <Link href={scoped("/dashboard/invoices/all")}>See all invoices</Link>
+      </p>
+    </>
+  );
 }

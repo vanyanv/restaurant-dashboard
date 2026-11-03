@@ -217,7 +217,7 @@ export const COUNT_TABS: readonly SubNavItem[] = [
 
 /** Invoices — the worklist, the full list, and what the prices did. */
 export const INVOICES_TABS: readonly SubNavItem[] = [
-  { label: "Needs you", href: "/dashboard/invoices" },
+  { label: "This week", href: "/dashboard/invoices" },
   { label: "All invoices", href: "/dashboard/invoices/all" },
   { label: "Prices", href: "/dashboard/invoices/prices" },
 ] as const

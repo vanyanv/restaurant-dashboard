@@ -10,7 +10,7 @@ import { counterToday } from "@/lib/counter/today"
 
 export const dynamic = "force-dynamic"
 
-/** Invoices — Needs you, on a phone: the desk client drawn in the phone shell. */
+/** Invoices — This week, on a phone: the desk client drawn in the phone shell. */
 export default async function MobileInvoicesPage({
   searchParams,
 }: {
@@ -43,7 +43,7 @@ export default async function MobileInvoicesPage({
     <>
       <CounterInvoicesClient
         sub={`${storeName} · read from the invoices inbox`}
-        sections={{ headline: sections.headline, desk: sections.desk }}
+        sections={{ week: sections.week }}
         prices={{ movers: prices.movers }}
       />
       <span hidden data-perf-ready="/m/invoices" />
