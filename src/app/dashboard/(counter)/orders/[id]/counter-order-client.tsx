@@ -195,6 +195,7 @@ export function CounterOrderClient({
             with nothing to fix arrives here as an EMPTY section, which is what
             the adapter means by it and what `Section` draws. */}
         <Section
+          fold="closed"
           title="Needs you"
           meta={countMeta(dataOf(sections.needsYou)?.length)}
           data={sections.needsYou}

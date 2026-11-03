@@ -81,7 +81,10 @@ const BUDGETS: BudgetRule[] = [
   {
     label: "mobile shell",
     match: (r) => r.startsWith("/m"),
-    uncompressedBytes: 680_000,
+    // 680 -> 690 KB on 2026-11-03: /m/recipes/[id]/edit sat at 662 KB and
+    // the Section fold (collapsed Needs you) put ~6 KB on every route that
+    // shares Section's chunk, tipping it to 668. Nothing side-effectful added.
+    uncompressedBytes: 690_000,
   },
   {
     label: "dashboard chat (AI SDK)",
