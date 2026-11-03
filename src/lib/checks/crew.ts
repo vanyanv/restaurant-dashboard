@@ -81,6 +81,11 @@ export type ActiveCheck = {
   marks: CrewMarkState[]
   /** Everyone who has ticked something, in the order they joined. */
   people: string[]
+  /**
+   * The owner has paused this store's checks to train crew: the list is open
+   * whatever the time, Submit is always on, and submitting saves nothing.
+   */
+  practice: boolean
 }
 
 export type CrewView = {
@@ -90,6 +95,10 @@ export type CrewView = {
   active: ActiveCheck | null
   next: { label: { en: string; es: string }; opensLabel: string } | null
   closedToday: boolean
+  /** Checks are paused for training: the page is practice. See `ActiveCheck.practice`. */
+  practice: boolean
+  /** Epoch ms the open pause began; practice clean-up touches only rows after it. */
+  practiceSince: number | null
   serverNow: number
 }
 
@@ -110,14 +119,32 @@ export async function loadCrewView(store: CrewStore, now: Date): Promise<CrewVie
   // The check crew can work on now: a night still open past midnight belongs
   // to yesterday, so the day comes from the window.
   let active: { kind: CheckKindName; day: string; cell: GridCell } | null = null
-  for (const t of templates) {
-    if (!t.enabled) continue
-    const day = visibleDay(t, now)
-    if (!day) continue
-    const cell = cellFor(t.kind, day)
-    if (cell && cell.status === "open") {
-      active = { kind: t.kind, day, cell }
-      break
+  const practice = grid?.pausedSince != null
+  if (practice) {
+    // Practice: any time of day. The check whose list is up now comes first,
+    // then today's others, skipping one sent for real before the pause began.
+    // A window that had already closed when the pause began (so it stays
+    // missed) can still be practised: training mid-afternoon must work.
+    const visible = templates.filter((t) => t.enabled && visibleDay(t, now))
+    const rest = templates.filter((t) => t.enabled && !visibleDay(t, now))
+    for (const t of [...visible, ...rest]) {
+      const day = visibleDay(t, now) ?? today
+      const cell = cellFor(t.kind, day)
+      if (cell && !cell.submission && cell.status !== "off" && cell.status !== "closed") {
+        active = { kind: t.kind, day, cell }
+        break
+      }
+    }
+  } else {
+    for (const t of templates) {
+      if (!t.enabled) continue
+      const day = visibleDay(t, now)
+      if (!day) continue
+      const cell = cellFor(t.kind, day)
+      if (cell && cell.status === "open") {
+        active = { kind: t.kind, day, cell }
+        break
+      }
     }
   }
 
@@ -151,12 +178,13 @@ export async function loadCrewView(store: CrewStore, now: Date): Promise<CrewVie
       submitFrom: b.submitFrom.getTime(),
       dueAt: b.due.getTime(),
       closesAt: b.closes.getTime(),
-      canSubmit: phase === "open" || phase === "late",
+      canSubmit: practice || phase === "open" || phase === "late",
       submitFromLabel: minutesLabel(submitFromFor(t)),
       dueLabel: minutesLabel(dueAtFor(active.day, t)),
       sections: await loadSections(store.id, active.kind),
       marks: markStates(active.cell.marks),
       people: active.cell.people,
+      practice,
     }
   }
 
@@ -169,6 +197,8 @@ export async function loadCrewView(store: CrewStore, now: Date): Promise<CrewVie
     active: activeCheck,
     next: upcoming ? { label: upcoming.label, opensLabel: upcoming.opensLabel } : null,
     closedToday: (grid?.preOpen ?? false) || (grid?.closedDays.includes(today) ?? false),
+    practice,
+    practiceSince: grid?.pausedSince ? grid.pausedSince.getTime() : null,
     serverNow: now.getTime(),
   }
 }

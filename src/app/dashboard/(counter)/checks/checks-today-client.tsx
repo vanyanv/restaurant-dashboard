@@ -4,7 +4,7 @@ import { useState, useTransition } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { Section, useCounterTransition, usePageChrome, useSurfaceHref } from "@/components/counter"
-import { setStoreClosed } from "@/lib/counter/actions/checks"
+import { setChecksPaused, setStoreClosed } from "@/lib/counter/actions/checks"
 import { shortStoreName } from "@/lib/checks/names"
 import type { SectionSources } from "@/lib/counter/adapters/types"
 import type { TodayData, TodaySections, CellView } from "@/lib/counter/adapters/checks"
@@ -104,10 +104,17 @@ function Stores({ data }: { data: TodayData }) {
         <div className="ck-stores">
           {data.stores.map((s) => (
             <div key={s.id} className={`ck-store${s.preOpen ? " ck-store--off" : ""}`}>
-              <div className="ck-spread">
+              {/* Name over its rate, always: side by side, a long store name
+                  pushed the rate under it on one card and not the next, so
+                  the tiles below sat at two heights. */}
+              <div className="ck-storehead">
                 <h3>{shortStoreName(s.name)}</h3>
                 <span className="ck-meta">
-                  {s.preOpen ? "Not open yet" : `7-day on time ${s.rate7 === null ? "—" : `${s.rate7}%`}`}
+                  {s.preOpen
+                    ? "Not open yet"
+                    : s.rate7 === null
+                      ? "7-day on time · nothing due yet"
+                      : `7-day on time · ${s.rate7}%`}
                 </span>
               </div>
               {s.preOpen ? (
@@ -117,6 +124,7 @@ function Stores({ data }: { data: TodayData }) {
                 </span>
               ) : (
                 <>
+                  {s.paused && <PausedNote storeId={s.id} since={s.paused} />}
                   <div className="ck-pair">
                     {s.cells.map((c, i) =>
                       c ? (
@@ -156,7 +164,10 @@ function Stores({ data }: { data: TodayData }) {
                       </div>
                     ))}
                   </div>
-                  <ClosedToggle storeId={s.id} day={data.day} closed={s.closedToday} />
+                  <span className="ck-row">
+                    <ClosedToggle storeId={s.id} day={data.day} closed={s.closedToday} />
+                    {!s.paused && <PauseLink storeId={s.id} />}
+                  </span>
                 </>
               )}
             </div>
@@ -220,9 +231,76 @@ function ClosedToggle({ storeId, day, closed }: { storeId: string; day: string; 
           })
         }
       >
-        {busy ? "Saving…" : closed ? "Closed today · reopen" : "Pause checks today (closed)"}
+        {busy ? "Saving…" : closed ? "Closed today · reopen" : "Mark closed today"}
       </button>
       <OutcomeLine outcome={outcome} />
     </span>
+  )
+}
+
+/** The store's checks are paused for training: say so on its card, with the way back. */
+function PausedNote({ storeId, since }: { storeId: string; since: string }) {
+  const router = useRouter()
+  const href = useSurfaceHref()
+  const [busy, start] = useTransition()
+  const [outcome, setOutcome] = useState<Outcome>(null)
+  return (
+    <div className="ck-pause" role="status">
+      <b>Paused for training</b>
+      <span className="ck-meta">
+        {since}. Nothing counts as missed or late, nothing goes to Needs you, and the crew page is practice only.
+      </span>
+      <span className="ck-row">
+        <button
+          type="button"
+          className="btn"
+          disabled={busy}
+          onClick={() =>
+            start(async () => {
+              const r = await setChecksPaused({ storeId, paused: false })
+              if (!r.ok) setOutcome({ ok: false, text: r.error })
+              else {
+                setOutcome(null)
+                router.refresh()
+              }
+            })
+          }
+        >
+          {busy ? "Resuming…" : "Resume checks"}
+        </button>
+        <Link className="ck-link" href={href(`/dashboard/stores/${storeId}`)}>
+          Store settings
+        </Link>
+        <OutcomeLine outcome={outcome} />
+      </span>
+    </div>
+  )
+}
+
+function PauseLink({ storeId }: { storeId: string }) {
+  const router = useRouter()
+  const [busy, start] = useTransition()
+  const [outcome, setOutcome] = useState<Outcome>(null)
+  return (
+    <>
+      <button
+        type="button"
+        className="ck-link"
+        disabled={busy}
+        onClick={() =>
+          start(async () => {
+            const r = await setChecksPaused({ storeId, paused: true })
+            if (!r.ok) setOutcome({ ok: false, text: r.error })
+            else {
+              setOutcome(null)
+              router.refresh()
+            }
+          })
+        }
+      >
+        {busy ? "Pausing…" : "Pause for training"}
+      </button>
+      <OutcomeLine outcome={outcome} />
+    </>
   )
 }

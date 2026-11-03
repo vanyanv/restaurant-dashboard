@@ -31,6 +31,8 @@ type Receipt = {
   photos: number
   people: string[]
   next: CrewView["next"]
+  /** Practice while checks are paused: nothing was saved or sent. */
+  practice?: boolean
 }
 type Screen = "home" | "pin" | "list" | "done"
 
@@ -98,6 +100,13 @@ const T = {
     notYou: "Not you? Sign out",
     offline: "No connection. Try again.",
     closedWhile: "This check just closed or was submitted.",
+    practiceTitle: "Practice mode",
+    practiceHelp: "Your manager paused checks while you learn. Practice the open check as many times as you like. Nothing is saved or counted.",
+    practiceOpen: "Open for practice",
+    practiceFrom: (t: string) => `Practice from ${t}`,
+    practiceSubmit: (c: string) => `Finish ${c} practice`,
+    practiceDoneTitle: (c: string) => `${c} practice done`,
+    practiceThanks: (n: string) => `Nice work, ${n}. Nothing was saved, and the list is clear for the next person.`,
   },
   es: {
     openUntil: (from: string, to: string) => `Abierta · se envía de ${from} a ${to}`,
@@ -160,6 +169,13 @@ const T = {
     notYou: "¿No eres tú? Salir",
     offline: "Sin conexión. Inténtalo otra vez.",
     closedWhile: "Esta revisión se acaba de cerrar o enviar.",
+    practiceTitle: "Modo de práctica",
+    practiceHelp: "Tu gerente pausó las revisiones mientras aprendes. Practica la revisión abierta las veces que quieras. No se guarda ni cuenta nada.",
+    practiceOpen: "Abierta para practicar",
+    practiceFrom: (t: string) => `Práctica desde las ${t}`,
+    practiceSubmit: (c: string) => `Terminar práctica de ${c.toLowerCase()}`,
+    practiceDoneTitle: (c: string) => `Práctica de ${c.toLowerCase()} terminada`,
+    practiceThanks: (n: string) => `Buen trabajo, ${n}. No se guardó nada y la lista quedó limpia para la siguiente persona.`,
   },
 }
 type Tx = (typeof T)["en"]
@@ -363,10 +379,11 @@ function Home({
     .toLowerCase()
   return (
     <>
-      <p className="ckc__dim" style={{ margin: "4px 16px 0", fontSize: 14 }}>
+      <p className="ckc__dim ckb__date">
         {day} · {clock}
       </p>
-      {notice && <div className="ckb__alldone" style={{ background: "var(--warn-wash)", color: "var(--warn)", borderColor: "var(--accent-hi)" }}>{notice}</div>}
+      {notice && <div className="ckb__alldone ckb__alldone--warn">{notice}</div>}
+      {view.practice && !view.closedToday && <PracticeBanner t={t} />}
       {view.closedToday ? (
         <div className="ckc__hero">
           <h2>{t.closedToday}</h2>
@@ -376,7 +393,10 @@ function Home({
           const live = a?.kind === r.kind
           let line = t.opensAt(r.opensLabel)
           let tone = "ckb__tone-dim"
-          if (live && a) {
+          if (live && a && a.practice) {
+            line = t.practiceOpen
+            tone = "ckb__tone-good"
+          } else if (live && a) {
             const canSubmit = now >= a.submitFrom && now <= a.closesAt
             line = canSubmit
               ? t.submitNow(a.dueLabel, durationLabel(a.dueAt - now))
@@ -390,6 +410,7 @@ function Home({
             tone = "ckb__tone-bad"
           } else if (r.status === "closed") line = t.closedNow
           else if (r.status === "off") line = t.off
+          else if (r.status === "paused") line = t.practiceFrom(r.opensLabel)
           const c = live && a ? counts(a) : null
           return (
             <button key={r.kind} type="button" className="ckb__card" data-live={live} disabled={!live} onClick={onStart}>
@@ -407,17 +428,17 @@ function Home({
                 )}
               </span>
               <span className={`ckb__line ${tone}`}>{line}</span>
-              {c && <span className="ckc__dim" style={{ fontSize: 13.5 }}>{t.progress(c.done, c.total)}</span>}
+              {c && <span className="ckc__dim ckb__progress">{t.progress(c.done, c.total)}</span>}
             </button>
           )
         })
       )}
       {!a && !view.closedToday && (
-        <p className="ckc__dim" style={{ fontSize: 14 }}>
+        <p className="ckc__dim ckb__progress">
           {view.next ? t.nextOpens(view.next.label[lang], view.next.opensLabel) : t.allDone}
         </p>
       )}
-      {a && <p className="ckc__dim" style={{ fontSize: 13.5, lineHeight: 1.5, marginTop: "auto" }}>{t.pickHelp}</p>}
+      {a && <p className="ckc__dim ckb__help">{t.pickHelp}</p>}
     </>
   )
 }
@@ -491,7 +512,7 @@ function Pin({
 
   return (
     <>
-      <button type="button" className="ckc__btn ckc__btn--ghost" style={{ width: "auto", justifySelf: "start", minHeight: 44, fontFamily: "var(--sans)", fontSize: 14, fontWeight: 600 }} onClick={onBack}>
+      <button type="button" className="ckc__btn ckc__btn--ghost ckb__back" onClick={onBack}>
         ‹ {checkLabel}
       </button>
       <div style={{ display: "grid", gap: 4, textAlign: "center", marginTop: 8 }}>
@@ -567,7 +588,7 @@ function Checklist({
   const done = active.sections.reduce((n, s) => n + s.items.filter((i) => stateOf(i.id).done).length, 0)
   const photosLeft = active.sections.reduce((n, s) => n + s.items.filter((i) => i.photoRequired && !stateOf(i.id).done).length, 0)
   const tasksLeft = base.total - done - photosLeft
-  const canSubmit = now >= active.submitFrom && now <= active.closesAt
+  const canSubmit = active.practice || (now >= active.submitFrom && now <= active.closesAt)
   const others = active.people.filter((p) => p !== who.name)
   const next = useMemo(() => {
     for (const s of active.sections) {
@@ -678,6 +699,8 @@ function Checklist({
         </div>
       </div>
 
+      {active.practice && <PracticeBanner t={t} />}
+
       {next ? (
         <div className="ckb__next">
           <span className="ck-mono">{t.nextUp(next.section)}</span>
@@ -753,7 +776,7 @@ function Checklist({
           </button>
         ) : (
           <button type="button" className="ckc__btn" disabled={sending} onClick={submit}>
-            {sending ? t.sending : t.submitCheck(label)}
+            {sending ? t.sending : active.practice ? t.practiceSubmit(label) : t.submitCheck(label)}
           </button>
         )}
       </div>
@@ -814,6 +837,16 @@ function Checklist({
         />
       )}
     </>
+  )
+}
+
+/** Said on the store page and over the list while the owner has checks paused. */
+function PracticeBanner({ t }: { t: Tx }) {
+  return (
+    <div className="ckb__practice" role="note">
+      <b>{t.practiceTitle}</b>
+      <span>{t.practiceHelp}</span>
+    </div>
   )
 }
 
@@ -953,13 +986,13 @@ function Done({
         <div className="ckc__big" aria-hidden>
           ✓
         </div>
-        <h1>{t.doneTitle(receipt.check[lang])}</h1>
+        <h1>{receipt.practice ? t.practiceDoneTitle(receipt.check[lang]) : t.doneTitle(receipt.check[lang])}</h1>
         <p className="ckc__dim" style={{ margin: 0 }}>
-          {t.thanks(firstName)}
+          {receipt.practice ? t.practiceThanks(firstName) : t.thanks(firstName)}
         </p>
         <div className="ckc__receipt">
           <div>
-            <span className="ckc__dim">{t.submitted}</span>
+            <span className="ckc__dim">{receipt.practice ? t.practiceTitle : t.submitted}</span>
             <b>
               {day} · {receipt.at}
             </b>

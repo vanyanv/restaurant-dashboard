@@ -58,6 +58,40 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   const form = snapshotForm(active, rows)
   if ("error" in form) return NextResponse.json({ error: form.error, view }, { status: 400 })
 
+  if (active.practice && view.practiceSince !== null) {
+    // Only rows made during the pause: real ticks from before it stay.
+    const since = new Date(view.practiceSince)
+    // Practice while the owner trains crew: the form was checked exactly as a
+    // real submit would be, then nothing is saved and nobody is emailed. The
+    // ticks are cleared so the next trainee starts on an empty list.
+    await prisma.$transaction([
+      prisma.checkMark.deleteMany({
+        where: { storeId: store.id, kind: active.kind, businessDate: dayToDb(active.day), at: { gte: since }, store: { accountId: store.accountId } },
+      }),
+      prisma.checkStart.deleteMany({
+        where: { storeId: store.id, kind: active.kind, businessDate: dayToDb(active.day), startedAt: { gte: since }, store: { accountId: store.accountId } },
+      }),
+    ])
+    return NextResponse.json({
+      ok: true,
+      receipt: {
+        store: store.name,
+        check: active.label,
+        day: active.day,
+        at: clockLabel(now),
+        by: crew.name,
+        late: 0,
+        dueLabel: active.dueLabel,
+        flagged: form.flagged,
+        tasks: form.content.sections.reduce((n, s) => n + s.items.length, 0),
+        photos: form.photos.length,
+        people: active.people,
+        next: null,
+        practice: true,
+      },
+    })
+  }
+
   const tpl = await prisma.checkTemplate.findUnique({
     where: { storeId_kind: { storeId: store.id, kind: active.kind } },
     select: { id: true, opensAtMin: true, submitFromMin: true, dueAtMin: true, dueByWeekday: true, graceMin: true },

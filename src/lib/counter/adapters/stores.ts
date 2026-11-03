@@ -1,3 +1,4 @@
+import { clockLabel, dayLabel, todayLA } from "@/lib/checks/time"
 import { prisma } from "@/lib/prisma"
 import { monthlyCostForDays } from "@/lib/pnl"
 import { count, money, pct, plural, pluralWord, titleCase } from "@/lib/counter/format"
@@ -153,6 +154,7 @@ export interface StoreExpenseLine {
 interface StoreFileRow extends StoreRow {
   phone: string | null
   longitude: number | null
+  checksPausedAt: Date | null
   expenses: StoreExpenseLine[]
 }
 
@@ -223,6 +225,8 @@ const FILE_SELECT = {
   ...SELECT,
   phone: true,
   longitude: true,
+  // The open pause of this store's checks, if any. See `CheckPause`.
+  checkPauses: { where: { resumedAt: null }, select: { pausedAt: true }, take: 1 },
   fixedExpenses: {
     where: { isActive: true },
     // Ordered in `shapeFile`, not here. A Prisma `orderBy` tuple has to be a
@@ -277,6 +281,7 @@ const shapeFile = (
   s: Parameters<typeof shape>[0] & {
     phone: string | null
     longitude: number | null
+    checkPauses: Array<{ pausedAt: Date }>
     fixedExpenses: Array<{
       id: string
       label: string
@@ -289,6 +294,7 @@ const shapeFile = (
   ...shape(s),
   phone: s.phone,
   longitude: s.longitude,
+  checksPausedAt: s.checkPauses[0]?.pausedAt ?? null,
   expenses: [...s.fixedExpenses]
     .sort((a, b) => a.label.localeCompare(b.label))
     .map((e) => {
@@ -594,6 +600,11 @@ export interface StoreFileEditable {
   /** Stated, not offered: `updateStoreSchema` does not accept it. */
   cogsTarget: number | null
   /**
+   * Store checks paused for crew training: "Tue Nov 3, 2:15 pm", or null when
+   * checks are running. Its own action (`setChecksPaused`), not part of Save.
+   */
+  checksPausedSince: string | null
+  /**
    * The store's fixed-expense lines, carried on the EDIT section rather than
    * on `expenses` beside the table that displays them.
    *
@@ -779,6 +790,9 @@ export function getStoreFileSectionPromises(
       stage:
         store.stage === "warming_up" || store.stage === "ready" ? store.stage : "pre_open",
       cogsTarget: store.cogsTarget,
+      checksPausedSince: store.checksPausedAt
+        ? `${dayLabel(todayLA(store.checksPausedAt))}, ${clockLabel(store.checksPausedAt)}`
+        : null,
       expenseLines: store.expenses,
     })),
     head: s((store) => {

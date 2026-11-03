@@ -125,6 +125,10 @@ function cellView(store: GridStore, cell: GridCell, now: Date): CellView {
     case "before":
       label = "Before checks began"
       break
+    case "paused":
+      label = "Paused for training"
+      meta = cell.done > 0 ? `Practice: ${cell.done} of ${cell.total} ticked` : null
+      break
     case "upcoming":
       label = `Opens ${clockLabel(b.opens)}`
       break
@@ -149,7 +153,7 @@ function cellView(store: GridStore, cell: GridCell, now: Date): CellView {
   const live = cell.status === "open"
   const tile: CellView["tile"] = {
     tone: sent ? "ok" : cell.status === "missed" ? "miss" : live ? "open" : null,
-    headline: sent && sub ? `Sent ${clockLabel(sub.submittedAt)}` : label,
+    headline: sent && sub ? `Sent ${clockLabel(sub.submittedAt)}` : cell.status === "paused" ? "Paused" : label,
     sub: sent
       ? cell.people.join(", ") || sub?.crewName || null
       : live
@@ -193,6 +197,8 @@ export type TodayData = {
     id: string
     name: string
     preOpen: boolean
+    /** "Paused since Tue 2:15 pm" while the owner trains crew, else null. */
+    paused: string | null
     rate7: number | null
     closedToday: boolean
     cells: Array<CellView | null>
@@ -269,6 +275,9 @@ export function getChecksTodaySectionPromises(opts: { accountId: string; now?: D
             id: s.id,
             name: s.name,
             preOpen: s.preOpen,
+            paused: s.pausedSince
+              ? `Paused since ${dayLabel(todayLA(s.pausedSince))} ${clockLabel(s.pausedSince)}`
+              : null,
             closedToday: s.closedDays.includes(today),
             week: weekDays.map((day) => ({
               day,

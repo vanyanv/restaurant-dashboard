@@ -151,7 +151,7 @@ function Editor({ data }: { data: ChecklistsData }) {
                 </b>
                 <span className="ck-meta">
                   {d.enabled
-                    ? `Submit ${label12(d.submitFromMin)} – ${label12(d.dueAtMin)} · ${items} task${items === 1 ? "" : "s"} · ${d.sections.reduce((n, s) => n + s.items.filter((i) => i.photoRequired).length, 0)} photo`
+                    ? `Submit ${label12(d.submitFromMin)} – ${label12(d.dueAtMin)} · ${items} task${items === 1 ? "" : "s"} · ${photoCount(d)} photo${photoCount(d) === 1 ? "" : "s"}`
                     : "Switched off"}
                 </span>
               </button>
@@ -219,8 +219,11 @@ function Editor({ data }: { data: ChecklistsData }) {
                 <i className="g" style={{ left: left(t.opensAtMin), width: `calc(${left(t.submitFromMin)} - ${left(t.opensAtMin)})` }} />
                 <i className="w" style={{ left: left(t.submitFromMin), width: `calc(${left(t.dueAtMin)} - ${left(t.submitFromMin)})` }} />
                 <span style={{ left: left(t.opensAtMin) }}>{label12(t.opensAtMin)}</span>
-                <span style={{ left: left(t.submitFromMin) }}>{label12(t.submitFromMin)}</span>
-                <span style={{ left: left(t.dueAtMin) }}>{label12(t.dueAtMin)}</span>
+                {/* One label for the submit window, centred on it: two at its
+                    ends ran into each other on a one-hour window. */}
+                <span className="span-w" style={{ left: `calc((${left(t.submitFromMin)} + ${left(t.dueAtMin)}) / 2)` }}>
+                  {label12(t.submitFromMin)} – {label12(t.dueAtMin)}
+                </span>
               </div>
             </div>
           </div>
@@ -406,4 +409,8 @@ function Editor({ data }: { data: ChecklistsData }) {
       </div>
     </div>
   )
+}
+
+function photoCount(t: { sections: Array<{ items: Array<{ photoRequired: boolean }> }> }): number {
+  return t.sections.reduce((n, s) => n + s.items.filter((i) => i.photoRequired).length, 0)
 }

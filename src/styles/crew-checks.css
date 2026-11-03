@@ -84,3 +84,17 @@
 .ckb__preview { width: 100%; aspect-ratio: 3 / 4; object-fit: cover; background: var(--ink) }
 .ckb__toast { position: fixed; left: 16px; right: 16px; bottom: max(96px, calc(env(safe-area-inset-bottom, 0px) + 96px)); z-index: 30;
   background: var(--ink); color: var(--surface); padding: 12px 14px; font-size: 14px; font-weight: 600; max-width: 448px; margin: 0 auto }
+.ckb__alldone--warn { background: var(--warn-wash); border-color: var(--accent-hi); color: var(--warn) }
+
+/* Practice mode: the owner has paused this store's checks to train crew. */
+.ckb__practice { display: grid; gap: 4px; padding: 12px 14px; background: var(--accent-wash);
+  border: 1.5px dashed var(--accent-hi); border-left: 6px solid var(--accent) }
+.ckb__practice b { font-family: var(--display); font-weight: 400; font-size: 17px; letter-spacing: .04em; text-transform: uppercase; line-height: 1.1 }
+.ckb__practice span { font-size: 14px; line-height: 1.45; color: var(--ink-2) }
+
+/* Small text roles the page used to set inline, one size each. */
+.ckb__date { margin-block: 4px 0; font-size: 14px }
+.ckb__help { font-size: 13.5px; line-height: 1.5; margin-top: auto }
+.ckb__progress { font-size: 13.5px }
+.ckb__back { width: auto; justify-self: start; min-height: 44px; font-family: var(--sans); font-size: 14px; font-weight: 600; letter-spacing: 0 }
+.ckb .ckc__btn.ckb__back { font-family: var(--sans); font-size: 14px; font-weight: 600; letter-spacing: 0 }

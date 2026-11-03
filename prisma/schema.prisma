@@ -243,6 +243,7 @@ model Store {
   checkSubmissions CheckSubmission[]
   checkStarts      CheckStart[]
   checkClosures    CheckClosure[]
+  checkPauses      CheckPause[]
   checkMarks       CheckMark[]
 
   @@index([ownerId])
@@ -2553,4 +2554,19 @@ model CheckClosure {
   store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
 
   @@unique([storeId, businessDate])
+}
+
+/// The owner paused a store's checks, to teach crew how to do them. A check
+/// whose window closes inside a pause is "paused": never missed, never late,
+/// never on Needs you. While a pause is open (`resumedAt` null) the crew page
+/// is practice: any check can be worked at any time, and Submit saves nothing.
+model CheckPause {
+  id        String    @id @default(cuid())
+  storeId   String
+  pausedAt  DateTime  @default(now())
+  resumedAt DateTime?
+
+  store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  @@index([storeId, pausedAt])
 }

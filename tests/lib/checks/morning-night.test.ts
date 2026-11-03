@@ -94,6 +94,7 @@ const active = (): ActiveCheck => ({
   ],
   marks: [],
   people: [],
+  practice: false,
 })
 
 const mark = (over: Partial<MarkRow>): MarkRow => ({
