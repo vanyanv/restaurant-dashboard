@@ -106,6 +106,7 @@ export function CounterStoresClient({
       </Section>
 
       <Section
+        fold="closed"
         title="Needs you"
         meta={(w) => w.meta}
         data={sections.work}

@@ -442,6 +442,7 @@ export function CounterLaborClient({
       </div>
 
       <Section
+        fold="closed"
         title="Needs a decision"
         pending={pending}
         meta={(d) => d.meta}

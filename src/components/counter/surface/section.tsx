@@ -210,6 +210,20 @@ type SectionProps<T> = {
    * as it always does: a failed offer still says so.
    */
   quietWhenEmpty?: boolean
+  /**
+   * Draw the section as a fold: the head becomes a native `<summary>` the
+   * reader taps to open or close the body. `"closed"` starts it shut, for a
+   * worklist the owner reads on demand rather than first (owner, 2026-11-03:
+   * Needs you "feels like information that's not very important right now").
+   * `"open"` starts it open but still lets it fold.
+   *
+   * A `<details>` rather than state, because this component is rendered from
+   * Server Components (every `loading.tsx`) and may not hold a hook. The
+   * `.sec` landmark stays the outer element so the fidelity gate counts it.
+   * The "Ask about this" button is left out of a fold's head: a button
+   * inside a `<summary>` toggles the fold as well as asking.
+   */
+  fold?: "open" | "closed"
   children: (data: T) => ReactNode
 }
 
@@ -228,6 +242,7 @@ function SectionBody<T>({
   bare = false,
   pending = false,
   quietWhenEmpty = false,
+  fold,
   children,
 }: Omit<SectionProps<T>, "data"> & { data: SectionData<T> }) {
   /*
@@ -323,7 +338,34 @@ function SectionBody<T>({
 
   // A page-level block: the states, without the box. The head block, the
   // strip, the moving band and the comparison drill are all this.
+  if (bare && fold) {
+    // A bare block has no box of its own, so its fold is a plain summary line
+    // (title and qualifier) over the same unboxed body.
+    return (
+      <details className="sec-fold-bare" open={fold === "open"}>
+        <summary className="sec-fold-bare__head">
+          <span className="t">{title}</span>
+          {metaText ? <span className={hot ? "k hot" : "k"}>{metaText}</span> : null}
+        </summary>
+        {body}
+      </details>
+    )
+  }
   if (bare) return <>{body}</>
+
+  if (fold) {
+    return (
+      <section className="sec sec--fold" aria-labelledby={headingId}>
+        <details open={fold === "open"}>
+          <summary className="sec__head">
+            <h3 id={headingId}>{title}</h3>
+            {metaText ? <span className={hot ? "k hot" : "k"}>{metaText}</span> : null}
+          </summary>
+          {body}
+        </details>
+      </section>
+    )
+  }
 
   return (
     // `<section aria-labelledby>` rather than the prototype's bare `<div>`.

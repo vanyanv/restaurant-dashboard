@@ -158,7 +158,7 @@ export function CounterPhoneLaborClient({
       {/* Page level, below the last `.sec`, exactly where the prototype puts
           it — and pointed at somewhere real, or not rendered at all. See the
           file note. */}
-      <Section bare title="Needs a decision" data={sections.decision} pending={pending}>
+      <Section bare fold="closed" title="Needs a decision" meta={(d) => d.meta} data={sections.decision} pending={pending}>
         {(d) =>
           d.items.length === 0 || !d.items[0].href ? null : (
             <Link className="mbtn mbtn--primary" href={d.items[0].href}>
