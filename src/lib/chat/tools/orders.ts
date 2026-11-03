@@ -155,7 +155,7 @@ const ordersByDayParams = z
       .string()
       .optional()
       .describe(
-        "Filter by platform string (e.g. 'doordash', 'ubereats', 'css-pos', 'bnm-web'). Omit for all platforms.",
+        "Filter by platform string (e.g. 'doordash', 'ubereats', 'css-pos', 'd2c-eater-website' for own-website orders). Omit for all platforms.",
       ),
     minTotal: z
       .number()

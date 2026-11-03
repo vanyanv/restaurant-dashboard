@@ -1,5 +1,6 @@
 import { isAfter, isBefore } from "date-fns"
 import { hasFixedLabor, payrollTaxRateOf } from "@/lib/counter/labor-cost-core"
+import { isFirstPartyPlatform } from "@/lib/first-party-platforms"
 // UTC-floor on purpose: OtterDailySummary.date is a Postgres @db.Date stored
 // at UTC midnight (e.g. May 1 LA business day → 2026-05-01T00:00:00Z).
 // Period boundaries must land on the same instant or bucketSummariesByPeriod
@@ -291,7 +292,8 @@ export type OtterSummaryRow = {
   tpRefundsAdjustments?: number | null
 }
 
-const FP_PLATFORMS = new Set(["css-pos", "bnm-web"])
+/** The shared first-party list (`@/lib/first-party-platforms`): their figures are the `fp*` columns. */
+const FP_PLATFORMS = { has: isFirstPartyPlatform }
 
 /**
  * What one summary row contributes to the statement — the one place a

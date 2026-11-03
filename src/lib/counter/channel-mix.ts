@@ -1,6 +1,7 @@
 import { Prisma } from "@/generated/prisma/client"
 import { prisma } from "@/lib/prisma"
 import { CHANNELS, type ChannelId } from "@/lib/counter/channels"
+import { FIRST_PARTY_PLATFORMS } from "@/lib/first-party-platforms"
 import { toQueryBounds, type DateRange } from "@/lib/counter/date-range"
 import { otterRangeTags, rangeTtl } from "@/lib/cache/range"
 import { cached, stableKey } from "@/lib/cache/cached"
@@ -97,8 +98,10 @@ export interface ChannelMixInput {
  * would report marketplace volume as commission-free.
  */
 export const CHANNEL_FOR_PLATFORM: Record<string, ChannelId> = {
-  "css-pos": "house",
-  "bnm-web": "house",
+  // `css-pos`, `bnm-web` and `d2c-eater-website` (the order feed's name for
+  // the same own-website orders the summary calls `bnm-web`) — the shared
+  // first-party list, so a slug added there is house here too.
+  ...Object.fromEntries(FIRST_PARTY_PLATFORMS.map((p) => [p, "house" as const])),
   doordash: "doordash",
   ubereats: "ubereats",
   grubhub: "grubhub",
@@ -106,26 +109,12 @@ export const CHANNEL_FOR_PLATFORM: Record<string, ChannelId> = {
 
 /**
  * Raw Otter platform slugs whose channel is `house` — i.e. the money arrived
- * without a marketplace in between. Derived from `CHANNEL_FOR_PLATFORM` so
- * that inside the Counter layer there is one place that decides "in-house",
- * not a second `"css-pos"` string literal wherever something needs to exclude
- * the house channel (e.g. a third-party-only aggregate).
- *
- * ## IT IS NOT THE ONLY PLACE IN THE REPOSITORY, and this used to say it was
- *
- * The same set is defined independently, as its own literal, in four more:
- *
- *   src/lib/pnl.ts                              FP_PLATFORMS
- *   src/lib/dashboard/channel-fold.ts           FP_PLATFORMS
- *   src/lib/otter-analytics-aggregation.ts      FP_PLATFORMS
- *   src/lib/otter-metrics-sync.ts               inline `=== "css-pos" || …`
- *
- * plus three inline copies inside
- * `src/app/actions/store/dashboard-analytics-actions.ts`. Those belong to the
- * sync layer and the pre-Counter editorial stack rather than to this one, so
- * they are not wrong to exist yet — but a claim that this is THE one place
- * would send the next person who adds a first-party slug home after changing
- * one of five. Say where to look instead.
+ * without a marketplace in between. Derived from `CHANNEL_FOR_PLATFORM`, which
+ * takes its house slugs from `FIRST_PARTY_PLATFORMS`
+ * (`@/lib/first-party-platforms`) — the one list. `pnl.ts`, the Otter sync
+ * (`otter-analytics-aggregation.ts`, `otter-metrics-sync.ts`), the legacy
+ * `dashboard-analytics-actions.ts` and `scripts/reconcile-weekly-sheet.ts`
+ * read that list too, so a first-party slug is added in one place.
  */
 export const HOUSE_PLATFORMS: readonly string[] = Object.entries(
   CHANNEL_FOR_PLATFORM

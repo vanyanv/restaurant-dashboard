@@ -1,4 +1,5 @@
 import { computeDeposit } from "@/lib/deposit"
+import { isFirstPartyPlatform } from "@/lib/first-party-platforms"
 
 /**
  * Single-pass channel rollup for `getOtterAnalytics` / `getDashboardAnalytics`.
@@ -62,10 +63,8 @@ export type ChannelTotals = {
   expectedDeposit: number
 }
 
-const FP_PLATFORMS = new Set(["css-pos", "bnm-web"])
-
 function isFP(platform: string): boolean {
-  return FP_PLATFORMS.has(platform)
+  return isFirstPartyPlatform(platform)
 }
 
 function emptyTotals(platform: string, paymentMethod: string | null): ChannelTotals {

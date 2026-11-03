@@ -37,6 +37,7 @@ export type ChannelId = "house" | "doordash" | "ubereats" | "grubhub"
 export const PLATFORM_LABEL: Record<string, string> = {
   "css-pos": "In-house",
   "bnm-web": "Own web",
+  "d2c-eater-website": "Own web",
   doordash: "DoorDash",
   ubereats: "Uber Eats",
   grubhub: "Grubhub",

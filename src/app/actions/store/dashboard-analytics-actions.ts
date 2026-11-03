@@ -4,6 +4,7 @@ import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { computeDeposit } from "@/lib/deposit"
+import { isFirstPartyPlatform } from "@/lib/first-party-platforms"
 import { todayInLA, startOfDayLA, endOfDayLA } from "@/lib/dashboard-utils"
 import { cached, stableKey } from "@/lib/cache/cached"
 import { aggregateChannelTotals } from "@/lib/otter-analytics-aggregation"
@@ -86,7 +87,7 @@ export async function getOtterAnalytics(
     const sum = (rows: typeof summaries, fn: (r: (typeof summaries)[0]) => number) =>
       rows.reduce((acc, r) => acc + fn(r), 0)
 
-    const isFPPlatform = (p: string) => p === "css-pos" || p === "bnm-web"
+    const isFPPlatform = isFirstPartyPlatform
     const gross = (r: (typeof summaries)[0]) => (r.fpGrossSales ?? 0) + (r.tpGrossSales ?? 0)
     const net = (r: (typeof summaries)[0]) => (r.fpNetSales ?? 0) + (r.tpNetSales ?? 0)
 
@@ -288,7 +289,7 @@ export async function getRevenueTrendData(
 
     if (summaries.length === 0) return null
 
-    const isFPPlatform = (p: string) => p === "css-pos" || p === "bnm-web"
+    const isFPPlatform = isFirstPartyPlatform
 
     const byDate: Record<string, { grossRevenue: number; netRevenue: number; orderCount: number; fpGross: number; tpGross: number; cashSales: number; cardSales: number }> = {}
     for (const r of summaries) {
@@ -462,10 +463,11 @@ export async function getDashboardAnalytics(
 
     const totals = buildRow("total", "TOTAL", summaries)
 
-    const isFPPlatform = (p: string) => p === "css-pos" || p === "bnm-web"
+    const isFPPlatform = isFirstPartyPlatform
     const PLATFORM_LABELS: Record<string, string> = {
       "css-pos": "Otter POS",
       "bnm-web": "Otter Online Ordering",
+      "d2c-eater-website": "Otter Online Ordering",
       doordash: "DoorDash",
       ubereats: "Uber Eats",
       grubhub: "Grubhub",
