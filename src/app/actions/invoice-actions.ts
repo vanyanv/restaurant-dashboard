@@ -750,3 +750,40 @@ export async function setInvoiceReviewDecision(
   await bustTags(["invoices", `account:${accountId}`])
   return { ok: true, status: updated.status }
 }
+
+/**
+ * Answers "which store is this?" for an invoice the sync held because the
+ * delivery address only partly matched (`low_match_confidence`).
+ *
+ * The store must be one of the reader's own account's stores, and the invoice
+ * must be the account's too: `accountId` is the tenancy boundary, the same
+ * check `PATCH /api/invoices/[id]` makes. Confirming IS the review decision, so
+ * the invoice is APPROVED in the same write (and `matchedAt` stamped, as
+ * `setInvoiceReviewDecision` does). Only REVIEW invoices are moved this way:
+ * a settled invoice changing store is a different question, asked on its page.
+ */
+export async function setInvoiceStore(
+  invoiceId: string,
+  storeId: string,
+): Promise<{ ok: true; storeId: string } | { ok: false; reason: string }> {
+  const session = await getServerSession(authOptions)
+  if (!session?.user) return { ok: false, reason: "unauthenticated" }
+  if (!hasOwnerAccess(session.user.role)) return { ok: false, reason: "forbidden" }
+  const accountId = session.user.accountId
+
+  const [invoice, store] = await Promise.all([
+    prisma.invoice.findFirst({ where: { id: invoiceId, accountId }, select: { id: true, status: true } }),
+    prisma.store.findFirst({ where: { id: storeId, accountId }, select: { id: true } }),
+  ])
+  if (!invoice) return { ok: false, reason: "not-found" }
+  if (!store) return { ok: false, reason: "store-not-found" }
+  if (invoice.status !== "REVIEW") return { ok: false, reason: "not-in-review" }
+
+  await prisma.invoice.update({
+    where: { id: invoice.id },
+    data: { storeId: store.id, status: "APPROVED", matchedAt: new Date() },
+  })
+
+  await bustTags(["invoices", `account:${accountId}`])
+  return { ok: true, storeId: store.id }
+}

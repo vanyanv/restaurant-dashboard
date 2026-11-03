@@ -3,6 +3,7 @@
 import {
   setInvoiceIsReturn,
   setInvoiceReviewDecision,
+  setInvoiceStore,
 } from "@/app/actions/invoice-actions"
 
 /**
@@ -39,6 +40,19 @@ export async function markInvoiceReturn(
   isReturn: boolean,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const result = await setInvoiceIsReturn(invoiceId, isReturn)
+  if (!result.ok) return { ok: false, error: result.reason }
+  return { ok: true }
+}
+
+/**
+ * "Yes, Glendale" / "Different store" on Needs you: puts a held invoice in
+ * the store the owner names and approves it. See `setInvoiceStore`.
+ */
+export async function confirmInvoiceStore(
+  invoiceId: string,
+  storeId: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const result = await setInvoiceStore(invoiceId, storeId)
   if (!result.ok) return { ok: false, error: result.reason }
   return { ok: true }
 }

@@ -10,7 +10,7 @@ import { counterToday } from "@/lib/counter/today"
 
 export const dynamic = "force-dynamic"
 
-/** Invoices — Needs you: the worklist, worst first, and what the prices did. */
+/** Invoices — This week: one sentence, what needs you, what came in, prices and vendors. */
 export default async function InvoicesPage({
   searchParams,
 }: {
@@ -43,7 +43,7 @@ export default async function InvoicesPage({
     <>
       <CounterInvoicesClient
         sub={`${storeName} · read from the invoices inbox`}
-        sections={{ headline: sections.headline, desk: sections.desk }}
+        sections={{ week: sections.week }}
         prices={{ movers: prices.movers }}
       />
       <span hidden data-perf-ready="/dashboard/invoices" />
