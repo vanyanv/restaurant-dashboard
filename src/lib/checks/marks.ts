@@ -95,3 +95,38 @@ export function snapshotForm(active: ActiveCheck, rows: MarkRow[]): FormSnapshot
   if (photosLeft > 0) return { error: `${photosLeft} photo${photosLeft === 1 ? "" : "s"} still needed.` }
   return { content, flagged, photos, firstAt: rows[0]?.at ?? null }
 }
+
+/** What the latest row on a task says, as the server sees it now. */
+export type LatestMark = { id: string; done: boolean; note: string | null; crewName: string; photoKey: string | null } | null
+
+export type MarkRequest = {
+  done: boolean
+  note: string | null
+  /** The tap carries a photo. */
+  photo: boolean
+  /** The mark id the phone showed when crew asked to undo. Null when it showed none. */
+  seen: string | null
+}
+
+/**
+ * Whether one tap may change a task on the shared form. Several crew work one
+ * check, and a phone can be a few seconds behind, so a tap is read as what
+ * the person meant against what they saw:
+ *
+ * - "keep": ticking a task someone already finished does nothing, so a phone
+ *   that had not caught up yet cannot take the credit or wipe a photo.
+ * - "stale": an undo names the mark it saw; if someone changed the task since,
+ *   the undo is refused and the phone gets the fresh list instead.
+ * - "write": anything else (a first tick, a note, a deliberate undo of what
+ *   the phone showed) is saved as a new row.
+ */
+export function markDecision(latest: LatestMark, req: MarkRequest): "write" | "keep" | "stale" {
+  if (req.done) {
+    // A photo still lands on a task that was finished with a note instead.
+    if (latest?.done && !req.note && !(req.photo && !latest.photoKey)) return "keep"
+    return "write"
+  }
+  if (!latest?.done) return "keep"
+  if (req.seen !== latest.id) return "stale"
+  return "write"
+}

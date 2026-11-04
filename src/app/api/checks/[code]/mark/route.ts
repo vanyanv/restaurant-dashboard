@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma"
 import { rateLimit } from "@/lib/rate-limit"
 import { isProductPhotoContentType, putCheckPhoto } from "@/lib/blob"
 import { findStoreByCode, loadCrewView } from "@/lib/checks/crew"
-import { crewFromPass } from "@/lib/checks/marks"
+import { crewFromPass, markDecision } from "@/lib/checks/marks"
 import { dayToDb } from "@/lib/checks/time"
 import { looksLikeImage, MAX_PHOTO_BYTES } from "@/lib/checks/photo"
 
@@ -60,6 +60,25 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   const hasFile = file instanceof File && file.size > 0
   if (done && item.photoRequired && !hasFile && !note) {
     return NextResponse.json({ error: "Take a photo to finish this task." }, { status: 400 })
+  }
+
+  // A phone a few seconds behind must not undo or re-credit someone else's
+  // task: an untick names the mark it saw, and a tick on a finished task is
+  // a no-op.
+  const latest = await prisma.checkMark.findFirst({
+    where: { storeId: store.id, kind: active.kind, businessDate: dayToDb(active.day), itemId: item.id, store: { accountId: store.accountId } },
+    orderBy: [{ at: "desc" }, { id: "desc" }],
+    select: { id: true, done: true, note: true, crewName: true, photoKey: true },
+  })
+  const seenRaw = form.get("seen")
+  const seen = typeof seenRaw === "string" && seenRaw ? seenRaw : null
+  const decision = markDecision(latest, { done, note, photo: hasFile, seen })
+  if (decision === "keep") return NextResponse.json({ ok: true, view })
+  if (decision === "stale") {
+    return NextResponse.json(
+      { error: `${latest?.crewName ?? "Someone"} just updated this task. Here is the latest list.`, view },
+      { status: 409 },
+    )
   }
 
   let photo: { key: string; type: string; size: number } | null = null
