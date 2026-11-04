@@ -97,6 +97,12 @@ const T = {
     photoUse: "Looks good, mark done",
     retake: "Retake",
     uploading: "Saving photo…",
+    cameraTitle: "Take the photo",
+    shutter: "Take photo",
+    cameraStarting: "Opening the camera…",
+    cameraBlocked: "The camera is blocked. Allow the camera for this page in your phone's settings, then tap Try again.",
+    cameraNone: "No camera found. Open this page on your phone.",
+    tryAgain: "Try again",
     doneTitle: (c: string) => `${c} check sent`,
     thanks: (n: string) => `Thanks, ${n}. It's saved and locked.`,
     store: "Tasks",
@@ -175,6 +181,12 @@ const T = {
     photoUse: "Se ve bien, marcar hecha",
     retake: "Repetir",
     uploading: "Guardando foto…",
+    cameraTitle: "Toma la foto",
+    shutter: "Tomar foto",
+    cameraStarting: "Abriendo la cámara…",
+    cameraBlocked: "La cámara está bloqueada. Permite la cámara para esta página en los ajustes del teléfono y toca Intentar otra vez.",
+    cameraNone: "No se encontró cámara. Abre esta página en tu teléfono.",
+    tryAgain: "Intentar otra vez",
     doneTitle: (c: string) => `Revisión de ${c.toLowerCase()} enviada`,
     thanks: (n: string) => `Gracias, ${n}. Quedó guardada y cerrada.`,
     store: "Tareas",
@@ -225,19 +237,34 @@ function useClock(serverNow: number): number {
   return now
 }
 
+/** Draws a frame at most 1600px on its long edge and encodes it as JPEG. */
+async function toJpeg(src: CanvasImageSource, w: number, h: number): Promise<Blob | null> {
+  const scale = Math.min(1, 1600 / Math.max(w, h))
+  const canvas = document.createElement("canvas")
+  canvas.width = Math.round(w * scale)
+  canvas.height = Math.round(h * scale)
+  canvas.getContext("2d")!.drawImage(src, 0, 0, canvas.width, canvas.height)
+  return new Promise<Blob | null>((r) => canvas.toBlob(r, "image/jpeg", 0.72))
+}
+
 /** Shrinks a camera photo to at most 1600px on its long edge, as JPEG. */
 async function compress(file: File): Promise<Blob> {
   try {
     const bmp = await createImageBitmap(file)
-    const scale = Math.min(1, 1600 / Math.max(bmp.width, bmp.height))
-    const canvas = document.createElement("canvas")
-    canvas.width = Math.round(bmp.width * scale)
-    canvas.height = Math.round(bmp.height * scale)
-    canvas.getContext("2d")!.drawImage(bmp, 0, 0, canvas.width, canvas.height)
-    const blob = await new Promise<Blob | null>((r) => canvas.toBlob(r, "image/jpeg", 0.72))
+    const blob = await toJpeg(bmp, bmp.width, bmp.height)
     if (blob) return blob
   } catch {}
   return file
+}
+
+/**
+ * Task photos come from a live camera view inside the page, so there is no
+ * way to pick a saved picture from the camera roll or a computer's files.
+ * Only a browser with no camera API at all falls back to the file input,
+ * which carries capture="environment" and opens the camera on phones.
+ */
+function hasLiveCamera(): boolean {
+  return typeof navigator !== "undefined" && typeof navigator.mediaDevices?.getUserMedia === "function"
 }
 
 export function CrewCheckClient({ code, initial }: { code: string; initial: CrewView }) {
@@ -595,6 +622,8 @@ function Checklist({
   /** A done task someone tapped: shows who did it, and undo is a second, deliberate tap. */
   const [doneFor, setDoneFor] = useState<CrewItem | null>(null)
   const [photoFor, setPhotoFor] = useState<{ item: CrewItem; blob: Blob; url: string } | null>(null)
+  /** The task the live camera is open for. */
+  const [shootFor, setShootFor] = useState<CrewItem | null>(null)
   const [error, setError] = useState("")
   const [sending, setSending] = useState(false)
   const camera = useRef<HTMLInputElement>(null)
@@ -659,6 +688,10 @@ function Checklist({
   }
 
   const openCamera = (item: CrewItem) => {
+    if (hasLiveCamera()) {
+      setShootFor(item)
+      return
+    }
     cameraFor.current = item
     camera.current?.click()
   }
@@ -827,6 +860,18 @@ function Checklist({
           setPhotoFor({ item, blob, url: URL.createObjectURL(blob) })
         }}
       />
+      {shootFor && (
+        <CameraSheet
+          t={t}
+          title={txt(shootFor.en, shootFor.es)}
+          onCancel={() => setShootFor(null)}
+          onShot={(blob) => {
+            const item = shootFor
+            setShootFor(null)
+            setPhotoFor({ item, blob, url: URL.createObjectURL(blob) })
+          }}
+        />
+      )}
       {photoFor && (
         <PhotoSheet
           t={t}
@@ -909,6 +954,91 @@ function CameraIcon({ size = 20 }: { size?: number }) {
       <path d="M3 7h4l2-3h6l2 3h4v13H3z" />
       <circle cx="12" cy="13" r="4" />
     </svg>
+  )
+}
+
+/** A live view of the back camera with a shutter button. Nothing to upload from. */
+function CameraSheet({
+  t,
+  title,
+  onShot,
+  onCancel,
+}: {
+  t: Tx
+  title: string
+  onShot: (blob: Blob) => void
+  onCancel: () => void
+}) {
+  const video = useRef<HTMLVideoElement>(null)
+  const [state, setState] = useState<"starting" | "live" | "blocked" | "none">("starting")
+  const [attempt, setAttempt] = useState(0)
+  const [busy, setBusy] = useState(false)
+
+  useEffect(() => {
+    let stream: MediaStream | null = null
+    let stopped = false
+    setState("starting")
+    navigator.mediaDevices
+      .getUserMedia({
+        audio: false,
+        video: { facingMode: { ideal: "environment" }, width: { ideal: 1920 }, height: { ideal: 1440 } },
+      })
+      .then((s) => {
+        if (stopped) {
+          s.getTracks().forEach((tr) => tr.stop())
+          return
+        }
+        stream = s
+        const v = video.current
+        if (v) {
+          v.srcObject = s
+          void v.play().catch(() => {})
+        }
+        setState("live")
+      })
+      .catch((err: unknown) => {
+        if (stopped) return
+        const name = err instanceof DOMException ? err.name : ""
+        setState(name === "NotFoundError" || name === "OverconstrainedError" ? "none" : "blocked")
+      })
+    return () => {
+      stopped = true
+      stream?.getTracks().forEach((tr) => tr.stop())
+    }
+  }, [attempt])
+
+  const shoot = async () => {
+    const v = video.current
+    if (!v || !v.videoWidth) return
+    setBusy(true)
+    const blob = await toJpeg(v, v.videoWidth, v.videoHeight)
+    setBusy(false)
+    if (blob) onShot(blob)
+  }
+
+  return (
+    <div className="ckc__sheet" role="dialog" aria-modal="true" aria-label={t.cameraTitle} onClick={onCancel}>
+      <div onClick={(e) => e.stopPropagation()}>
+        <span className="ck-mono">{t.cameraTitle}</span>
+        <h2>{title}</h2>
+        <video ref={video} className="ckb__preview ckb__preview--live" playsInline muted autoPlay />
+        <div className="ckc__err" role="alert">
+          {state === "starting" ? t.cameraStarting : state === "blocked" ? t.cameraBlocked : state === "none" ? t.cameraNone : ""}
+        </div>
+        {state === "blocked" || state === "none" ? (
+          <button type="button" className="ckc__btn" onClick={() => setAttempt((n) => n + 1)}>
+            {t.tryAgain}
+          </button>
+        ) : (
+          <button type="button" className="ckc__btn" disabled={state !== "live" || busy} onClick={shoot}>
+            <CameraIcon /> {t.shutter}
+          </button>
+        )}
+        <button type="button" className="ckc__btn ckc__btn--ghost" onClick={onCancel}>
+          {t.cancel}
+        </button>
+      </div>
+    </div>
   )
 }
 

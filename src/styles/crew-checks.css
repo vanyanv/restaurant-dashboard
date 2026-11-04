@@ -82,6 +82,8 @@
 .ckb__segs i { flex: 1; height: 6px; background: var(--line) }
 .ckb__segs i.f { background: var(--good) }
 .ckb__preview { width: 100%; aspect-ratio: 3 / 4; object-fit: cover; background: var(--ink) }
+/* The live camera shows the whole frame the shutter will keep, not a crop. */
+.ckb__preview--live { object-fit: contain }
 .ckb__toast { position: fixed; left: 16px; right: 16px; bottom: max(96px, calc(env(safe-area-inset-bottom, 0px) + 96px)); z-index: 30;
   background: var(--ink); color: var(--surface); padding: 12px 14px; font-size: 14px; font-weight: 600; max-width: 448px; margin: 0 auto }
 .ckb__alldone--warn { background: var(--warn-wash); border-color: var(--accent-hi); color: var(--warn) }
