@@ -134,6 +134,11 @@ describe("buildPlain", () => {
     expect(todo?.action.href).toBe("/dashboard/stores/g")
   })
 
+  it("never reads a store list that did not load as 'all on file'", () => {
+    const q = buildPlain({ statement: s, prior: null, priorLabel: null, weekWindows: [], weeks: null, daily: null, files: [], storeId: null })
+    expect(q.statuses.find((x) => x.text.startsWith("Fixed"))).toEqual({ tone: "warn", text: "Fixed costs: store settings did not load" })
+  })
+
   it("groups the gaps into at most three to-dos", () => {
     expect(p.todos.map((t) => t.title)).toEqual([
       "Labor is missing",

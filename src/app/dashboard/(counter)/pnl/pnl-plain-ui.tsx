@@ -4,7 +4,7 @@ import Link from "next/link"
 import { Fragment, useState } from "react"
 import { useSurfaceHref } from "@/components/counter"
 import { money, pct } from "@/lib/counter/format"
-import type { DateRange, SerializedWeekWindow } from "@/lib/counter/date-range"
+import { isoDay, readWeekWindow, type DateRange, type SerializedWeekWindow } from "@/lib/counter/date-range"
 import type { PlainDay, PlainLine, PlainTone, PnlPlain } from "@/lib/counter/pnl-plain"
 
 /**
@@ -26,10 +26,9 @@ const signed = (v: number) => `${v >= 0 ? "+" : "−"}${money(Math.abs(v))}`
 
 const pts = (v: number) => `${v >= 0 ? "+" : "−"}${Math.abs(v).toFixed(1)} pts`
 
-const isoDay = (d: Date | string) => new Date(d).toISOString().slice(0, 10)
-
+/** Week windows arrive as day keys; the range is local midnight. Compare day keys, never UTC slices. */
 function isSelected(w: SerializedWeekWindow, range: DateRange): boolean {
-  return isoDay(w.start) === isoDay(range.start) && isoDay(w.end) === isoDay(range.end)
+  return w.start === isoDay(range.start) && w.end === isoDay(range.end)
 }
 
 /** The big kept figure, its move, the sentence, and the eight weeks as the picker. */
@@ -108,7 +107,10 @@ export function PlainHero({
                   type="button"
                   aria-pressed={on}
                   aria-label={`Week of ${w.label}: kept ${w.atMost ? "at most " : ""}${money(w.kept)}`}
-                  onClick={() => onWeek({ start: new Date(w.window.start), end: new Date(w.window.end) })}
+                  onClick={() => {
+                    const r = readWeekWindow(w.window)
+                    onWeek({ start: r.start, end: r.end })
+                  }}
                 >
                   <span className="pl-wk__pct">{w.sales > 0 ? pct(w.keptPct) : "—"}</span>
                   <span

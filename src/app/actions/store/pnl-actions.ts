@@ -778,10 +778,14 @@ export async function getAllStoresPnL(input: {
         ),
       })
       perStoreComputed.push(computed)
-      const soldDays = new Set<string>()
+      // A store-day sold when its rows NET above zero: several rows per day
+      // (platform, payment), so a lone refund or a +X/−X pair is not a sale.
+      const netByDay = new Map<string, number>()
       for (const r of storeSummaries) {
-        if (rowSales(r).net !== 0) soldDays.add(new Date(r.date).toISOString().slice(0, 10))
+        const day = new Date(r.date).toISOString().slice(0, 10)
+        netByDay.set(day, (netByDay.get(day) ?? 0) + rowSales(r).net)
       }
+      const soldDays = new Set([...netByDay].filter(([, net]) => net > 0).map(([day]) => day))
       const missing = soldDaysWithoutLabor(
         laborCost.stores[store.id],
         soldDays,

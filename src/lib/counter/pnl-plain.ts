@@ -240,6 +240,8 @@ export function buildPlain(input: PlainInput): PnlPlain {
   const keptPct = share(s.bottomLine, sales)
   const missing = missingByStore(s, names)
   const nof = fixedNotOnFile(scopeFiles)
+  // No store file came back (load failed or empty): unknown, never "all on file".
+  const filesKnown = scopeFiles.length > 0
   const est = estimatedShare(s)
 
   const atMost =
@@ -297,9 +299,11 @@ export function buildPlain(input: PlainInput): PnlPlain {
     missDays > 0
       ? { tone: "bad", text: `Labor: ${plural(missDays, "store-day")} missing` }
       : { tone: "ok", text: "Labor: every day from Harri" },
-    nof.length > 0
-      ? { tone: "warn", text: `Fixed costs: ${nof.length} not on file` }
-      : { tone: "ok", text: "Fixed costs: all on file" },
+    !filesKnown
+      ? { tone: "warn", text: "Fixed costs: store settings did not load" }
+      : nof.length > 0
+        ? { tone: "warn", text: `Fixed costs: ${nof.length} not on file` }
+        : { tone: "ok", text: "Fixed costs: all on file" },
   ]
   if (est !== null) {
     statuses.push(
@@ -365,7 +369,9 @@ export function buildPlain(input: PlainInput): PnlPlain {
     ],
     food: ["recipe cost of what sold", "ok"],
     labor: [missDays > 0 ? `${plural(missDays, "day")} missing` : "from Harri", missDays > 0 ? "bad" : "ok"],
-    fixed: [nof.length > 0 ? `${nof.length} not on file` : "monthly, charged per day", nof.length > 0 ? "warn" : "ok"],
+    fixed: !filesKnown
+      ? ["store settings did not load", "warn"]
+      : [nof.length > 0 ? `${nof.length} not on file` : "monthly, charged per day", nof.length > 0 ? "warn" : "ok"],
     kept: [missDays > 0 ? "at most" : "what is left", "ok"],
   })
 
