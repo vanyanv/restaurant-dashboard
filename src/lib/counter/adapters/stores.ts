@@ -16,6 +16,7 @@ import {
   type ObservedRate,
 } from "@/lib/counter/commission"
 import { PRIME_CEILING_PCT } from "@/lib/counter/prime-cost"
+import { MONTHLY_FROM } from "@/lib/counter/expense-cadence"
 import type {
   Column,
   FigureProps,
@@ -186,11 +187,7 @@ interface StoreFileRow extends StoreRow {
  * have made a latent typo into a live money bug, on the first yearly expense
  * anyone entered.
  */
-const MONTHLY_FROM: Record<StoreExpenseLine["frequency"], number> = {
-  WEEKLY: 52 / 12,
-  MONTHLY: 1,
-  YEARLY: 1 / 12,
-}
+// The table itself lives in `expense-cadence.ts`, shared with the chat.
 
 const CADENCE_LABEL: Record<StoreExpenseLine["frequency"], string> = {
   WEEKLY: "Weekly",
