@@ -1,5 +1,6 @@
 {
   "called": [
+    "getRatings",
     "getRatings"
   ],
   "model": "gpt-5-mini",
