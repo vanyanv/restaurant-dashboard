@@ -71,6 +71,11 @@ import { describeSchema } from "./describe-schema"
 import { fileReturn } from "./file-return"
 import { getLaborActuals } from "./labor"
 import { getCleaningChecks } from "./checks"
+import { getCrewAndSchedule } from "./crew"
+import { getCountAndWaste } from "./count-waste"
+import { getWeatherAndEvents } from "./weather-events"
+import { getShopOrders } from "./shop"
+import { getStoreSettings } from "./store-settings"
 
 export type { ChatTool, ChatToolContext } from "./types"
 
@@ -150,6 +155,16 @@ export const chatTools = {
   getLaborActuals,
   // Store cleaning checks
   getCleaningChecks,
+  // Crew list and the published Harri schedule
+  getCrewAndSchedule,
+  // Count & waste report and the waste log
+  getCountAndWaste,
+  // Weather and nearby events (the forecasts' own signals)
+  getWeatherAndEvents,
+  // The merch shop (website), read-only
+  getShopOrders,
+  // Per-store settings: commission rates, fixed costs, stage
+  getStoreSettings,
   // Inventory
   getInventoryStatus,
   getInventoryCoverage,

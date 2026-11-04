@@ -103,10 +103,11 @@ export const TOOL_GROUPS = {
     "listStockCounts",
     "getRecentInventoryAdjustments",
     "getWasteRootCauses",
+    "getCountAndWaste",
   ],
   vendors: ["listVendorLeadTimes", "getVendorReliability", "compareVendorPrices"],
   orders: ["getOrderById", "listOrdersByDay", "getOrderItemFrequency"],
-  labor: ["getLaborActuals", "getLaborStaffingForecast", "getOperationalCosts"],
+  labor: ["getLaborActuals", "getLaborStaffingForecast", "getOperationalCosts", "getCrewAndSchedule"],
   /** The store cleaning checks and what the crew flagged on them. */
   checks: ["getCleaningChecks"],
   anomalies: ["getOpenAnomalies", "getAlerts", "getLostSales"],
@@ -117,6 +118,12 @@ export const TOOL_GROUPS = {
    * revenue turn.
    */
   ratings: ["getRatings"],
+  /** Weather and nearby events: "was it raining Saturday", "what's this weekend look like". */
+  signals: ["getWeatherAndEvents"],
+  /** The merch shop on the website. Not food sales, so not in `sales`. */
+  shop: ["getShopOrders"],
+  /** What the owner typed into each store's settings: rates, rent, stage. */
+  settings: ["getStoreSettings"],
   /**
    * The 13 ML tools. Deliberately NOT unioned into every page: a question
    * about last week does not need the forecast menu, and this group is the
@@ -154,7 +161,7 @@ export type ToolGroupName = keyof typeof TOOL_GROUPS
  * labels, so renaming "P&L" in the rail does not silently unroute it.
  */
 export const NAV_TOOL_GROUPS: Record<string, readonly ToolGroupName[]> = {
-  overview: ["sales", "anomalies", "pnl", "ratings"],
+  overview: ["sales", "anomalies", "pnl", "ratings", "signals"],
   analytics: ["sales", "orders", "menu", "ratings"],
   pnl: ["pnl", "costs", "invoices"],
   cogs: ["costs", "recipes", "invoices"],
@@ -164,11 +171,13 @@ export const NAV_TOOL_GROUPS: Record<string, readonly ToolGroupName[]> = {
   recipes: ["recipes", "costs", "menu"],
   invoices: ["invoices", "costs", "vendors"],
   inventory: ["inventory", "costs", "vendors"],
+  count: ["inventory", "costs"],
   ingredients: ["costs", "vendors", "inventory"],
   vendors: ["vendors", "invoices", "costs"],
   orders: ["orders", "sales"],
   "needs-you": ["anomalies", "sales", "forecasts", "ratings"],
-  stores: ["sales", "pnl"],
+  stores: ["sales", "pnl", "settings"],
+  shop: ["shop"],
 }
 
 /**
@@ -189,15 +198,18 @@ export const GROUP_HINTS: Record<ToolGroupName, string> = {
   menu: "menu items and their prices, best sellers, item margin, menu engineering",
   recipes: "recipes and what a plate is made of, recipe cost, margin ranking by recipe",
   elasticity: "price what-ifs — what happens to demand and profit if a price changes",
-  inventory: "on-hand stock, counts, coverage, waste and shrink",
+  inventory: "on-hand stock, counts, coverage, waste and shrink, the weekly count & waste report (missing dollars)",
   vendors: "vendor reliability and delivery lead times",
   orders: "individual orders and order-level drilldown",
-  labor: "labour hours and cost actually worked, labour %, overtime, cost by role, clock-in/out problems, and future staffing",
+  labor: "labour hours and cost actually worked, labour %, overtime, cost by role, clock-in/out problems, future staffing, the crew list and who is on the schedule",
   checks: "store cleaning checks (morning, Transition, evening) — on time, late, missed, items the crew flagged",
   anomalies:
     "open alerts and the alert inbox, things that need attention, price/labour/quantity warnings, lost sales",
   ratings:
     "guest star ratings and review TEXT from the delivery platforms -- what customers said, complaints, what a bad review mentioned",
+  signals: "weather (past days and the next two weeks) and nearby events: games, concerts, festivals, attendance",
+  shop: "the merch shop on the website: merch sales, shop orders to ship, product stock",
+  settings: "store settings the owner typed in: commission % per platform, payroll tax, rent and fixed costs, store stage",
   forecasts: "anything FORWARD-LOOKING — what will happen next week/Saturday, predicted revenue, demand, promos",
 }
 

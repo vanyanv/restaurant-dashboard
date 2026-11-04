@@ -104,6 +104,11 @@ describe("freshness stamps", () => {
       // write anywhere to stamp, so a cached answer would keep saying "open".
       getCleaningChecks: "statuses move with the clock, not with a sync",
       getLaborActuals: "divides Harri by Otter sales, so no one sync stamps it",
+      getCrewAndSchedule: "the crew list is edited by hand and the schedule sync is manual",
+      getCountAndWaste: "counts and waste are typed in on the phone, not synced",
+      getWeatherAndEvents: "weather forecasts are rewritten for days ahead, so no one stamp holds",
+      getShopOrders: "read live from the website's API, never cached",
+      getStoreSettings: "owner-edited settings, no sync",
     }
     const unstamped = Object.keys(chatTools).filter(
       (n) => !(n in TOOL_AS_OF) && !(n in EXEMPT),

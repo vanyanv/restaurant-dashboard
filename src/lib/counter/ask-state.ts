@@ -114,6 +114,12 @@ export interface AskAnswer {
    * after the refresh that lists it.
    */
   messageId: string | null
+  /**
+   * Dollar amounts and percentages the answer printed that match no number
+   * its lookups returned — see `checkAnswerNumbers`. Printed under the answer
+   * as "Not checked". Absent or empty when everything matched.
+   */
+  unchecked?: string[]
 }
 
 /**
@@ -439,6 +445,8 @@ export function restoredAskState(turn: {
   scope: AskTurnScope | null
   filed: FiledReturn | null
   meta: AskTurnMeta | null
+  /** Amounts the answer check could not match, worked out by the adapter from the stored tool rows. */
+  unchecked?: string[]
 }): AskState {
   return {
     status: "answered",
@@ -452,6 +460,7 @@ export function restoredAskState(turn: {
       form: turn.filed ? returnForm(turn.filed) : "empty",
       meta: turn.meta,
       messageId: turn.id,
+      unchecked: turn.unchecked ?? [],
     },
   }
 }

@@ -10,9 +10,11 @@ import { scopeFromSentence, type AskTurnScope } from "@/lib/counter/ask-context"
 import {
   selectFiledReturn,
   selectPresentations,
+  splitProvenance,
   type FiledReturn,
   type ShownPresentation,
 } from "@/lib/chat/return"
+import { checkAnswerNumbers } from "@/lib/chat/verify-numbers"
 import { classify, guardSection, type StreamedSections } from "@/lib/counter/adapters/types"
 import { readFailedReasons, type AskTurnMeta } from "@/lib/counter/ask-meta"
 import type { SectionData } from "@/lib/counter/section-data"
@@ -123,6 +125,8 @@ export interface AskTurn {
    * off the message.
    */
   meta: AskTurnMeta | null
+  /** Amounts the answer printed that its stored lookups do not contain — see `checkAnswerNumbers`. */
+  unchecked: string[]
 }
 
 export interface AskThread {
@@ -268,6 +272,25 @@ function shownFromCalls(
 }
 
 /**
+ * The answer check, over the stored rows — the same `checkAnswerNumbers` a
+ * live turn runs on its stream, so a thread reopened tomorrow flags exactly
+ * what it flagged today.
+ */
+function uncheckedFromCalls(
+  calls: ReadonlyArray<{ toolName: string; args: unknown; result: unknown }>,
+  filed: FiledReturn | null,
+  text: string,
+): string[] {
+  const parts = calls.map((c) => ({
+    type: `tool-${c.toolName}`,
+    toolName: c.toolName,
+    state: "output-available",
+    output: c.result,
+  }))
+  return checkAnswerNumbers(parts, filed, splitProvenance(text).body).unchecked
+}
+
+/**
  * A stored thread, rendered read-only.
  *
  * It now carries everything a live turn does — the question, the prose, the
@@ -387,6 +410,7 @@ const loadThread = cache(
               })),
             at: m.createdAt,
             meta: isUser ? null : metaFor(stored),
+            unchecked: isUser ? [] : uncheckedFromCalls(m.toolCalls, filed, m.content),
           }
         }),
     }

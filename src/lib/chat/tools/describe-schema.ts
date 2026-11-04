@@ -31,6 +31,10 @@ const params = z
         "anomalies",
         "elasticity",
         "ratings",
+        "crew",
+        "signals",
+        "shop",
+        "settings",
       ])
       .optional()
       .default("all")
@@ -145,6 +149,31 @@ const CATALOG: SchemaDomain[] = [
     ],
   },
   {
+    domain: "crew",
+    summary: "Who works at each store and the published Harri schedule, including future days.",
+    tools: [
+      { name: "getCrewAndSchedule", useFor: "crew list per store; who is on which shift, position, start/end, scheduled hours, open slots" },
+    ],
+    notes: "Names only (first name, last initial). No emails, phones or PINs exist in the result.",
+  },
+  {
+    domain: "signals",
+    summary: "Weather (past and ~14 days ahead) and nearby events per store and day — the forecasts' own inputs.",
+    tools: [
+      { name: "getWeatherAndEvents", useFor: "high/low °F, rain, conditions, wind; event counts, attendance, top events with venue" },
+    ],
+  },
+  {
+    domain: "shop",
+    summary: "The merch shop on the website, read-only: sales, orders to ship, products and stock.",
+    tools: [{ name: "getShopOrders", useFor: "merch sales by day, open orders, product stock" }],
+  },
+  {
+    domain: "settings",
+    summary: "Per-store settings the owner entered: commission rates, payroll tax, rent and fixed costs, lifecycle stage.",
+    tools: [{ name: "getStoreSettings", useFor: "commission % by platform vs observed, payroll tax %, rent, fixed expenses, stage, COGS target" }],
+  },
+  {
     domain: "inventory",
     summary: "Physical inventory (on-hand, reorder status, counts, adjustments).",
     tools: [
@@ -152,6 +181,7 @@ const CATALOG: SchemaDomain[] = [
       { name: "getInventoryCoverage", useFor: "what fraction of last-7d sales is mapped to costed recipes (caveat for food-cost answers)" },
       { name: "listStockCounts", useFor: "recent physical counts (status, when, line count)" },
       { name: "getRecentInventoryAdjustments", useFor: "logged theft / expiry / supplier-return / damage events" },
+      { name: "getCountAndWaste", useFor: "the weekly Count & waste report: should-have vs counted, missing $ and extra $, waste log for the last 7 days" },
     ],
   },
   {

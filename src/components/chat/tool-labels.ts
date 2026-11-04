@@ -89,6 +89,31 @@ export const TOOL_LABELS: Record<
     done: "Read the store checks",
     short: "store checks",
   },
+  getCrewAndSchedule: {
+    running: "Reading the crew and schedule",
+    done: "Read the crew and schedule",
+    short: "crew schedule",
+  },
+  getCountAndWaste: {
+    running: "Reading the count and waste report",
+    done: "Read the count and waste report",
+    short: "count & waste",
+  },
+  getWeatherAndEvents: {
+    running: "Reading weather and nearby events",
+    done: "Read weather and nearby events",
+    short: "weather & events",
+  },
+  getShopOrders: {
+    running: "Reading the merch shop",
+    done: "Read the merch shop",
+    short: "shop",
+  },
+  getStoreSettings: {
+    running: "Reading store settings",
+    done: "Read store settings",
+    short: "store settings",
+  },
   getLaborStaffingForecast: {
     running: "Reading the staffing forecast",
     done: "Read the staffing forecast",

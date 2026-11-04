@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useChat } from "@ai-sdk/react"
 import { DefaultChatTransport } from "ai"
 import { returnForm, selectFiledReturn } from "@/lib/chat/return"
+import { checkAnswerNumbers } from "@/lib/chat/verify-numbers"
 import type { AskContext, AskEffort, AskRequestScope, AskTurnScope } from "./ask-context"
 
 /** Per-turn choices the dock makes: how hard to think, and whether to skip the cache. */
@@ -355,6 +356,7 @@ export function useAsk(
           },
         }
       }
+      const body = proseFrom(parts)
       return {
         id: `${i}`,
         question,
@@ -363,7 +365,7 @@ export function useAsk(
           answer: {
             question,
             filed,
-            body: proseFrom(parts),
+            body,
             read: toolReadsFrom(parts),
             shown: shownFrom(parts, filed),
             scope: scopes[i] ?? null,
@@ -373,6 +375,7 @@ export function useAsk(
             meta: readAskTurnMeta(answers[i]?.metadata),
             // The SDK's ids are its own, not `Message.id` — see `AskAnswer`.
             messageId: null,
+            unchecked: checkAnswerNumbers(parts, filed, body).unchecked,
           },
         },
       }
