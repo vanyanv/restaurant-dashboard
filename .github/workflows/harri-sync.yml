@@ -6,6 +6,19 @@ on:
     # retroactive punch edits without re-pulling weeks of data each tick.
     - cron: '15 */4 * * *'
   workflow_dispatch:
+    inputs:
+      backfill_store:
+        description: 'Backfill one store instead of the 3-day sync (store id)'
+        required: false
+        default: ''
+      backfill_start:
+        description: 'Backfill start date, YYYY-MM-DD'
+        required: false
+        default: ''
+      backfill_end:
+        description: 'Backfill end date, YYYY-MM-DD'
+        required: false
+        default: ''
 
 concurrency:
   group: harri-sync
@@ -26,7 +39,27 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npx prisma generate
+      - name: Backfill Harri labor for one store
+        id: backfill
+        if: ${{ inputs.backfill_store != '' && inputs.backfill_store != null }}
+        run: |
+          if [ -z "$START" ] || [ -z "$END" ]; then
+            echo "backfill_start and backfill_end are both required with backfill_store" >&2
+            exit 1
+          fi
+          bash .github/scripts/run-with-cron-logging.sh \
+            npx tsx scripts/backfill-harri.ts --store="$STORE" --start="$START" --end="$END"
+        env:
+          STORE: ${{ inputs.backfill_store }}
+          START: ${{ inputs.backfill_start }}
+          END: ${{ inputs.backfill_end }}
+          LOG_FILE: logs/harri-sync.log
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          HARRI_COGNITO_CLIENT_ID: ${{ secrets.HARRI_COGNITO_CLIENT_ID }}
+          HARRI_COGNITO_USER_POOL_REGION: ${{ secrets.HARRI_COGNITO_USER_POOL_REGION }}
+          HARRI_REFRESH_TOKEN: ${{ secrets.HARRI_REFRESH_TOKEN }}
       - name: Sync Harri labor
+        if: ${{ inputs.backfill_store == '' || inputs.backfill_store == null }}
         id: cron
         run: |
           bash .github/scripts/run-with-cron-logging.sh \
@@ -53,10 +86,10 @@ jobs:
           ISSUE_TITLE: "[Auto] Harri Labor Sync failing"
           ISSUE_LABEL: cron-failure
           LOG_FILE: logs/harri-sync.log
-          FAILED_EXIT_CODE: ${{ steps.cron.outputs.status }}
+          FAILED_EXIT_CODE: ${{ steps.cron.outputs.status || steps.backfill.outputs.status }}
         run: bash .github/scripts/report-workflow-failure.sh
       - name: Close incident issue on recovery
-        if: success()
+        if: success() && steps.cron.outcome == 'success'
         env:
           GH_TOKEN: ${{ github.token }}
           WORKFLOW_NAME: Harri Labor Sync

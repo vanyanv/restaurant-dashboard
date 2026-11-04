@@ -1,10 +1,12 @@
+import type { Prisma } from "@/generated/prisma/client"
 import { prisma } from "@/lib/prisma"
 import { normalizeVendorName, vendorMatchKey } from "@/lib/vendor-normalize"
 import { deriveCostFromLineItem } from "@/lib/ingredient-cost"
 import {
-  COST_CANDIDATE_WINDOW,
+  COST_HISTORY_WINDOW,
   selectNonSpikeCostIndex,
 } from "@/lib/invoice-line-shape"
+import { isLinePriceable, PRICED_INVOICE_STATUSES } from "@/lib/invoice-verify"
 import { canonicalizeUnit } from "@/lib/unit-conversion"
 import { logger } from "@/lib/logger"
 
@@ -369,7 +371,10 @@ export async function getCanonicalIngredientCost(
       where: {
         canonicalIngredientId,
         quantity: { not: 0 },
-        invoice: asOf ? { invoiceDate: { lte: asOf } } : undefined,
+        invoice: {
+          status: { in: [...PRICED_INVOICE_STATUSES] },
+          ...(asOf ? { invoiceDate: { lte: asOf } } : {}),
+        },
       },
       orderBy: { invoice: { invoiceDate: "desc" } },
       select: {
@@ -400,9 +405,14 @@ export async function getCanonicalIngredientCost(
   // COGS reflects this store's actual vendor pricing. If no store-scoped match
   // exists, fall back to the cross-store latest (so a brand-new store still
   // gets a usable price).
+  //
+  // Only VERIFIED invoices price an ingredient (`PRICED_INVOICE_STATUSES`):
+  // a REVIEW, PENDING or REJECTED invoice is one the sync could not prove,
+  // and until 2026-11-03 this query ignored status and let them set recipe
+  // costs anyway. Lines the sync marked unverifiable on a MATCHED invoice are
+  // dropped below by `isLinePriceable`.
   const buildInvoiceWhere = (forStoreId?: string) => {
-    if (!asOf && !forStoreId) return undefined
-    const w: { invoiceDate?: { lte: Date }; storeId?: string } = {}
+    const w: Prisma.InvoiceWhereInput = { status: { in: [...PRICED_INVOICE_STATUSES] } }
     if (asOf) w.invoiceDate = { lte: asOf }
     if (forStoreId) w.storeId = forStoreId
     return w
@@ -420,7 +430,8 @@ export async function getCanonicalIngredientCost(
     unitSizeUom: true,
     unitPrice: true,
     extendedPrice: true,
-    invoice: { select: { invoiceDate: true, vendorName: true } },
+    lineNumber: true,
+    invoice: { select: { invoiceDate: true, vendorName: true, status: true, reviewReasons: true } },
   } as const
 
   // Pull a short window of recent lines (newest first) rather than just the
@@ -433,22 +444,24 @@ export async function getCanonicalIngredientCost(
           quantity: { not: 0 },
         },
         orderBy: { invoice: { invoiceDate: "desc" } },
-        take: COST_CANDIDATE_WINDOW,
+        take: COST_HISTORY_WINDOW,
         select: lineSelect,
       })
     : []
+  recentLines = recentLines.filter((l) => isLinePriceable(l.invoice, l.lineNumber))
 
   if (recentLines.length === 0) {
     recentLines = await prisma.invoiceLineItem.findMany({
       where: {
         canonicalIngredientId,
-        invoice: asOf ? { invoiceDate: { lte: asOf } } : undefined,
+        invoice: buildInvoiceWhere(),
         quantity: { not: 0 },
       },
       orderBy: { invoice: { invoiceDate: "desc" } },
-      take: COST_CANDIDATE_WINDOW,
+      take: COST_HISTORY_WINDOW,
       select: lineSelect,
     })
+    recentLines = recentLines.filter((l) => isLinePriceable(l.invoice, l.lineNumber))
   }
 
   // Need a date for ordering / asOf provenance.
@@ -520,6 +533,7 @@ export async function getCanonicalIngredientCost(
     where: {
       canonicalIngredientId: null,
       invoice: {
+        status: { in: [...PRICED_INVOICE_STATUSES] },
         invoiceDate: asOf ? { lte: asOf } : undefined,
         storeId: { in: aliases.map((a) => a.storeId) },
       },
@@ -534,7 +548,10 @@ export async function getCanonicalIngredientCost(
       productName: true,
       quantity: true,
       extendedPrice: true,
-      invoice: { select: { invoiceDate: true, storeId: true, vendorName: true } },
+      lineNumber: true,
+      invoice: {
+        select: { invoiceDate: true, storeId: true, vendorName: true, status: true, reviewReasons: true },
+      },
     },
   })
 
@@ -546,6 +563,7 @@ export async function getCanonicalIngredientCost(
 
   for (const li of candidates) {
     if (!li.invoice.invoiceDate || !li.invoice.storeId) continue
+    if (!isLinePriceable(li.invoice, li.lineNumber)) continue
     const alias = aliasLookup.get(
       `${li.invoice.storeId}::${li.productName.toLowerCase()}`
     )

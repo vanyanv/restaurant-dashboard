@@ -1,5 +1,6 @@
 import type { PrismaClient } from "@/generated/prisma/client"
 import { prisma } from "@/lib/prisma"
+import { PACKAGING_CATEGORY } from "@/lib/counter/food-cost-scope"
 import { blendedMargin } from "@/lib/counter/blended-margin"
 import {
   DEAL_THRESHOLD,
@@ -183,7 +184,8 @@ export interface ItemEconomicsResult {
   discounts: Map<string, ItemDiscountEntry>
 }
 
-export const PACKAGING_CATEGORY = "Packaging"
+// `PACKAGING_CATEGORY` (`food-cost-scope.ts`): packaging is never an item,
+// whether or not it counts toward food cost.
 
 const isPackaging = (s: Pick<CogsSlice, "category">) => s.category === PACKAGING_CATEGORY
 

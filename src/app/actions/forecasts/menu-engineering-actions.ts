@@ -19,6 +19,7 @@ import { startOfDayUTC as startOfDay } from "@/lib/date-utils"
 // could NOT see is reported in `coverage` so callers can qualify the result.
 
 import { prisma } from "@/lib/prisma"
+import { FOOD_COST_ROWS } from "@/lib/counter/food-cost-scope"
 import { getCachedSession, resolveStoreContext } from "./_shared"
 
 export type MenuQuadrant = "STAR" | "PLOWHORSE" | "PUZZLE" | "DOG"
@@ -121,7 +122,7 @@ export async function getMenuEngineering(input: {
   const windowWhere = {
     storeId: { in: storeIds },
     date: { gte: windowStart, lte: windowEnd },
-    category: { not: "Packaging" },
+    ...FOOD_COST_ROWS,
   }
 
   // `windowEnd` is a DATE the rollup includes whole; orders carry a time.

@@ -19,6 +19,7 @@ import {
   type ComparisonContext,
 } from "@/lib/counter/comparison"
 import { PRIME_CEILING_PCT } from "@/lib/counter/prime-cost"
+import { LABOR_CODE } from "@/lib/pnl"
 import { count, delta, money, pct, plural, points } from "@/lib/counter/format"
 import {
   serializeWeekWindow,
@@ -786,6 +787,17 @@ function buildReading(p: Statement, targets: StripTargets | null): ReadingSegmen
   return out
 }
 
+/**
+ * The labor line's sub-note, with the rollup's own word on the employer
+ * payroll tax appended — "incl. 7.65% employer payroll tax", or "wages only,
+ * no payroll tax on file". The owner reads from the line itself that taxes
+ * are in it; the rate is the store file's, and this only repeats it.
+ */
+function laborSub(p: Statement, base: string): string {
+  const note = p.rows.find((r) => r.code === LABOR_CODE)?.note
+  return note ? `${base} · ${note}` : base
+}
+
 /* ── The cascade ──────────────────────────────────────────────────────── */
 
 /**
@@ -856,7 +868,7 @@ function buildCascade(
         // — Harri actuals for the days Harri covers, the store file prorated
         // for the days it does not. It is a substitution, not a sum, and
         // `prime-cost.ts` says so at length.
-        sub: "clock-ins where Harri covers, the store file where it does not",
+        sub: laborSub(p, "clock-ins where Harri covers, the store file where it does not"),
         amount: p.laborValue,
       },
       {
@@ -1003,7 +1015,7 @@ function buildStatement(
     line("labor", "Labor", p.laborValue, laborKnown(p) ? p.prime.laborPct : null, c && laborKnown(c) ? c.prime.laborPct : null, {
       negative: true,
       act: ACT_PTS.labor,
-      sub: "clock-ins plus the store file",
+      sub: laborSub(p, "clock-ins plus the store file"),
       href: "/dashboard/labor",
     }),
     line("prime", "Prime cost", p.prime.primeValue, laborKnown(p) ? p.prime.primePct : null, c && laborKnown(c) ? c.prime.primePct : null, {

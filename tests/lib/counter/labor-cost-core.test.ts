@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest"
 import {
+  DEFAULT_EMPLOYER_PAYROLL_TAX_RATE,
   combineLaborDay,
+  payrollTaxRateOf,
   daysBetween,
   foldLaborCost,
   hasFixedLabor,
@@ -11,18 +13,18 @@ import {
 
 describe("combineLaborDay", () => {
   it("prefers the daily actual when both are present", () => {
-    expect(combineLaborDay(1200, 1150)).toEqual({ amount: 1200, source: "daily" })
+    expect(combineLaborDay(1200, 1150)).toEqual({ amount: 1200, wages: 1200, source: "daily" })
   })
   it("uses the daily actual when it is the only one", () => {
-    expect(combineLaborDay(900, null)).toEqual({ amount: 900, source: "daily" })
-    expect(combineLaborDay(900, undefined)).toEqual({ amount: 900, source: "daily" })
+    expect(combineLaborDay(900, null)).toEqual({ amount: 900, wages: 900, source: "daily" })
+    expect(combineLaborDay(900, undefined)).toEqual({ amount: 900, wages: 900, source: "daily" })
   })
   it("uses the positions when only they are present", () => {
-    expect(combineLaborDay(null, 1300)).toEqual({ amount: 1300, source: "positions" })
-    expect(combineLaborDay(undefined, 1300)).toEqual({ amount: 1300, source: "positions" })
+    expect(combineLaborDay(null, 1300)).toEqual({ amount: 1300, wages: 1300, source: "positions" })
+    expect(combineLaborDay(undefined, 1300)).toEqual({ amount: 1300, wages: 1300, source: "positions" })
   })
   it("does not believe a daily 0 when positions exist", () => {
-    expect(combineLaborDay(0, 1300)).toEqual({ amount: 1300, source: "positions" })
+    expect(combineLaborDay(0, 1300)).toEqual({ amount: 1300, wages: 1300, source: "positions" })
   })
   it("is missing, not 0, when neither table has a reading", () => {
     expect(combineLaborDay(null, null)).toBeNull()
@@ -33,6 +35,46 @@ describe("combineLaborDay", () => {
   it("treats a position sum of 0 as missing too (a true zero day is indistinguishable)", () => {
     expect(combineLaborDay(null, 0)).toBeNull()
     expect(combineLaborDay(0, 0)).toBeNull()
+  })
+})
+
+describe("employer payroll tax", () => {
+  it("loads the decided wages with the store's rate", () => {
+    const d = combineLaborDay(1000, 900, 0.0765)
+    expect(d?.wages).toBe(1000)
+    expect(d?.amount).toBeCloseTo(1076.5, 6)
+    expect(combineLaborDay(null, 2000, 0.1)?.amount).toBeCloseTo(2200, 6)
+  })
+  it("adds nothing for a cleared, negative or non-finite rate", () => {
+    for (const r of [null, undefined, 0, -0.05, Number.NaN]) {
+      expect(payrollTaxRateOf(r)).toBe(0)
+      expect(combineLaborDay(500, null, r)?.amount).toBe(500)
+    }
+  })
+  it("defaults to the federal FICA employer share", () => {
+    expect(DEFAULT_EMPLOYER_PAYROLL_TAX_RATE).toBe(0.0765)
+  })
+  it("folds each store at its own rate, and missing days stay missing", () => {
+    const days = ["2026-10-19", "2026-10-20"]
+    const cost = foldLaborCost({
+      storeIds: ["a", "b", "c"],
+      days,
+      daily: [
+        { storeId: "a", day: "2026-10-19", actualCost: 1000 },
+        { storeId: "b", day: "2026-10-19", actualCost: 1000 },
+        { storeId: "c", day: "2026-10-19", actualCost: 1000 },
+      ],
+      positions: [],
+      payrollTaxRates: { a: 0.0765, b: 0.1, c: null },
+    })
+    expect(cost.stores.a.total).toBeCloseTo(1076.5, 6)
+    expect(cost.stores.a.payrollTaxRate).toBe(0.0765)
+    expect(cost.stores.b.total).toBeCloseTo(1100, 6)
+    expect(cost.stores.c.total).toBe(1000)
+    expect(cost.stores.c.payrollTaxRate).toBe(0)
+    expect(cost.total).toBeCloseTo(3176.5, 6)
+    expect(cost.stores.a.missingDays).toEqual(["2026-10-20"])
+    expect(cost.stores.a.byDay["2026-10-19"].wages).toBe(1000)
   })
 })
 

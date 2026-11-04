@@ -465,7 +465,7 @@ export async function loadLaborWeek(input: {
   // under its own key, and it only enters at `laborDay` below. Folding it in
   // would make this key move with the statement instead of with labour.
   const fold = await cached(
-    `counter:laborweek2:${stableKey({ a: accountId, ids: [...storeIds].sort(), from: startDate, to: endDate })}`,
+    `counter:laborweek3:${stableKey({ a: accountId, ids: [...storeIds].sort(), from: startDate, to: endDate })}`,
     rangeTtl(endDate),
     // Three tables, two writers: `/api/cron/harri` busts `harri` (positions
     // AND shifts come from that one run) and `/api/cron/otter/hourly` busts
@@ -592,7 +592,18 @@ async function foldLaborWeekRows(input: {
     scheduledByDate[key] = (scheduledByDate[key] ?? 0) + s.minutes
   }
 
-  return { hoursByDate, costByDate, missingByDay: missingStoresByDay(laborCost), scheduledByDate, roles: [...roleAgg.values()], overtimeCost }
+  // Role dollars are Harri's per-position wages; the Total row is the shared
+  // labor rule (employer payroll tax included, daily total preferred). Scale
+  // the roles onto that total so the table's rows add up to its Total row.
+  const roles = [...roleAgg.values()]
+  const totalCost = sum(Object.values(costByDate))
+  const roleWages = sum(roles.map((r) => r.cost))
+  if (roleWages > 0 && totalCost > 0) {
+    const scale = totalCost / roleWages
+    for (const r of roles) r.cost *= scale
+  }
+
+  return { hoursByDate, costByDate, missingByDay: missingStoresByDay(laborCost), scheduledByDate, roles, overtimeCost }
 }
 
 /**
@@ -641,7 +652,7 @@ export async function loadLaborTrend(input: {
   // Same rule as `loadLaborWeek`: the fold is cached, `weeklyTotalSales` is
   // the statement's and stays outside.
   const { costByDate, hoursByDate, missingByDay } = await cached(
-    `counter:labortrend3:${stableKey({ a: accountId, ids: [...storeIds].sort(), from: startDate, to: endDate })}`,
+    `counter:labortrend4:${stableKey({ a: accountId, ids: [...storeIds].sort(), from: startDate, to: endDate })}`,
     rangeTtl(endDate),
     ["harri", ...otterRangeTags(startDate, endDate)],
     () => foldLaborTrendRows({ accountId, storeIds, startDate, endDate }),

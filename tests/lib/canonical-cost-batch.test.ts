@@ -53,6 +53,9 @@ function line(day: string, quantity: number, extendedPrice: number) {
     extendedPrice,
     invoiceDate: new Date(`${day}T00:00:00.000Z`),
     vendorName: "Premier Meats",
+    lineNumber: 1,
+    status: "MATCHED",
+    reviewReasons: null,
   }
 }
 

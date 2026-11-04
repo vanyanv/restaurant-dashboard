@@ -1,0 +1,16 @@
+-- Employer payroll tax on labor, as an owner-edited setting on the store file.
+--
+-- Labor dollars were Harri wages only. Every labor figure (P&L, Overview,
+-- Analytics, prime cost, the Labor page, SPLH, the assistant) now reads
+-- wages × (1 + "employerPayrollTaxRate"), applied once in
+-- src/lib/counter/labor-cost-core.ts.
+--
+-- 0.0765 is the federal FICA employer share (Social Security 6.2% + Medicare
+-- 1.45%), fixed by law. California UI and ETT depend on the employer's
+-- assigned rate, which is not on file: the owner adds them by raising the
+-- field in Stores settings. NULL (a cleared field) means no tax is added.
+--
+-- Additive and nullable. ADD COLUMN ... DEFAULT fills every existing "Store"
+-- row with 0.0765, so the three stores start at the federal share.
+-- Apply BEFORE deploying the code that selects the column.
+ALTER TABLE "Store" ADD COLUMN IF NOT EXISTS "employerPayrollTaxRate" DOUBLE PRECISION DEFAULT 0.0765;

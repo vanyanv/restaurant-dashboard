@@ -11,6 +11,7 @@
 // so the existing single-row-per-tick monitoring shape is preserved until
 // the per-store matrix workflow lands.
 import { prisma } from "@/lib/prisma"
+import { isFirstPartyPlatform } from "@/lib/first-party-platforms"
 import {
   queryMetrics,
   queryRatings,
@@ -217,7 +218,7 @@ async function runMetricsSyncInner(
       const date = new Date(row["eod_date_with_timezone"] as string)
       const platform = (row["pos_summary_ofo"] as string | null) ?? "unknown"
       const paymentMethod = (row["multi_value_pos_payment_method"] as string | null) ?? "N/A"
-      const isFP = platform === "css-pos" || platform === "bnm-web"
+      const isFP = isFirstPartyPlatform(platform)
       const orderCount = (row["order_count"] as number | null) ?? null
 
       const fields: DailyFields = {

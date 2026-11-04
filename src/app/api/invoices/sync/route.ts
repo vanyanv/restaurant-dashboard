@@ -6,12 +6,13 @@ import { Prisma } from "@/generated/prisma/client"
 import { fetchInvoiceEmails, getEmailAttachments } from "@/lib/microsoft-graph"
 import { extractInvoiceData } from "@/lib/gemini-invoice"
 import { matchInvoiceToStore } from "@/lib/address-matcher"
+import { PRICED_INVOICE_STATUSES, verifyInvoice } from "@/lib/invoice-verify"
+import { loadPackShapePriors } from "@/lib/invoice-pack-prior-load"
 import type { InvoiceSyncProgressEvent } from "@/types/invoice"
 import { isCronRequest, rateLimit, RATE_LIMIT_TIERS } from "@/lib/rate-limit"
-import { sanitizeInvoiceDate, findLineMathMismatches, findPackShapeAnomalies, findTotalReconciliationMismatch, findEmptyExtraction, composeReviewReasons, isAccountPaper, describeMoneyProblems, moneyProblemScore, type ReviewReason } from "@/lib/invoice-sanity"
+import { sanitizeInvoiceDate, findLineMathMismatches, findPackShapeAnomalies, findTotalReconciliationMismatch, findEmptyExtraction, isAccountPaper, describeMoneyProblems, moneyProblemScore, type ReviewReason } from "@/lib/invoice-sanity"
 import {
   applyPackShapePriors,
-  buildPackShapePriors,
   lineMatchesPrior,
   type PackShapePrior,
 } from "@/lib/invoice-pack-prior"
@@ -169,7 +170,9 @@ async function detectAndAlertPriceHikes(invoiceIds: string[], userId: string, ac
 
   const newLines = await prisma.invoiceLineItem.findMany({
     // Returns / credit memos can't be price hikes — exclude them.
-    where: { invoiceId: { in: invoiceIds }, invoice: { isReturn: false } },
+    // Only verified invoices: an alert about a price the sync could not prove
+    // would be an alert about a misread.
+    where: { invoiceId: { in: invoiceIds }, invoice: { isReturn: false, status: { in: [...PRICED_INVOICE_STATUSES] } } },
     select: {
       sku: true,
       productName: true,
@@ -196,6 +199,7 @@ async function detectAndAlertPriceHikes(invoiceIds: string[], userId: string, ac
             accountId,
             vendorName: { in: vendorNames },
             invoiceDate: { not: null },
+            status: { in: [...PRICED_INVOICE_STATUSES] },
           },
         },
         select: {
@@ -511,6 +515,16 @@ async function runSync(
   // Holes (never-started tasks) are skipped by filter, nulls are failures.
   const validExtractions = extracted.filter((e): e is ExtractedInvoice => e != null)
 
+  // Give every line the number it will be saved under BEFORE any check runs.
+  // A stray "3a" or a missing number is saved as index + 1; if the checks saw
+  // the raw value, a flag on that line would point at a number no saved line
+  // carries, and the flagged line could still set an ingredient price.
+  for (const inv of validExtractions) {
+    inv.extraction.lineItems.forEach((li, index) => {
+      if (!Number.isInteger(li.lineNumber)) li.lineNumber = index + 1
+    })
+  }
+
   // ─── Phase 2.5: Historical pack-shape priors ───
   // The same (vendor, sku) ships the same physical case every week, but the
   // LLM re-derives the PACK/SIZE split per invoice and is nondeterministic
@@ -527,35 +541,7 @@ async function runSync(
   let packPriors = new Map<string, PackShapePrior>()
   if (priorSkus.length > 0) {
     try {
-      const priorRows = await prisma.invoiceLineItem.findMany({
-        where: {
-          sku: { in: priorSkus },
-          invoice: { accountId, status: { in: ["MATCHED", "APPROVED"] } },
-        },
-        select: {
-          sku: true,
-          productName: true,
-          category: true,
-          unit: true,
-          packSize: true,
-          unitSize: true,
-          unitSizeUom: true,
-          invoice: { select: { vendorName: true, status: true } },
-        },
-      })
-      packPriors = buildPackShapePriors(
-        priorRows.map((r) => ({
-          vendorName: r.invoice.vendorName,
-          sku: r.sku,
-          productName: r.productName,
-          category: r.category,
-          unit: r.unit,
-          packSize: r.packSize,
-          unitSize: r.unitSize,
-          unitSizeUom: r.unitSizeUom,
-          approved: r.invoice.status === "APPROVED",
-        }))
-      )
+      packPriors = await loadPackShapePriors(accountId, priorSkus)
     } catch (err) {
       logger.error("[invoice-sync] pack-shape prior lookup failed — continuing without priors:", err)
     }
@@ -717,22 +703,18 @@ async function runSync(
       !inv.extraction.deliveryAddress?.trim() &&
       !knownVendors.has(vendorMatchKey(inv.extraction.vendorName ?? ""))
 
-    let status: "MATCHED" | "REVIEW" | "PENDING" | "REJECTED"
-    if (notAnInvoice || notASupplier) {
-      status = "REJECTED"
-    } else if (
-      dateSuspect ||
-      mathMismatches.length > 0 ||
-      packAnomalies.length > 0 ||
-      totalMismatch ||
-      emptyExtraction
-    ) {
-      status = "REVIEW"
-    } else if (match) {
-      status = match.confidence >= 0.85 ? "MATCHED" : "REVIEW"
-    } else {
-      status = "PENDING"
-    }
+    // Verified or held, by what the document proves — `verifyInvoice`. A
+    // line whose arithmetic or pack shape cannot be checked no longer holds an
+    // invoice whose total ties out: the line is marked and never prices an
+    // ingredient, and the invoice's spend is verified by its own total.
+    const verdict = verifyInvoice({
+      extraction: inv.extraction,
+      dateSuspect,
+      match,
+      isPackConfirmed: (li) => lineMatchesPrior(inv.extraction.vendorName, li, packPriors),
+    })
+    const status: "MATCHED" | "REVIEW" | "PENDING" | "REJECTED" =
+      notAnInvoice || notASupplier ? "REJECTED" : verdict.status
 
     // Persist WHY it needs review — the detail page renders these so the
     // owner isn't left staring at a bare badge.
@@ -754,17 +736,7 @@ async function runSync(
               "Check it is a real supplier before paying anything.",
           },
         ]
-      : status === "REVIEW"
-        ? composeReviewReasons({
-            dateSuspect,
-            mathMismatches,
-            packAnomalies,
-            totalMismatch,
-            emptyExtraction,
-            matchConfidence: match?.confidence ?? null,
-            matched: Boolean(match),
-          })
-        : []
+      : verdict.reviewReasons
 
     return {
       reviewReasons,

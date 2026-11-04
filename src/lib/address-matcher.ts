@@ -42,7 +42,21 @@ function normalizeAddress(address: string): string {
       continue
     }
 
-    const word = words[i]
+    let word = words[i]
+
+    // A street number fused to one letter ("1360E COLORADO ST", "14523A
+    // Sherman Way") is the number followed by a directional or a unit letter
+    // the vendor printed without a space. Read whole, "1360e" is a different
+    // street number from the store's 1360, and two Glendale Premier Meats
+    // invoices (2026-10-29, 2026-11-02) sat in review at 75% for it. Split it
+    // here so the letter takes the same path as "1360 E" below.
+    if (result.length === 0) {
+      const fused = word.match(/^(\d+)([a-z])$/)
+      if (fused) {
+        result.push(fused[1])
+        word = fused[2]
+      }
+    }
 
     // Strip unit identifiers and their following number
     if (STRIP_WORDS.has(word)) {
@@ -160,6 +174,59 @@ export interface StoreMatch {
 }
 
 /**
+ * Confidence given to a fuzzy match that `verifyByStreetAndZip` has proved.
+ * Over the 0.85 auto-match line and under 1.0, so an exact match still wins
+ * and the row still reads as a match that needed the second check.
+ */
+export const VERIFIED_FUZZY_CONFIDENCE = 0.9
+
+/**
+ * Prove a fuzzy store match from the parts of an address that identify a
+ * place, instead of leaving it for someone to confirm.
+ *
+ * A match the similarity score puts under 0.85 is verified when ALL of these
+ * hold, and only then:
+ *   - the invoice prints a 5-digit ZIP and it is this store's ZIP;
+ *   - no other store on the account is in that ZIP, so the ZIP cannot point
+ *     anywhere else;
+ *   - the street number is this store's, or the store's with one character
+ *     missing or extra (IFS prints "1452 A Sherman Way" for 14523);
+ *   - the street name and city after the number agree (similarity ≥ 0.8).
+ *
+ * Nothing is inferred that the document does not say: each test compares
+ * printed text with the store's own address. When any test fails the match
+ * keeps its score and the invoice is not auto-matched.
+ */
+export function verifyByStreetAndZip(
+  deliveryAddress: string,
+  storeAddress: string,
+  otherStoreAddresses: string[],
+): boolean {
+  const inv = normalizeAddress(deliveryAddress)
+  const st = normalizeAddress(storeAddress)
+  const zip = extractZip(inv)
+  if (!zip || extractZip(st) !== zip) return false
+  if (otherStoreAddresses.some((a) => extractZip(normalizeAddress(a)) === zip)) return false
+
+  const numInv = extractStreetNumber(inv)
+  const numSt = extractStreetNumber(st)
+  if (!numInv || !numSt) return false
+  const sameNumber =
+    numInv === numSt ||
+    (Math.abs(numInv.length - numSt.length) === 1 &&
+      (numInv.startsWith(numSt) || numSt.startsWith(numInv)))
+  if (!sameNumber) return false
+
+  // The words between the number and the ZIP: street name, city, state.
+  const streetOf = (a: string) =>
+    a.replace(/^\d+[\w-]*\s*/, "").replace(/\b\d{5}(?:-\d{4})?\b.*$/, "").trim()
+  const a = streetOf(inv)
+  const b = streetOf(st)
+  if (!a || !b) return false
+  return 1 - levenshtein(a, b) / Math.max(a.length, b.length) >= 0.8
+}
+
+/**
  * Match an invoice delivery address to the best-matching store.
  * Returns null if no store exceeds the confidence threshold.
  */
@@ -175,6 +242,17 @@ export function matchInvoiceToStore(
     const confidence = addressSimilarity(deliveryAddress, store.address)
     if (confidence >= threshold && (!best || confidence > best.confidence)) {
       best = { storeId: store.id, confidence }
+    }
+  }
+
+  if (best && best.confidence < VERIFIED_FUZZY_CONFIDENCE) {
+    const chosen = best
+    const store = stores.find((s) => s.id === chosen.storeId)
+    const others = stores
+      .filter((s) => s.id !== chosen.storeId && s.address)
+      .map((s) => s.address as string)
+    if (store?.address && verifyByStreetAndZip(deliveryAddress, store.address, others)) {
+      best = { storeId: chosen.storeId, confidence: VERIFIED_FUZZY_CONFIDENCE }
     }
   }
 

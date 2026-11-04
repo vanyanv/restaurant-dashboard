@@ -140,7 +140,7 @@ export async function getSplhSeries(
     // Without a range the window is "trailing, ending now", so the key must
     // carry the day — or this morning's reader would be served last night's
     // window until the TTL ran out. With a range the bounds ARE the key.
-    `splh2:account:${accountId}:${stableKey({
+    `splh3:account:${accountId}:${stableKey({
       g: granularity,
       s: range?.startDate ?? null,
       e: range?.endDate ?? null,

@@ -1,5 +1,6 @@
 import { isAfter, isBefore } from "date-fns"
-import { hasFixedLabor } from "@/lib/counter/labor-cost-core"
+import { hasFixedLabor, payrollTaxRateOf } from "@/lib/counter/labor-cost-core"
+import { isFirstPartyPlatform } from "@/lib/first-party-platforms"
 // UTC-floor on purpose: OtterDailySummary.date is a Postgres @db.Date stored
 // at UTC midnight (e.g. May 1 LA business day → 2026-05-01T00:00:00Z).
 // Period boundaries must land on the same instant or bucketSummariesByPeriod
@@ -53,6 +54,12 @@ export interface PnLRow {
    * may add it in.
    */
   isMemo?: boolean
+  /**
+   * A short note on how the line was arrived at, for the page to print beside
+   * its name — the labor line says whether the employer payroll tax is in it.
+   * Words only: no figure on the line depends on it.
+   */
+  note?: string
 }
 
 // ─── GL row metadata ───
@@ -285,7 +292,8 @@ export type OtterSummaryRow = {
   tpRefundsAdjustments?: number | null
 }
 
-const FP_PLATFORMS = new Set(["css-pos", "bnm-web"])
+/** The shared first-party list (`@/lib/first-party-platforms`): their figures are the `fp*` columns. */
+const FP_PLATFORMS = { has: isFirstPartyPlatform }
 
 /**
  * What one summary row contributes to the statement — the one place a
@@ -493,6 +501,23 @@ export interface StoreFixedInputs {
   uberPickupCommissionRate?: number | null
   doordashPickupCommissionRate?: number | null
   grubhubCommissionRate?: number | null
+  /**
+   * `Store.employerPayrollTaxRate`. The tax itself is already IN the Harri
+   * dollars this function is handed (`labor-cost-core.ts` loads them); it is
+   * here only so the labor line can say so.
+   */
+  employerPayrollTaxRate?: number | null
+}
+
+/**
+ * The labor line's note: whether the Harri wages in it carry the employer
+ * payroll tax, and at what rate. `null` when no Harri reading is in the line
+ * (the store file's fixed labor is entered all-in, and is not loaded).
+ */
+export function payrollTaxNote(rate: number | null | undefined): string {
+  const r = payrollTaxRateOf(rate)
+  if (r === 0) return "wages only, no payroll tax on file"
+  return `incl. ${(Math.round(r * 10000) / 100).toString()}% employer payroll tax`
 }
 
 export interface ComputedPnL {
@@ -710,6 +735,9 @@ export function computeStorePnL(input: {
   let laborValues: number[]
   let laborLabel = "Labor (fixed)"
   let laborUnknown: boolean[]
+  // Harri wages carry the employer payroll tax (`labor-cost-core.ts`); the
+  // note says so, and at what rate, whenever any Harri reading is in the line.
+  let laborNote: string | undefined
   if (harriLaborByPeriod && harriLaborByPeriod.length === periods.length) {
     laborValues = periods.map((p, i) => {
       const h = harriLaborByPeriod[i]
@@ -753,6 +781,7 @@ export function computeStorePnL(input: {
     if (totalDays > 0 && totalCovered / totalDays >= 0.8) laborLabel = "Labor (actual)"
     else if (totalCovered > 0) laborLabel = "Labor (partial)"
     else laborLabel = fixedLabor != null ? "Labor (fixed)" : "Labor (estimated)"
+    if (totalCovered > 0) laborNote = payrollTaxNote(store.employerPayrollTaxRate)
   } else {
     laborValues = fixedLaborByPeriod
     laborUnknown = periods.map(() => fixedLabor == null)
@@ -778,6 +807,7 @@ export function computeStorePnL(input: {
     percents: laborValues.map((v, i) => pctOfSales(-v, totalSales[i])),
     isFixed: true,
     isUnknown: laborUnknown,
+    ...(laborNote ? { note: laborNote } : {}),
   })
   rows.push({
     code: RENT_CODE,
@@ -936,6 +966,21 @@ export function consolidateRows(
       )
     )
     const anyUnknown = combinedUnknown.some(Boolean)
+    // One note when every store that carries one agrees; where the stores'
+    // rates differ, the line says the tax is in without naming one rate.
+    const notes = new Set(
+      contributing
+        .map((rows) => rows.find((r) => r.code === code)?.note)
+        .filter((n): n is string => n !== undefined)
+    )
+    const note =
+      notes.size === 0
+        ? undefined
+        : notes.size === 1
+          ? [...notes][0]
+          : code === LABOR_CODE
+            ? "incl. employer payroll tax at each store's rate"
+            : undefined
     return {
       code,
       label,
@@ -945,6 +990,7 @@ export function consolidateRows(
       isFixed: meta.isFixed,
       isMemo: meta.isMemo,
       isUnknown: anyUnknown ? combinedUnknown : undefined,
+      ...(note ? { note } : {}),
     }
   })
 }

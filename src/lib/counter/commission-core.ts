@@ -1,4 +1,5 @@
 import type { Period } from "@/lib/pnl"
+import { FIRST_PARTY_PLATFORMS } from "@/lib/first-party-platforms"
 
 /**
  * What the marketplaces kept — the pure half of the ONE commission function.
@@ -35,12 +36,12 @@ import type { Period } from "@/lib/pnl"
 export type FulfillmentKind = "delivery" | "pickup"
 
 /**
- * The in-house platforms — no marketplace, no commission. The same set as
- * `HOUSE_PLATFORMS` in `channel-mix.ts` (a test holds them equal); spelled
- * here because `channel-mix.ts` imports this module and the reverse import
- * would be a cycle.
+ * The in-house platforms — no marketplace, no commission. The shared
+ * `FIRST_PARTY_PLATFORMS` list (`@/lib/first-party-platforms`), which also
+ * builds `HOUSE_PLATFORMS` in `channel-mix.ts` (a test holds them equal).
+ * Includes `d2c-eater-website`, the order feed's name for own-website orders.
  */
-export const COMMISSION_FREE_PLATFORMS: readonly string[] = ["css-pos", "bnm-web"]
+export const COMMISSION_FREE_PLATFORMS: readonly string[] = FIRST_PARTY_PLATFORMS
 
 /** The commission lines the P&L prints. Everything that is not one of the three is `other`. */
 export type CommissionLine = "ubereats" | "doordash" | "grubhub" | "other"
@@ -281,6 +282,9 @@ function cellsOf(
   const key = (storeId: string, day: string, platform: string) => `${storeId}|${day}|${platform}`
   const cells = new Map<string, Cell>()
   for (const g of groups) {
+    // The query already leaves these out; a group handed in from elsewhere
+    // must not turn an own-website order into an unpriced marketplace one.
+    if (COMMISSION_FREE_PLATFORMS.includes(g.platform)) continue
     const k = key(g.storeId, g.day, g.platform)
     const c = cells.get(k) ?? { storeId: g.storeId, day: g.day, platform: g.platform, totals: empty() }
     addGroup(c.totals, g, rates)

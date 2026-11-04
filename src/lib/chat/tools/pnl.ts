@@ -30,6 +30,7 @@ import {
   storeIdsSchema,
 } from "./_shared"
 import type { ChatTool, ChatToolContext } from "./types"
+import { FOOD_COST_ROWS } from "@/lib/counter/food-cost-scope"
 
 /**
  * P&L summary for the chat assistant.
@@ -82,6 +83,7 @@ type StoreFixed = {
   uberPickupCommissionRate: number | null
   doordashPickupCommissionRate: number | null
   grubhubCommissionRate: number | null
+  employerPayrollTaxRate: number | null
   targetCogsPct: number | null
 }
 
@@ -419,6 +421,8 @@ async function computeWindow(input: {
       where: {
         storeId: { in: storeIds },
         date: { gte: overallStart, lte: overallEnd },
+        // Packaging out, as on the dashboard's food line (`food-cost-scope.ts`).
+        ...FOOD_COST_ROWS,
       },
       select: {
         storeId: true,
@@ -655,6 +659,7 @@ export const getPnlSummary: ChatTool<typeof params, PnlSummaryResult> = {
         uberPickupCommissionRate: true,
         doordashPickupCommissionRate: true,
         grubhubCommissionRate: true,
+        employerPayrollTaxRate: true,
         targetCogsPct: true,
       },
       orderBy: { name: "asc" },
