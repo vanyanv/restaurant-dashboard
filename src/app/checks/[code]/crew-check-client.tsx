@@ -70,7 +70,15 @@ const T = {
     allTasksDone: "All tasks done.",
     comeBack: (from: string, to: string) => `Come back between ${from} and ${to} to submit.`,
     tapSubmit: "Tap Submit below.",
-    undoHelp: "Tapped by mistake? Tap a done task again to undo it.",
+    undoHelp: "Tap a done task to see who did it. Undo is in there, so nobody undoes a task by accident.",
+    doneSheetTitle: "Already done",
+    doneByAt: (by: string, at: string) => `Done by ${by} at ${at}`,
+    doneByYou: (at: string) => `You did this at ${at}`,
+    withPhoto: "Photo saved with it.",
+    keepDone: "Keep it done",
+    undoMine: "Undo, it's not done",
+    undoTheirs: (by: string) => `Undo ${by}'s tick`,
+    undoWarn: "Only undo if the task really needs doing again.",
     problem: "Problem?",
     needsAttention: "Needs attention",
     flagTitle: "What's wrong?",
@@ -139,7 +147,15 @@ const T = {
     allTasksDone: "Todas las tareas están hechas.",
     comeBack: (from: string, to: string) => `Vuelve entre ${from} y ${to} para enviarla.`,
     tapSubmit: "Toca Enviar abajo.",
-    undoHelp: "¿Te equivocaste? Toca otra vez una tarea hecha para quitarla.",
+    undoHelp: "Toca una tarea hecha para ver quién la hizo. Ahí puedes deshacerla, así nadie la quita por error.",
+    doneSheetTitle: "Ya está hecha",
+    doneByAt: (by: string, at: string) => `La hizo ${by} a las ${at}`,
+    doneByYou: (at: string) => `La hiciste tú a las ${at}`,
+    withPhoto: "Tiene foto guardada.",
+    keepDone: "Dejarla hecha",
+    undoMine: "Deshacer, no está hecha",
+    undoTheirs: (by: string) => `Deshacer la marca de ${by}`,
+    undoWarn: "Deshazla solo si de verdad hay que hacerla otra vez.",
     problem: "¿Problema?",
     needsAttention: "Necesita atención",
     flagTitle: "¿Qué pasa?",
@@ -573,6 +589,8 @@ function Checklist({
   /** Taps sent but not answered yet, shown as if they had landed. */
   const [pending, setPending] = useState<Record<string, boolean>>({})
   const [flagFor, setFlagFor] = useState<CrewItem | null>(null)
+  /** A done task someone tapped: shows who did it, and undo is a second, deliberate tap. */
+  const [doneFor, setDoneFor] = useState<CrewItem | null>(null)
   const [photoFor, setPhotoFor] = useState<{ item: CrewItem; blob: Blob; url: string } | null>(null)
   const [error, setError] = useState("")
   const [sending, setSending] = useState(false)
@@ -585,6 +603,11 @@ function Checklist({
     const mark = base.state.get(id)
     return { done: id in pending ? pending[id] : Boolean(mark?.done), mark }
   }
+  // Someone else undid the task while this sheet was open: nothing left to keep.
+  const doneForGone = doneFor !== null && !base.state.get(doneFor.id)?.done
+  useEffect(() => {
+    if (doneForGone) setDoneFor(null)
+  }, [doneForGone])
   const done = active.sections.reduce((n, s) => n + s.items.filter((i) => stateOf(i.id).done).length, 0)
   const photosLeft = active.sections.reduce((n, s) => n + s.items.filter((i) => i.photoRequired && !stateOf(i.id).done).length, 0)
   const tasksLeft = base.total - done - photosLeft
@@ -602,7 +625,7 @@ function Checklist({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [active, pending, lang])
 
-  const send = async (item: CrewItem, opts: { done: boolean; note?: string; photo?: Blob }) => {
+  const send = async (item: CrewItem, opts: { done: boolean; note?: string; photo?: Blob; seen?: string }) => {
     setError("")
     setPending((p) => ({ ...p, [item.id]: opts.done }))
     try {
@@ -611,6 +634,7 @@ function Checklist({
       form.set("itemId", item.id)
       form.set("done", opts.done ? "1" : "0")
       if (opts.note) form.set("note", opts.note)
+      if (opts.seen) form.set("seen", opts.seen)
       if (opts.photo) form.set("photo", opts.photo, `${item.id}.jpg`)
       const res = await fetch(`/api/checks/${encodeURIComponent(code)}/mark`, { method: "POST", body: form })
       const body = (await res.json().catch(() => ({}))) as { error?: string; view?: CrewView }
@@ -637,7 +661,11 @@ function Checklist({
   }
   const tap = (item: CrewItem) => {
     const s = stateOf(item.id)
-    if (s.done) void send(item, { done: false })
+    if (s.done) {
+      // Never untick on one tap: another person's phone may have just ticked
+      // it. Show who did it; undo is a separate button.
+      if (!(item.id in pending)) setDoneFor(item)
+    }
     else if (item.photoRequired) openCamera(item)
     else void send(item, { done: true })
   }
@@ -831,11 +859,28 @@ function Checklist({
             setFlagFor(null)
           }}
           onRemove={() => {
-            void send(flagFor, { done: false })
+            void send(flagFor, { done: false, seen: stateOf(flagFor.id).mark?.markId })
             setFlagFor(null)
           }}
         />
       )}
+      {doneFor && (() => {
+        const mark = stateOf(doneFor.id).mark
+        if (!mark?.done) return null
+        return (
+          <DoneSheet
+            t={t}
+            title={txt(doneFor.en, doneFor.es)}
+            mark={mark}
+            mine={mark.by === who.name}
+            onKeep={() => setDoneFor(null)}
+            onUndo={() => {
+              void send(doneFor, { done: false, seen: mark.markId })
+              setDoneFor(null)
+            }}
+          />
+        )
+      })()}
     </>
   )
 }
@@ -902,6 +947,49 @@ function PhotoSheet({
         <button type="button" className="ckc__btn ckc__btn--ghost" disabled={busy} onClick={onRetake}>
           {t.retake}
         </button>
+      </div>
+    </div>
+  )
+}
+
+function DoneSheet({
+  t,
+  title,
+  mark,
+  mine,
+  onKeep,
+  onUndo,
+}: {
+  t: Tx
+  title: string
+  mark: CrewMarkState
+  mine: boolean
+  onKeep: () => void
+  onUndo: () => void
+}) {
+  return (
+    <div className="ckc__sheet" role="dialog" aria-modal="true" aria-label={t.doneSheetTitle} onClick={onKeep}>
+      <div onClick={(e) => e.stopPropagation()}>
+        <h2>{t.doneSheetTitle}</h2>
+        <b>{title}</b>
+        <p className="ckc__dim" style={{ margin: 0, fontSize: 14 }}>
+          {mine ? t.doneByYou(mark.at) : t.doneByAt(mark.by, mark.at)}
+          {mark.hasPhoto ? ` ${t.withPhoto}` : ""}
+        </p>
+        {mark.note && (
+          <p className="ckc__dim" style={{ margin: 0, fontSize: 13 }}>
+            {t.needsAttention} · {mark.note}
+          </p>
+        )}
+        <button type="button" className="ckc__btn" onClick={onKeep}>
+          ✓ {t.keepDone}
+        </button>
+        <button type="button" className="ckc__btn ckc__btn--ghost" onClick={onUndo}>
+          {mine ? t.undoMine : t.undoTheirs(mark.by)}
+        </button>
+        <p className="ckc__dim" style={{ margin: 0, fontSize: 12.5 }}>
+          {t.undoWarn}
+        </p>
       </div>
     </div>
   )

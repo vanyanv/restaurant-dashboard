@@ -63,6 +63,8 @@ export type CrewMarkState = {
   /** "9:41 am". */
   at: string
   hasPhoto: boolean
+  /** The row this state comes from. An undo sends it back, so it can only undo what the phone showed. */
+  markId: string
 }
 
 export type ActiveCheck = {
@@ -211,6 +213,7 @@ export function markStates(log: GridMark[]): CrewMarkState[] {
     by: m.crewName,
     at: clockLabel(m.at),
     hasPhoto: m.hasPhoto,
+    markId: m.id,
   }))
 }
 
