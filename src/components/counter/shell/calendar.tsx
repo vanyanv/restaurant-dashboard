@@ -154,6 +154,9 @@ export function Calendar({
                   className="drwk"
                   type="button"
                   aria-label={`Pick the week of ${monday.toLocaleDateString("en-US", { month: "long", day: "numeric" })}`}
+                  // A week that has not started has nothing to show, and
+                  // `weekOf` would have no day in it to end on.
+                  disabled={monday > today}
                   onClick={() => onPickWeek(monday)}
                 >
                   {getISOWeek(monday)}

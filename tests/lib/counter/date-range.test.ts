@@ -3,7 +3,7 @@ import {
   PRESETS, COMPARISONS, resolvePreset, bucketFor, stepRange, comparisonRange,
   comparisonWindows, dayCount,
   toQueryBounds, isoDay, parseIsoDay, rangeLabel, rangeTitle, rangeSubtitle,
-  monthDay, trailingWeeks, MENU_PRESETS, describeRange, compareSentence, canStepForward,
+  monthDay, trailingWeeks, MENU_PRESETS, describeRange, compareSentence, canStepForward, weekOf,
 } from "@/lib/counter/date-range"
 import { addDays as addDaysFor } from "date-fns"
 
@@ -528,5 +528,13 @@ describe("compareSentence", () => {
     const monTue = { start: new Date(2026, 10, 2), end: new Date(2026, 10, 3) }
     expect(compareSentence(monTue, "prev")).toBe("Comparing Nov 2 – Nov 3 with Oct 26 – Oct 27.")
     expect(compareSentence(monTue, "none")).toBe("Showing Nov 2 – Nov 3 with no comparison.")
+  })
+})
+
+describe("weekOf", () => {
+  it("never returns an inverted window for a week that has not started", () => {
+    const today = new Date(2026, 10, 4)
+    expect(weekOf(new Date(2026, 10, 9), today)).toEqual({ start: today, end: today })
+    expect(weekOf(new Date(2026, 10, 2), today)).toEqual({ start: new Date(2026, 10, 2), end: today })
   })
 })

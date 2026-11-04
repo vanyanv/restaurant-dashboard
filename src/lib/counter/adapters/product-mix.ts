@@ -232,7 +232,7 @@ async function loadMix(input: ProductMixInput): Promise<MixData> {
     }
   }
 
-  // The window immediately before this one, of the same length. `prior` is
+  // The prior window ("prev": the same weekdays a week back for a short window, the month before for a month, else the same length immediately before). `prior` is
   // what the strip's deltas and the whole bridge are measured against, so it
   // is not the page's comparison SETTING — a weekday-matched comparison would
   // make "share of units, prior" mean something else on every other visit.

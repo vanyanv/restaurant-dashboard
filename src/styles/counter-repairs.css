@@ -3438,6 +3438,7 @@ html[data-theme-switching] .ct-root *::after {
 .drgrid--wk{grid-template-columns:22px repeat(7,1fr)}
 .drwk{font-family:var(--mono);font-size:8.5px;color:var(--ink-3);cursor:pointer;border-radius:var(--r-sm);display:grid;place-items:center}
 .drwk:hover{background:var(--sunk);color:var(--ink)}
+.drwk:disabled{color:var(--line-strong);cursor:default;background:none}
 .drhint{margin:6px 0 0;font-size:11px;color:var(--ink-3)}
 .drcmpline{flex-basis:100%;order:3;font-size:11.5px;color:var(--ink-2)}
 .mdatebar{display:flex;align-items:center;gap:4px}

@@ -211,7 +211,7 @@ function isMonthShaped(r: DateRange, today?: Date): boolean {
  *
  * `today`, when given, keeps a step from running into the future: a window
  * that would end after today ends today, and one that would start after
- * today is not returned (null) so the caller can disable the arrow.
+ * today becomes today itself. `canStepForward` is how a caller disables ›.
  */
 export function stepRange(r: DateRange, direction: -1 | 1, today?: Date): DateRange {
   const span = dayCount(r)
@@ -628,5 +628,7 @@ export function weekOf(day: Date, today: Date): DateRange {
   const start = weekStart(day)
   const whole = addDays(start, 6)
   const t = startOfDay(today)
+  // A week that has not started yet: today, rather than an inverted window.
+  if (start.getTime() > t.getTime()) return { start: t, end: t }
   return { start, end: whole.getTime() > t.getTime() ? t : whole }
 }
