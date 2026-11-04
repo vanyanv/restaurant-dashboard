@@ -61,6 +61,12 @@ describe("buildQuery", () => {
     expect(() => buildQuery({ dataset: "orders", columns: ["total"], orderBy: [{ column: "platform" }] }, scope)).toThrow(/orderBy/)
   })
 
+  it("refuses groupBy without an aggregate, and buckets timestamps by LA day", () => {
+    expect(() => buildQuery({ dataset: "ratings", groupBy: ["platform"] }, scope)).toThrow(/groupBy needs/)
+    const q = buildQuery({ dataset: "ratings", groupBy: ["day"], aggregates: [{ fn: "count" }] }, scope)
+    expect(q.sql).toContain(`AT TIME ZONE 'UTC' AT TIME ZONE 'America/Los_Angeles'`)
+  })
+
   it("has no personal columns in any dataset", () => {
     const all = Object.values(DATASETS).flatMap((d) => [...Object.keys(d.columns), ...Object.values(d.columns).map((c) => c.sql)])
     for (const banned of ["customerName", "email", "phone", "pin", "deliveryAddress", "pdfBlob", "rawExtraction", "photo"]) {

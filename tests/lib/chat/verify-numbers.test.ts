@@ -67,9 +67,12 @@ describe("checkAnswerNumbers", () => {
     expect(checkAnswerNumbers([shop], filed(["$1,234.50"]), "").unchecked).toEqual([])
   })
 
-  it("does not check a turn that called no data tool", () => {
+  it("in a turn with no data tool, checks only the filed figures, not the paragraph", () => {
     const only = tool("fileReturn", { verdict: "x", department: "No data" })
-    expect(checkAnswerNumbers([only], filed(["$5"]), "Maybe $40?").unchecked).toEqual([])
+    expect(checkAnswerNumbers([only], null, "Maybe $40?").unchecked).toEqual([])
+    const out = checkAnswerNumbers([only], filed(["$5"]), "Maybe $40?")
+    expect(out.unchecked).toEqual(["$5"])
+    expect(out.figures).toEqual([true])
   })
 
   it("does not pair numbers that never sat together", () => {

@@ -124,6 +124,7 @@ export const DATASETS = {
       ...dayCols(`o."referenceTimeLocal"`),
       platform: { sql: `o."platform"`, type: "text", about: "platform" },
       item: { sql: `i."name"`, type: "text", about: "the item it modifies" },
+      orderId: { sql: `o."id"`, type: "text", about: "internal order id; countDistinct on this to count orders" },
       modifier: { sql: `m."name"`, type: "text", about: "the modifier" },
       group: { sql: `m."subHeader"`, type: "text", about: "modifier group heading" },
       quantity: { sql: `m."quantity"`, type: "number", about: "count" },
@@ -193,10 +194,10 @@ export const DATASETS = {
     from: `"OtterRating" r JOIN "Store" s ON s."id" = r."storeId"`,
     account: `s."accountId"`,
     store: `r."storeId"`,
-    date: `r."reviewedAt"::date`,
+    date: `(r."reviewedAt" AT TIME ZONE 'UTC' AT TIME ZONE 'America/Los_Angeles')::date`,
     columns: {
       store: STORE,
-      ...dayCols(`r."reviewedAt"`),
+      ...dayCols(`(r."reviewedAt" AT TIME ZONE 'UTC' AT TIME ZONE 'America/Los_Angeles')`),
       platform: { sql: `r."platform"`, type: "text", about: "platform" },
       stars: { sql: `r."rating"`, type: "number", about: "1 to 5" },
       review: { sql: `r."reviewText"`, type: "text", about: "what the guest wrote" },
@@ -258,10 +259,10 @@ export const DATASETS = {
     from: `"InventoryAdjustment" ad JOIN "Store" s ON s."id" = ad."storeId" JOIN "CanonicalIngredient" ci ON ci."id" = ad."canonicalIngredientId"`,
     account: `s."accountId"`,
     store: `ad."storeId"`,
-    date: `ad."occurredAt"::date`,
+    date: `(ad."occurredAt" AT TIME ZONE 'UTC' AT TIME ZONE 'America/Los_Angeles')::date`,
     columns: {
       store: STORE,
-      ...dayCols(`ad."occurredAt"`),
+      ...dayCols(`(ad."occurredAt" AT TIME ZONE 'UTC' AT TIME ZONE 'America/Los_Angeles')`),
       ingredient: { sql: `ci."name"`, type: "text", about: "ingredient" },
       quantity: { sql: `ad."qty"`, type: "number", about: "in the recipe unit" },
       unit: { sql: `ci."recipeUnit"`, type: "text", about: "recipe unit" },
@@ -369,6 +370,8 @@ export function buildQuery(
   const ds: Dataset = DATASETS[args.dataset]
   const aggs = args.aggregates ?? []
   const groups = args.groupBy ?? []
+
+  if (groups.length > 0 && aggs.length === 0) throw new Error("groupBy needs at least one aggregate, e.g. { fn: \"count\" }")
 
   const select: Prisma.Sql[] = []
   const aliases = new Set<string>()

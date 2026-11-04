@@ -36,6 +36,8 @@ export type ShopResult =
       sales: { paid: number; refunded: number; orders: number; days: Array<{ date: string; paid: number; refunded: number; orders: number }> }
       toDo: { toShip: number; lateToShip: number; toBag: number; readyForPickup: number; shippedLast7: number; pickedUpLast7: number }
       paused: boolean
+      /** True when more orders match than the 50 listed. */
+      ordersTruncated: boolean
       orders: Array<{ number: string; status: string; fulfilment: string; placed: string; customer: string | null; items: string; total: number }>
       products: Array<{ name: string; status: string; price: number; stock: number | null }>
       lowStock: Array<{ name: string; remaining: number }>
@@ -71,6 +73,7 @@ export const getShopOrders: ChatTool<typeof params, ShopResult> = {
       },
       toDo: summary.counts,
       paused: summary.settings.shopPaused,
+      ordersTruncated: list.nextCursor != null || list.rows.length > 50,
       orders: list.rows.slice(0, 50).map((o) => ({
         number: o.number,
         status: o.status,

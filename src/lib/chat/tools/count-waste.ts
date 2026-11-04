@@ -34,6 +34,8 @@ export type CountWasteResult = {
   stores: Array<{
     storeId: string
     storeName: string
+    /** Sections that could not be read for this store; the other stores still answer. */
+    errors: string[]
     /** Null when the store has fewer than two completed counts: there is no report yet. */
     report: {
       count: string
@@ -115,13 +117,15 @@ export const getCountAndWaste: ChatTool<typeof params, CountWasteResult> = {
           getCountReportSectionPromises({ accountId: ctx.accountId, storeId: s.id }).report,
           getCountWasteSectionPromises({ accountId: ctx.accountId, storeId: s.id }).waste,
         ])
-        if (report.status === "failed") throw new Error(`count report failed for ${s.name}: ${report.error}`)
-        if (waste.status === "failed") throw new Error(`waste log failed for ${s.name}: ${waste.error}`)
+        const errors: string[] = []
+        if (report.status === "failed") errors.push(`count report could not be read: ${report.error}`)
+        if (waste.status === "failed") errors.push(`waste log could not be read: ${waste.error}`)
         const r = report.status === "ready" || report.status === "stale" ? report.data : null
         const w = waste.status === "ready" || waste.status === "stale" ? waste.data : null
         return {
           storeId: s.id,
           storeName: s.name,
+          errors,
           report:
             r && r.current && r.previous
               ? {

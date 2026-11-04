@@ -129,19 +129,23 @@ export function sourceNumbers(outputs: readonly unknown[]): Sources {
     }
     if (Array.isArray(v)) {
       const sums = new Map<string, number>()
+      const counts = new Map<string, number>()
       for (const item of v) {
         walk(item, depth + 1)
         if (item && typeof item === "object" && !Array.isArray(item)) {
           for (const [k, x] of Object.entries(item)) {
-            if (typeof x === "number" && Number.isFinite(x)) sums.set(k, (sums.get(k) ?? 0) + x)
+            if (typeof x === "number" && Number.isFinite(x)) {
+              sums.set(k, (sums.get(k) ?? 0) + x)
+              counts.set(k, (counts.get(k) ?? 0) + 1)
+            }
           }
         }
       }
       if (v.length > 1) {
         for (const [k, s] of sums) {
           add(s)
-          // "$412 a day" is the column total over its rows.
-          add(s / v.length)
+          // "$412 a day" is the column total over the rows that carry it.
+          add(s / (counts.get(k) ?? v.length))
           const list = byKey.get(`\u03a3${k}`) ?? []
           list.push(Math.abs(s))
           byKey.set(`\u03a3${k}`, list)
@@ -207,9 +211,10 @@ const cache = new WeakMap<readonly ReturnPart[], Map<string, NumberCheck>>()
 /**
  * Check one answer against the lookups that produced it.
  *
- * A turn that called no data tool is not checked: a refusal or a clarifying
- * question has nothing to check against, and flagging every number in it
- * would bury the one place the reader is told why there is no answer.
+ * In a turn that called no data tool only the filed figures and verdict are
+ * checked: a refusal or a clarifying question has nothing to check against,
+ * and flagging every number in its paragraph would bury the one place the
+ * reader is told why there is no answer.
  */
 export function checkAnswerNumbers(
   parts: readonly ReturnPart[],
@@ -226,7 +231,7 @@ export function checkAnswerNumbers(
   const figures = (filed?.figures ?? []).map(() => false)
   let result: NumberCheck = { figures, unchecked: [] }
 
-  if (outputs.length > 0) {
+  {
     const sources = sourceNumbers(outputs)
     const unchecked: string[] = []
     const flag = (c: Claim) => {
@@ -239,7 +244,11 @@ export function checkAnswerNumbers(
         bad.forEach(flag)
       }
     })
-    for (const c of claimsIn(`${filed?.verdict ?? ""}\n${body}`)) if (!matches(c, sources)) flag(c)
+    // Filed figures and the verdict must come from this turn's lookups, so they
+    // are checked even when none ran. The paragraph is checked only when one
+    // did: a refusal or a clarifying question has nothing to check against.
+    const prose = outputs.length > 0 ? `${filed?.verdict ?? ""}\n${body}` : (filed?.verdict ?? "")
+    for (const c of claimsIn(prose)) if (!matches(c, sources)) flag(c)
     result = { figures, unchecked }
   }
 
