@@ -97,11 +97,13 @@ export function snapshotForm(active: ActiveCheck, rows: MarkRow[]): FormSnapshot
 }
 
 /** What the latest row on a task says, as the server sees it now. */
-export type LatestMark = { id: string; done: boolean; note: string | null; crewName: string } | null
+export type LatestMark = { id: string; done: boolean; note: string | null; crewName: string; photoKey: string | null } | null
 
 export type MarkRequest = {
   done: boolean
   note: string | null
+  /** The tap carries a photo. */
+  photo: boolean
   /** The mark id the phone showed when crew asked to undo. Null when it showed none. */
   seen: string | null
 }
@@ -120,7 +122,8 @@ export type MarkRequest = {
  */
 export function markDecision(latest: LatestMark, req: MarkRequest): "write" | "keep" | "stale" {
   if (req.done) {
-    if (latest?.done && !req.note) return "keep"
+    // A photo still lands on a task that was finished with a note instead.
+    if (latest?.done && !req.note && !(req.photo && !latest.photoKey)) return "keep"
     return "write"
   }
   if (!latest?.done) return "keep"

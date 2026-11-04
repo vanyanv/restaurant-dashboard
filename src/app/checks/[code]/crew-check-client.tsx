@@ -76,6 +76,7 @@ const T = {
     doneByYou: (at: string) => `You did this at ${at}`,
     withPhoto: "Photo saved with it.",
     keepDone: "Keep it done",
+    addPhoto: "Add the photo",
     undoMine: "Undo, it's not done",
     undoTheirs: (by: string) => `Undo ${by}'s tick`,
     undoWarn: "Only undo if the task really needs doing again.",
@@ -153,6 +154,7 @@ const T = {
     doneByYou: (at: string) => `La hiciste tú a las ${at}`,
     withPhoto: "Tiene foto guardada.",
     keepDone: "Dejarla hecha",
+    addPhoto: "Agregar la foto",
     undoMine: "Deshacer, no está hecha",
     undoTheirs: (by: string) => `Deshacer la marca de ${by}`,
     undoWarn: "Deshazla solo si de verdad hay que hacerla otra vez.",
@@ -588,7 +590,8 @@ function Checklist({
 }) {
   /** Taps sent but not answered yet, shown as if they had landed. */
   const [pending, setPending] = useState<Record<string, boolean>>({})
-  const [flagFor, setFlagFor] = useState<CrewItem | null>(null)
+  /** The task being flagged, with the note and mark it had when the sheet opened. */
+  const [flagFor, setFlagFor] = useState<{ item: CrewItem; note: string; seen?: string } | null>(null)
   /** A done task someone tapped: shows who did it, and undo is a second, deliberate tap. */
   const [doneFor, setDoneFor] = useState<CrewItem | null>(null)
   const [photoFor, setPhotoFor] = useState<{ item: CrewItem; blob: Blob; url: string } | null>(null)
@@ -779,7 +782,7 @@ function Checklist({
                   </span>
                 </button>
                 {!isDone && (
-                  <button type="button" className="ckc__flagbtn" onClick={() => setFlagFor(i)}>
+                  <button type="button" className="ckc__flagbtn" onClick={() => setFlagFor({ item: i, note: mark?.note ?? "", seen: mark?.markId })}>
                     {t.problem}
                   </button>
                 )}
@@ -852,14 +855,14 @@ function Checklist({
       {flagFor && (
         <FlagSheet
           t={t}
-          current={stateOf(flagFor.id).mark?.note ?? ""}
+          current={flagFor.note}
           onCancel={() => setFlagFor(null)}
           onSave={(note) => {
-            void send(flagFor, { done: true, note })
+            void send(flagFor.item, { done: true, note })
             setFlagFor(null)
           }}
           onRemove={() => {
-            void send(flagFor, { done: false, seen: stateOf(flagFor.id).mark?.markId })
+            void send(flagFor.item, { done: false, seen: flagFor.seen })
             setFlagFor(null)
           }}
         />
@@ -873,6 +876,11 @@ function Checklist({
             title={txt(doneFor.en, doneFor.es)}
             mark={mark}
             mine={mark.by === who.name}
+            onPhoto={doneFor.photoRequired && !mark.hasPhoto ? () => {
+              const item = doneFor
+              setDoneFor(null)
+              openCamera(item)
+            } : undefined}
             onKeep={() => setDoneFor(null)}
             onUndo={() => {
               void send(doneFor, { done: false, seen: mark.markId })
@@ -959,6 +967,7 @@ function DoneSheet({
   mine,
   onKeep,
   onUndo,
+  onPhoto,
 }: {
   t: Tx
   title: string
@@ -966,6 +975,8 @@ function DoneSheet({
   mine: boolean
   onKeep: () => void
   onUndo: () => void
+  /** A photo task finished with a note: the photo can still be added. */
+  onPhoto?: () => void
 }) {
   return (
     <div className="ckc__sheet" role="dialog" aria-modal="true" aria-label={t.doneSheetTitle} onClick={onKeep}>
@@ -984,6 +995,11 @@ function DoneSheet({
         <button type="button" className="ckc__btn" onClick={onKeep}>
           ✓ {t.keepDone}
         </button>
+        {onPhoto && (
+          <button type="button" className="ckc__btn ckc__btn--light" onClick={onPhoto}>
+            <CameraIcon /> {t.addPhoto}
+          </button>
+        )}
         <button type="button" className="ckc__btn ckc__btn--ghost" onClick={onUndo}>
           {mine ? t.undoMine : t.undoTheirs(mark.by)}
         </button>

@@ -68,11 +68,11 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   const latest = await prisma.checkMark.findFirst({
     where: { storeId: store.id, kind: active.kind, businessDate: dayToDb(active.day), itemId: item.id, store: { accountId: store.accountId } },
     orderBy: [{ at: "desc" }, { id: "desc" }],
-    select: { id: true, done: true, note: true, crewName: true },
+    select: { id: true, done: true, note: true, crewName: true, photoKey: true },
   })
   const seenRaw = form.get("seen")
   const seen = typeof seenRaw === "string" && seenRaw ? seenRaw : null
-  const decision = markDecision(latest, { done, note, seen })
+  const decision = markDecision(latest, { done, note, photo: hasFile, seen })
   if (decision === "keep") return NextResponse.json({ ok: true, view })
   if (decision === "stale") {
     return NextResponse.json(
