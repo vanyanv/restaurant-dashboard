@@ -221,12 +221,14 @@ beforeEach(() => {
 /* ── The shape of the load ────────────────────────────────────────────── */
 
 describe("getPnlSections — the loads", () => {
-  it("loads the selected range once and ALL eight weeks in one more call", async () => {
+  it("loads the selected range once, ALL eight weeks in one more call, and the prior period", async () => {
     await load()
     // Was 9 — the selected range plus one rollup per week. The eight weeks are
     // now a single call carrying eight explicit periods, which is the whole of
-    // what `loadWeekStatements` changed.
-    expect(vi.mocked(getAllStoresPnL)).toHaveBeenCalledTimes(2)
+    // what `loadWeekStatements` changed. The third is the prior period the
+    // big "kept" figure is compared against (`plain`); with the comparison on
+    // "Prior period" that load is the comparison's, and not asked twice.
+    expect(vi.mocked(getAllStoresPnL)).toHaveBeenCalledTimes(3)
   })
 
   it("adds exactly one more window when a comparison is chosen", async () => {
@@ -774,8 +776,9 @@ describe("by store", () => {
     // The point of this test is unchanged and is the whole plan: the by-store
     // table must come off a call the page already made. What changed is how
     // many that is — 1 selected + 1 for all eight weeks, where it used to be
-    // 1 + 8. A THIRD call here would be the second rollup this prevents.
-    expect(vi.mocked(getAllStoresPnL)).toHaveBeenCalledTimes(2)
+    // 1 + 8. The third is the prior period (`plain`); a FOURTH call here
+    // would be the second rollup this prevents.
+    expect(vi.mocked(getAllStoresPnL)).toHaveBeenCalledTimes(3)
   })
 
   it("gives a store that has not traded no figures at all, and says why", async () => {

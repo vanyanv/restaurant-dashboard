@@ -1,12 +1,9 @@
 // @vitest-environment jsdom
 /**
- * The desk composition, asserted against `P.pnl.desk()`'s own order
- * (`docs/counter/counter-prototype.html:5245`).
- *
- * The fidelity gate measures the same thing in a browser against the prototype
- * itself. These are the fast half: the ORDER, the two blocks that must NOT be
- * inside a section, the arithmetic the cascade prints, and the one gesture on
- * this page that changes the range.
+ * The desk P&L "made plain" (owner-approved 2026-11-03): the kept figure and
+ * how it moved, the eight weeks as the picker, Needs you folded, where each
+ * dollar went, day by day, store cards, and the full statement folded under
+ * them. These assert what a reader sees and the gestures that change the URL.
  */
 import { describe, it, expect, vi, beforeEach } from "vitest"
 import { render, screen, fireEvent, within } from "@testing-library/react"
@@ -43,6 +40,7 @@ const USER = { name: "Chris Karimian", role: "Owner" }
 import { ready, empty, failed } from "@/lib/counter/section-data"
 import { trailingWeeks, serializeWeekWindow } from "@/lib/counter/date-range"
 import type { PnlSections } from "@/lib/counter/adapters/pnl"
+import { plainFixture } from "./fixtures/pnl-plain"
 
 const TODAY = new Date("2026-08-25T00:00:00-07:00") // Tuesday in Los Angeles
 const WEEKS = trailingWeeks(TODAY, 8)
@@ -74,6 +72,9 @@ const CASCADE = {
   ],
   end: { name: "Bottom line", sub: "12.5% of sales" },
 }
+
+
+const PLAIN = plainFixture(WEEKS)
 
 const sections: PnlSections = {
   headline: ready({
@@ -129,6 +130,7 @@ const sections: PnlSections = {
     { id: "hollywood", name: "Hollywood", stage: "trading", grossSales: 25_879, primePct: 56.2, fixedOnFile: 2_100, rentOnFile: true },
     { id: "glendale", name: "Glendale", stage: "pre_open", grossSales: null, primePct: null, fixedOnFile: null, rentOnFile: false },
   ]),
+  plain: ready(PLAIN),
   trust: { status: "not_computed", owed: "a per-line provenance model" },
   foodCause: { status: "not_computed", owed: "a cause-attribution model" },
 }
@@ -149,9 +151,6 @@ beforeEach(() => push.mockClear())
 
 describe("Counter P&L", () => {
   it("titles the page with its NAME, and subtitles it with the store, window, days and comparison", () => {
-    // `P.pnl.title` is "Profit and loss" — unlike the Overview, whose title is
-    // a sentence about the range. A statement is the same document whatever
-    // window it is drawn over.
     const { container } = render(<CounterPnlClient {...base} sections={sections} />)
     expect(screen.getByRole("heading", { level: 2, name: "Profit and loss" })).toBeTruthy()
     expect(container.querySelector(".pagehead .sub")?.textContent).toBe(
@@ -162,188 +161,102 @@ describe("Counter P&L", () => {
     )
   })
 
-  it("names the window by its ENDS on a preset too, never by the preset's name", () => {
-    // `CD.rangeLabel()` is `fmtRange()` (prototype line 1862) — two dates, no
-    // preset branch — and `P.pnl.desk()` calls it for the cascade's meta
-    // (5313) and the week table's unmarked note (5172). With the PRESET's name
-    // here the desk printed "Last 7 days" where the phone, from the same
-    // range, printed "Aug 19 – Aug 25": one window, two names, across two
-    // surfaces of one page.
-    const { container } = render(
-      <CounterPnlClient {...base} params="range=d7" sections={sections} />,
-    )
-    expect(container.querySelector(".pagehead .sub")?.textContent).toBe(
-      "All stores · Aug 19 – Aug 25 · 7 days · vs the prior period",
-    )
-    const cascadeMeta = main(container).querySelector(".sec .sec__head .k")?.textContent
-    expect(cascadeMeta).toBe("Aug 19 – Aug 25 · the bar is what is left after each line")
-    // The same label again, in the note the week table prints when the range
-    // above it is not one of its eight rows.
-    expect(main(container).textContent).toContain(
-      "The range above is Aug 19 – Aug 25, which is not one of these weeks",
-    )
-    // "Last 7 days" is still on the page exactly once, inside the date
-    // control, which is the prototype's own `presetName()` at line 1919 — the
-    // control names the preset, the page names the window.
-    expect(
-      Array.from(main(container).querySelectorAll(".sec__head .k")).map((e) => e.textContent),
-    ).toEqual([
-      "Aug 19 – Aug 25 · the bar is what is left after each line",
-      "press a week to read it in full · every figure is this same statement over that window",
-      "against the prior period · same 7 days, so the change column is readable",
-      "2 stores, 2 stages",
+  it("leads with what was kept, says it is an upper bound when labor is missing, and how it moved", () => {
+    const { container } = render(<CounterPnlClient {...base} sections={sections} />)
+    const big = container.querySelector(".pl-big")?.textContent
+    expect(big).toBe("≤ $23,916" + "28.4% of sales")
+    expect(container.querySelector(".pl-atmost")?.textContent).toBe("at most · 2 Glendale days of labor missing")
+    expect(container.querySelector(".pl-delta")?.textContent).toContain("vs Oct 19 – 25: ▲ +$4,413")
+    expect(container.querySelector(".pl-lead")?.textContent).toContain("true number is lower")
+    expect(Array.from(container.querySelectorAll(".pl-pill")).map((p) => p.className)).toEqual([
+      "pl-pill ",
+      "pl-pill is-bad",
     ])
   })
 
-  it("composes the page in the prototype's order, with the strip and the reading OUTSIDE any section", () => {
-    // The whole task as one assertion: the view bar → strip → reading →
-    // cascade → eight weeks → statement → the split → by store.
-    //
-    // `.seg` is `VIEWS.pnl`, and it was missing from this page entirely until
-    // the phone pass added it. Analytics, Labor and COGS have all drawn their
-    // group/store bar directly after `</PageHead>` since they were built; this
-    // is the fourth page in the design with a per-store twin, and it had no
-    // bar at all — so `/dashboard/pnl/<id>` was reachable only from the
-    // Overview's store cards. Its position here is theirs.
+  it("composes the page: kept, Needs you, the dollar, day by day, by store, then the full statement", () => {
     const { container } = render(<CounterPnlClient {...base} sections={sections} />)
-    const kids = [...main(container).children].map((c) => c.className.split(" ")[0])
-    expect(kids).toEqual([
-      "pagehead",
-      "seg",
-      "strip",
-      "ans__lead",
-      "sec", // where it went
-      "sec", // the last eight weeks
-      "sec", // the statement
-      "split", // food cause + trust
-      "sec", // by store
+    const titles = Array.from(main(container).querySelectorAll(".sec .sec__head h3, .sec summary h3")).map(
+      (h) => h.textContent,
+    )
+    expect(titles).toEqual([
+      "Needs you",
+      "Where each dollar went",
+      "Day by day",
+      "By store",
+      "Full statement",
     ])
-    for (const cls of [".strip", ".ans__lead"]) {
-      expect(main(container).querySelector(cls)!.closest(".sec")).toBeNull()
-    }
   })
 
-  it("renders the landmark sequence in the prototype's order — the cascade before the weeks before the statement", () => {
+  it("folds Needs you and the full statement closed", () => {
     const { container } = render(<CounterPnlClient {...base} sections={sections} />)
-    const CLASSES = ["strip", "ans__lead", "wf", "wkt", "tbl", "split", "sec", "empty"]
-    const seq = Array.from(main(container).querySelectorAll("*"))
-      .map((el) => CLASSES.filter((c) => el.classList.contains(c)).join("."))
-      .filter((s) => s !== "")
-    expect(seq.indexOf("strip")).toBeLessThan(seq.indexOf("ans__lead"))
-    expect(seq.indexOf("ans__lead")).toBeLessThan(seq.indexOf("wf"))
-    expect(seq.indexOf("wf")).toBeLessThan(seq.indexOf("wkt"))
-    expect(seq.indexOf("wkt")).toBeLessThan(seq.indexOf("tbl"))
-    expect(seq.indexOf("tbl")).toBeLessThan(seq.indexOf("split"))
-    // Nothing is a grey empty box on a page with data.
-    expect(seq).not.toContain("empty")
+    const folds = Array.from(main(container).querySelectorAll("details"))
+    expect(folds.length).toBeGreaterThanOrEqual(2)
+    for (const d of folds) expect(d.open).toBe(false)
+    expect(screen.getByText("Labor is missing")).toBeTruthy()
+    expect(screen.getByRole("link", { name: "Open store settings" }).getAttribute("href")).toBe(
+      "/dashboard/stores/glendale",
+    )
   })
 
-  it("bolds the figure the ADAPTER chose, and puts no element around the plain text", () => {
-    // `.ans__lead b` is a real rule in the ported sheet, and which figure
-    // carries the emphasis is a judgement the adapter makes.
+  it("presses a week bar and moves the range to that week", () => {
     const { container } = render(<CounterPnlClient {...base} sections={sections} />)
-    const lead = container.querySelector(".ans__lead") as HTMLElement
-    expect(Array.from(lead.querySelectorAll("b")).map((b) => b.textContent)).toEqual([
-      "You kept $3,247",
-      "12.5%",
-    ])
-    // Two bold runs and nothing else: the plain segments are text nodes.
-    expect(lead.children).toHaveLength(2)
-  })
-
-  /**
-   * The one assertion this page cannot ship without.
-   *
-   * A statement that does not add up is worse than no statement, because it is
-   * a picture of arithmetic and the reader will trust it over their own.
-   * `Cascade` computes the end from the cuts, so this holds by construction —
-   * which is exactly why it is asserted on the RENDERED DOM rather than on the
-   * inputs: the thing being checked is what the reader can see.
-   */
-  it("prints a cascade that reconciles — start, minus every subtraction, is the bottom line", () => {
-    const { container } = render(<CounterPnlClient {...base} sections={sections} />)
-    const figures = cascadeFigures(container)
-    expect(figures).toHaveLength(7)
-    const start = figures[0]
-    const cuts = figures.slice(1, -1)
-    const end = figures[figures.length - 1]
-    expect(start - cuts.reduce((t, c) => t + Math.abs(c), 0)).toBe(end)
-    // And the bottom line it reaches is the one the strip above it prints.
-    expect(container.querySelector(".strip .v")!.textContent).toBe(`$${end.toLocaleString("en-US")}`)
-  })
-
-  it("paints exactly one cut red — the one line that beat a published target", () => {
-    const { container } = render(<CounterPnlClient {...base} sections={sections} />)
-    expect(container.querySelectorAll(".wf__cut.is-over")).toHaveLength(1)
-    expect(container.querySelectorAll(".wf__cut")).toHaveLength(5)
-  })
-
-  it("presses a week and moves the DATE CONTROL — not just the figures", () => {
-    // `writeCounterParams({ range })` writes `?from=…&to=…`, which
-    // `readCounterParams` reads back as a custom range and the control names.
-    // This machinery was built two plans ago and this is its first caller.
-    const { container } = render(<CounterPnlClient {...base} sections={sections} />)
-    const rows = container.querySelectorAll(".wkt tbody tr")
-    expect(rows).toHaveLength(8)
-    fireEvent.click(rows[2])
+    const bars = container.querySelectorAll(".pl-wk button")
+    expect(bars).toHaveLength(8)
+    expect(bars[7].querySelector(".pl-bar")?.className).toContain("is-part")
+    fireEvent.click(bars[2])
     const w = WEEKS[2]
     const iso = (d: Date) =>
       `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`
-    expect(push).toHaveBeenCalledWith(
-      `/dashboard/pnl?from=${iso(w.start)}&to=${iso(w.end)}`,
-      { scroll: false },
-    )
+    expect(push).toHaveBeenCalledWith(`/dashboard/pnl?from=${iso(w.start)}&to=${iso(w.end)}`, { scroll: false })
   })
 
-  it("marks the week the page is currently reading, and only that one", () => {
+  it("marks the week the page is reading, and only that one", () => {
     const w = WEEKS[3]
     const iso = (d: Date) =>
       `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`
     const { container } = render(
-      <CounterPnlClient
-        {...base}
-        params={`from=${iso(w.start)}&to=${iso(w.end)}`}
-        sections={sections}
-      />,
+      <CounterPnlClient {...base} params={`from=${iso(w.start)}&to=${iso(w.end)}`} sections={sections} />,
     )
-    const here = container.querySelectorAll(".wkt tbody tr.is-here")
-    expect(here).toHaveLength(1)
-    expect(here[0].getAttribute("aria-current")).toBe("true")
+    const on = container.querySelectorAll('.pl-wk button[aria-pressed="true"]')
+    expect(on).toHaveLength(1)
+    expect(on[0]).toBe(container.querySelectorAll(".pl-wk button")[3])
   })
 
-  it("heads the statement's comparison column with the comparison, and calls out only the loud lines", () => {
+  it("opens a day into its lines and its stores, marking an incomplete one 'at most'", () => {
+    const { container } = render(<CounterPnlClient {...base} sections={sections} />)
+    const days = container.querySelectorAll("button.pl-day")
+    expect(days).toHaveLength(2)
+    expect(days[1].textContent).toContain("Glendale labor missing · kept is at most")
+    expect(days[1].textContent).toContain("≤ $2,364")
+    expect(container.querySelector(".pl-detail")).toBeNull()
+    fireEvent.click(days[1])
+    const detail = container.querySelector(".pl-detail") as HTMLElement
+    expect(within(detail).getByText("Kept (at most)")).toBeTruthy()
+    expect(within(detail).getByText("no labor this day")).toBeTruthy()
+    fireEvent.click(days[1])
+    expect(container.querySelector(".pl-detail")).toBeNull()
+  })
+
+  it("presses a store card and scopes the page to it", () => {
+    const { container } = render(<CounterPnlClient {...base} sections={sections} />)
+    const cards = container.querySelectorAll("button.pl-store")
+    expect(cards).toHaveLength(2)
+    expect(cards[1].textContent).toContain("2 days of labor missing")
+    fireEvent.click(cards[0])
+    expect(push).toHaveBeenCalledWith("/dashboard/pnl?store=hollywood", { scroll: false })
+  })
+
+  it("heads the full statement's comparison column with the comparison, and calls out only the loud lines", () => {
     const { container } = render(<CounterPnlClient {...base} sections={sections} />)
     const table = container.querySelectorAll("table.tbl")[0] as HTMLElement
     expect(Array.from(table.querySelectorAll("thead th")).map((th) => th.textContent)).toEqual([
       "Line", "This range", "% of sales", "the prior period", "Change", "Worth",
     ])
     expect(table.querySelectorAll("tbody tr")).toHaveLength(9)
-    // One of nine. A change column that flags everything flags nothing.
     const hot = table.querySelectorAll("td.hot")
     expect(hot).toHaveLength(1)
     expect(hot[0].textContent).toBe("▲ 1.3 pts")
-    // And the page states the rule the paint follows.
-    expect(
-      screen.getByText(/one point on food, two on labor, three on prime/),
-    ).toBeTruthy()
-  })
-
-  it("says 'no comparison' in the column head rather than leaving it blank", () => {
-    const { container } = render(
-      <CounterPnlClient
-        {...base}
-        params="cmp=none"
-        sections={{
-          ...sections,
-          statement: ready({
-            ...(sections.statement as { status: "ready"; data: { lines: unknown[] } }).data,
-            comparisonLabel: null,
-          } as never),
-        }}
-      />,
-    )
-    const table = container.querySelectorAll("table.tbl")[0] as HTMLElement
-    expect(table.querySelectorAll("thead th")[3].textContent).toBe("no comparison")
   })
 
   it("gives every statement row that has a destination one this app actually serves", () => {
@@ -355,112 +268,23 @@ describe("Counter P&L", () => {
     expect(push).toHaveBeenCalledWith("/dashboard/analytics")
   })
 
-  it("heads the by-store money column GROSS, because that is the figure in it", () => {
-    // `PnlStoreLine.grossSales` IS `StoreStatement.grossSales`. The prototype's
-    // column says "Net" while its own statement heads the identical value
-    // "Gross sales" (`pnl().gross = R.netTotal()`); this table sits under the
-    // statement and follows its word.
-    const { container } = render(<CounterPnlClient {...base} sections={sections} />)
-    const table = container.querySelectorAll("table.tbl")[1] as HTMLElement
-    expect(Array.from(table.querySelectorAll("thead th")).map((th) => th.textContent)).toEqual([
-      "Store", "Gross", "Prime", "Fixed on file", "Stage",
-    ])
-    const rows = table.querySelectorAll("tbody tr")
-    expect(within(rows[0] as HTMLElement).getByText("$25,879")).toBeTruthy()
-  })
-
-  it("says a store's rent is not on file, rather than printing a zero for it", () => {
-    const { container } = render(<CounterPnlClient {...base} sections={sections} />)
-    const table = container.querySelectorAll("table.tbl")[1] as HTMLElement
-    const glendale = table.querySelectorAll("tbody tr")[1] as HTMLElement
-    const cell = within(glendale).getByText("not on file")
-    expect(cell.className).toContain("text-ct-warn")
-    // And the callout says what the missing field costs the reader.
-    expect(screen.getByText(/would make the group look more profitable than it is/)).toBeTruthy()
-  })
-
-  /**
-   * The sheet's `is-hole` pair — `tr.is-hole td{background:var(--bad-wash)}`
-   * and `tr.is-hole .hole{font-style:italic;color:var(--bad)}` — was tried
-   * here and is the wrong element. It is what a document line that is WRONG
-   * looks like: two whole rows washed red on a P&L. A pre-open store with no
-   * rent yet is not wrong, it is early, and the Stage column beside it says
-   * so. The prototype paints ONE cell `var(--warn)` and leaves the row alone.
-   */
-  it("does not paint a pre-open store's row as a document that is wrong", () => {
-    const { container } = render(<CounterPnlClient {...base} sections={sections} />)
-    const table = container.querySelectorAll("table.tbl")[1] as HTMLElement
-    expect(table.querySelectorAll("tr.is-hole")).toHaveLength(0)
-    expect(table.querySelectorAll("td.hole")).toHaveLength(0)
-    // The stage is what says why the cell is empty.
-    expect(within(table).getByText("Pre-open").className).toContain("mtag")
-  })
-
-  it("derives the by-store sentence from the ROWS, not from one account", () => {
-    const { container } = render(<CounterPnlClient {...base} sections={sections} />)
-    expect(container.textContent).toContain(
-      "Every line above is Hollywood, because it is the only store with sales in this range",
+  it("carries each section's own state — the plain reading failing does not blank the statement", () => {
+    const { container } = render(
+      <CounterPnlClient {...base} sections={{ ...sections, plain: failed("the rollup timed out", "retryStatement") }} />,
     )
-    const { container: two } = render(
-      <CounterPnlClient
-        {...base}
-        sections={{
-          ...sections,
-          byStore: ready([
-            { id: "a", name: "Hollywood", stage: "trading", grossSales: 1, primePct: 50, fixedOnFile: 1, rentOnFile: true },
-            { id: "b", name: "Glendale", stage: "trading", grossSales: 2, primePct: 50, fixedOnFile: 1, rentOnFile: true },
-          ]),
-        }}
-      />,
-    )
-    expect(two.textContent).toContain(
-      "Every line above is Hollywood and Glendale, because they are the only stores with sales in this range",
-    )
-    // With every rent on file, nothing is held out — and the callout says so
-    // rather than disappearing and leaving the reader to infer it.
-    expect(two.textContent).toContain("Every store carries a rent line")
+    expect(container.querySelector(".pl-big")).toBeNull()
+    expect(screen.getAllByRole("alert").length).toBeGreaterThan(0)
+    expect(container.querySelectorAll("table.tbl")).toHaveLength(1)
   })
 
-  it("names the two owed sections instead of drawing half an answer as a whole one", () => {
-    const { container } = render(<CounterPnlClient {...base} sections={sections} />)
-    const split = main(container).querySelector(".split") as HTMLElement
-    expect(split.querySelectorAll(".sec")).toHaveLength(2)
-    expect(within(split).getByText(/a cause-attribution model/)).toBeTruthy()
-    expect(within(split).getByText(/a per-line provenance model/)).toBeTruthy()
-    // Not a `.gap` bar whose only segment would be the derived residual.
-    expect(container.querySelector(".gap")).toBeNull()
-  })
-
-  it("carries each section's own state — the weeks failing does not blank the statement", () => {
+  it("renders the empty reason rather than a page of zeroes", () => {
     const { container } = render(
       <CounterPnlClient
         {...base}
-        sections={{ ...sections, weeks: failed("the weekly rollups timed out", "retryWeeks") }}
+        sections={{ ...sections, plain: empty("pre_open"), statement: empty("pre_open") }}
       />,
     )
-    expect(container.querySelector(".wkt")).toBeNull()
-    expect(screen.getByRole("alert")).toBeTruthy()
-    expect(container.querySelectorAll("table.tbl")).toHaveLength(2)
-  })
-
-  it("renders the empty reason rather than a cascade of zeroes", () => {
-    const { container } = render(
-      <CounterPnlClient
-        {...base}
-        sections={{
-          ...sections,
-          headline: empty("pre_open"),
-          cascade: empty("pre_open"),
-          weeks: empty("pre_open"),
-          statement: empty("pre_open"),
-        }}
-      />,
-    )
-    expect(container.querySelector(".wf")).toBeNull()
-    expect(container.querySelector(".strip")).toBeNull()
+    expect(container.querySelector(".pl-big")).toBeNull()
     expect(container.querySelectorAll(".empty").length).toBeGreaterThan(0)
-    // The by-store table still answers, because it is the section that says
-    // WHICH stores exist — the question a pre-open account most needs answered.
-    expect(container.querySelector("table.tbl")).toBeTruthy()
   })
 })

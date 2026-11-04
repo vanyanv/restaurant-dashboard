@@ -207,6 +207,35 @@ export function laborInWindow(
 }
 
 /**
+ * Per period, the days this store SOLD on and has no labor reading for — the
+ * days its labor line counts as nothing. A day nobody sold on is not a gap.
+ *
+ * `soldDays` holds `YYYY-MM-DD` keys. Periods are bounded by their UTC
+ * calendar days, as `laborByPeriods` bounds them. A store with a fixed monthly
+ * labor budget on file has its uncovered days filled from that budget, so the
+ * caller passes `fixedLaborOnFile` and gets zeros: those days are estimated,
+ * not missing.
+ */
+export function soldDaysWithoutLabor(
+  store: StoreLaborCost | undefined,
+  soldDays: ReadonlySet<string>,
+  periods: Array<{ startDate: Date; endDate: Date }>,
+  fixedLaborOnFile = false,
+): number[] {
+  return periods.map((p) => {
+    if (fixedLaborOnFile) return 0
+    const start = p.startDate.toISOString().slice(0, 10)
+    const end = p.endDate.toISOString().slice(0, 10)
+    let n = 0
+    for (const day of soldDays) {
+      if (day < start || day > end) continue
+      if (!store || !store.byDay[day]) n += 1
+    }
+    return n
+  })
+}
+
+/**
  * "A fixed monthly labor budget is on file." `0` is how the store file saves
  * a budget nobody entered, so it reads as not set, same as `null`.
  */

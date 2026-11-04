@@ -34,6 +34,7 @@ import { ready, failed } from "@/lib/counter/section-data"
 import { trailingWeeks, serializeWeekWindow } from "@/lib/counter/date-range"
 import { PRIME_CEILING_PCT } from "@/lib/counter/prime-cost"
 import type { PnlSections } from "@/lib/counter/adapters/pnl"
+import { plainFixture } from "./fixtures/pnl-plain"
 
 const TODAY = new Date("2026-08-25T00:00:00-07:00") // Tuesday in Los Angeles
 const WEEKS = trailingWeeks(TODAY, 8)
@@ -113,6 +114,7 @@ const sections: PnlSections = {
   byStore: ready([
     { id: "holly", name: "Hollywood", stage: "trading", grossSales: 25_879, primePct: 56.2, fixedOnFile: 2_100, rentOnFile: true },
   ]),
+  plain: ready(plainFixture(WEEKS, ["holly", "gln"])),
   trust: { status: "not_computed", owed: "a per-line provenance model" },
   foodCause: { status: "not_computed", owed: "a cause-attribution model" },
 }
@@ -169,33 +171,19 @@ describe("Counter P&L — the phone", () => {
     expect([...root.children].map((c) => c.className)).toEqual(["mtop", "mscroll"])
   })
 
-  it("composes the page in `P.pnl.phone()`'s order", () => {
-    // mstrip → cascade section → week section → statement section, and NOT the
-    // desk's `.strip`, `.sp`, `.wkt` or `.tbl`.
+  it("composes the page: kept, Needs you, the dollar, day by day, by store, then the full statement", () => {
     const { container } = renderPhone()
-    expect(landmarkSequence(scroll(container))).toEqual([
-      "mstrip",
-      "blt",
-      "band",
-      "sec",
-      "sec__head",
-      "sec__body",
-      "wf",
-      "sec",
-      "sec__head",
-      "sec__body",
-      "mlist",
-      "sec",
-      "sec__head",
-      "sec__body",
-      "moneyline",
-      "moneyline",
-      "moneyline",
-      "moneyline",
-      "moneyline",
-      "moneyline",
-      "moneyline",
+    const sc = scroll(container)
+    expect(sc.querySelector(".pl-big")).toBeTruthy()
+    expect(Array.from(sc.querySelectorAll(".sec h3")).map((h) => h.textContent)).toEqual([
+      "Needs you",
+      "Where each dollar went",
+      "Day by day",
+      "By store",
+      "Full statement",
     ])
+    // No desk strip or week table on the phone.
+    expect(sc.querySelector(".strip, .wkt, .mstrip")).toBeNull()
   })
 
   it("heads the page with its NAME and subs it with the window and the day count", () => {
@@ -216,97 +204,38 @@ describe("Counter P&L — the phone", () => {
     expect(container.querySelector(".msub")?.textContent).toBe("Aug 19 – Aug 25 · 7 days")
     expect(
       Array.from(container.querySelectorAll(".sec__head .k")).map((e) => e.textContent),
-    ).toEqual(["Aug 19 – Aug 25", "tap a week", "Aug 19 – Aug 25"])
+    ).toEqual(["2 things", "Aug 19 – Aug 25", "tap a day", "tap one", "Aug 19 – Aug 25"])
   })
 
-  /* ── The strip ─────────────────────────────────────────────────────── */
+  /* ── The plain reading ─────────────────────────────────────────────── */
 
-  it("draws the PHONE's two cells, not the first two of the desk's five", () => {
+  it("leads with what was kept and marks it 'at most' when labor is missing", () => {
     const { container } = renderPhone()
-    const strip = container.querySelector(".mstrip") as HTMLElement
-    expect(Array.from(strip.querySelectorAll(".k")).map((e) => e.textContent)).toEqual([
-      "Bottom line",
-      "Prime cost",
-    ])
-    // The desk's prime cell says "▲ 1.4 pts vs prior"; the phone's says how
-    // much ceiling is left. Reading `cells` instead of `phoneCells` would put
-    // the desk's sentence here and nothing else would notice.
-    expect(strip.textContent).toContain("3.8 pts of room")
-    expect(strip.textContent).not.toContain("vs prior")
+    expect(container.querySelector(".pl-big")?.textContent).toBe("≤ $23,916" + "28.4% of sales")
+    expect(container.querySelector(".pl-atmost")?.textContent).toContain("2 Glendale days of labor missing")
   })
 
-  it("draws no sparkline on the phone, whatever the reference carries", () => {
-    // `mstrip()`'s own decision: the phone takes the mark, not the trajectory.
-    const { container } = renderPhone("", {
-      headline: ready({
-        ...(sections.headline.status === "ready" ? sections.headline.data : ({} as never)),
-        phoneCells: [
-          { label: "Bottom line", value: "$3,247" },
-          {
-            label: "Prime cost",
-            value: "56.2%",
-            reference: { v: 56.2, target: 60, better: "low", series: [55, 56, 57] },
-          },
-        ],
-      }),
-    })
-    expect(container.querySelectorAll(".sp")).toHaveLength(0)
-    expect(container.querySelectorAll(".blt")).toHaveLength(1)
-  })
-
-  /* ── The six weeks ─────────────────────────────────────────────────── */
-
-  it("lists SIX weeks — the most recent six, oldest first", () => {
+  it("makes a week bar move THIS page's range", () => {
     const { container } = renderPhone()
-    const rows = container.querySelectorAll(".mli")
-    expect(rows).toHaveLength(6)
-    // The eight the adapter loads, less the two oldest — so the first row is
-    // WEEKS[2], not WEEKS[0]. Reading the first six instead would put six
-    // stale weeks under a heading that says the last six.
-    const first = WEEKS[2]
-    expect(first.start.toDateString()).toBe("Mon Jul 20 2026")
-    expect(rows[0].querySelector("b")?.textContent).toBe("Jul 20")
+    const bars = container.querySelectorAll(".pl-wk button")
+    expect(bars).toHaveLength(8)
+    fireEvent.click(bars[5])
+    const w = WEEKS[5]
+    const iso = (d: Date) =>
+      `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`
+    expect(push).toHaveBeenCalledWith(`/m/pnl?from=${iso(w.start)}&to=${iso(w.end)}`, { scroll: false })
   })
 
-  it("says how short a part-week is, rather than drawing it as a whole one", () => {
+  it("sends Needs you buttons to the phone's own pages", () => {
     const { container } = renderPhone()
-    const rows = container.querySelectorAll(".mli")
-    const last = WEEKS[WEEKS.length - 1]
-    expect(last.partial, "the fixture's last week must be short for this to mean anything").toBe(true)
-    expect(rows[5].querySelector("b")?.textContent).toBe(
-      `Aug ${last.start.getDate()} · ${last.days}d`,
-    )
+    const links = Array.from(container.querySelectorAll(".pl-todo a")).map((a) => a.getAttribute("href"))
+    expect(links.every((h) => h?.startsWith("/m/"))).toBe(true)
   })
 
-  it("prints each week's own gross, prime, kept and margin", () => {
+  it("opens a day on tap", () => {
     const { container } = renderPhone()
-    const row = container.querySelectorAll(".mli")[0]
-    expect(row.querySelector("div > span")?.textContent).toBe("$21,000 · prime 56.2%")
-    expect(row.querySelector(".rt")?.textContent).toBe("$2,70012.5%")
-  })
-
-  it("calls a week down when its PRIME cost beat the ceiling, not when its margin was small", () => {
-    const { container } = renderPhone()
-    const rows = container.querySelectorAll(".mli")
-    // Every week's margin is 12.5% in the fixture; only WEEK_ROWS[6] is over
-    // the ceiling, and it is the fifth of the six shown.
-    expect(Array.from(rows).map((r) => r.querySelector("em")?.className)).toEqual([
-      "up", "up", "up", "up", "down", "up",
-    ])
-  })
-
-  it("makes a week a LINK to its own window, on this page", () => {
-    const { container } = renderPhone("?cmp=weekday")
-    const row = container.querySelectorAll(".mli")[0] as HTMLAnchorElement
-    expect(row.tagName).toBe("A")
-    const url = new URL(row.getAttribute("href")!, "http://x")
-    expect(url.pathname).toBe("/m/pnl")
-    // The row's OWN window — never a preset, and never the window the page is
-    // already reading. The comparison it was opened with survives.
-    expect(url.searchParams.get("from")).toBe("2026-07-20")
-    expect(url.searchParams.get("to")).toBe("2026-07-26")
-    expect(url.searchParams.get("cmp")).toBe("weekday")
-    expect(url.searchParams.get("range")).toBeNull()
+    fireEvent.click(container.querySelectorAll("button.pl-day")[0])
+    expect(container.querySelector(".pl-detail")).toBeTruthy()
   })
 
   /* ── The statement ─────────────────────────────────────────────────── */
@@ -408,15 +337,12 @@ describe("Counter P&L — the phone", () => {
 
   /* ── One section's failure is not another's ────────────────────────── */
 
-  it("keeps the strip and the statement when the WEEKS fail", () => {
-    // The weeks are their own load. A page that went blank because six rows
-    // could not be drawn would be a worse page than one missing six rows.
+  it("keeps the statement when the plain reading fails", () => {
     const { container } = renderPhone("", {
-      weeks: failed("the weekly rollups are down", "retryWeeks"),
+      plain: failed("the rollup is down", "retryStatement"),
     })
-    expect(container.querySelectorAll(".mstrip")).toHaveLength(1)
+    expect(container.querySelector(".pl-big")).toBeNull()
     expect(container.querySelectorAll(".moneyline")).toHaveLength(7)
-    expect(container.querySelectorAll(".mlist")).toHaveLength(0)
-    expect(container.textContent).toContain("the weekly rollups are down")
+    expect(container.textContent).toContain("the rollup is down")
   })
 })

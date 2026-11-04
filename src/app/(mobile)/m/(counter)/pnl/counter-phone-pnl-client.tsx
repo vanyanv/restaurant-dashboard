@@ -1,24 +1,21 @@
 "use client"
 
 import { useCallback, useMemo } from "react"
+import { useRouter } from "next/navigation"
+import { PlainDays, PlainDollar, PlainHero, PlainStatuses, PlainStores, PlainTodos } from "@/app/dashboard/(counter)/pnl/pnl-plain-ui"
 import {
-  Cascade,
   MList,
-  MStrip,
   MoneyLines,
   Note,
   Section,
   SubNav,
   useCounterTransition,
-  type MListRow,
   type MoneyLine,
-  type WeekRow,
 } from "@/components/counter"
 import { storeViewTabs } from "@/lib/counter/nav"
 import { readCounterParams, writeCounterParams } from "@/lib/counter/url-state"
-import { dayCount, monthDay, rangeLabel, readWeekWindow, type DateRange } from "@/lib/counter/date-range"
+import { dayCount, rangeLabel } from "@/lib/counter/date-range"
 import { money, pct } from "@/lib/counter/format"
-import { PRIME_CEILING_PCT } from "@/lib/counter/prime-cost"
 import type { PnlSections, PnlStatement } from "@/lib/counter/adapters/pnl"
 import type { StoreFixedSections } from "@/lib/counter/adapters/pnl-store"
 import type { SectionSources } from "@/lib/counter/adapters/types"
@@ -103,25 +100,18 @@ export function CounterPhonePnlClient({
    * links below stay plain `<a>` navigations, unrelated to this transition —
    * see the file's own note on why they are links rather than a `push`.)
    */
-  const { pending } = useCounterTransition()
+  const { pending, startTransition } = useCounterTransition()
+  const router = useRouter()
 
-  /**
-   * Where a week row goes. `writeCounterParams({ range })` writes `?from=…&to=…`
-   * — the SAME parameters the date sheet above writes, so pressing a week and
-   * picking that window off the calendar land on one URL.
-   *
-   * An `<a>`, not the prototype's `data-setrange` on a div: `MList` renders a
-   * row with an `href` as a link, which gets middle-click, "open in new tab",
-   * the right role and keyboard activation for free. The prototype has no
-   * router and could not.
-   */
-  const weekHref = useCallback(
-    (range: DateRange) => {
-      const qs = writeCounterParams(params, { range }).toString()
-      return qs ? `/m/pnl?${qs}` : "/m/pnl"
+  /** A week bar or a store card: the same params the date sheet and store picker write. */
+  const go = useCallback(
+    (next: Parameters<typeof writeCounterParams>[1]) => {
+      const qs = writeCounterParams(params, next).toString()
+      startTransition(() => router.push(qs ? `/m/pnl?${qs}` : "/m/pnl", { scroll: false }))
     },
-    [params],
+    [params, router, startTransition],
   )
+
 
   const { range } = counterParams
   /**
@@ -165,23 +155,57 @@ export function CounterPhonePnlClient({
         </p>
       </div>
 
-      {/* Two cells. The reading paragraph beside them on the desk is not on
-          this surface, so the strip is the whole headline here. */}
-      <Section bare title="The figures" data={sections.headline} pending={pending}>
-        {(h) => <MStrip cells={h.phoneCells} />}
+      {/* The page "made plain", the same blocks and words as the desk
+          (`pnl-plain-ui.tsx`); the phone layout is `counter-pnl.css`. A week
+          bar or a store card navigates to the same `?from=…&to=…` / `?store=`
+          the date sheet and the store picker write. */}
+      <Section bare title="What you kept" data={sections.plain} pending={pending}>
+        {(p) => (
+          <>
+            <PlainHero p={p} range={range} onWeek={(next) => go({ range: next })} />
+            <PlainStatuses p={p} />
+          </>
+        )}
       </Section>
 
-      <Section title="Where it went" meta={windowLabel} data={sections.cascade} pending={pending}>
-        {(c) => <Cascade lead={c.lead} start={c.start} cuts={c.cuts} end={c.end} />}
+      <Section
+        title="Needs you"
+        fold="closed"
+        meta={(p) => (p.todos.length > 0 ? `${p.todos.length} ${p.todos.length === 1 ? "thing" : "things"}` : "nothing waiting")}
+        data={sections.plain}
+        pending={pending}
+        pad={false}
+      >
+        {(p) => <PlainTodos p={p} />}
       </Section>
 
-      {/* SIX weeks, not the desk's eight, and the most recent six — the
-          prototype's own `weekRows(6)`, oldest first. */}
-      <Section title="Week by week" meta="tap a week" data={sections.weeks} pending={pending}>
-        {(w) => <MList rows={w.rows.slice(-6).map((row) => toWeekRow(row, weekHref))} />}
+      <Section title="Where each dollar went" meta={windowLabel} data={sections.plain} pending={pending}>
+        {(p) => <PlainDollar p={p} />}
       </Section>
 
-      <Section title="The statement" meta={windowLabel} data={sections.statement} pending={pending}>
+      <Section
+        title="Day by day"
+        meta={(p) => (p.days ? "tap a day" : "pick a week")}
+        data={sections.plain}
+        pending={pending}
+        pad={false}
+      >
+        {(p) =>
+          p.days ? (
+            <PlainDays days={p.days} showStores={counterParams.storeId === null} />
+          ) : (
+            <p className="pl-nodays">This range is longer than a month. Pick a week above to see its days.</p>
+          )
+        }
+      </Section>
+
+      {counterParams.storeId === null ? (
+        <Section title="By store" meta="tap one" data={sections.plain} pending={pending}>
+          {(p) => <PlainStores p={p} onStore={(id) => go({ storeId: id })} />}
+        </Section>
+      ) : null}
+
+      <Section title="Full statement" fold="closed" meta={windowLabel} data={sections.statement} pending={pending}>
         {(s) => (
           <>
             <MoneyLines rows={statementRows(s)} />
@@ -228,32 +252,6 @@ export function CounterPhonePnlClient({
   )
 }
 
-/**
- * One week as one `.mli`.
- *
- * `[wkLabel + partial, gross · prime, bottom, margin, up|down]` — the
- * prototype's own five slots. The row PROMISES that its figures are the
- * figures the page will show when it is pressed, which holds because the
- * week's load and the pressed range use the same bounds and the same cache
- * entry (see the adapter's note on the eight windows).
- */
-function toWeekRow(row: WeekRow, href: (range: DateRange) => string): MListRow {
-  const w = readWeekWindow(row.window)
-  return {
-    key: w.start.toISOString(),
-    title: `${monthDay(w.start)}${w.partial ? ` · ${w.days}d` : ""}`,
-    detail: `${money(row.grossSales)} · prime ${pct(row.primePct, { scaled: true })}`,
-    value: money(row.bottomLine),
-    note: pct(row.marginPct, { scaled: true }),
-    // The prototype's own rule: a week is `down` when its PRIME cost beat the
-    // ceiling, not when its margin was small. `PRIME_CEILING_PCT` is the
-    // trade's published benchmark that `prime-cost.ts` owns — the same
-    // constant the desk's `WeekTable` reads, so one week cannot be over the
-    // ceiling on one surface and under it on the other.
-    noteTone: row.primePct !== null && row.primePct > PRIME_CEILING_PCT ? "down" : "up",
-    href: href({ start: w.start, end: w.end }),
-  }
-}
 
 /**
  * The lines the phone's statement prints, and what it calls each of them.

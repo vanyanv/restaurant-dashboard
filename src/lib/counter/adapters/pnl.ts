@@ -22,6 +22,9 @@ import { PRIME_CEILING_PCT } from "@/lib/counter/prime-cost"
 import { LABOR_CODE } from "@/lib/pnl"
 import { count, delta, money, pct, plural, points } from "@/lib/counter/format"
 import {
+  comparisonWindows,
+  dayCount,
+  rangeLabel,
   serializeWeekWindow,
   trailingWeeks,
   type ComparisonId,
@@ -45,6 +48,7 @@ import {
   type SectionData,
 } from "@/lib/counter/section-data"
 import type { Reference } from "@/lib/counter/bullet-state"
+import { buildPlain, PLAIN_MAX_DAYS, type PnlPlain } from "@/lib/counter/pnl-plain"
 import type {
   CascadeCut,
   CascadeEnd,
@@ -298,6 +302,11 @@ export interface PnlSectionsInput {
 }
 
 export interface PnlSections {
+  /**
+   * The page "made plain" (`pnl-plain.ts`): the kept figure, the prior period,
+   * the eight weeks as a picker, the gaps in words, and every day of the range.
+   */
+  plain: SectionData<PnlPlain>
   /** The strip, and the reading under it. */
   headline: SectionData<PnlHeadline>
   /** Note 52: a statement is a sequence of subtractions, so it is drawn as one. */
@@ -1236,6 +1245,34 @@ export function getPnlSectionPromises(input: PnlSectionsInput): StreamedSections
     retryAction: "retryOrders",
   })
 
+  /*
+   * The prior period of the same length, whatever comparison the date control
+   * is set to: the big number always says how it moved from the period
+   * before. With the control on "Prior period" that IS the comparison load,
+   * so it is reused rather than asked for twice.
+   */
+  const priorWindow = comparisonWindows(range, "prev")?.[0] ?? null
+  const priorP: Promise<SectionData<Statement | null>> =
+    comparisonId === "prev"
+      ? cmpP
+      : classify<Statement | null>(
+          () =>
+            priorWindow === null
+              ? Promise.resolve(null)
+              : loadStatement({ range: priorWindow, storeId, granularity }),
+          { retryAction: "retryComparison" },
+        )
+
+  /*
+   * Every day of the range, for "Day by day". A range of up to a month is
+   * already read DAILY (`bucketFor`), so the statement's own periods are its
+   * days and no second load is needed; past that the page asks for a week.
+   */
+  const dailyP: Promise<SectionData<Statement | null>> =
+    granularity === "daily" && dayCount(range) <= PLAIN_MAX_DAYS
+      ? stmtP
+      : Promise.resolve(ready<Statement | null>(null))
+
   /* ── The derivations, each over only the loads it reads. ── */
 
   // ONE decision about what this page is looking at, applied to every section
@@ -1258,6 +1295,25 @@ export function getPnlSectionPromises(input: PnlSectionsInput): StreamedSections
   })
 
   return {
+    plain: guardSection(
+      Promise.all([scopeP, priorP, weeksP, dailyP, filesP]).then(
+        ([scopeSd, priorSd, weeksSd, dailySd, filesSd]) =>
+          mapReady(scopeSd, (statement) =>
+            buildPlain({
+              statement,
+              prior: dataOf(priorSd) ?? null,
+              priorLabel: priorWindow ? rangeLabel(priorWindow, "custom") : null,
+              weekWindows: windows,
+              weeks: dataOf(weeksSd) ?? null,
+              daily: dataOf(dailySd) ?? null,
+              files: dataOf(filesSd) ?? [],
+              storeId,
+            }),
+          ),
+      ),
+      "retryStatement",
+    ),
+
     headline: guardSection(
       Promise.all([scopeP, cmpCtxP, targetsP, weeksP]).then(
         ([scopeSd, cmp, targetsSd, weeksSd]) => {
