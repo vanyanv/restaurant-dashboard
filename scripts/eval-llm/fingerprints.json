@@ -32,13 +32,15 @@
     "floor": 0.75
   },
   "chat-tool-choice": {
-    "sha256": "9f7b545c0ef5ed0d",
-    "model": "gpt-5-mini",
+    "sha256": "3afc2d50bcaa1569",
+    "model": "gpt-4.1",
     "evaluatedAt": "2026-11-03",
     "cases": 22,
-    "passed": 22,
-    "passRate": 1,
-    "costUsd": 0.03084,
-    "floor": 0.75
+    "passed": 0,
+    "passRate": 0,
+    "costUsd": 0,
+    "floor": 0.75,
+    "pendingReEval": true,
+    "pendingReason": "The Quick chat model moved from gpt-5-mini (low effort) to gpt-4.1 on 2026-11-04 (PR #163); Careful stays on gpt-5-mini. The prompt is unchanged, but the model the eval grades is not. The live eval needs an OPENAI_API_KEY and was not run from the session. Numbers are zeroed rather than carried over: the 22/22 graded gpt-5-mini. Run `npm run eval:llm -- --feature chat-tool-choice --record`."
   }
 }
