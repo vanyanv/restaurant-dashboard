@@ -12,9 +12,11 @@ import { render, screen, fireEvent } from "@testing-library/react"
 import { readFileSync } from "node:fs"
 import { join } from "node:path"
 import { MDateSheet } from "@/components/counter/shell/m-date-sheet"
-import { COMPARISONS, PRESETS, comparisonRange } from "@/lib/counter/date-range"
+import { COMPARISONS, MENU_PRESETS, comparisonRange } from "@/lib/counter/date-range"
 
-const SHEET = readFileSync(join(process.cwd(), "src/styles/counter-components.css"), "utf8")
+const SHEET = ["counter-components.css", "counter-repairs.css"]
+  .map((f) => readFileSync(join(process.cwd(), "src/styles", f), "utf8"))
+  .join("\n")
 
 const WEEK = { start: new Date(2026, 7, 15), end: new Date(2026, 7, 21) }
 const DAY = { start: new Date(2026, 7, 21), end: new Date(2026, 7, 21) }
@@ -46,11 +48,17 @@ describe("MDateSheet — the phone's date control", () => {
       "msheet__grab",
       "h4",
       "mpresets",
+      "drweeks",
+      "drmode",
       "drcals",
       "div",
+      "drhint",
       "mbtn mbtn--primary",
     ])
-    for (const rule of [".mdate{", ".msheet{", ".mpresets{", ".drcals{", ".drcmp{", ".mbtn{"]) {
+    for (const rule of [
+      ".mdate{", ".msheet{", ".mpresets{", ".drcals{", ".drcmp{", ".mbtn{",
+      ".mdatebar{", ".mstep{", ".drweeks{", ".drmode{", ".drhint{",
+    ]) {
       expect(SHEET, `${rule} has no rule`).toContain(rule)
     }
   })
@@ -69,11 +77,11 @@ describe("MDateSheet — the phone's date control", () => {
     const { container, onPreset } = renderSheet()
     fireEvent.click(container.querySelector(".mdate")!)
     const buttons = [...container.querySelectorAll(".mpresets button")]
-    expect(buttons).toHaveLength(PRESETS.length)
+    expect(buttons).toHaveLength(MENU_PRESETS.length)
     expect(buttons.filter((b) => b.getAttribute("aria-pressed") === "true")).toHaveLength(1)
 
-    fireEvent.click(screen.getByText(PRESETS[0].name))
-    expect(onPreset).toHaveBeenCalledWith(PRESETS[0].id)
+    fireEvent.click(screen.getByText(MENU_PRESETS[0].name))
+    expect(onPreset).toHaveBeenCalledWith(MENU_PRESETS[0].id)
     // The prototype leaves the sheet open on a preset — only [data-mclose]
     // closes it — so a reader can set the window and then the comparison.
     expect(container.querySelector(".msheet")!.className).toBe("msheet on")
@@ -108,9 +116,21 @@ describe("MDateSheet — the phone's date control", () => {
     expect(container.querySelector(".msheet")!.className).toBe("msheet on")
   })
 
-  it("two calendar taps make a range, and one on its own does not", () => {
+  it("one calendar tap picks that day and closes the sheet", () => {
     const { container, onRange } = renderSheet()
     fireEvent.click(container.querySelector(".mdate")!)
+    const days = [...container.querySelectorAll(".drd:not(.out)")]
+    fireEvent.click(days[9])
+    expect(onRange).toHaveBeenCalledTimes(1)
+    const [r] = onRange.mock.calls[0]
+    expect([r.start.getDate(), r.end.getDate()]).toEqual([10, 10])
+    expect(container.querySelector(".msheet")!.className).toBe("msheet")
+  })
+
+  it("in range mode, two calendar taps make a range, and one on its own does not", () => {
+    const { container, onRange } = renderSheet()
+    fireEvent.click(container.querySelector(".mdate")!)
+    fireEvent.click(screen.getByRole("button", { name: "A range" }))
     const days = [...container.querySelectorAll(".drd:not(.out)")]
     fireEvent.click(days[9])
     expect(onRange).not.toHaveBeenCalled()
@@ -124,7 +144,7 @@ describe("MDateSheet — the phone's date control", () => {
     const { container, onPreset, onComparison, onRange } = renderSheet()
     fireEvent.click(container.querySelector(".mdate")!)
     const apply = container.querySelector(".mbtn--primary")!
-    expect(apply.textContent).toBe("Show 7 days")
+    expect(apply.textContent).toBe("Show Last 7 days")
     fireEvent.click(apply)
     expect(container.querySelector(".msheet")!.className).toBe("msheet")
     // Every choice already applied when it was made; this cannot apply a
@@ -134,10 +154,18 @@ describe("MDateSheet — the phone's date control", () => {
     expect(onRange).not.toHaveBeenCalled()
   })
 
-  it("says 'day' for a one-day range", () => {
-    const { container } = renderSheet({ range: DAY, presetId: "yesterday" })
+  it("names a stepped single day by its weekday", () => {
+    const { container } = renderSheet({ range: DAY, presetId: "custom" })
     fireEvent.click(container.querySelector(".mdate")!)
-    expect(container.querySelector(".mbtn--primary")!.textContent).toBe("Show 1 day")
+    expect(container.querySelector(".mbtn--primary")!.textContent).toBe("Show Friday")
+  })
+
+  it("has ‹ › arrows beside the chip that step through onRange", () => {
+    const { container, onRange } = renderSheet({ range: DAY, presetId: "custom" })
+    fireEvent.click(screen.getByRole("button", { name: /^Earlier/ }))
+    const [r] = onRange.mock.calls[0]
+    expect([r.start.getDate(), r.end.getDate()]).toEqual([20, 20])
+    expect(container.querySelectorAll(".mdatebar .mstep")).toHaveLength(2)
   })
 
   it("the shade and Escape both close it without choosing anything", () => {
@@ -152,10 +180,9 @@ describe("MDateSheet — the phone's date control", () => {
     expect(onRange).not.toHaveBeenCalled()
   })
 
-  it("carries no stepper and no Today button — those are the DESK bar's", () => {
-    // `.dr__step` / `.dr__next` / `.dr__today` belong to `bar()`. The phone gets
-    // a chip and a sheet, and copying the desk's control here would be the
-    // `.strip`-on-a-phone mistake in a different place.
+  it("carries none of the DESK bar's classes", () => {
+    // The phone has its own round `.mstep` arrows; `.dr__step` / `.dr__today`
+    // belong to the desk bar and its stylesheet.
     const { container } = renderSheet()
     fireEvent.click(container.querySelector(".mdate")!)
     expect(container.querySelector(".dr")).toBeNull()

@@ -18,7 +18,6 @@ import {
 } from "@/components/counter"
 import { ingredientPhoto } from "@/lib/counter/ingredient-photos"
 import { readCounterParams, writeCounterParams } from "@/lib/counter/url-state"
-import { stepRange } from "@/lib/counter/date-range"
 import type { SectionSources } from "@/lib/counter/adapters/types"
 import type { IngredientCost, IngredientSections } from "@/lib/counter/adapters/ingredient"
 import { saveIngredientCost } from "@/lib/counter/actions/ingredient"
@@ -254,7 +253,6 @@ export function CounterIngredientClient({
           range={range}
           onPreset={(id) => push({ presetId: id })}
           onComparison={(id) => push({ comparisonId: id })}
-          onStep={(direction) => push({ range: stepRange(range, direction) })}
           onRange={(next) => push({ range: next })}
         />
       </PageHead>

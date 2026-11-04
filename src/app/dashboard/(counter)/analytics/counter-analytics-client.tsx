@@ -20,7 +20,7 @@ import {
 import { storeViewTabs } from "@/lib/counter/nav"
 import { readCounterParams, writeCounterParams } from "@/lib/counter/url-state"
 import { count, money, pct, plural } from "@/lib/counter/format"
-import { dayCount, rangeSubtitle, stepRange, rangeLabel } from "@/lib/counter/date-range"
+import { dayCount, rangeSubtitle, rangeLabel } from "@/lib/counter/date-range"
 import type { SectionSources } from "@/lib/counter/adapters/types"
 import type { AnalyticsSections, MixDrill } from "@/lib/counter/adapters/analytics"
 
@@ -178,7 +178,6 @@ export function CounterAnalyticsClient({
           range={range}
           onPreset={(id) => push({ presetId: id })}
           onComparison={(id) => push({ comparisonId: id })}
-          onStep={(direction) => push({ range: stepRange(range, direction) })}
           onRange={(next) => push({ range: next })}
         />
       </PageHead>

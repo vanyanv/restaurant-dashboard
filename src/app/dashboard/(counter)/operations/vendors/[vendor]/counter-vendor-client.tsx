@@ -16,7 +16,6 @@ import {
   type SwitchableStore,
 } from "@/components/counter"
 import { readCounterParams, writeCounterParams } from "@/lib/counter/url-state"
-import { stepRange } from "@/lib/counter/date-range"
 import type { SectionSources } from "@/lib/counter/adapters/types"
 import type { VendorSections } from "@/lib/counter/adapters/vendor"
 
@@ -98,7 +97,6 @@ export function CounterVendorClient({
           range={range}
           onPreset={(id) => push({ presetId: id })}
           onComparison={(id) => push({ comparisonId: id })}
-          onStep={(direction) => push({ range: stepRange(range, direction) })}
           onRange={(next) => push({ range: next })}
         />
       </PageHead>

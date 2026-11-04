@@ -20,7 +20,6 @@ import {
 } from "@/components/counter"
 import { readCounterParams, writeCounterParams } from "@/lib/counter/url-state"
 import { dataOf } from "@/lib/counter/section-data"
-import { stepRange } from "@/lib/counter/date-range"
 import type { SectionSources } from "@/lib/counter/adapters/types"
 import { mapItemToRecipe } from "@/lib/counter/actions/menu-item"
 import type { ItemBehind, MenuItemSections } from "@/lib/counter/adapters/menu-item"
@@ -213,7 +212,6 @@ export function CounterMenuItemClient({
           range={range}
           onPreset={(id) => push({ presetId: id })}
           onComparison={(id) => push({ comparisonId: id })}
-          onStep={(direction) => push({ range: stepRange(range, direction) })}
           onRange={(next) => push({ range: next })}
         />
       </PageHead>

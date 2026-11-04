@@ -21,7 +21,7 @@ import {
 import { storeViewTabs } from "@/lib/counter/nav"
 import { readCounterParams, writeCounterParams } from "@/lib/counter/url-state"
 import { money, pct } from "@/lib/counter/format"
-import { rangeSubtitle, rangeLabel, stepRange } from "@/lib/counter/date-range"
+import { rangeSubtitle, rangeLabel } from "@/lib/counter/date-range"
 import type { SectionSources } from "@/lib/counter/adapters/types"
 import type {
   CategoryTable,
@@ -259,7 +259,6 @@ export function CounterStoreAnalyticsClient({
           range={range}
           onPreset={(id) => push({ presetId: id })}
           onComparison={(id) => push({ comparisonId: id })}
-          onStep={(direction) => push({ range: stepRange(range, direction) })}
           onRange={(next) => push({ range: next })}
         />
       </PageHead>

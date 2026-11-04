@@ -6,7 +6,7 @@ import Link from "next/link"
 import { Calendar, Store as StoreGlyph } from "lucide-react"
 import { askHref, describeAskContext, type AskContext } from "@/lib/counter/ask-context"
 import { visibleNavGroups } from "@/lib/counter/nav-access"
-import { PRESETS, type PresetId, type RangeId } from "@/lib/counter/date-range"
+import { MENU_PRESETS, type PresetId, type RangeId } from "@/lib/counter/date-range"
 import { NAV_ICONS } from "@/components/counter/shell/nav-icons"
 import { AskGlyph } from "@/components/counter/surface/ask-glyph"
 import { AskAnswerPane } from "@/components/counter/ask/ask-answer"
@@ -107,7 +107,7 @@ import type { SwitchableStore } from "@/components/counter/shell/store-switcher"
  * because `/dashboard/admin/**` refuses anyone who is not one and a row that
  * only ever reaches `/dashboard/forbidden` is worse than an absent one. "Switch
  * store" is the same `stores` array the rail's switcher gets. "Change the
- * range" is `PRESETS` from `date-range.ts`, the same twelve `DateControl`
+ * range" is `MENU_PRESETS` from `date-range.ts`, the same list `DateControl`
  * offers. A palette that lists a page the rail does not is worse than one that
  * lists nothing, so none of these is written out here.
  *
@@ -471,7 +471,7 @@ export function AskSurface({
     if (onSelectPreset) {
       out.push({
         caption: "Change the range",
-        rows: PRESETS.map((p) => ({
+        rows: MENU_PRESETS.map((p) => ({
           key: `range:${p.id}`,
           dataT: p.name.toLowerCase(),
           icon: <Calendar aria-hidden="true" />,

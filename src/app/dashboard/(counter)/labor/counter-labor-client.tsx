@@ -27,7 +27,7 @@ import {
 import { storeViewTabs } from "@/lib/counter/nav"
 import { readCounterParams, writeCounterParams } from "@/lib/counter/url-state"
 import { pct } from "@/lib/counter/format"
-import { rangeLabel, stepRange } from "@/lib/counter/date-range"
+import { rangeLabel } from "@/lib/counter/date-range"
 import type { SectionSources } from "@/lib/counter/adapters/types"
 import type { LaborSections, LeakRowView, RolesSection, LeaksSection } from "@/lib/counter/adapters/labor"
 import type { QueueEntry } from "@/lib/counter/adapters/overview"
@@ -293,7 +293,6 @@ export function CounterLaborClient({
           range={range}
           onPreset={(id) => push({ presetId: id })}
           onComparison={(id) => push({ comparisonId: id })}
-          onStep={(direction) => push({ range: stepRange(range, direction) })}
           onRange={(next) => push({ range: next })}
         />
       </PageHead>

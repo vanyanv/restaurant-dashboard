@@ -1,6 +1,6 @@
 "use client"
 
-import { addMonths, getDaysInMonth, isSameDay, startOfMonth } from "date-fns"
+import { addDays, addMonths, getDaysInMonth, getISOWeek, isSameDay, startOfMonth } from "date-fns"
 import { isoDay, type DateRange } from "@/lib/counter/date-range"
 
 /**
@@ -82,6 +82,7 @@ export function Calendar({
   today,
   pending,
   onPickDay,
+  onPickWeek,
   onMonthChange,
 }: {
   /** Any date in the month to draw; normalised here. */
@@ -96,6 +97,11 @@ export function Calendar({
   /** The first click of a two-click range pick, before it becomes a range. */
   pending?: Date | null
   onPickDay: (day: Date) => void
+  /**
+   * When given, each row opens with its week number, and pressing it picks
+   * that Monday-to-Sunday week in one tap. Receives the row's Monday.
+   */
+  onPickWeek?: (monday: Date) => void
   onMonthChange: (month: Date) => void
 }) {
   const first = startOfMonth(month)
@@ -127,16 +133,38 @@ export function Calendar({
           <Chevron dir={1} />
         </button>
       </div>
-      <div className="drgrid">
+      <div className={onPickWeek ? "drgrid drgrid--wk" : "drgrid"}>
+        {onPickWeek && (
+          <span className="dw" aria-hidden="true">
+            Wk
+          </span>
+        )}
         {DOW.map((d, i) => (
           <span className="dw" key={i} aria-hidden="true">
             {d}
           </span>
         ))}
-        {Array.from({ length: lead }, (_, i) => (
-          <span className="drd out" key={`lead-${i}`} />
-        ))}
-        {Array.from({ length: days }, (_, i) => {
+        {Array.from({ length: lead + days }, (_, cell) => {
+          const weekButton = onPickWeek && cell % 7 === 0
+            ? (() => {
+              const monday = addDays(first, cell - lead)
+              return (
+                <button
+                  key={`wk-${cell}`}
+                  className="drwk"
+                  type="button"
+                  aria-label={`Pick the week of ${monday.toLocaleDateString("en-US", { month: "long", day: "numeric" })}`}
+                  onClick={() => onPickWeek(monday)}
+                >
+                  {getISOWeek(monday)}
+                </button>
+              )
+            })()
+            : null
+          if (cell < lead) {
+            return [weekButton, <span className="drd out" key={`lead-${cell}`} />]
+          }
+          const i = cell - lead
           const day = new Date(year, monthIndex, i + 1)
           const isPending = pending != null && isSameDay(day, pending)
           const classes = ["drd"]
@@ -147,7 +175,7 @@ export function Calendar({
           if (isSameDay(day, today)) classes.push("today")
           if (compare?.some((w) => within(day, w))) classes.push("cmp")
           return (
-            <button
+            [weekButton, <button
               key={isoDay(day)}
               className={classes.join(" ")}
               type="button"
@@ -163,7 +191,7 @@ export function Calendar({
               onClick={() => onPickDay(day)}
             >
               {i + 1}
-            </button>
+            </button>]
           )
         })}
       </div>
