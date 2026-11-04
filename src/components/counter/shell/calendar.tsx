@@ -1,6 +1,6 @@
 "use client"
 
-import { addDays, addMonths, getDaysInMonth, getISOWeek, isSameDay, startOfMonth } from "date-fns"
+import { addDays, addMonths, getDaysInMonth, isSameDay, startOfMonth } from "date-fns"
 import { isoDay, type DateRange } from "@/lib/counter/date-range"
 
 /**
@@ -68,6 +68,17 @@ function Chevron({ dir }: { dir: -1 | 1 }) {
       <path d={dir === -1 ? "M10 3.5L5.5 8 10 12.5" : "M6 3.5L10.5 8 6 12.5"} />
     </svg>
   )
+}
+
+/**
+ * ISO week number of a Monday: the week belongs to the year its Thursday is
+ * in. Written out rather than taken from date-fns `getISOWeek`, which brings
+ * its ISO-week-year helpers into every phone route's bundle.
+ */
+function isoWeekOfMonday(monday: Date): number {
+  const thursday = new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + 3)
+  const jan1 = new Date(thursday.getFullYear(), 0, 1)
+  return Math.floor(Math.round((thursday.getTime() - jan1.getTime()) / 86_400_000) / 7) + 1
 }
 
 function within(day: Date, r: DateRange | null): boolean {
@@ -159,7 +170,7 @@ export function Calendar({
                   disabled={monday > today}
                   onClick={() => onPickWeek(monday)}
                 >
-                  {getISOWeek(monday)}
+                  {isoWeekOfMonday(monday)}
                 </button>
               )
             })()
