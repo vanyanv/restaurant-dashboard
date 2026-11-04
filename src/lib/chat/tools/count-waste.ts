@@ -65,10 +65,14 @@ export type CountWasteResult = {
         partial: boolean
       }>
     } | null
+    /** Completed counts on file, up to the 12 the report looks back over. */
     completedCounts: number
     /** The waste log, last 7 days, newest first. */
     wasteLastWeek: {
+      /** Priced entries only; see unpricedEntries. */
       dollars: number
+      /** Entries whose ingredient has no cost yet: counted in entries, not in dollars. */
+      unpricedEntries: number
       entries: Array<{ item: string; amount: string; reason: string; when: string; dollars: number | null; note: string | null }>
     } | null
     /** How often each item has been ordered over 8 weeks, top 10 by spend. */
@@ -138,6 +142,7 @@ export const getCountAndWaste: ChatTool<typeof params, CountWasteResult> = {
           wasteLastWeek: w
             ? {
                 dollars: round2(w.weekDollars),
+                unpricedEntries: w.recent.filter((e) => e.dollars === null).length,
                 entries: w.recent.map((e) => ({
                   item: e.name,
                   amount: e.amount,

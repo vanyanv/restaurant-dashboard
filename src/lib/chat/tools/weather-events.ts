@@ -67,11 +67,12 @@ export type WeatherEventsResult = {
     eventsSyncedThrough: string | null
     days: Array<{
       date: string
-      /** Null when there is no weather reading for the day. Store opening hours, 10 am to 10 pm LA, drive highF/lowF/label. */
+      /** Null when there is no weather reading for the day. Hours 10 am to 10 pm LA drive highF/lowF/label; rain and wind are the whole day. */
       weather: {
         highF: number | null
         lowF: number | null
-        rainInches: number
+        /** Whole-day total. Null when no hour has a rain reading. */
+        rainInches: number | null
         maxRainChancePct: number | null
         label: string | null
         windMphMax: number | null
@@ -152,10 +153,11 @@ export const getWeatherAndEvents: ChatTool<typeof params, WeatherEventsResult> =
         eventsSyncedThrough: maxOf(eMax, s.id),
         days: dayKeys.map((day) => {
           const hours = weather.filter((w) => w.storeId === s.id && ymd(w.date) === day)
-          const open = hours.filter((h) => h.hour >= 10 && h.hour <= 22)
+          const open = hours.filter((h) => h.hour >= 10 && h.hour < 22)
           const basis = open.length > 0 ? open : hours
           const temps = basis.map((h) => h.temperatureC).filter((t): t is number => t != null)
           const chances = hours.map((h) => h.precipitationProbabilityPct).filter((p): p is number => p != null)
+          const rains = hours.map((h) => h.precipitationMm).filter((r): r is number => r != null)
           const winds = hours.map((h) => h.windSpeedKph).filter((w): w is number => w != null)
           const worst = basis.reduce<number | null>(
             (acc, h) => (severity(h.weatherCode) > severity(acc) ? h.weatherCode : acc),
@@ -170,7 +172,7 @@ export const getWeatherAndEvents: ChatTool<typeof params, WeatherEventsResult> =
                 : {
                     highF: temps.length ? toF(Math.max(...temps)) : null,
                     lowF: temps.length ? toF(Math.min(...temps)) : null,
-                    rainInches: Math.round((hours.reduce((t, h) => t + (h.precipitationMm ?? 0), 0) / 25.4) * 100) / 100,
+                    rainInches: rains.length ? Math.round((rains.reduce((t, r) => t + r, 0) / 25.4) * 100) / 100 : null,
                     maxRainChancePct: chances.length ? Math.round(Math.max(...chances)) : null,
                     label: weatherLabel(worst),
                     windMphMax: winds.length ? round1(Math.max(...winds) * 0.621371) : null,
@@ -196,7 +198,7 @@ export const getWeatherAndEvents: ChatTool<typeof params, WeatherEventsResult> =
                       title: d.title!,
                       category: d.category,
                       startsAt: d.startsAt
-                        ? d.startsAt.toLocaleString("en-US", { weekday: "short", hour: "numeric", minute: "2-digit", timeZone: "America/Los_Angeles" })
+                        ? d.startsAt.toLocaleString("en-US", { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZone: "America/Los_Angeles" })
                         : null,
                       attendance: d.attendance == null ? null : Math.round(d.attendance),
                       distanceMiles: d.distanceMiles == null ? null : round1(d.distanceMiles),

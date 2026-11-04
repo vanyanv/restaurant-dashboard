@@ -36,6 +36,11 @@ const ALWAYS: readonly ChatToolName[] = [
   // before committing to a domain call.
   "listStores",
   "describeSchema",
+  // The fallback for questions no dedicated lookup answers. On every turn so
+  // a page that narrowed the menu can still answer "how many orders asked
+  // for no onions"; its schema is small and its catalogue lives behind
+  // describeSchema("explore").
+  "queryData",
 ]
 
 /**

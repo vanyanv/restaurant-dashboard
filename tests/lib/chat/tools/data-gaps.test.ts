@@ -112,6 +112,7 @@ describe("getCountAndWaste", () => {
     expect(out.stores[0].report).toBeNull()
     expect(out.stores[0].completedCounts).toBe(1)
     expect(out.stores[0].wasteLastWeek?.dollars).toBe(12.35)
+    expect(out.stores[0].wasteLastWeek?.unpricedEntries).toBe(0)
   })
 })
 

@@ -9,6 +9,7 @@
 
 import { z } from "zod"
 import type { ChatTool } from "./types"
+import { datasetCatalog } from "./query-data"
 
 const params = z
   .object({
@@ -35,6 +36,7 @@ const params = z
         "signals",
         "shop",
         "settings",
+        "explore",
       ])
       .optional()
       .default("all")
@@ -147,6 +149,15 @@ const CATALOG: SchemaDomain[] = [
       { name: "getLaborActuals", useFor: "hours worked vs scheduled, labour cost and % of Total Sales, sales per labour hour, overtime, cost by role, clock-in/out drift" },
       { name: "getCleaningChecks", useFor: "morning / Transition / evening cleaning checks: on time, late, missed, and items the crew flagged" },
     ],
+  },
+  {
+    domain: "explore",
+    summary:
+      "Fallback when no lookup above fits: queryData counts, lists or groups raw rows. Never for sales, food cost, labour, commission or P&L totals.",
+    tools: [{ name: "queryData", useFor: "counts, lists and groupings of raw rows from the datasets in notes" }],
+    notes: datasetCatalog()
+      .map((d) => `${d.dataset}${d.needsDateRange ? " (needs dateRange)" : ""}: ${d.about} Columns: ${d.columns}.`)
+      .join(" | "),
   },
   {
     domain: "crew",

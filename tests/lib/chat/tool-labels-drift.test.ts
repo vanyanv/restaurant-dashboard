@@ -59,7 +59,7 @@ describe("tool routing tables", () => {
   it("every registered tool is reachable from at least one page, or is always on", () => {
     // A tool in the registry and in no group can only ever be called on a turn
     // that established no department at all — which is a tool nobody routed to.
-    const ALWAYS = new Set(["fileReturn", "listStores", "describeSchema"])
+    const ALWAYS = new Set(["fileReturn", "listStores", "describeSchema", "queryData"])
     const grouped = new Set(Object.values(TOOL_GROUPS).flat())
     const orphans = Object.keys(chatTools).filter(
       (n) => !grouped.has(n as never) && !ALWAYS.has(n),
@@ -109,6 +109,7 @@ describe("freshness stamps", () => {
       getWeatherAndEvents: "weather forecasts are rewritten for days ahead, so no one stamp holds",
       getShopOrders: "read live from the website's API, never cached",
       getStoreSettings: "owner-edited settings, no sync",
+      queryData: "ad hoc rows across many tables, so no one sync stamps it",
     }
     const unstamped = Object.keys(chatTools).filter(
       (n) => !(n in TOOL_AS_OF) && !(n in EXEMPT),

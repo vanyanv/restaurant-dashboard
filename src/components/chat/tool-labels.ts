@@ -109,6 +109,11 @@ export const TOOL_LABELS: Record<
     done: "Read the merch shop",
     short: "shop",
   },
+  queryData: {
+    running: "Looking up the rows",
+    done: "Looked up the rows",
+    short: "raw lookup",
+  },
   getStoreSettings: {
     running: "Reading store settings",
     done: "Read store settings",

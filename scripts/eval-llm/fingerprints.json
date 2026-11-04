@@ -32,7 +32,7 @@
     "floor": 0.75
   },
   "chat-tool-choice": {
-    "sha256": "e5b6e974f7b71e09",
+    "sha256": "9f7b545c0ef5ed0d",
     "model": "gpt-5-mini",
     "evaluatedAt": "2026-10-28",
     "cases": 15,
@@ -41,6 +41,6 @@
     "costUsd": 0,
     "floor": 0.75,
     "pendingReEval": true,
-    "pendingReason": "The chat prompt and tool catalogue changed on 2026-11-04: five lookups were added (getCrewAndSchedule, getCountAndWaste, getWeatherAndEvents, getShopOrders, getStoreSettings) with routing sections, five golden cases awaiting fixtures, and the weather case moved from out-of-scope to getWeatherAndEvents (a competitor-prices case now holds the out-of-scope slot). The live eval needs an OPENAI_API_KEY this session did not have; numbers stay zeroed. Run `npm run eval:llm -- --feature chat-tool-choice --record` on this branch."
+    "pendingReason": "The chat prompt and tool catalogue changed on 2026-11-04: five lookups were added (getCrewAndSchedule, getCountAndWaste, getWeatherAndEvents, getShopOrders, getStoreSettings) plus the always-on queryData fallback, with routing sections, seven golden cases awaiting fixtures, and the weather case moved from out-of-scope to getWeatherAndEvents (a competitor-prices case now holds the out-of-scope slot). The live eval needs an OPENAI_API_KEY this session did not have; numbers stay zeroed. Run `npm run eval:llm -- --feature chat-tool-choice --record` on this branch."
   }
 }

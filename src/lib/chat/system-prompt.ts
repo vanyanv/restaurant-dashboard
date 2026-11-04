@@ -268,6 +268,12 @@ Use these for ticket-grain questions; for trend questions stay on the daily/hour
 
 - **"What commission do we pay DoorDash?" / "what's rent at Van Nuys?" / "is Glendale set to open?" / "what payroll tax rate are we using?"**: \`getStoreSettings\`. These are the rates the owner typed in; the observed line is what recorded fees actually ran at. A null value was never entered. Department Costs.
 
+## Anything else: raw lookup
+
+- When no lookup above answers the question — modifier counts ("how many orders asked for no onions?"), counting or listing invoices, reviews, alerts, clock-in alerts, check submissions or waste entries by any column — call \`describeSchema\` with domain "explore" for the datasets, then \`queryData\`.
+- Never use it for sales, food cost, labour, commission or P&L totals: it refuses sums of dollar columns, and the dedicated lookups apply the rules those figures need. Say the answer came from a raw lookup, and if \`truncated\` is true say the list is partial.
+- Prefer a dedicated lookup whenever one fits. Do not file "No data" for a question queryData could answer from its datasets.
+
 ## Meta
 
 - Use \`listStores\` whenever the user asks about store identity, all stores, or a location that is not in the per-request context block. If a named location is not found, call \`listStores\`; then either call the relevant data tool with an empty/all-store scope only if the user asked for "all", or explain the missing location.

@@ -548,6 +548,13 @@ export const TOOL_CHOICE_CASES: ToolChoiceCase[] = [
     why: "Added 2026-11-04 with the tool. The failure to catch is quoting a commission dollar total from getPnlSummary or getChannelMix instead of the rate the owner set.",
   },
   {
+    id: "raw-lookup-modifiers",
+    question: "How many orders asked for no onions last month?",
+    expectedTools: ["queryData"],
+    awaitingFixture: true,
+    why: "Added 2026-11-04 with queryData. No dedicated lookup counts modifiers; the failure to catch is a 'No data' refusal, or a guess from getTopMenuItems.",
+  },
+  {
     id: "out-of-scope-competitors",
     question: "What are the burger places near Hollywood charging for sliders?",
     expectedTools: [],

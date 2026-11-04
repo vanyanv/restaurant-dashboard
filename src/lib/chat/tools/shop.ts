@@ -75,7 +75,7 @@ export const getShopOrders: ChatTool<typeof params, ShopResult> = {
         number: o.number,
         status: o.status,
         fulfilment: o.fulfilment,
-        placed: o.createdAt.slice(0, 10),
+        placed: new Date(o.createdAt).toLocaleDateString("en-CA", { timeZone: "America/Los_Angeles" }),
         customer: o.customerName ? o.customerName.trim().split(/\s+/)[0] : null,
         items: o.itemsSummary,
         total: dollars(o.totalCents),

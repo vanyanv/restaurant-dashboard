@@ -86,3 +86,31 @@ describe("uncheckedLine", () => {
     expect(uncheckedLine(["$1", "2%"])).toMatch(/don't match/)
   })
 })
+
+describe("review fixes", () => {
+  it("reads million/thousand and drops a trailing comma", () => {
+    expect(claimsIn("about $1.2 million, $3 thousand, $5,000, and $.50").map((c) => [c.text, c.value])).toEqual([
+      ["$1.2 million", 1200000],
+      ["$3 thousand", 3000],
+      ["$5,000", 5000],
+      ["$.50", 0.5],
+    ])
+  })
+
+  it("lets a round figure stand only for a close number", () => {
+    const parts = [tool("x", { rows: [{ total: 1600 }] })]
+    expect(checkAnswerNumbers(parts, null, "About $2,000.").unchecked).toEqual(["$2,000"])
+    const close = [tool("x", { rows: [{ total: 1994 }] })]
+    expect(checkAnswerNumbers(close, null, "About $2,000.").unchecked).toEqual([])
+  })
+
+  it("accepts a daily average and two rows combined", () => {
+    const parts = [tool("x", { rows: [{ net: 400 }, { net: 424 }, { net: 412 }] })]
+    expect(checkAnswerNumbers(parts, null, "$412 a day; the first two came to $824.").unchecked).toEqual([])
+  })
+
+  it("does not read dates or clock times in strings as amounts", () => {
+    const parts = [tool("x", { when: "2026-11-03 10:30" })]
+    expect(checkAnswerNumbers(parts, null, "$2,026 and 30%").unchecked).toEqual(["$2,026", "30%"])
+  })
+})

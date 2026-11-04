@@ -76,6 +76,7 @@ import { getCountAndWaste } from "./count-waste"
 import { getWeatherAndEvents } from "./weather-events"
 import { getShopOrders } from "./shop"
 import { getStoreSettings } from "./store-settings"
+import { queryData } from "./query-data"
 
 export type { ChatTool, ChatToolContext } from "./types"
 
@@ -165,6 +166,8 @@ export const chatTools = {
   getShopOrders,
   // Per-store settings: commission rates, fixed costs, stage
   getStoreSettings,
+  // Fallback: count / list / group raw rows from allowlisted datasets
+  queryData,
   // Inventory
   getInventoryStatus,
   getInventoryCoverage,

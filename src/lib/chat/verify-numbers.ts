@@ -15,10 +15,11 @@ import type { FiledReturn, ReturnPart } from "./return"
  *
  * What counts as "from the data", for a claimed value v shown at some
  * precision (tolerance t, half its last shown digit):
- *   - any number a tool returned, as is, ×100 (a 0.253 fraction shown as
- *     25.3%) or ÷100 (cents shown as dollars);
- *   - a column total — every value under one key across an array of rows,
- *     which is how "the week's total" is read off seven day rows;
+ *   - any number a tool returned, as is; a fraction ×100 for a percent
+ *     (0.253 shown as 25.3%), cents ÷100 for a dollar amount;
+ *   - a column total or average — every value under one key across an array
+ *     of rows, which is how "the week's total" or "a day" is read off rows;
+ *   - the sum of two numbers that sit together (two stores combined);
  *   - the difference of two numbers that sit together — fields of one row,
  *     or one field across rows or lookups ("$120 more than last week");
  *   - one of those as a percent of another, or the percent change between two.
@@ -45,40 +46,50 @@ interface Claim {
   percent: boolean
 }
 
-const CLAIM_RE = /(\$\s?-?\d[\d,]*(?:\.\d+)?\s?[kKmM]?\b)|(-?\d[\d,]*(?:\.\d+)?\s?%)/g
-const NUM_RE = /-?\d[\d,]*(?:\.\d+)?/g
+const AMOUNT = String.raw`(?:\d+(?:,\d{3})*(?:\.\d+)?|\.\d+)`
+const CLAIM_RE = new RegExp(
+  String.raw`(\$\s?-?${AMOUNT}(?:\s?(?:thousand|million|billion|[kKmMbB])\b)?)|(-?${AMOUNT}\s?%)`,
+  "g",
+)
+const NUM_RE = new RegExp(`-?${AMOUNT}`, "g")
+/** Dates and clock times inside a returned string are not amounts: "2026-11-03", "10:30". */
+const NOT_AMOUNT_RE = /\d{4}-\d{2}-\d{2}(?:T[\d:.]+Z?)?|\b\d{1,2}:\d{2}(?::\d{2})?\b/g
 
 function parseNumber(raw: string): number | null {
   const n = Number(raw.replace(/,/g, ""))
   return Number.isFinite(n) ? n : null
 }
 
-/** Half the last digit shown: "$48,912" → 0.5, "66.2%" → 0.05, "$49,000" → 500, "$48.9k" → 50. */
-function toleranceFor(digits: string, scale: number): number {
+/**
+ * Half the last digit shown: "$48,912" → 0.5, "66.2%" → 0.05, "$48.9k" → 50.
+ * A round figure ("$49,000", "about $2,000") may be a rounding, but only a
+ * close one: half a percent of itself, so "$2,000" cannot stand for $1,600.
+ */
+function toleranceFor(digits: string, scale: number, value: number): number {
   const clean = digits.replace(/,/g, "").replace(/^-/, "")
   const dot = clean.indexOf(".")
   if (dot >= 0) return 0.5 * 10 ** -(clean.length - dot - 1) * scale
   const zeros = clean.match(/0+$/)?.[0].length ?? 0
-  // "$100" and "$1,000" read as exact amounts as often as rounded ones; only
-  // three or more trailing zeros on a larger figure count as rounding.
-  const rounded = zeros >= 3 && clean.length > zeros ? zeros : 0
-  return 0.5 * 10 ** rounded * scale
+  const exact = 0.5 * scale
+  return zeros >= 3 && clean.length > zeros ? Math.max(exact, value * 0.005) : exact
 }
+
+const SCALE: Record<string, number> = { k: 1e3, thousand: 1e3, m: 1e6, million: 1e6, b: 1e9, billion: 1e9 }
 
 export function claimsIn(text: string): Claim[] {
   const out: Claim[] = []
   for (const m of text.matchAll(CLAIM_RE)) {
     const token = (m[1] ?? m[2]).trim()
     const percent = Boolean(m[2])
-    const digits = token.replace(/[$%\s]/g, "").replace(/[kKmM]$/, "")
-    const suffix = token.match(/[kKmM]$/)?.[0]?.toLowerCase()
-    const scale = suffix === "k" ? 1_000 : suffix === "m" ? 1_000_000 : 1
+    const suffix = token.match(/(thousand|million|billion|[kKmMbB])$/)?.[0]?.toLowerCase()
+    const digits = token.replace(/(thousand|million|billion|[kKmMbB])$/, "").replace(/[$%\s]/g, "")
+    const scale = suffix ? SCALE[suffix] : 1
     const n = parseNumber(digits)
     if (n === null) continue
     const value = Math.abs(n) * scale
     // 0 and 100% match almost anything and say nothing worth checking.
     if (value === 0 || (percent && value === 100)) continue
-    out.push({ text: token, value, tol: toleranceFor(digits, scale), percent })
+    out.push({ text: token, value, tol: toleranceFor(digits, scale, value), percent })
   }
   return out
 }
@@ -110,7 +121,7 @@ export function sourceNumbers(outputs: readonly unknown[]): Sources {
     if (depth > 12 || v == null) return
     if (typeof v === "number") return add(v)
     if (typeof v === "string") {
-      for (const m of v.matchAll(NUM_RE)) {
+      for (const m of v.replace(NOT_AMOUNT_RE, " ").matchAll(NUM_RE)) {
         const n = parseNumber(m[0])
         if (n !== null) add(n)
       }
@@ -129,6 +140,8 @@ export function sourceNumbers(outputs: readonly unknown[]): Sources {
       if (v.length > 1) {
         for (const [k, s] of sums) {
           add(s)
+          // "$412 a day" is the column total over its rows.
+          add(s / v.length)
           const list = byKey.get(`\u03a3${k}`) ?? []
           list.push(Math.abs(s))
           byKey.set(`\u03a3${k}`, list)
@@ -162,7 +175,9 @@ function near(a: number, b: number, tol: number): boolean {
 export function matches(claim: Claim, sources: Sources): boolean {
   const { value: v, tol } = claim
   for (const s of sources.all) {
-    if (near(s, v, tol) || near(s * 100, v, tol) || near(s / 100, v, tol)) return true
+    if (near(s, v, tol)) return true
+    // A 0.253 fraction printed as 25.3%; cents printed as dollars.
+    if (claim.percent ? near(s * 100, v, tol) : near(s / 100, v, tol)) return true
   }
   // Worked out from two numbers that sit together. Only reached for the few
   // claims a direct lookup missed.
@@ -172,7 +187,7 @@ export function matches(claim: Claim, sources: Sources): boolean {
       for (let j = 0; j < g.length; j++) {
         if (i === j) continue
         const b = g[j]
-        if (!claim.percent && near(Math.abs(a - b), v, tol)) return true
+        if (!claim.percent && (near(Math.abs(a - b), v, tol) || (i < j && near(a + b, v, tol)))) return true
         if (claim.percent) {
           if (near((a / b) * 100, v, tol)) return true
           if (near((Math.abs(a - b) / b) * 100, v, tol)) return true
