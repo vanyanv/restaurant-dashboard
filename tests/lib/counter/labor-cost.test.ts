@@ -4,10 +4,11 @@ vi.mock("@/lib/prisma", () => ({ prisma: {} }))
 
 import { loadLaborCost } from "@/lib/counter/labor-cost"
 
-function db(daily: unknown[], positions: unknown[]) {
+function db(daily: unknown[], positions: unknown[], stores: unknown[] = [{ id: "s1", employerPayrollTaxRate: null }]) {
   return {
     harriDailyLabor: { findMany: vi.fn(async (_a: unknown) => daily) },
     harriPositionDaily: { groupBy: vi.fn(async (_a: unknown) => positions) },
+    store: { findMany: vi.fn(async (_a: unknown) => stores) },
   }
 }
 
@@ -27,6 +28,27 @@ describe("loadLaborCost", () => {
     const posWhere = (d.harriPositionDaily.groupBy.mock.calls[0][0] as { where: { store: unknown } }).where
     expect(dailyWhere.store).toEqual({ accountId: "acct-A" })
     expect(posWhere.store).toEqual({ accountId: "acct-A" })
+    const storeWhere = (d.store.findMany.mock.calls[0][0] as { where: { accountId: unknown } }).where
+    expect(storeWhere.accountId).toBe("acct-A")
+  })
+
+  it("loads wages with the store's employer payroll tax rate", async () => {
+    const d = db(
+      [{ storeId: "s1", date: new Date("2026-10-19T00:00:00Z"), actualCost: 1000 }],
+      [],
+      [{ id: "s1", employerPayrollTaxRate: 0.0765 }],
+    )
+    const r = await loadLaborCost(
+      {
+        accountId: "acct-A",
+        storeIds: ["s1"],
+        startDate: new Date("2026-10-19T00:00:00Z"),
+        endDate: new Date("2026-10-19T00:00:00Z"),
+      },
+      d as never,
+    )
+    expect(r.total).toBeCloseTo(1076.5, 6)
+    expect(r.stores.s1.byDay["2026-10-19"].wages).toBe(1000)
   })
 
   it("applies the rule: daily when real, else positions, else missing", async () => {

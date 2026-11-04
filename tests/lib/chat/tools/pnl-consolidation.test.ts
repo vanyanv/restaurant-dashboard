@@ -139,3 +139,12 @@ describe("getPnlSummary — combining stores that do not have the same lines", (
     expect(rowFor(rows, "7200")?.values[0]).toBeCloseTo(-15_000 * AUGUST, 2)
   })
 })
+
+describe("getPnlSummary — food cost", () => {
+  it("reads its cost rows with packaging left out, as the dashboard's food line does", async () => {
+    await run()
+    const findMany = ctx.prisma.dailyCogsItem.findMany as unknown as ReturnType<typeof vi.fn>
+    const where = findMany.mock.calls[0]?.[0]?.where
+    expect(where?.category).toEqual({ not: "Packaging" })
+  })
+})

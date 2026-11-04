@@ -89,9 +89,9 @@ export async function getInvoiceSummary(options?: {
     prisma.invoice.aggregate({
       where: { ...where, status: "REVIEW" },
       _count: { _all: true },
-      // The dollar value matters as much as the count: three invoices holding
-      // $2,184 out of COGS understates food cost by a knowable amount, and the
-      // overview says so.
+      // The dollar value of what is held. It is not missing from COGS — COGS
+      // is recipe cost × sales — but none of its lines price an ingredient
+      // until it is verified (`isLinePriceable`), and the overview says so.
       _sum: { totalAmount: true },
     }),
     prisma.invoiceLineItem.findMany({

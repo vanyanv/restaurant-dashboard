@@ -13,7 +13,8 @@ export * from "@/lib/counter/labor-cost-core"
  *
  * Per store and business day: `HarriDailyLabor.actualCost` when it is a real
  * (> 0) reading, else the day's `HarriPositionDaily.totalLabor` sum, else the
- * day is missing. The P&L rollup, the chat P&L tool and the Labor page all
+ * day is missing — and a decided day's wages carry the store's employer
+ * payroll tax (`Store.employerPayrollTaxRate`). The P&L rollup, the chat P&L tool and the Labor page all
  * read their labor dollars here, so a week costs the same on every page.
  *
  * Hours and per-position splits still come from `HarriPositionDaily` — they
@@ -35,7 +36,7 @@ export interface LaborCostQuery {
 }
 
 /** The app's client, or a chat tool's own `ctx.prisma`. */
-type LaborDb = Pick<typeof prisma, "harriDailyLabor" | "harriPositionDaily">
+type LaborDb = Pick<typeof prisma, "harriDailyLabor" | "harriPositionDaily" | "store">
 
 const isoDay = (d: Date) => d.toISOString().slice(0, 10)
 
@@ -53,7 +54,7 @@ export async function loadLaborCost(
   }
   const where = { storeId: { in: storeIds }, store: { accountId }, date: range }
 
-  const [daily, positions] = await Promise.all([
+  const [daily, positions, rates] = await Promise.all([
     db.harriDailyLabor.findMany({
       where,
       select: { storeId: true, date: true, actualCost: true },
@@ -62,6 +63,12 @@ export async function loadLaborCost(
       by: ["storeId", "date"],
       where,
       _sum: { totalLabor: true },
+    }),
+    // The employer payroll tax each store's wages are loaded with — the
+    // owner's setting on the store file. Same tenancy boundary as above.
+    db.store.findMany({
+      where: { id: { in: storeIds }, accountId },
+      select: { id: true, employerPayrollTaxRate: true },
     }),
   ])
 
@@ -74,5 +81,6 @@ export async function loadLaborCost(
       day: isoDay(r.date),
       totalLabor: r._sum.totalLabor ?? null,
     })),
+    payrollTaxRates: Object.fromEntries(rates.map((r) => [r.id, r.employerPayrollTaxRate])),
   })
 }

@@ -963,13 +963,17 @@ function buildMoving(
   const cells: MovingCell[] = []
 
   if (invoices && invoices.pendingReviewCount > 0) {
-    // Only when something is actually held. "$0 · everything received has
-    // posted to COGS" is good news drawn in the colour of a warning, in a band
-    // that exists to say what is missing from the figures.
+    // Only when something is actually held. A held invoice does NOT make
+    // COGS short by its total, and this note said it did until 2026-11-03:
+    // COGS here is theoretical — recipe cost × items sold — so an invoice's
+    // dollars never enter it. What a held invoice does is stay out of the
+    // prices: `isLinePriceable` keeps every line of an unverified invoice from
+    // pricing an ingredient, so recipes cost off the last verified delivery.
+    // Its total is in "Received" like any other invoice.
     cells.push({
-      label: "Not in the figures",
+      label: "Unverified invoices",
       value: money(invoices.pendingReviewTotal),
-      note: `${plural(invoices.pendingReviewCount, "invoice")} in review · COGS understated by this much`,
+      note: `${plural(invoices.pendingReviewCount, "invoice")} held · their prices are not used in recipe costs`,
     })
   }
 
@@ -1202,15 +1206,18 @@ function buildInvoiceLines(k: InvoiceKpis): MoneyLine[] {
   const postedTotal = k.totalSpend - k.pendingReviewTotal
   /*
    * The prototype's order, and the prototype's tones: received, then what
-   * reached COGS, then what is still held up. `total` is on NONE of them —
+   * cleared, then what is still held up. `total` is on NONE of them —
    * `.moneyline.total` is the heavy closing line, and the prototype's is
    * "Does not reconcile", the one figure of the four this schema cannot
-   * answer. Promoting "Posted to COGS" into that slot would put a bold
-   * closing rule under a line that is not the statement's bottom line.
+   * answer.
+   *
+   * The middle line said "Posted to COGS" until 2026-11-03. Nothing posts an
+   * invoice to COGS: COGS is recipe cost × items sold. "Cleared" is what the
+   * number is — every invoice not held in review.
    */
   return [
     { label: "Received", value: `${count(k.invoiceCount)} · ${money(k.totalSpend)}` },
-    { label: "Posted to COGS", value: `${count(postedCount)} · ${money(postedTotal)}` },
+    { label: "Cleared", value: `${count(postedCount)} · ${money(postedTotal)}` },
     {
       label: "In review",
       value: `${count(k.pendingReviewCount)} · ${money(k.pendingReviewTotal)}`,

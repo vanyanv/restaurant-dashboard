@@ -18,6 +18,7 @@
  */
 import fs from "node:fs"
 import path from "node:path"
+import { isFirstPartyPlatform } from "../src/lib/first-party-platforms"
 import { parseXlsx, excelSerialToDate, colIndexToLetters, type Sheet } from "./lib/xlsx-minimal"
 
 function loadEnvLocal(): void {
@@ -222,7 +223,7 @@ interface DashboardWeek {
   invoicesTotal: number
 }
 
-const FP_PLATFORMS = new Set(["css-pos", "bnm-web"])
+const FP_PLATFORMS = { has: isFirstPartyPlatform }
 
 async function computeDashboardWeek(
   prisma: any,

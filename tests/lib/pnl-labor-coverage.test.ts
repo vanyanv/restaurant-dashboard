@@ -20,6 +20,7 @@
 import { describe, expect, it } from "vitest"
 import {
   computeStorePnL,
+  consolidateRows,
   LABOR_CODE,
   type OtterSummaryRow,
   type Period,
@@ -150,5 +151,60 @@ describe("a pre-open store: no sales and no labor reading", () => {
 
   it("an open store with sales and no reading still falls back to the budget", () => {
     expect(laborRow(BUDGETED, 0, 0).value).toBeGreaterThan(0)
+  })
+})
+
+describe("labour line — says the employer payroll tax is in it", () => {
+  const noteOf = (store: StoreFixedInputs, coveredDays: number) =>
+    computeStorePnL({
+      bucketed: [[sales(20_000)]],
+      periods: week,
+      store,
+      harriLaborByPeriod: [{ actualUsd: 7_000, coveredDays }],
+    }).rows.find((r) => r.code === LABOR_CODE)!.note
+
+  it("names the store's rate when Harri wages are in the line", () => {
+    expect(noteOf({ ...BUDGETED, employerPayrollTaxRate: 0.0765 }, 7)).toBe(
+      "incl. 7.65% employer payroll tax",
+    )
+    expect(noteOf({ ...BUDGETED, employerPayrollTaxRate: 0.104 }, 3)).toBe(
+      "incl. 10.4% employer payroll tax",
+    )
+  })
+
+  it("says wages only when no rate is on file", () => {
+    expect(noteOf({ ...BUDGETED, employerPayrollTaxRate: null }, 7)).toBe(
+      "wages only, no payroll tax on file",
+    )
+  })
+
+  it("carries no note when no Harri reading is in the line (fixed labor is entered all-in)", () => {
+    expect(noteOf({ ...BUDGETED, employerPayrollTaxRate: 0.0765 }, 0)).toBeUndefined()
+  })
+
+  it("does not change the dollars: the tax is already in the Harri figure", () => {
+    const a = laborRow({ ...BUDGETED, employerPayrollTaxRate: 0.0765 }, 7, 7_000)
+    const b = laborRow({ ...BUDGETED, employerPayrollTaxRate: null }, 7, 7_000)
+    expect(a.value).toBe(b.value)
+  })
+})
+
+describe("consolidated labour note", () => {
+  const rowsAt = (rate: number | null) =>
+    computeStorePnL({
+      bucketed: [[sales(20_000)]],
+      periods: week,
+      store: { ...BUDGETED, employerPayrollTaxRate: rate },
+      harriLaborByPeriod: [{ actualUsd: 7_000, coveredDays: 7 }],
+    }).rows
+  const note = (rows: ReturnType<typeof consolidateRows>) => rows.find((r) => r.code === LABOR_CODE)?.note
+
+  it("keeps the rate when every store agrees", () => {
+    expect(note(consolidateRows([rowsAt(0.0765), rowsAt(0.0765)], week))).toBe("incl. 7.65% employer payroll tax")
+  })
+  it("does not stamp one store's rate on the group when they differ", () => {
+    expect(note(consolidateRows([rowsAt(0.0765), rowsAt(0.104)], week))).toBe(
+      "incl. employer payroll tax at each store's rate",
+    )
   })
 })

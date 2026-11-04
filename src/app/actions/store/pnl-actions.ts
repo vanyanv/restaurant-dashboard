@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache"
 import { getServerSession } from "next-auth"
 import { authOptions, hasOwnerAccess } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { FOOD_COST_ROWS } from "@/lib/counter/food-cost-scope"
 import { getAccountStoreRows } from "@/lib/account-stores"
 import {
   buildPeriods,
@@ -387,6 +388,7 @@ export async function getStorePnL(input: {
         uberPickupCommissionRate: true,
         doordashPickupCommissionRate: true,
         grubhubCommissionRate: true,
+        employerPayrollTaxRate: true,
       },
     })
     if (!store) return { error: "Store not found" }
@@ -462,6 +464,7 @@ export async function getStorePnL(input: {
       where: {
         storeId: store.id,
         date: { gte: overallStart, lte: overallEnd },
+        ...FOOD_COST_ROWS,
       },
       select: {
         date: true,
@@ -616,7 +619,9 @@ export async function getAllStoresPnL(input: {
     // which the payroll-tax change took the same day). `pnl3:` since
     // 2026-10-28 (`pnl2:` before it grew the sales cascade; pnl3 moved labor
     // dollars to `loadLaborCost`): the answer's shape grew the sales cascade and
-    // the commission basis, and a pre-change entry would lack both.
+    // the commission basis, and a pre-change entry would lack both. `pnl4:`
+    // since 2026-11-03: labor carries the employer payroll tax and its note.
+    // `pnl5:` since 2026-11-04: periods carry laborMissingDays.
     `pnl5:account:${accountId}:${stableKey({
       s: input.startDate.toISOString(),
       e: input.endDate.toISOString(),
@@ -717,6 +722,7 @@ export async function getAllStoresPnL(input: {
       where: {
         storeId: { in: storeIds },
         date: { gte: overallStart, lte: overallEnd },
+        ...FOOD_COST_ROWS,
       },
       select: {
         storeId: true,

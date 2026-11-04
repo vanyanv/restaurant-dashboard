@@ -39,6 +39,9 @@ const updateStoreSchema = z.object({
   uberPickupCommissionRate: z.number().min(0).max(1).nullable().optional(),
   doordashPickupCommissionRate: z.number().min(0).max(1).nullable().optional(),
   grubhubCommissionRate: z.number().min(0).max(1).nullable().optional(),
+  // Employer payroll tax on Harri wages. Nullable: a blank clears it and labor
+  // reads as wages only (`labor-cost-core.ts`).
+  employerPayrollTaxRate: z.number().min(0).max(1).nullable().optional(),
   lifecycleStage: z.enum(["pre_open", "warming_up", "ready"]).optional(),
 })
 
@@ -184,6 +187,15 @@ export async function updateStore(storeId: string, formData: FormData) {
       if (!parsed.ok) return { error: parsed.error }
       rates[r.field] = parsed.value === null ? null : percentToFraction(parsed.value)
     }
+    // Employer payroll tax: a percent, through the same parser. Absent =
+    // unchanged; blank clears it.
+    let employerPayrollTaxRate: number | null | undefined
+    const taxRaw = formData.get("employerPayrollTaxRate")
+    if (taxRaw != null) {
+      const parsed = parseRatePercent(String(taxRaw), "Employer payroll tax", { required: false })
+      if (!parsed.ok) return { error: parsed.error }
+      employerPayrollTaxRate = parsed.value === null ? null : percentToFraction(parsed.value)
+    }
     const stage = formData.get("lifecycleStage")
 
     const validatedData = updateStoreSchema.parse({
@@ -196,6 +208,7 @@ export async function updateStore(storeId: string, formData: FormData) {
       fixedMonthlyTowels: parseOptionalNumber(formData.get("fixedMonthlyTowels")),
       fixedMonthlyCleaning: parseOptionalNumber(formData.get("fixedMonthlyCleaning")),
       ...rates,
+      ...(employerPayrollTaxRate !== undefined ? { employerPayrollTaxRate } : {}),
       lifecycleStage: stage == null || String(stage) === "" ? undefined : String(stage),
     })
 
@@ -220,7 +233,9 @@ export async function updateStore(storeId: string, formData: FormData) {
     revalidatePath(`/dashboard/stores/${storeId}`)
     // Commission rates price every P&L range, so a rate edit must not wait out
     // the rollup's 600s cache. Fire-and-forget, as the fixed-expense edits do.
-    void bustTags(["pnl"])
+    // `harri` too: the employer payroll tax is folded into the labor dollars
+    // the Labor page and SPLH cache under that tag.
+    void bustTags(["pnl", "harri"])
     return { success: true, store: updatedStore }
   } catch (error) {
     if (error instanceof z.ZodError) {

@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma"
+import { FOOD_COST_ROWS } from "@/lib/counter/food-cost-scope"
 import { getScopedStores } from "@/lib/account-stores"
 import { cached, monthTags, stableKey } from "@/lib/cache/cached"
 import { rangeTtl } from "@/lib/cache/range"
@@ -420,7 +421,9 @@ async function foldCogsRows(input: {
 
   const [rows, discounts] = await Promise.all([
     prisma.dailyCogsItem.findMany({
-      where: { storeId: { in: storeIds }, date: { gte: startDate, lte: endDate } },
+      // Packaging out of food cost (`food-cost-scope.ts`): the window total,
+      // the category split and the daily line all leave it out together.
+      where: { storeId: { in: storeIds }, date: { gte: startDate, lte: endDate }, ...FOOD_COST_ROWS },
       select: {
         // The discount share is per (store, item): one store's deal must not
         // discount another store's sales (`item-economics.ts`).

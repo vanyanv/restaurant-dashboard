@@ -1,6 +1,7 @@
 import { Prisma } from "@/generated/prisma/client"
 import { prisma } from "@/lib/prisma"
-import { COST_CANDIDATE_WINDOW, selectNonSpikeCostIndex } from "@/lib/invoice-line-shape"
+import { COST_HISTORY_WINDOW, selectNonSpikeCostIndex } from "@/lib/invoice-line-shape"
+import { isLinePriceable, PRICED_INVOICE_STATUSES } from "@/lib/invoice-verify"
 import {
   resolveLineUnitCost,
   type CanonicalIngredientCost,
@@ -22,6 +23,9 @@ type ProvenanceRow = {
   extendedPrice: number
   invoiceDate: Date
   vendorName: string
+  lineNumber: number
+  status: string
+  reviewReasons: unknown
 }
 
 /**
@@ -81,21 +85,27 @@ export async function batchCanonicalCosts(
       li."unitPrice"     AS "unitPrice",
       li."extendedPrice" AS "extendedPrice",
       i."invoiceDate"    AS "invoiceDate",
-      i."vendorName"     AS "vendorName"
+      i."vendorName"     AS "vendorName",
+      li."lineNumber"    AS "lineNumber",
+      i."status"::text   AS "status",
+      i."reviewReasons"  AS "reviewReasons"
     FROM "InvoiceLineItem" li
     JOIN "Invoice" i ON i."id" = li."invoiceId"
     WHERE i."accountId" = ${accountId}
+      AND i."status"::text = ANY(${[...PRICED_INVOICE_STATUSES]}::text[])
       AND li."canonicalIngredientId" = ANY(${ids}::text[])
       AND li."quantity" > 0
       AND i."invoiceDate" IS NOT NULL
     ) ranked
-    WHERE rn <= ${COST_CANDIDATE_WINDOW}
+    WHERE rn <= ${COST_HISTORY_WINDOW}
     ORDER BY "canonicalIngredientId", rn
   `)
 
   // Newest first within each canonical, which is the order the guard expects.
   const provenanceWindow = new Map<string, ProvenanceRow[]>()
   for (const r of rows) {
+    // Only verified invoices price an ingredient — see `isLinePriceable`.
+    if (!isLinePriceable(r, r.lineNumber)) continue
     const list = provenanceWindow.get(r.canonicalIngredientId) ?? []
     list.push(r)
     provenanceWindow.set(r.canonicalIngredientId, list)
@@ -226,7 +236,10 @@ export async function batchCanonicalCosts(
       const candidates = await prisma.invoiceLineItem.findMany({
         where: {
           canonicalIngredientId: null,
-          invoice: { storeId: { in: aliases.map((a) => a.storeId) } },
+          invoice: {
+            status: { in: [...PRICED_INVOICE_STATUSES] },
+            storeId: { in: aliases.map((a) => a.storeId) },
+          },
           productName: { in: aliases.map((a) => a.rawName) },
         },
         orderBy: { invoice: { invoiceDate: "desc" } },
@@ -238,7 +251,10 @@ export async function batchCanonicalCosts(
           productName: true,
           quantity: true,
           extendedPrice: true,
-          invoice: { select: { invoiceDate: true, storeId: true, vendorName: true } },
+          lineNumber: true,
+          invoice: {
+            select: { invoiceDate: true, storeId: true, vendorName: true, status: true, reviewReasons: true },
+          },
         },
       })
 
@@ -250,6 +266,7 @@ export async function batchCanonicalCosts(
         )
         for (const li of candidates) {
           if (!li.invoice.invoiceDate || !li.invoice.storeId) continue
+          if (!isLinePriceable(li.invoice, li.lineNumber)) continue
           const alias = aliasLookup.get(
             `${li.invoice.storeId}::${li.productName.toLowerCase()}`
           )

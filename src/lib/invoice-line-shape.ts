@@ -25,15 +25,30 @@
 import { canonicalizeUnit, convert } from "@/lib/unit-conversion"
 
 /**
- * How many times above its recent price history a freshly-derived invoice cost
- * may sit before we treat it as a parse error rather than a real price move.
- * Real food prices rarely jump more than ~2–3x; the pack-metadata mis-parses
- * that have repeatedly poisoned COGS land at 10x–200x. 8x leaves a wide margin.
+ * How far a freshly-derived invoice cost may sit from the ingredient's
+ * established price, either way, before it is treated as a misread rather than
+ * a price move. Real food prices rarely move more than ~2–3x; the pack-shape
+ * misreads that have poisoned COGS land at 10x–200x. Until 2026-11-03 this was
+ * 8x; the owner's line is that a move over 5x must never silently become a
+ * recipe price, and it now holds at 5x.
  */
-export const COST_SPIKE_THRESHOLD = 8
+export const COST_SPIKE_THRESHOLD = 5
 
-/** How many recent invoice lines to weigh when guarding against price spikes. */
+/** How many recent invoice lines the price-move readouts weigh. */
 export const COST_CANDIDATE_WINDOW = 8
+
+/**
+ * How many verified invoice lines the BOOKED cost is judged over. Wider than
+ * `COST_CANDIDATE_WINDOW` on purpose: the 9x6 foam container (IFS, 2026-10)
+ * had seven misread lines in a row after the vendor changed its SKU, so the
+ * eight newest lines were mostly wrong and the guard measured each misread
+ * against other misreads. Forty lines is months of a weekly delivery — the
+ * price the ingredient actually held, not last week's reading of it.
+ */
+export const COST_HISTORY_WINDOW = 40
+
+/** Readings within this factor of each other count as the same price. */
+const SAME_PRICE_FACTOR = 1.5
 
 function median(xs: number[]): number {
   if (xs.length === 0) return 0
@@ -45,50 +60,85 @@ function median(xs: number[]): number {
 }
 
 /**
+ * The ingredient's established price over a window of readings: the price the
+ * most readings agree on (within `SAME_PRICE_FACTOR`), the older one on a tie
+ * — a price that has held longer is the one that is established. Returns the
+ * median of that cluster. `costs` newest first, all positive and finite.
+ */
+export function establishedCost(costs: number[]): number | null {
+  if (costs.length === 0) return null
+  let bestIdx = -1
+  let bestSupport = -1
+  for (let i = 0; i < costs.length; i++) {
+    const c = costs[i]
+    const support = costs.filter((o) => o <= c * SAME_PRICE_FACTOR && o >= c / SAME_PRICE_FACTOR).length
+    // `>=` walks toward the older end on a tie.
+    if (support >= bestSupport) {
+      bestSupport = support
+      bestIdx = i
+    }
+  }
+  const anchor = costs[bestIdx]
+  return median(costs.filter((o) => o <= anchor * SAME_PRICE_FACTOR && o >= anchor / SAME_PRICE_FACTOR))
+}
+
+/**
  * Pick which of several invoice-derived costs to trust, newest-first.
  *
- * Each line is judged against the median of its *older* history (the entries
- * after it). A line whose cost exceeds `threshold ×` that baseline — or falls
- * below `baseline ÷ threshold` — is an implausible move — almost always a
- * mis-parsed pack size (under- or over-applied), not a real price change — so
- * we skip it and fall back to the newest line that is in tolerance. Real price
- * moves are ~2–3x at the extreme; the symmetric 8x band leaves wide margin in
- * both directions.
+ * Each reading is judged against a TRUSTED price, never against whatever
+ * happens to be older than it. Until 2026-11-03 each line was compared with
+ * the median of the lines after it, which fails exactly when it matters: the
+ * IFS 9x6 foam container was read at 1 EA, 1 COMP and "30.72" a case for
+ * weeks, every misread compared against other misreads, and a $0.15 container
+ * went into recipes at $2.51 and $15.36.
  *
- * The oldest line (no older history) is always accepted as the baseline of
- * last resort. Non-finite / non-positive costs are ignored when forming a
- * baseline so a single garbage value can't mask a real spike.
+ * Now:
+ *   1. The established price is the one most of the window agrees on
+ *      (`establishedCost`), the older on a tie.
+ *   2. The readings are walked oldest to newest. Each is accepted only when
+ *      it is within `threshold`× of the trusted price — the established price
+ *      until three readings are trusted, then the median of the trusted ones,
+ *      so a real price that moves gradually is followed.
+ *   3. The newest accepted reading is the price. A rejected reading never
+ *      enters the trusted history, so a run of misreads cannot vouch for
+ *      itself however long it gets.
  *
- * @returns the chosen index and whether at least one newer line was rejected.
+ * Non-finite / non-positive costs are skipped and never form a baseline.
+ *
+ * @returns the chosen index and whether a newer reading was rejected.
  */
 export function selectNonSpikeCostIndex(
   costsNewestFirst: number[],
   threshold: number = COST_SPIKE_THRESHOLD
 ): { index: number; rejectedSpike: boolean } {
-  let rejectedSpike = false
-  for (let i = 0; i < costsNewestFirst.length; i++) {
-    // A candidate that is itself non-finite / non-positive is bad data, not a
-    // usable price — skip it (without flagging a spike) and keep looking.
-    if (!isFinite(costsNewestFirst[i]) || costsNewestFirst[i] <= 0) continue
-    const older = costsNewestFirst
-      .slice(i + 1)
-      .filter((c) => isFinite(c) && c > 0)
-    if (older.length === 0) {
-      // No older history to compare against — accept as the baseline of last resort.
-      return { index: i, rejectedSpike }
+  const valid = costsNewestFirst
+    .map((c, i) => ({ c, i }))
+    .filter((r) => isFinite(r.c) && r.c > 0)
+  if (valid.length === 0) return { index: 0, rejectedSpike: false }
+
+  const seed = establishedCost(valid.map((r) => r.c))!
+  const trusted: number[] = []
+  const accepted = new Set<number>()
+  for (let k = valid.length - 1; k >= 0; k--) {
+    const { c, i } = valid[k]
+    const baseline = trusted.length >= 3 ? median(trusted) : seed
+    if (c <= baseline * threshold && c >= baseline / threshold) {
+      trusted.push(c)
+      accepted.add(i)
     }
-    const baseline = median(older)
-    if (
-      baseline > 0 &&
-      (costsNewestFirst[i] > threshold * baseline ||
-        costsNewestFirst[i] < baseline / threshold)
-    ) {
-      rejectedSpike = true
-      continue
-    }
-    return { index: i, rejectedSpike }
   }
-  return { index: 0, rejectedSpike }
+
+  const chosen = valid.find((r) => accepted.has(r.i))
+  if (!chosen) {
+    // Unreachable in practice — the established price is itself a reading —
+    // but never hand back a reading the guard did not accept as if it had.
+    const closest = valid.reduce((a, b) =>
+      Math.abs(Math.log(b.c / seed)) < Math.abs(Math.log(a.c / seed)) ? b : a,
+    )
+    return { index: closest.i, rejectedSpike: closest.i !== valid[0].i }
+  }
+  const rejectedSpike = valid.some((r) => r.i < chosen.i && !accepted.has(r.i))
+  return { index: chosen.i, rejectedSpike }
 }
 
 export type LineItemForCost = {

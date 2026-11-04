@@ -28,13 +28,41 @@
  * A daily `actualCost` of 0 does not count as a reading: it is what a store
  * with no payroll yet looks like, and it is what the sync writes for days it
  * has not filled in. The position rows are asked before it is believed.
+ *
+ * ## Employer payroll tax
+ *
+ * Harri reports WAGES. What the store pays is wages plus the employer's share
+ * of payroll tax, so a decided day's `amount` is `wages × (1 + rate)`, where
+ * the rate is the store's own `Store.employerPayrollTaxRate` — an owner-edited
+ * setting on the store file (default 0.0765, the federal FICA employer share;
+ * California UI/ETT are the employer's assigned rate, which the owner adds by
+ * raising it). It is applied HERE and nowhere else, so the P&L, prime cost,
+ * the Labor page, SPLH and the assistant all carry the same loaded figure.
+ * A null (cleared) rate adds nothing. `fixedMonthlyLabor` is not touched: it
+ * is a figure the owner enters, taken as the all-in cost.
  */
+
+/** The federal FICA employer share: Social Security 6.2% + Medicare 1.45%. */
+export const DEFAULT_EMPLOYER_PAYROLL_TAX_RATE = 0.0765
+
+/**
+ * A stored rate as the multiplier's addend. Null, absent, negative or
+ * non-finite adds nothing — it never inflates labor on a bad value.
+ */
+export function payrollTaxRateOf(v: number | null | undefined): number {
+  return typeof v === "number" && Number.isFinite(v) && v > 0 ? v : 0
+}
 
 export type LaborSource = "daily" | "positions"
 
 export interface LaborDayCost {
-  /** Dollars. Always a number: a missing day has no entry at all. */
+  /**
+   * Dollars the store paid: `wages × (1 + payroll tax rate)`. Always a
+   * number: a missing day has no entry at all.
+   */
   amount: number
+  /** Harri's wages for the day, before the employer's payroll tax. */
+  wages: number
   source: LaborSource
 }
 
@@ -44,17 +72,20 @@ export interface LaborDayCost {
  * `daily` is `HarriDailyLabor.actualCost` (`null`/`undefined` when the row or
  * the value is absent); `positions` is the day's summed
  * `HarriPositionDaily.totalLabor` (`null`/`undefined` when no row carries a
- * cost).
+ * cost). `payrollTaxRate` is the store's employer payroll tax (see the module
+ * note); the decided wages are loaded with it.
  */
 export function combineLaborDay(
   daily: number | null | undefined,
   positions: number | null | undefined,
+  payrollTaxRate: number | null | undefined = 0,
 ): LaborDayCost | null {
+  const load = 1 + payrollTaxRateOf(payrollTaxRate)
   if (typeof daily === "number" && Number.isFinite(daily) && daily > 0) {
-    return { amount: daily, source: "daily" }
+    return { amount: daily * load, wages: daily, source: "daily" }
   }
   if (typeof positions === "number" && Number.isFinite(positions) && positions > 0) {
-    return { amount: positions, source: "positions" }
+    return { amount: positions * load, wages: positions, source: "positions" }
   }
   return null
 }
@@ -78,8 +109,10 @@ export interface StoreLaborCost {
   storeId: string
   /** Decided days only, keyed `YYYY-MM-DD`. */
   byDay: Record<string, LaborDayCost>
-  /** Sum of the decided days. */
+  /** Sum of the decided days, payroll tax included. */
   total: number
+  /** The employer payroll tax rate applied to this store's wages (0 when none is on file). */
+  payrollTaxRate: number
   /** Every day of the range, `YYYY-MM-DD`, for callers that walk it. */
   days: string[]
   /** Days of the range with no reading from either table. */
@@ -113,6 +146,8 @@ export function foldLaborCost(input: {
   days: string[]
   daily: DailyLaborRow[]
   positions: PositionLaborRow[]
+  /** `Store.employerPayrollTaxRate` by store id. A store not in it adds no tax. */
+  payrollTaxRates?: Record<string, number | null | undefined>
 }): LaborCost {
   const dailyBy = new Map<string, number | null>()
   for (const r of input.daily) dailyBy.set(`${r.storeId}|${r.day}`, r.actualCost)
@@ -134,9 +169,10 @@ export function foldLaborCost(input: {
     const byDay: Record<string, LaborDayCost> = {}
     const missingDays: string[] = []
     let storeTotal = 0
+    const payrollTaxRate = payrollTaxRateOf(input.payrollTaxRates?.[storeId])
     for (const day of input.days) {
       const k = `${storeId}|${day}`
-      const decided = combineLaborDay(dailyBy.get(k), posBy.get(k))
+      const decided = combineLaborDay(dailyBy.get(k), posBy.get(k), payrollTaxRate)
       if (decided === null) {
         missingDays.push(day)
         continue
@@ -144,7 +180,7 @@ export function foldLaborCost(input: {
       byDay[day] = decided
       storeTotal += decided.amount
     }
-    stores[storeId] = { storeId, byDay, total: storeTotal, days: input.days, missingDays }
+    stores[storeId] = { storeId, byDay, total: storeTotal, payrollTaxRate, days: input.days, missingDays }
     total += storeTotal
     missingStoreDays += missingDays.length
   }

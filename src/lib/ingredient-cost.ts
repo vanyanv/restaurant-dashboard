@@ -4,8 +4,9 @@
 
 import { prisma } from "@/lib/prisma"
 import { logger } from "@/lib/logger"
+import { isLinePriceable, PRICED_INVOICE_STATUSES } from "@/lib/invoice-verify"
 import {
-  COST_CANDIDATE_WINDOW,
+  COST_HISTORY_WINDOW,
   deriveCostFromLineItem,
   getLineItemBaseQty,
   selectNonSpikeCostIndex,
@@ -24,18 +25,26 @@ export type RecomputeResult =
   | { status: "updated"; before: number | null; after: number; unit: string }
   | { status: "unchanged"; reason: "locked" | "no-recipe-unit" | "no-match" | "no-derive" | "same-value" }
 
+export type DeriveResult =
+  | {
+      status: "derived"
+      before: number | null
+      after: number
+      unit: string
+      /** A newer reading was refused as more than 5x off the trusted price. */
+      rejectedSpike: boolean
+    }
+  | { status: "unchanged"; reason: "locked" | "no-recipe-unit" | "no-match" | "no-derive" }
+
 /**
- * Recompute a canonical ingredient's `costPerRecipeUnit` from the most recent
- * matched invoice line item.
+ * What `recomputeCanonicalCost` would store, without storing it — so the
+ * re-verify script can show a dry run of every price it would move.
  *
- * - Skips if `costLocked` is true.
- * - Skips if the canonical has no `recipeUnit` set (we don't know what to convert to).
- * - Skips if no matched line item exists yet.
- * - Otherwise updates cost + costSource="invoice" + costUpdatedAt=now.
+ * Reads only lines that may price an ingredient (`isLinePriceable`): lines on
+ * MATCHED or APPROVED invoices that the sync did not mark unverifiable. A
+ * REVIEW, PENDING or REJECTED invoice never sets the stored price.
  */
-export async function recomputeCanonicalCost(
-  canonicalId: string
-): Promise<RecomputeResult> {
+export async function deriveCanonicalCost(canonicalId: string): Promise<DeriveResult> {
   const canonical = await prisma.canonicalIngredient.findUnique({
     where: { id: canonicalId },
     select: {
@@ -53,12 +62,17 @@ export async function recomputeCanonicalCost(
   // A window of recent matched lines (newest first), not just the latest, so
   // the spike guard has price history. Returns (negative qty) are eligible —
   // they still establish a unit price for the ingredient.
-  const lines = await prisma.invoiceLineItem.findMany({
-    where: { canonicalIngredientId: canonicalId, quantity: { not: 0 } },
+  const fetched = await prisma.invoiceLineItem.findMany({
+    where: {
+      canonicalIngredientId: canonicalId,
+      quantity: { not: 0 },
+      invoice: { status: { in: [...PRICED_INVOICE_STATUSES] } },
+    },
     orderBy: { invoice: { invoiceDate: "desc" } },
-    take: COST_CANDIDATE_WINDOW,
+    take: COST_HISTORY_WINDOW,
     select: {
       id: true,
+      lineNumber: true,
       quantity: true,
       unit: true,
       packSize: true,
@@ -66,9 +80,10 @@ export async function recomputeCanonicalCost(
       unitSizeUom: true,
       unitPrice: true,
       extendedPrice: true,
-      invoice: { select: { vendorName: true } },
+      invoice: { select: { vendorName: true, status: true, reviewReasons: true } },
     },
   })
+  const lines = fetched.filter((l) => isLinePriceable(l.invoice, l.lineNumber))
   if (lines.length === 0) return { status: "unchanged", reason: "no-match" }
 
   // Per-ingredient conversion stored on the SKU match (future use for weird units).
@@ -104,25 +119,42 @@ export async function recomputeCanonicalCost(
     )
   }
 
-  const before = canonical.costPerRecipeUnit
+  return {
+    status: "derived",
+    before: canonical.costPerRecipeUnit,
+    after: derived,
+    unit: canonical.recipeUnit,
+    rejectedSpike,
+  }
+}
+
+/**
+ * Recompute a canonical ingredient's `costPerRecipeUnit` from its verified
+ * invoice lines (`deriveCanonicalCost`).
+ *
+ * - Skips if `costLocked` is true.
+ * - Skips if the canonical has no `recipeUnit` set (we don't know what to convert to).
+ * - Skips if no verified line item exists yet.
+ * - Otherwise updates cost + costSource="invoice" + costUpdatedAt=now.
+ */
+export async function recomputeCanonicalCost(
+  canonicalId: string
+): Promise<RecomputeResult> {
+  const d = await deriveCanonicalCost(canonicalId)
+  if (d.status === "unchanged") return d
   // Avoid a spurious update when the value rounds to the same dollars.
-  if (before != null && Math.abs(before - derived) < 1e-6) {
+  if (d.before != null && Math.abs(d.before - d.after) < 1e-6) {
     return { status: "unchanged", reason: "same-value" }
   }
 
   await prisma.canonicalIngredient.update({
     where: { id: canonicalId },
     data: {
-      costPerRecipeUnit: derived,
+      costPerRecipeUnit: d.after,
       costSource: "invoice",
       costUpdatedAt: new Date(),
     },
   })
 
-  return {
-    status: "updated",
-    before,
-    after: derived,
-    unit: canonical.recipeUnit,
-  }
+  return { status: "updated", before: d.before, after: d.after, unit: d.unit }
 }

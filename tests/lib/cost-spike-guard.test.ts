@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest"
 import {
   COST_SPIKE_THRESHOLD,
+  establishedCost,
   selectNonSpikeCostIndex,
 } from "@/lib/invoice-line-shape"
 
@@ -48,14 +49,14 @@ describe("selectNonSpikeCostIndex", () => {
     expect(result).toEqual({ index: 2, rejectedSpike: true })
   })
 
-  it("uses a threshold of 8 by default", () => {
-    expect(COST_SPIKE_THRESHOLD).toBe(8)
-    // Exactly 8x the baseline is allowed; just over 8x is rejected.
-    expect(selectNonSpikeCostIndex([8, 1, 1, 1])).toEqual({
+  it("uses a threshold of 5 by default", () => {
+    expect(COST_SPIKE_THRESHOLD).toBe(5)
+    // Exactly 5x the baseline is allowed; just over 5x is rejected.
+    expect(selectNonSpikeCostIndex([5, 1, 1, 1])).toEqual({
       index: 0,
       rejectedSpike: false,
     })
-    expect(selectNonSpikeCostIndex([8.01, 1, 1, 1])).toEqual({
+    expect(selectNonSpikeCostIndex([5.01, 1, 1, 1])).toEqual({
       index: 1,
       rejectedSpike: true,
     })
@@ -87,15 +88,53 @@ describe("selectNonSpikeCostIndex", () => {
     expect(result).toEqual({ index: 0, rejectedSpike: false })
   })
 
-  it("applies the same 8x threshold symmetrically on the low side", () => {
-    // Exactly 1/8 of the baseline is allowed; just under is rejected.
-    expect(selectNonSpikeCostIndex([0.125, 1, 1, 1])).toEqual({
+  it("applies the same 5x threshold symmetrically on the low side", () => {
+    // Exactly 1/5 of the baseline is allowed; just under is rejected.
+    expect(selectNonSpikeCostIndex([0.2, 1, 1, 1])).toEqual({
       index: 0,
       rejectedSpike: false,
     })
-    expect(selectNonSpikeCostIndex([0.124, 1, 1, 1])).toEqual({
+    expect(selectNonSpikeCostIndex([0.199, 1, 1, 1])).toEqual({
       index: 1,
       rejectedSpike: true,
     })
+  })
+
+  it("judges against the trusted price, not against older misreads (IFS 9x6 foam, 2026-10)", () => {
+    // Newest first, $/each: the bagasse line read as 2×9 CT ($2.51), then the
+    // new SKU read as 1 EA / 1 CT ($15.36) three times, then months of the
+    // real 2×100 CT case ($0.1536). The old guard compared each misread with
+    // the median of the eight lines after it — mostly misreads — and booked
+    // $2.51. The established price is the one most readings agree on.
+    const costs = [2.51, 15.36, 15.36, 15.36, ...Array(20).fill(0.1536)]
+    expect(selectNonSpikeCostIndex(costs)).toEqual({ index: 4, rejectedSpike: true })
+  })
+
+  it("never lets a run of misreads vouch for itself", () => {
+    // Five misreads in a row on top of six good readings: each misread agrees
+    // with the misreads before it, but none of them is ever trusted.
+    const costs = [15, 15, 15, 15, 15, 0.15, 0.15, 0.15, 0.15, 0.15, 0.15]
+    expect(selectNonSpikeCostIndex(costs)).toEqual({ index: 5, rejectedSpike: true })
+  })
+
+  it("prefers the older reading when two disagree and there is nothing else", () => {
+    // One reading each way: the price that came first is the established one.
+    expect(selectNonSpikeCostIndex([15.36, 0.1536])).toEqual({ index: 1, rejectedSpike: true })
+  })
+
+  it("follows a real price that rises gradually past 5x of where it started", () => {
+    // 1 → 2 → 4 → 8 over many deliveries: every step is ordinary, and the
+    // trusted median moves with it.
+    const costs = [8, 8, 8, 4, 4, 4, 2, 2, 2, 1, 1, 1].slice()
+    expect(selectNonSpikeCostIndex(costs)).toEqual({ index: 0, rejectedSpike: false })
+  })
+})
+
+describe("establishedCost", () => {
+  it("is the price most readings agree on", () => {
+    expect(establishedCost([2.51, 15.36, 15.36, 0.15, 0.15, 0.15, 0.15])).toBeCloseTo(0.15)
+  })
+  it("is null for no readings", () => {
+    expect(establishedCost([])).toBeNull()
   })
 })

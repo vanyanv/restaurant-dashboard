@@ -217,7 +217,7 @@ describe("one commission function", () => {
     expect(text).toContain("OFO_STATUS_CANCELED")
     expect(text).toContain(`s."accountId" =`)
     expect(sql.values).toContain("acct-A")
-    expect(sql.values).toEqual(expect.arrayContaining(["css-pos", "bnm-web"]))
+    expect(sql.values).toEqual(expect.arrayContaining(["css-pos", "bnm-web", "d2c-eater-website"]))
   })
 
   it("agrees with channel-mix about which platforms are in-house", () => {

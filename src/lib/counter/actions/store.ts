@@ -35,6 +35,8 @@ export interface StoreFileEdit {
   uberPickupCommissionRate: number | null
   doordashPickupCommissionRate: number | null
   grubhubCommissionRate: number | null
+  /** Employer payroll tax, a PERCENT (7.65). Blank (null) clears it: labor is wages only. */
+  employerPayrollTaxRate: number | null
   /** Present only when the owner changed it — see `saveStoreFile`. */
   lifecycleStage?: "pre_open" | "warming_up" | "ready"
 }
@@ -65,6 +67,7 @@ export async function saveStoreFile(
   put(form, "uberPickupCommissionRate", edit.uberPickupCommissionRate)
   put(form, "doordashPickupCommissionRate", edit.doordashPickupCommissionRate)
   put(form, "grubhubCommissionRate", edit.grubhubCommissionRate)
+  put(form, "employerPayrollTaxRate", edit.employerPayrollTaxRate)
   // Only when the owner changed it. The nightly model promotes a store from
   // warming_up to ready on its own; always sending the stage the page loaded
   // with would quietly undo that promotion on any unrelated save.

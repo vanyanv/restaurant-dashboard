@@ -161,6 +161,15 @@ model Store {
   doordashPickupCommissionRate Float? @default(0.06)
   grubhubCommissionRate        Float? @default(0.25)
 
+  // Employer payroll tax on Harri wages (decimal, 0.0765 = 7.65%), owner-edited
+  // on the store file. Labor dollars are wages × (1 + rate) — applied once, in
+  // src/lib/counter/labor-cost-core.ts. 7.65% is the federal FICA employer
+  // share (Social Security 6.2% + Medicare 1.45%); California UI/ETT depend on
+  // the employer's assigned rate, so the owner adds them by raising this.
+  // Null (cleared) = no tax added: labor is wages only. Not applied to
+  // fixedMonthlyLabor, which the owner enters as the all-in figure.
+  employerPayrollTaxRate       Float? @default(0.0765)
+
   // Per-store COGS target as a percent (e.g. 28.5 for 28.5%). Drives the
   // /dashboard/cogs target band and the "vs target" KPI. Nullable so existing
   // stores remain valid until set via the topbar chip.

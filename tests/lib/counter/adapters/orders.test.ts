@@ -325,10 +325,11 @@ describe("buildOrdersList", () => {
   })
 
   it("expands a selected channel to every raw slug behind it", () => {
-    expect(platformsForChannels(["house"])).toEqual(["css-pos", "bnm-web"])
+    expect(platformsForChannels(["house"])).toEqual(["css-pos", "bnm-web", "d2c-eater-website"])
     expect(platformsForChannels(["house", "grubhub"])).toEqual([
       "css-pos",
       "bnm-web",
+      "d2c-eater-website",
       "grubhub",
     ])
     // No channel selected is not "no channel matches" — it is every channel.
@@ -432,7 +433,7 @@ describe("getOrdersSections — the channel filter reaching the action", () => {
     })
 
     const filters = vi.mocked(getOrdersList).mock.calls[0][0]
-    expect(filters?.platforms).toEqual(["css-pos", "bnm-web"])
+    expect(filters?.platforms).toEqual(["css-pos", "bnm-web", "d2c-eater-website"])
   })
 })
 
