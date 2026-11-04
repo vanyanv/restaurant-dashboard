@@ -24,7 +24,7 @@ import {
 import { INGREDIENT_TABS } from "@/lib/counter/nav"
 import { ingredientPhoto } from "@/lib/counter/ingredient-photos"
 import { readCounterParams, writeCounterParams } from "@/lib/counter/url-state"
-import { rangeLabel, stepRange } from "@/lib/counter/date-range"
+import { rangeLabel } from "@/lib/counter/date-range"
 import type { SectionSources } from "@/lib/counter/adapters/types"
 import type { InboxCluster, IngredientsSections } from "@/lib/counter/adapters/ingredients"
 import { acceptClusterMatch } from "@/lib/counter/actions/ingredient-match"
@@ -324,7 +324,6 @@ export function CounterIngredientsClient({
           range={range}
           onPreset={(id) => push({ presetId: id })}
           onComparison={(id) => push({ comparisonId: id })}
-          onStep={(direction) => push({ range: stepRange(range, direction) })}
           onRange={(next) => push({ range: next })}
         />
       </PageHead>

@@ -16,7 +16,7 @@ import {
 } from "@/components/counter"
 import { MENU_TABS } from "@/lib/counter/nav"
 import { readCounterParams, writeCounterParams } from "@/lib/counter/url-state"
-import { rangeLabel, stepRange } from "@/lib/counter/date-range"
+import { rangeLabel } from "@/lib/counter/date-range"
 import { count, pct } from "@/lib/counter/format"
 import type { SectionSources } from "@/lib/counter/adapters/types"
 import type { ItemGlyph, MenuItemsData, MenuItemsSections } from "@/lib/counter/adapters/menu-items"
@@ -99,7 +99,6 @@ export function CounterMenuItemsClient({
           range={range}
           onPreset={(id) => push({ presetId: id })}
           onComparison={(id) => push({ comparisonId: id })}
-          onStep={(direction) => push({ range: stepRange(range, direction) })}
           onRange={(next) => push({ range: next })}
         />
         <Link className="btn btn--primary" href={surface("/dashboard/menu/items/new")}>

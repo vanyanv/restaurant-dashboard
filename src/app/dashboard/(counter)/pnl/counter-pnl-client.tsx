@@ -23,7 +23,6 @@ import {
   dayCount,
   rangeLabel,
   rangeSubtitle,
-  stepRange,
   type ComparisonId,
 } from "@/lib/counter/date-range"
 import { money, plural } from "@/lib/counter/format"
@@ -248,7 +247,6 @@ export function CounterPnlClient({
           range={range}
           onPreset={(id) => push({ presetId: id })}
           onComparison={(id) => push({ comparisonId: id })}
-          onStep={(direction) => push({ range: stepRange(range, direction) })}
           onRange={(next) => push({ range: next })}
         />
       </PageHead>

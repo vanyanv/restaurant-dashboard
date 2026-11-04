@@ -84,7 +84,11 @@ const BUDGETS: BudgetRule[] = [
     // 680 -> 690 KB on 2026-11-03: /m/recipes/[id]/edit sat at 662 KB and
     // the Section fold (collapsed Needs you) put ~6 KB on every route that
     // shares Section's chunk, tipping it to 668. Nothing side-effectful added.
-    uncompressedBytes: 690_000,
+    // 690 -> 700 KB on 2026-11-04: the date picker rework (one-tap day, the
+    // 8-week row, week numbers, phone arrows, range naming) is in the phone
+    // shell on every route and added ~10 KB; /m/recipes/[id]/edit went 668 ->
+    // 678. Pure UI and date arithmetic, no new dependency.
+    uncompressedBytes: 700_000,
   },
   {
     label: "dashboard chat (AI SDK)",

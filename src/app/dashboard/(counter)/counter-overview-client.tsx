@@ -41,7 +41,6 @@ import {
   rangeLabel,
   rangeSubtitle,
   rangeTitle,
-  stepRange,
   type ComparisonId,
   type DateRange,
 } from "@/lib/counter/date-range"
@@ -379,7 +378,6 @@ export function CounterOverviewClient({
           range={range}
           onPreset={(id) => push({ presetId: id })}
           onComparison={(id) => push({ comparisonId: id })}
-          onStep={(direction) => push({ range: stepRange(range, direction) })}
           onRange={(next) => push({ range: next })}
         />
       </PageHead>

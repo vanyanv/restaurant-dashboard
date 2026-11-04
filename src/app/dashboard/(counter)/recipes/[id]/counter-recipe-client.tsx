@@ -24,7 +24,6 @@ import {
   useSurfaceHref,
 } from "@/components/counter"
 import { readCounterParams, writeCounterParams } from "@/lib/counter/url-state"
-import { stepRange } from "@/lib/counter/date-range"
 import {
   costDraftRecipe,
   markRecipeConfirmed,
@@ -322,7 +321,6 @@ export function CounterRecipeClient({
           range={range}
           onPreset={(id) => push({ presetId: id })}
           onComparison={(id) => push({ comparisonId: id })}
-          onStep={(direction) => push({ range: stepRange(range, direction) })}
           onRange={(next) => push({ range: next })}
         />
       </PageHead>

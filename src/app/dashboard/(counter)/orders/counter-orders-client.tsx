@@ -19,7 +19,7 @@ import {
   type SwitchableStore,
 } from "@/components/counter"
 import { readCounterParams, writeCounterParams } from "@/lib/counter/url-state"
-import { rangeSubtitle, stepRange } from "@/lib/counter/date-range"
+import { rangeSubtitle } from "@/lib/counter/date-range"
 import { CHANNELS, type ChannelId } from "@/lib/counter/channels"
 import type { OrdersList, OrdersRow, OrdersSections } from "@/lib/counter/adapters/orders"
 import type { SectionSources } from "@/lib/counter/adapters/types"
@@ -376,7 +376,6 @@ export function CounterOrdersClient({
           range={range}
           onPreset={(id) => push({ presetId: id })}
           onComparison={(id) => push({ comparisonId: id })}
-          onStep={(direction) => push({ range: stepRange(range, direction) })}
           onRange={(next) => push({ range: next })}
         />
       </PageHead>

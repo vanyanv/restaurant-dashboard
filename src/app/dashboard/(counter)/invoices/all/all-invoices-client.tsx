@@ -18,7 +18,7 @@ import {
   type SwitchableStore,
 } from "@/components/counter"
 import { readCounterParams, writeCounterParams } from "@/lib/counter/url-state"
-import { rangeLabel, stepRange } from "@/lib/counter/date-range"
+import { rangeLabel } from "@/lib/counter/date-range"
 import type { SectionSources } from "@/lib/counter/adapters/types"
 import type { InvoiceList, InvoicesSections, ProductRow } from "@/lib/counter/adapters/invoices"
 import { InvoiceGlyph, InvoiceLegend, InvoicesHead } from "../invoices-ui"
@@ -111,7 +111,6 @@ export function AllInvoicesClient({
           range={range}
           onPreset={(id) => push({ presetId: id })}
           onComparison={(id) => push({ comparisonId: id })}
-          onStep={(direction) => push({ range: stepRange(range, direction) })}
           onRange={(next) => push({ range: next })}
         />
       </InvoicesHead>

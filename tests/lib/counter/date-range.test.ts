@@ -3,20 +3,27 @@ import {
   PRESETS, COMPARISONS, resolvePreset, bucketFor, stepRange, comparisonRange,
   comparisonWindows, dayCount,
   toQueryBounds, isoDay, parseIsoDay, rangeLabel, rangeTitle, rangeSubtitle,
-  monthDay, trailingWeeks,
+  monthDay, trailingWeeks, MENU_PRESETS, describeRange, compareSentence, canStepForward, weekOf,
 } from "@/lib/counter/date-range"
 import { addDays as addDaysFor } from "date-fns"
 
 const TODAY = new Date(2026, 7, 24) // Mon 24 Aug 2026, local midnight
 
 describe("presets", () => {
-  it("offers exactly the twelve the design specifies", () => {
-    expect(PRESETS).toHaveLength(12)
-    expect(PRESETS.map((p) => p.id)).toEqual([
-      "today", "yesterday", "wtd", "lastweek",
-      "d3", "d7", "d14", "d30", "d90",
-      "mtd", "qtd", "ytd",
+  it("offers ten in the menu, grouped, and still resolves the three it dropped", () => {
+    // d3, d14 and qtd left the menu in November 2026; an old `?range=d14`
+    // link must still open on fourteen days rather than fall to the default.
+    expect(MENU_PRESETS.map((p) => p.id)).toEqual([
+      "today", "yesterday", "wtd", "lastweek", "d7",
+      "mtd", "lastmonth", "d30", "d90", "ytd",
     ])
+    expect(PRESETS.filter((p) => !p.menu).map((p) => p.id)).toEqual(["d3", "d14", "qtd"])
+    expect(dayCount(resolvePreset("d14", TODAY))).toBe(14)
+  })
+
+  it("last month is the whole calendar month before, ending at a midnight", () => {
+    const r = resolvePreset("lastmonth", TODAY)
+    expect(r).toEqual({ start: new Date(2026, 6, 1), end: new Date(2026, 6, 31) })
   })
 
   it("today is a single day", () => {
@@ -89,7 +96,30 @@ describe("bucketFor", () => {
 })
 
 describe("stepRange", () => {
-  it("walks back by exactly the span you are on, not by a calendar unit", () => {
+  it("walks a running week back to the WHOLE week before, not the weekend before it", () => {
+    // Tue 3 Nov 2026: "This week" is Mon–Tue. Stepping by its 2-day span
+    // used to land on Sat 31 Oct – Sun 1 Nov.
+    const today = new Date(2026, 10, 3)
+    const thisWeek = resolvePreset("wtd", today)
+    expect(stepRange(thisWeek, -1, today)).toEqual({ start: new Date(2026, 9, 26), end: new Date(2026, 10, 1) })
+  })
+
+  it("walks a whole week forward into the running week, ending today", () => {
+    const today = new Date(2026, 10, 3)
+    const lastWeek = resolvePreset("lastweek", today)
+    expect(stepRange(lastWeek, 1, today)).toEqual(resolvePreset("wtd", today))
+    expect(canStepForward(resolvePreset("wtd", today), today)).toBe(false)
+    expect(canStepForward(lastWeek, today)).toBe(true)
+  })
+
+  it("walks a month by whole months, whatever their length", () => {
+    const today = new Date(2026, 10, 3)
+    const oct = resolvePreset("lastmonth", today)
+    expect(stepRange(oct, -1, today)).toEqual({ start: new Date(2026, 8, 1), end: new Date(2026, 8, 30) })
+    expect(stepRange(resolvePreset("mtd", today), -1, today)).toEqual(oct)
+  })
+
+  it("walks back by exactly the span you are on when the range is no calendar unit", () => {
     const week = { start: new Date(2026, 7, 18), end: new Date(2026, 7, 24) }
     const back = stepRange(week, -1)
     expect(dayCount(back)).toBe(7)
@@ -110,6 +140,22 @@ describe("comparisonRange", () => {
 
   it("offers exactly four modes", () => {
     expect(COMPARISONS.map((c) => c.id)).toEqual(["prev", "weekday", "year", "none"])
+  })
+
+  it("prior period lines a short window up weekday for weekday, one week back", () => {
+    // Mon–Tue against the Mon–Tue before, not against the weekend.
+    const monTue = { start: new Date(2026, 10, 2), end: new Date(2026, 10, 3) }
+    expect(comparisonRange(monTue, "prev")).toEqual({ start: new Date(2026, 9, 26), end: new Date(2026, 9, 27) })
+    // A single Monday against the Monday before.
+    const mon = { start: new Date(2026, 10, 2), end: new Date(2026, 10, 2) }
+    expect(comparisonRange(mon, "prev")).toEqual({ start: new Date(2026, 9, 26), end: new Date(2026, 9, 26) })
+  })
+
+  it("prior period compares a month with the month before, clipped to its length", () => {
+    expect(comparisonRange({ start: new Date(2026, 9, 1), end: new Date(2026, 9, 31) }, "prev"))
+      .toEqual({ start: new Date(2026, 8, 1), end: new Date(2026, 8, 30) })
+    expect(comparisonRange({ start: new Date(2026, 2, 1), end: new Date(2026, 2, 30) }, "prev"))
+      .toEqual({ start: new Date(2026, 1, 1), end: new Date(2026, 1, 28) })
   })
 
   it("prior period is the same length immediately before", () => {
@@ -457,5 +503,38 @@ describe("trailingWeeks", () => {
 
   it("returns nothing rather than a made-up week when asked for none", () => {
     expect(trailingWeeks(THU, 0)).toEqual([])
+  })
+})
+
+describe("describeRange", () => {
+  const today = new Date(2026, 10, 3) // Tue 3 Nov 2026
+
+  it("says 'so far' for a window still running", () => {
+    expect(describeRange(resolvePreset("wtd", today), "wtd", today)).toBe("This week so far")
+    expect(describeRange(resolvePreset("today", today), "today", today)).toBe("Today so far")
+  })
+
+  it("names a stepped window by the preset it equals, then by its shape", () => {
+    expect(describeRange(resolvePreset("lastweek", today), "custom", today)).toBe("Last week")
+    expect(describeRange({ start: new Date(2026, 9, 19), end: new Date(2026, 9, 25) }, "custom", today)).toBe("Week of Oct 19")
+    expect(describeRange({ start: new Date(2026, 8, 1), end: new Date(2026, 8, 30) }, "custom", today)).toBe("September")
+    expect(describeRange({ start: new Date(2026, 9, 28), end: new Date(2026, 9, 28) }, "custom", today)).toBe("Wednesday")
+    expect(describeRange({ start: new Date(2026, 9, 28), end: new Date(2026, 9, 30) }, "custom", today)).toBe("Custom range")
+  })
+})
+
+describe("compareSentence", () => {
+  it("names the dates the comparison reads", () => {
+    const monTue = { start: new Date(2026, 10, 2), end: new Date(2026, 10, 3) }
+    expect(compareSentence(monTue, "prev")).toBe("Comparing Nov 2 – Nov 3 with Oct 26 – Oct 27.")
+    expect(compareSentence(monTue, "none")).toBe("Showing Nov 2 – Nov 3 with no comparison.")
+  })
+})
+
+describe("weekOf", () => {
+  it("never returns an inverted window for a week that has not started", () => {
+    const today = new Date(2026, 10, 4)
+    expect(weekOf(new Date(2026, 10, 9), today)).toEqual({ start: today, end: today })
+    expect(weekOf(new Date(2026, 10, 2), today)).toEqual({ start: new Date(2026, 10, 2), end: today })
   })
 })

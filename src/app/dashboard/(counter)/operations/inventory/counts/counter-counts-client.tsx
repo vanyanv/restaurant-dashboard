@@ -20,7 +20,6 @@ import {
 } from "@/components/counter"
 import { INVENTORY_TABS } from "@/lib/counter/nav"
 import { readCounterParams, writeCounterParams } from "@/lib/counter/url-state"
-import { stepRange } from "@/lib/counter/date-range"
 import type { SectionSources } from "@/lib/counter/adapters/types"
 import type { StockCountsSections } from "@/lib/counter/adapters/stock-counts"
 
@@ -94,7 +93,6 @@ export function CounterCountsClient({
           range={range}
           onPreset={(id) => push({ presetId: id })}
           onComparison={(id) => push({ comparisonId: id })}
-          onStep={(direction) => push({ range: stepRange(range, direction) })}
           onRange={(next) => push({ range: next })}
         />
       </PageHead>

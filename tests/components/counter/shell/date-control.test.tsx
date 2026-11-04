@@ -10,7 +10,6 @@ const props = {
   range,
   onPreset: () => {},
   onComparison: () => {},
-  onStep: () => {},
   onRange: () => {},
 }
 
@@ -35,7 +34,15 @@ describe("DateControl", () => {
     )
     const main = container.querySelector(".dr__main") as HTMLElement
     expect(main.querySelector(".lb")?.textContent).toBe("Aug 3 – Aug 9")
-    expect(main.querySelector(".cmp")?.textContent).toContain("Custom range")
+    // Aug 3 – 9 2026 is Monday to Sunday, so the second line names the week.
+    expect(main.querySelector(".cmp")?.textContent).toContain("Week of Aug 3")
+  })
+
+  it('calls a window no shape names "Custom range"', () => {
+    const { container } = render(
+      <DateControl {...props} presetId="custom" range={{ start: new Date(2026, 7, 4), end: new Date(2026, 7, 9) }} />,
+    )
+    expect(container.querySelector(".dr__main .cmp")?.textContent).toContain("Custom range")
   })
 
   it("has a Today button, outside the stepper group", () => {
@@ -60,12 +67,13 @@ describe("DateControl", () => {
     expect(dr.className).toBe("dr is-open")
   })
 
-  it("shows every preset with its own day count", () => {
-    // Twelve presets, each showing its own length, so a reader picks by span
-    // rather than by name.
+  it("shows the menu presets in four groups, each with its own day count", () => {
     const { container } = render(<DateControl {...props} />)
+    expect([...container.querySelectorAll(".drpop__grp > .drpop__k")].map((k) => k.textContent)).toEqual([
+      "Days", "Weeks", "Months", "Longer",
+    ])
     const presets = [...container.querySelectorAll(".drp")]
-    expect(presets).toHaveLength(12)
+    expect(presets).toHaveLength(10)
     for (const p of presets) expect(p.querySelector(".n")?.textContent).toMatch(/^\d+d$/)
     const thirty = presets.find((p) => p.textContent?.startsWith("Last 30 days"))!
     expect(thirty.querySelector(".n")?.textContent).toBe("30d")
@@ -93,19 +101,30 @@ describe("DateControl", () => {
     const onPreset = vi.fn()
     const { container } = render(<DateControl {...props} onPreset={onPreset} />)
     fireEvent.click(container.querySelector(".dr__main") as HTMLElement)
-    fireEvent.click([...container.querySelectorAll(".drp")].find((p) => p.textContent?.startsWith("Last 14 days"))!)
-    expect(onPreset).toHaveBeenCalledWith("d14")
+    fireEvent.click([...container.querySelectorAll(".drp")].find((p) => p.textContent?.startsWith("Last month"))!)
+    expect(onPreset).toHaveBeenCalledWith("lastmonth")
     expect((container.querySelector(".dr") as HTMLElement).className).toBe("dr")
   })
 
-  it("steps back and forward by the span, not by a calendar unit", () => {
-    const onStep = vi.fn()
-    const { container } = render(<DateControl {...props} onStep={onStep} />)
+  it("steps a Monday week by whole weeks, through onRange", () => {
+    const onRange = vi.fn()
+    const week = { start: new Date(2026, 7, 3), end: new Date(2026, 7, 9) }
+    const { container } = render(<DateControl {...props} presetId="custom" range={week} onRange={onRange} />)
     const steps = container.querySelectorAll(".dr__step")
     fireEvent.click(steps[0])
-    expect(onStep).toHaveBeenCalledWith(-1)
+    const back = onRange.mock.calls[0][0] as { start: Date; end: Date }
+    expect([back.start.getDate(), back.end.getDate()]).toEqual([27, 2])
     fireEvent.click(steps[1])
-    expect(onStep).toHaveBeenLastCalledWith(1)
+    const fwd = onRange.mock.calls[1][0] as { start: Date; end: Date }
+    expect([fwd.start.getDate(), fwd.end.getDate()]).toEqual([10, 16])
+  })
+
+  it("steps a single day by one day", () => {
+    const onRange = vi.fn()
+    const day = { start: new Date(2026, 7, 5), end: new Date(2026, 7, 5) }
+    const { container } = render(<DateControl {...props} presetId="custom" range={day} onRange={onRange} />)
+    fireEvent.click(container.querySelectorAll(".dr__step")[0])
+    expect((onRange.mock.calls[0][0] as { start: Date }).start.getDate()).toBe(4)
   })
 
   describe("the calendar", () => {
@@ -124,11 +143,30 @@ describe("DateControl", () => {
       expect(shaded[shaded.length - 1]).toBe("14")
     })
 
-    it("takes TWO clicks to make a range, and reports nothing on the first", () => {
-      // A range picked in one click would be a real navigation to a one-day
-      // window on the way to the window the reader actually wanted.
+    it("picks a single day in ONE tap, and closes", () => {
+      // The owner's complaint: picking one day took several clicks.
       const onRange = vi.fn()
       const { container } = render(<DateControl {...props} onRange={onRange} />)
+      fireEvent.click(container.querySelector(".dr__main") as HTMLElement)
+      fireEvent.click([...container.querySelectorAll("button.drd")].find((b) => b.textContent === "12")!)
+      expect(onRange).toHaveBeenCalledTimes(1)
+      const picked = onRange.mock.calls[0][0] as { start: Date; end: Date }
+      expect([picked.start.getDate(), picked.end.getDate()]).toEqual([12, 12])
+      expect((container.querySelector(".dr") as HTMLElement).className).toBe("dr")
+    })
+
+    it("picks a whole Monday week from its week number", () => {
+      const onRange = vi.fn()
+      const { container } = render(<DateControl {...props} onRange={onRange} />)
+      fireEvent.click(screen.getByRole("button", { name: "Pick the week of August 10" }))
+      const picked = onRange.mock.calls[0][0] as { start: Date; end: Date }
+      expect([picked.start.getDate(), picked.end.getDate()]).toEqual([10, 16])
+    })
+
+    it("in range mode, takes TWO clicks to make a range, and reports nothing on the first", () => {
+      const onRange = vi.fn()
+      const { container } = render(<DateControl {...props} onRange={onRange} />)
+      fireEvent.click(screen.getByRole("button", { name: "A range" }))
       const day = (n: string) =>
         [...container.querySelectorAll("button.drd")].find((b) => b.textContent === n)!
       fireEvent.click(day("4"))
@@ -142,6 +180,7 @@ describe("DateControl", () => {
     it("orders the two clicks, so picking backwards still gives a forward range", () => {
       const onRange = vi.fn()
       const { container } = render(<DateControl {...props} onRange={onRange} />)
+      fireEvent.click(screen.getByRole("button", { name: "A range" }))
       const day = (n: string) =>
         [...container.querySelectorAll("button.drd")].find((b) => b.textContent === n)!
       fireEvent.click(day("9"))
@@ -199,7 +238,14 @@ describe("DateControl", () => {
       expect(labels).toContain("week buckets · 90 days")
     })
 
-    it("Apply only closes — every choice has already been reported", () => {
+    it("says which dates the comparison reads", () => {
+      const { container } = render(
+        <DateControl {...props} presetId="custom" comparisonId="prev" range={{ start: new Date(2026, 7, 3), end: new Date(2026, 7, 4) }} />,
+      )
+      expect(container.querySelector(".drcmpline")?.textContent).toBe("Comparing Aug 3 – Aug 4 with Jul 27 – Jul 28.")
+    })
+
+    it("Done only closes — every choice has already been reported", () => {
       const onRange = vi.fn()
       const onPreset = vi.fn()
       const { container } = render(<DateControl {...props} onRange={onRange} onPreset={onPreset} />)

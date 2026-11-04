@@ -5,10 +5,12 @@ import { businessCalendarDate } from "@/lib/counter/business-date"
 import { useId, useState, type CSSProperties } from "react"
 import { startOfMonth } from "date-fns"
 import {
-  COMPARISONS, PRESETS, comparisonWindows, dayCount, rangeLabel,
+  COMPARISONS, MENU_PRESETS, canStepForward, compareSentence, comparisonWindows, describeRange,
+  rangeLabel, stepRange, weekOf,
   type ComparisonId, type DateRange, type PresetId, type RangeId,
 } from "@/lib/counter/date-range"
 import { Calendar } from "./calendar"
+import { RangeWeeks } from "./range-weeks"
 import { PhoneSheet } from "./phone-sheet"
 
 /**
@@ -48,6 +50,13 @@ import { PhoneSheet } from "./phone-sheet"
  * empty delta, which reads as "no change" rather than "that question does not
  * apply here".
  *
+ * THE NOVEMBER 2026 PASS: the chip now sits between ‹ › arrows (`.mstep`),
+ * so the day or week before is one tap without opening anything; a calendar
+ * tap picks that one day and closes the sheet ("A range" switches to the old
+ * two-tap pick); the last 8 weeks are a row of buttons; the presets are the
+ * shorter `MENU_PRESETS` list; and the sheet says which dates the comparison
+ * reads. Same rules as the desk `DateControl`, from the same functions.
+ *
  * `.drcals`'s inline `grid-template-columns:1fr` is deliberately NOT ported:
  * the ported rule already declares exactly that (counter-components.css:939),
  * so the prototype's inline copy is a belt-and-braces no-op. Restating it here
@@ -55,6 +64,22 @@ import { PhoneSheet } from "./phone-sheet"
  */
 
 /** The prototype's own `ic(CHEV_D)`. */
+function Chevron({ dir }: { dir: -1 | 1 }) {
+  return (
+    <svg
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.7"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d={dir === -1 ? "M10 3.5L5.5 8 10 12.5" : "M6 3.5L10.5 8 6 12.5"} />
+    </svg>
+  )
+}
+
 function ChevronDown() {
   return (
     <svg
@@ -117,33 +142,55 @@ export function MDateSheet({
   // pick, and is dropped the moment the range itself is replaced.
   const [viewMonth, setViewMonth] = useState<Date | null>(null)
   const [pending, setPending] = useState<Date | null>(null)
+  const [mode, setMode] = useState<"day" | "range">("day")
   const cmpLabelId = useId()
   const sheetId = useId()
 
-  const days = dayCount(range)
   const today = businessCalendarDate(new Date())
+  const prev = stepRange(range, -1, today)
+  const next = stepRange(range, 1, today)
+  const forward = canStepForward(range, today)
+  const name = describeRange(range, presetId, today)
+  const activePreset = presetId !== "custom"
+    ? presetId
+    : MENU_PRESETS.find((p) => {
+      const r = p.resolve(today)
+      return r.start.getTime() === range.start.getTime() && r.end.getTime() === range.end.getTime()
+    })?.id
   const comparisonOptions = COMPARISONS.filter(
     (c) => c.id === "none" || comparisonWindows(range, c.id) !== null,
   )
 
-  function replaceRange(fn: () => void) {
+  function replaceRange(fn: () => void, close = false) {
     fn()
     setPending(null)
     setViewMonth(null)
+    if (close) setOpen(false)
   }
 
   function pickDay(day: Date) {
+    if (mode === "day") {
+      replaceRange(() => onRange({ start: day, end: day }), true)
+      return
+    }
     if (!pending) {
       setPending(day)
       return
     }
     const [start, end] = day < pending ? [day, pending] : [pending, day]
-    setPending(null)
-    onRange({ start, end })
+    replaceRange(() => onRange({ start, end }), true)
   }
 
   return (
-    <>
+    <div className="mdatebar">
+      <button
+        className="mstep"
+        type="button"
+        aria-label={`Earlier (${rangeLabel(prev, "custom")})`}
+        onClick={() => replaceRange(() => onRange(prev))}
+      >
+        <Chevron dir={-1} />
+      </button>
       <button
         className="mdate"
         type="button"
@@ -155,19 +202,46 @@ export function MDateSheet({
         {rangeLabel(range, "custom")}
         <ChevronDown />
       </button>
+      <button
+        className="mstep"
+        type="button"
+        aria-label={forward ? `Later (${rangeLabel(next, "custom")})` : "Later (already up to today)"}
+        disabled={!forward}
+        onClick={() => replaceRange(() => onRange(next))}
+      >
+        <Chevron dir={1} />
+      </button>
 
       <PhoneSheet open={open} onClose={() => setOpen(false)} title="Pick a range" id={sheetId}>
         <div className="mpresets" role="group" aria-label="Presets">
-          {PRESETS.map((p) => (
+          {MENU_PRESETS.map((p) => (
             <button
               key={p.id}
               type="button"
-              aria-pressed={p.id === presetId}
+              aria-pressed={p.id === activePreset}
               onClick={() => replaceRange(() => onPreset(p.id))}
             >
               {p.name}
             </button>
           ))}
+        </div>
+
+        <RangeWeeks range={range} today={today} onPick={(week) => replaceRange(() => onRange(week), true)} />
+
+        <div className="drmode" role="group" aria-label="What a tap on the calendar picks">
+          <button
+            type="button"
+            aria-pressed={mode === "day"}
+            onClick={() => {
+              setMode("day")
+              setPending(null)
+            }}
+          >
+            One day
+          </button>
+          <button type="button" aria-pressed={mode === "range"} onClick={() => setMode("range")}>
+            A range
+          </button>
         </div>
 
         <div className="drcals">
@@ -178,6 +252,7 @@ export function MDateSheet({
             today={today}
             pending={pending}
             onPickDay={pickDay}
+            onPickWeek={(monday) => replaceRange(() => onRange(weekOf(monday, today)), true)}
             onMonthChange={setViewMonth}
           />
         </div>
@@ -200,10 +275,14 @@ export function MDateSheet({
           </div>
         </div>
 
+        <p className="drhint">
+          {mode === "range" ? (pending ? "Now tap the last day." : "Tap the first day, then the last.") : compareSentence(range, comparisonId)}
+        </p>
+
         <button className="mbtn mbtn--primary" type="button" onClick={() => setOpen(false)}>
-          Show {days} {days === 1 ? "day" : "days"}
+          Show {name === "Custom range" ? rangeLabel(range, "custom") : name}
         </button>
       </PhoneSheet>
-    </>
+    </div>
   )
 }
