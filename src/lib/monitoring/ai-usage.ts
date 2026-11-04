@@ -23,8 +23,14 @@ import { prisma } from "@/lib/prisma"
  * (verified there against https://developers.openai.com/api/docs/pricing
  * on 2026-07-28, cross-checked against this table's own gpt-4.1-mini row),
  * not re-derived from memory.
+ *
+ * gpt-4.1 added 2026-11-04: the CHAT_QUICK_MODEL default. The session that
+ * added it could not reach the pricing page (host blocked), so this is the
+ * published standard rate as known then ($2.00 / $0.50 cached / $8.00) and
+ * should be re-checked against https://developers.openai.com/api/docs/pricing.
  */
 export const PRICING_PER_MTOK = {
+  "gpt-4.1":          { in: 2.00, cachedIn: 0.50,  out: 8.00 },
   "gpt-4.1-mini":     { in: 0.40, cachedIn: 0.10,  out: 1.60 },
   "gpt-4o-mini":      { in: 0.15, cachedIn: 0.075, out: 0.60 },
   "gemini-2.5-flash": { in: 0.30, cachedIn: 0.075, out: 2.50 },
