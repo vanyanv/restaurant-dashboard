@@ -133,6 +133,8 @@ export interface StatementLines {
    */
   cogsPct: number
   laborPct: number
+  /** Store-days that sold with no labor reading — labor counted as nothing on them. */
+  laborMissingDays: number
 }
 
 export interface StoreStatement extends StatementLines {
@@ -144,6 +146,8 @@ export interface StoreStatement extends StatementLines {
   prime: PrimeCost
   /** This store's P&L, bucket by bucket. */
   rows: PnLRow[]
+  /** This store's lines per period of the load (per day on a daily load). Absent on built-up statements. */
+  periodLines?: StatementLines[]
 }
 
 export interface Statement extends StatementLines {
@@ -184,6 +188,8 @@ export interface Statement extends StatementLines {
   /** The selection's P&L, bucket by bucket: one store's rows, or the consolidated ones. */
   rows: PnLRow[]
   periods: Period[]
+  /** The scoped lines per period of `periods`. Absent on built-up statements. */
+  periodLines?: StatementLines[]
 }
 
 /**
@@ -235,6 +241,7 @@ function linesFrom(k: RollupLines): StatementLines {
     // statement even though the margin beside it had been withheld.
     cogsPct: k.grossSales <= 0 ? 0 : k.cogsPct,
     laborPct: k.grossSales <= 0 ? 0 : k.laborPct,
+    laborMissingDays: k.laborMissingDays ?? 0,
   }
 }
 
@@ -255,6 +262,7 @@ function storeStatement(s: RollupOk["perStore"][number]): StoreStatement {
     fixedCostsConfigured: s.fixedCostsConfigured,
     prime: primeFor(lines),
     rows: s.rows,
+    periodLines: (s.perPeriod ?? []).map(linesFrom),
   }
 }
 
@@ -274,6 +282,7 @@ const NO_LINES: StatementLines = {
   marginPct: null,
   cogsPct: 0,
   laborPct: 0,
+  laborMissingDays: 0,
 }
 
 /**
@@ -343,6 +352,7 @@ export async function loadStatement(input: StatementInput): Promise<Statement> {
     storeNotFound: false,
     rows: storeId === null ? result.consolidatedRows : selected[0].rows,
     periods: result.periods,
+    periodLines: ((storeId === null ? result.perPeriod : selected[0].perPeriod) ?? []).map(linesFrom),
   }
 }
 
@@ -532,6 +542,7 @@ export async function loadComparisonStatement(input: {
     marginPct: grossSales <= 0 ? null : total((p) => p.bottomLine) / grossSales,
     cogsPct: grossSales <= 0 ? 0 : cogsValue / grossSales,
     laborPct: grossSales <= 0 ? 0 : laborValue / grossSales,
+    laborMissingDays: total((p) => p.laborMissingDays),
   }
 
   return {

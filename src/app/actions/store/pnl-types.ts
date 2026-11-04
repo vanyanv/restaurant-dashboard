@@ -73,6 +73,13 @@ export type PnLPeriodLines = {
   laborPct: number
   rentValue: number
   rentPct: number
+  /**
+   * Store-days in the window that SOLD and have no labor reading, so their
+   * labor counts as nothing and the bottom line reads high
+   * (`soldDaysWithoutLabor`). Optional so a cached or hand-built result
+   * without it reads as 0.
+   */
+  laborMissingDays?: number
 }
 
 export type AllStoresPnLResult =

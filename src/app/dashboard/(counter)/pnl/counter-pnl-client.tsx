@@ -1,21 +1,15 @@
 "use client"
 
-import Link from "next/link"
-import { Fragment, useCallback, useMemo } from "react"
+import { useCallback, useMemo } from "react"
 import { usePathname, useRouter } from "next/navigation"
 import {
-  Cascade,
   DateControl,
-  Lede,
   Note,
   PageHead,
   MoneyLines,
   Section,
-  STAGE_TAG,
-  Strip,
   SubNav,
   Table,
-  WeekTable,
   useCounterTransition,
   usePageChrome,
   type Column,
@@ -32,22 +26,29 @@ import {
   stepRange,
   type ComparisonId,
 } from "@/lib/counter/date-range"
-import { count, money, pct, plural, pluralWord } from "@/lib/counter/format"
+import { money, plural } from "@/lib/counter/format"
 import type { SectionSources } from "@/lib/counter/adapters/types"
 import type {
   PnlSections,
   PnlStatement,
-  PnlStoreLine,
-  ReadingSegment,
 } from "@/lib/counter/adapters/pnl"
 import type { StoreFixedSections } from "@/lib/counter/adapters/pnl-store"
+import { PlainDays, PlainDollar, PlainHero, PlainStatuses, PlainStores, PlainTodos } from "./pnl-plain-ui"
 
 /**
- * Counter P&L — the second Counter page, composed from `P.pnl.desk()`
- * (`docs/counter/counter-prototype.html:5245`) in the prototype's own order:
+ * Counter P&L, "made plain" (owner-approved 2026-11-03; mock
+ * https://claude.ai/artifact/EjD7D1265pyAu9PS8zz4xf):
  *
- *   strip → the reading paragraph → the `.wf` cascade → the eight weeks →
- *   the statement table → the split of food-cause and trust → by store.
+ *   what you kept (big figure, vs the prior period, the eight weeks as the
+ *   picker, each input's status in words) → Needs you (folded) → where each
+ *   dollar went → day by day → by store → the full statement (folded).
+ *
+ * The first five blocks read ONE section, `plain` (`src/lib/counter/pnl-plain.ts`).
+ * It replaced the prototype's strip, reading, cascade, week table, the two
+ * owed "trust"/"food cause" boxes and the by-store table, so this page no
+ * longer follows `P.pnl.desk()` and the fidelity structure pass reports that
+ * by design. The adapter still serves the old sections; the phone and the
+ * statement still read `statement`.
  *
  * A page composes primitives and calls exactly one adapter; it never imports
  * Prisma or an action directly and never inspects `SectionData.status` —
@@ -111,32 +112,6 @@ function comparisonName(id: ComparisonId): string {
   return (COMPARISONS.find((c) => c.id === id)?.label ?? "with no comparison").replace(/^vs /, "")
 }
 
-
-/** "Hollywood", "Hollywood and Glendale", "Hollywood, Glendale and Van Nuys". */
-function names(lines: PnlStoreLine[]): string {
-  if (lines.length === 0) return ""
-  if (lines.length === 1) return lines[0].name
-  return `${lines.slice(0, -1).map((l) => l.name).join(", ")} and ${lines[lines.length - 1].name}`
-}
-
-/**
- * The reading paragraph, as the prototype's `.ans__lead` — emphasis and all.
- *
- * The adapter decides WHICH figure carries the emphasis, because that is a
- * judgement about the data (`ReadingSegment`). A plain segment renders as a
- * text node, not a `<span>`: the prototype's paragraph has bold runs and bare
- * text, and wrapping the bare text would put elements in the DOM the sheet
- * never styles.
- */
-function Reading({ segments }: { segments: ReadingSegment[] }) {
-  return (
-    <p className="ans__lead" style={{ margin: "16px 0 0" }}>
-      {segments.map((s, i) =>
-        s.strong ? <b key={i}>{s.text}</b> : <Fragment key={i}>{s.text}</Fragment>,
-      )}
-    </p>
-  )
-}
 
 /** The statement's nine lines as `.tbl` rows. `href` makes a row open a page (note 47). */
 function statementRows(s: PnlStatement): Row[] {
@@ -247,7 +222,6 @@ export function CounterPnlClient({
   const days = dayCount(range)
   const comparing = comparisonId !== "none"
   const cmpName = comparisonName(comparisonId)
-  const stageCount = new Set(stores.map((s) => s.stage)).size
 
   return (
     /*
@@ -286,55 +260,73 @@ export function CounterPnlClient({
           store is picked. */}
       <SubNav items={storeViewTabs("/dashboard/pnl", counterParams.storeId, paramsString)} label="P&L" />
 
-      {/* The strip and the sentence under it — one section, because the
-          sentence is a reading OF those five figures. Both sit at page level,
-          above the first `.sec`, as `P.pnl.desk()` writes them. */}
-      <Section bare title="The figures" data={sections.headline} pending={pending}>
-        {(h) => (
+      {/* The page "made plain" (`pnl-plain.ts`, owner-approved 2026-11-03):
+          the kept figure and how it moved, the eight weeks as the picker,
+          each input's status in words, the gaps folded under Needs you, where
+          each dollar went, and every day of the range. One section of data
+          drawn as five blocks, so none can show a figure the others lack. */}
+      <Section bare title="What you kept" data={sections.plain} pending={pending}>
+        {(p) => (
           <>
-            <Strip cells={h.cells} />
-            <Reading segments={h.reading} />
+            <PlainHero p={p} range={range} onWeek={(next) => push({ range: next })} />
+            <PlainStatuses p={p} />
           </>
         )}
       </Section>
 
-      {/* Note 52: a statement is a sequence of subtractions, so it is drawn as
-          one. `Cascade` computes the end from the cuts rather than taking it
-          as a parameter, so the picture reconciles by construction. */}
       <Section
-        title="Where it went"
+        title="Needs you"
+        fold="closed"
+        meta={(p) => (p.todos.length > 0 ? plural(p.todos.length, "thing") : "nothing waiting")}
+        data={sections.plain}
         pending={pending}
-        meta={`${windowLabel} · the bar is what is left after each line`}
-        data={sections.cascade}
-        askAbout="where the money went"
+        pad={false}
       >
-        {(c) => <Cascade lead={c.lead} start={c.start} cuts={c.cuts} end={c.end} />}
-      </Section>
-
-      {/* Note 53. Pressing a row writes `?from=…&to=…`, which moves the date
-          control above and every figure on the page with it — the promise the
-          row makes ("these are the figures you will see") kept by navigating
-          to the same window the row was loaded over. */}
-      <Section
-        title="The last eight weeks"
-        pending={pending}
-        meta="press a week to read it in full · every figure is this same statement over that window"
-        data={sections.weeks}
-        askAbout="the last eight weeks"
-      >
-        {(w) => (
-          <WeekTable
-            weeks={w.rows}
-            selected={range}
-            selectedLabel={windowLabel}
-            foodTargetPct={w.foodTargetPct}
-            onSelect={(next) => push({ range: next })}
-          />
-        )}
+        {(p) => <PlainTodos p={p} />}
       </Section>
 
       <Section
-        title="The statement"
+        title="Where each dollar went"
+        meta={(p) => (p.sales > 0 ? `out of ${money(p.sales)} in sales · change vs the period before` : windowLabel)}
+        data={sections.plain}
+        pending={pending}
+      >
+        {(p) => <PlainDollar p={p} />}
+      </Section>
+
+      <Section
+        title="Day by day"
+        meta={(p) => (p.days ? "tap a day to see every line" : "pick a week to see its days")}
+        data={sections.plain}
+        pending={pending}
+        pad={false}
+      >
+        {(p) =>
+          p.days ? (
+            <PlainDays days={p.days} showStores={counterParams.storeId === null} />
+          ) : (
+            <p className="pl-nodays">
+              This range is longer than a month. Pick one of the weeks above to see it day by day.
+            </p>
+          )
+        }
+      </Section>
+
+      {counterParams.storeId === null ? (
+        <Section
+          title="By store"
+          meta="tap one to read only that store"
+          data={sections.plain}
+          pending={pending}
+          askAbout="how the stores compare"
+        >
+          {(p) => <PlainStores p={p} onStore={(id) => push({ storeId: id })} />}
+        </Section>
+      ) : null}
+
+      <Section
+        title="Full statement"
+        fold="closed"
         pending={pending}
         meta={
           comparing
@@ -400,43 +392,6 @@ export function CounterPnlClient({
         </Section>
       ) : null}
 
-      {/* Both halves are owed, and both name what is missing rather than
-          drawing half an answer as a whole one. `Section` renders that; this
-          page only says where the two blocks sit. */}
-      <div className="split">
-        <Section
-          title="What is behind the food line"
-          pending={pending}
-          meta="points of the food gap, per cause"
-          data={sections.foodCause}
-        >
-          {() => null}
-        </Section>
-        <Section
-          title="How much of this is measured"
-          pending={pending}
-          meta="and how much is an estimate"
-          data={sections.trust}
-        >
-          {() => null}
-        </Section>
-      </div>
-
-      {/* The section that answers which stores are IN the statement above and
-          which are not — so it is deliberately NOT scoped to the selection. */}
-      <Section
-        title="By store"
-        pending={pending}
-        // The prototype's "3 stores, 3 stages". Counted off the switcher's own
-        // list, which is page state — the section's rows are the same set, but
-        // a `meta` is drawn beside the title whatever the body turned out to be.
-        meta={`${plural(stores.length, "store")}, ${plural(stageCount, "stage")}`}
-        data={sections.byStore}
-        pad={false}
-        askAbout="how the stores compare"
-      >
-        {(lines) => <ByStore lines={lines} />}
-      </Section>
     </>
   )
 }
@@ -448,105 +403,3 @@ const FIXED_COLUMNS: Column[] = [
   { key: "range", label: "In this range", numeric: true },
   { key: "lands", label: "Lands on" },
 ]
-
-const BY_STORE_COLUMNS: Column[] = [
-  { key: "store", label: "Store" },
-  // "Gross", not the prototype's "Net": this figure IS `grossSales`, the same
-  // one the statement above heads "Gross sales". See the file note.
-  { key: "gross", label: "Gross", numeric: true },
-  { key: "prime", label: "Prime", numeric: true },
-  { key: "fixed", label: "Fixed on file", numeric: true },
-  { key: "stage", label: "Stage" },
-]
-
-/**
- * Every store on the account, and the sentence that says why only some of them
- * are in the statement above.
- *
- * The sentence says "in this range" rather than naming the window: the page
- * head and this section's own meta both name it already, and a preset's name
- * dropped mid-sentence ("with sales over Last 7 days") reads as a typo.
- *
- * The prose is derived from the rows, never written for one account: "Every
- * line above is Hollywood, because it is the only store with sales" is a
- * sentence about whichever stores traded, and an account where all three trade
- * gets a different one.
- */
-function ByStore({ lines }: { lines: PnlStoreLine[] }) {
-  const trading = lines.filter((l) => l.grossSales !== null)
-  const silent = lines.filter((l) => l.grossSales === null)
-  const noRent = lines.filter((l) => !l.rentOnFile)
-
-  const rows: Row[] = lines.map((l) => ({
-    key: l.id,
-    cells: {
-      store: <b>{l.name}</b>,
-      gross: money(l.grossSales),
-      prime: pct(l.primePct, { scaled: true }),
-      // The prototype's own treatment: ONE warn-coloured cell, and the row
-      // left alone. The sheet's `is-hole` pair was tried here and is wrong —
-      // it washes the whole row in `--bad-wash` and italicises the cell in
-      // `--bad`, which is what a document line that is WRONG looks like. A
-      // pre-open store with no rent yet is not wrong, it is early, and the
-      // Stage column beside it already says so.
-      fixed: l.rentOnFile ? money(l.fixedOnFile) : <span className="text-ct-warn">not on file</span>,
-      stage: <span className={STAGE_TAG[l.stage].className}>{STAGE_TAG[l.stage].label}</span>,
-    },
-  }))
-
-  return (
-    <>
-      <div className="sec__body">
-        <Lede>
-          {trading.length === 0 ? (
-            <>
-              No store took anything in this range, so the statement above has nothing to
-              subtract from. The table is what is known about {pluralWord(lines.length, "it", "them")}{" "}
-              meanwhile.
-            </>
-          ) : (
-            <>
-              Every line above is {names(trading)}, because{" "}
-              {pluralWord(trading.length, "it is the only store", "they are the only stores")} with
-              sales in this range.
-              {silent.length > 0 ? (
-                <>
-                  {" "}
-                  {names(silent)} {pluralWord(silent.length, "has", "have")} none, so{" "}
-                  {pluralWord(silent.length, "it carries", "they carry")} no line above. The table is
-                  what is known about {pluralWord(silent.length, "it", "them")} meanwhile.
-                </>
-              ) : null}
-            </>
-          )}
-        </Lede>
-      </div>
-
-      <Table columns={BY_STORE_COLUMNS} rows={rows} />
-
-      <div className="sec__body">
-        {noRent.length > 0 ? (
-          <p className="callout">
-            {count(noRent.length)} of {count(lines.length)}{" "}
-            {pluralWord(noRent.length, "carries", "carry")} no rent on file, which is the single field
-            that would let {pluralWord(noRent.length, "it", "them")} join the statement above.{" "}
-            <b>
-              Until it is filled in, folding {pluralWord(noRent.length, "it", "them")} in would make the
-              group look more profitable than it is.
-            </b>
-          </p>
-        ) : (
-          <p className="callout">
-            Every store carries a rent line, so nothing is held out of the statement above for a
-            missing file.
-          </p>
-        )}
-        <div className="btnrow" style={{ marginTop: "11px" }}>
-          <Link className="btn btn--primary" href="/dashboard/stores">
-            Fill in a store file
-          </Link>
-        </div>
-      </div>
-    </>
-  )
-}

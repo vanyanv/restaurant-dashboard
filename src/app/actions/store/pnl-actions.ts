@@ -15,6 +15,7 @@ import {
   monthlyFromFrequency,
   CUSTOM_FIXED_CODE_PREFIX,
   summarySlices,
+  rowSales,
   type CustomFixedExpense,
   type Granularity,
   type Period,
@@ -23,7 +24,12 @@ import type { UnmappedMenuItem } from "@/types/cogs"
 import { recomputeDailyCogsForRange } from "@/lib/cogs-materializer"
 import { CogsStatus } from "@/generated/prisma/client"
 import { cached, monthTags, stableKey } from "@/lib/cache/cached"
-import { loadLaborCost, laborByPeriods, hasFixedLabor } from "@/lib/counter/labor-cost"
+import {
+  loadLaborCost,
+  laborByPeriods,
+  hasFixedLabor,
+  soldDaysWithoutLabor,
+} from "@/lib/counter/labor-cost"
 import {
   addCommission,
   bucketCommission,
@@ -62,6 +68,8 @@ import type {
 function periodLines(
   computeds: Array<ReturnType<typeof computeStorePnL>>,
   periods: Period[],
+  /** Per computed, per period: `soldDaysWithoutLabor`. Absent reads as 0. */
+  laborMissing: number[][] = [],
 ): PnLPeriodLines[] {
   const total = (xs: number[]) => xs.reduce((a, b) => a + b, 0)
   return periods.map((_p, i) => {
@@ -105,6 +113,7 @@ function periodLines(
       laborPct: r(labor),
       rentValue: rent,
       rentPct: r(rent),
+      laborMissingDays: total(laborMissing.map((m) => m[i] ?? 0)),
     }
   })
 }
@@ -603,10 +612,11 @@ export async function getAllStoresPnL(input: {
   const accountId = session.user.accountId
 
   const result = await cached(
-    // `pnl3:` since 2026-10-28 (`pnl2:` before it grew the sales cascade; pnl3 moved labor
+    // `pnl4:` since 2026-11-03 (each period carries `laborMissingDays`). `pnl3:` since
+    // 2026-10-28 (`pnl2:` before it grew the sales cascade; pnl3 moved labor
     // dollars to `loadLaborCost`): the answer's shape grew the sales cascade and
     // the commission basis, and a pre-change entry would lack both.
-    `pnl3:account:${accountId}:${stableKey({
+    `pnl4:account:${accountId}:${stableKey({
       s: input.startDate.toISOString(),
       e: input.endDate.toISOString(),
       g: input.granularity,
@@ -745,6 +755,7 @@ export async function getAllStoresPnL(input: {
     })
 
     const perStoreComputed: Array<ReturnType<typeof computeStorePnL>> = []
+    const perStoreMissing: number[][] = []
 
     const perStore = stores.map((store) => {
       const storeSummaries = byStore.get(store.id) ?? []
@@ -766,6 +777,17 @@ export async function getAllStoresPnL(input: {
         ),
       })
       perStoreComputed.push(computed)
+      const soldDays = new Set<string>()
+      for (const r of storeSummaries) {
+        if (rowSales(r).net !== 0) soldDays.add(new Date(r.date).toISOString().slice(0, 10))
+      }
+      const missing = soldDaysWithoutLabor(
+        laborCost.stores[store.id],
+        soldDays,
+        periods,
+        hasFixedLabor(store.fixedMonthlyLabor),
+      )
+      perStoreMissing.push(missing)
 
       const grossSales = sum(computed.totalSales)
       const netAfterCommissions = sum(computed.netAfterCommissions)
@@ -792,7 +814,7 @@ export async function getAllStoresPnL(input: {
         []
       )
 
-      const storePeriods = periodLines([computed], periods)
+      const storePeriods = periodLines([computed], periods, [missing])
       return {
         storeId: store.id,
         storeName: store.name,
@@ -808,6 +830,7 @@ export async function getAllStoresPnL(input: {
         laborPct: ratio(laborValue),
         rentValue,
         rentPct: ratio(rentValue),
+        laborMissingDays: sum(missing),
         channelMix: channelMix(totalChannelVals),
         fixedCostsConfigured:
           hasFixedLabor(store.fixedMonthlyLabor) && store.fixedMonthlyRent != null,
@@ -822,7 +845,7 @@ export async function getAllStoresPnL(input: {
     const combinedCogs = sum(perStore.map((p) => p.cogsValue))
     const combinedLabor = sum(perStore.map((p) => p.laborValue))
     const combinedRent = sum(perStore.map((p) => p.rentValue))
-    const perPeriod = periodLines(perStoreComputed, periods)
+    const perPeriod = periodLines(perStoreComputed, periods, perStoreMissing)
     const combined = {
       grossSales: combinedGross,
       ...rangeSalesLines(perPeriod),
@@ -836,6 +859,7 @@ export async function getAllStoresPnL(input: {
       laborPct: combinedGross <= 0 ? 0 : combinedLabor / combinedGross,
       rentValue: combinedRent,
       rentPct: combinedGross <= 0 ? 0 : combinedRent / combinedGross,
+      laborMissingDays: sum(perStore.map((p) => p.laborMissingDays)),
     }
     combined.marginPct =
       combined.grossSales <= 0 ? 0 : combined.bottomLine / combined.grossSales

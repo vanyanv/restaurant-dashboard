@@ -285,6 +285,12 @@
   --ct-gp-2: light-dark(oklch(51.5% 0.158 30), oklch(71.5% 0.150 30));
   --ct-gp-3: light-dark(oklch(67% 0.118 45),   oklch(91.8% 0.110 45));
 
+  /* where each P&L dollar went (pnl-plain): one hue per cost, kept is --ct-good */
+  --ct-pl-fees:  light-dark(oklch(62% 0.07 250), oklch(66% 0.07 250));
+  --ct-pl-food:  light-dark(oklch(66% 0.11 70),  oklch(70% 0.11 70));
+  --ct-pl-labor: light-dark(oklch(58% 0.09 300), oklch(66% 0.09 300));
+  --ct-pl-fixed: light-dark(oklch(60% 0.02 55),  oklch(55% 0.02 55));
+
   /* type scale, fixed px, ratio ~1.16 */
   --ct-t-micro: 10px;
   --ct-t-cap:   11.5px;
