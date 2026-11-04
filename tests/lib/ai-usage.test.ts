@@ -22,13 +22,14 @@ import { PRICING_PER_MTOK, computeCostUsd } from "@/lib/monitoring/ai-usage"
 import { VERDICT_MODEL } from "@/lib/decision-verdict-llm"
 import { PROPOSAL_MODEL } from "@/lib/proposal-llm"
 import { ADJUDICATOR_MODEL } from "@/lib/ingredient-match-llm"
-import { CHAT_ROUTING_MODEL } from "@/lib/chat/openai-client"
+import { CHAT_QUICK_MODEL, CHAT_ROUTING_MODEL } from "@/lib/chat/openai-client"
 
 const SHIPPED_MODELS: Record<string, string> = {
   "decision-verdict": VERDICT_MODEL,
   "mapping-proposals": PROPOSAL_MODEL,
   "ingredient-adjudicator": ADJUDICATOR_MODEL,
   chat: CHAT_ROUTING_MODEL,
+  "chat-quick": CHAT_QUICK_MODEL,
 }
 
 describe("every model the app sends traffic to has a published rate", () => {

@@ -20,11 +20,10 @@ import { join } from "node:path"
 import { VERDICT_MODEL, buildVerdictPrompt } from "@/lib/decision-verdict-llm"
 import { PROPOSAL_MODEL, buildProposalPrompt } from "@/lib/proposal-llm"
 import { ADJUDICATOR_MODEL, buildAdjudicatorPrompt } from "@/lib/ingredient-match-llm"
-import {
-  CHAT_CLASSIFIER_MODEL,
-  CHAT_REASONING_EFFORT,
-  CHAT_ROUTING_MODEL,
-} from "@/lib/chat/openai-client"
+import { CHAT_CLASSIFIER_MODEL, chatModelFor } from "@/lib/chat/openai-client"
+
+/** The eval grades the Quick turn; see `runToolChoice`. */
+const QUICK = chatModelFor("quick")
 import {
   GROUP_HINTS,
   NAV_TOOL_GROUPS,
@@ -54,7 +53,7 @@ export const MODELS: Record<FingerprintedFeature, string> = {
   verdict: VERDICT_MODEL,
   proposal: PROPOSAL_MODEL,
   adjudicator: ADJUDICATOR_MODEL,
-  "chat-tool-choice": CHAT_ROUTING_MODEL,
+  "chat-tool-choice": QUICK.model,
 }
 
 const sha = (model: string, prompt: string): string =>
@@ -151,7 +150,7 @@ export function promptFingerprints(): Record<FingerprintedFeature, string> {
      * touching a single character of the prompt.
      */
     "chat-tool-choice": sha(
-      `${CHAT_ROUTING_MODEL}:${CHAT_REASONING_EFFORT}:${CHAT_CLASSIFIER_MODEL}`,
+      `${QUICK.model}:${QUICK.reasoningEffort ?? "none"}:${CHAT_CLASSIFIER_MODEL}`,
       `${evalSystemPrompt()}\n\n# Tools\n${toolCatalogue()}\n\n# Classifier\n${classifierCatalogue()}` +
         `\n\n# Narrowed\n${narrowedGuides()}`,
     ),
