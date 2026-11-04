@@ -1,6 +1,6 @@
 import {
-  addDays, differenceInCalendarDays, startOfDay, startOfWeek, startOfMonth,
-  startOfQuarter, startOfYear,
+  addDays, addMonths, differenceInCalendarDays, isSameDay, startOfDay,
+  startOfWeek, startOfMonth, startOfQuarter, startOfYear,
 } from "date-fns"
 
 /**
@@ -24,16 +24,33 @@ export interface DateRange {
 export type PresetId =
   | "today" | "yesterday" | "wtd" | "lastweek"
   | "d3" | "d7" | "d14" | "d30" | "d90"
-  | "mtd" | "qtd" | "ytd"
+  | "mtd" | "lastmonth" | "qtd" | "ytd"
+
+/** The heading a preset sits under in the date control's menu. */
+export type PresetGroup = "Days" | "Weeks" | "Months" | "Longer"
 
 export interface Preset {
   id: PresetId
   name: string
   resolve: (today: Date) => DateRange
+  group: PresetGroup
+  /**
+   * False for a preset that still resolves (an old link carries it in
+   * `?range=`) but is no longer offered: `d3`, `d14` and `qtd` were rarely
+   * picked and made the menu twelve rows long.
+   */
+  menu: boolean
 }
 
 /** Monday. The trade runs on a Monday-start week (note 53: weekly is the cadence). */
 const weekStart = (d: Date) => startOfWeek(d, { weekStartsOn: 1 })
+
+/**
+ * The last day of `d`'s month at local MIDNIGHT. Not date-fns `endOfMonth`,
+ * which returns 23:59:59.999 and breaks this module's "all dates are local
+ * midnights" contract the moment it is used as a range end.
+ */
+const lastDayOfMonth = (d: Date) => new Date(d.getFullYear(), d.getMonth() + 1, 0)
 
 /** A trailing window that INCLUDES today, so "last 7 days" is 7 days. */
 const trailing = (n: number) => (today: Date): DateRange => ({
@@ -42,26 +59,43 @@ const trailing = (n: number) => (today: Date): DateRange => ({
 })
 
 export const PRESETS: readonly Preset[] = [
-  { id: "today", name: "Today", resolve: (t) => ({ start: t, end: t }) },
-  { id: "yesterday", name: "Yesterday", resolve: (t) => ({ start: addDays(t, -1), end: addDays(t, -1) }) },
-  { id: "wtd", name: "This week", resolve: (t) => ({ start: weekStart(t), end: t }) },
+  { id: "today", name: "Today", group: "Days", menu: true, resolve: (t) => ({ start: t, end: t }) },
+  {
+    id: "yesterday", name: "Yesterday", group: "Days", menu: true,
+    resolve: (t) => ({ start: addDays(t, -1), end: addDays(t, -1) }),
+  },
+  { id: "wtd", name: "This week", group: "Weeks", menu: true, resolve: (t) => ({ start: weekStart(t), end: t }) },
   {
     id: "lastweek",
     name: "Last week",
+    group: "Weeks",
+    menu: true,
     resolve: (t) => {
       const s = addDays(weekStart(t), -7)
       return { start: s, end: addDays(s, 6) }
     },
   },
-  { id: "d3", name: "Last 3 days", resolve: trailing(3) },
-  { id: "d7", name: "Last 7 days", resolve: trailing(7) },
-  { id: "d14", name: "Last 14 days", resolve: trailing(14) },
-  { id: "d30", name: "Last 30 days", resolve: trailing(30) },
-  { id: "d90", name: "Last 90 days", resolve: trailing(90) },
-  { id: "mtd", name: "Month-to-date", resolve: (t) => ({ start: startOfMonth(t), end: t }) },
-  { id: "qtd", name: "Quarter-to-date", resolve: (t) => ({ start: startOfQuarter(t), end: t }) },
-  { id: "ytd", name: "Year-to-date", resolve: (t) => ({ start: startOfYear(t), end: t }) },
+  { id: "d7", name: "Last 7 days", group: "Weeks", menu: true, resolve: trailing(7) },
+  { id: "mtd", name: "This month", group: "Months", menu: true, resolve: (t) => ({ start: startOfMonth(t), end: t }) },
+  {
+    id: "lastmonth", name: "Last month", group: "Months", menu: true,
+    resolve: (t) => {
+      const s = startOfMonth(addMonths(t, -1))
+      return { start: s, end: lastDayOfMonth(s) }
+    },
+  },
+  { id: "d30", name: "Last 30 days", group: "Months", menu: true, resolve: trailing(30) },
+  { id: "d90", name: "Last 90 days", group: "Longer", menu: true, resolve: trailing(90) },
+  { id: "ytd", name: "This year", group: "Longer", menu: true, resolve: (t) => ({ start: startOfYear(t), end: t }) },
+  { id: "d3", name: "Last 3 days", group: "Days", menu: false, resolve: trailing(3) },
+  { id: "d14", name: "Last 14 days", group: "Weeks", menu: false, resolve: trailing(14) },
+  { id: "qtd", name: "This quarter", group: "Longer", menu: false, resolve: (t) => ({ start: startOfQuarter(t), end: t }) },
 ] as const
+
+/** What the date control offers, in menu order. Old ids still resolve. */
+export const MENU_PRESETS: readonly Preset[] = PRESETS.filter((p) => p.menu)
+
+export const PRESET_GROUPS: readonly PresetGroup[] = ["Days", "Weeks", "Months", "Longer"]
 
 /**
  * Normalises `today` to a local midnight ONCE, here, rather than trusting
@@ -147,17 +181,62 @@ export function bucketFor(r: DateRange): Bucket {
   return "month"
 }
 
-/**
- * Walk by exactly the range you are on, not by a calendar unit. A 7-day range
- * steps 7 days; a 90-day range steps 90. Stepping a "last 30 days" window by a
- * month would silently change its length.
- */
-export function stepRange(r: DateRange, direction: -1 | 1): DateRange {
+/** A Monday-start week: all seven days, or Monday up to `today` while it runs. */
+function isWeekShaped(r: DateRange, today?: Date): boolean {
+  if (r.start.getTime() !== weekStart(r.start).getTime()) return false
   const span = dayCount(r)
-  return {
-    start: addDays(r.start, span * direction),
-    end: addDays(r.end, span * direction),
+  if (span === 7) return true
+  return span < 7 && today !== undefined && isSameDay(r.end, today)
+}
+
+/** A calendar month: the 1st to its last day, or the 1st up to `today`. */
+function isMonthShaped(r: DateRange, today?: Date): boolean {
+  if (r.start.getDate() !== 1) return false
+  if (r.start.getMonth() !== r.end.getMonth() || r.start.getFullYear() !== r.end.getFullYear()) return false
+  if (isSameDay(r.end, lastDayOfMonth(r.start))) return true
+  return dayCount(r) > 1 && today !== undefined && isSameDay(r.end, today)
+}
+
+/**
+ * The ‹ › arrows. Walk by the calendar unit the range IS, so a week stays a
+ * week and a month stays a month:
+ *
+ *   - one day        → the day before / after
+ *   - a Monday week  → the whole week before / after (Mon–Sun). "This week"
+ *                      on a Tuesday is Mon–Tue; ‹ goes to all of last week,
+ *                      not to the Saturday and Sunday before it, which is
+ *                      what stepping by its two-day span used to do.
+ *   - a month        → the whole month before / after
+ *   - anything else  → by its own length, so "last 30 days" stays 30 days
+ *
+ * `today`, when given, keeps a step from running into the future: a window
+ * that would end after today ends today, and one that would start after
+ * today becomes today itself. `canStepForward` is how a caller disables ›.
+ */
+export function stepRange(r: DateRange, direction: -1 | 1, today?: Date): DateRange {
+  const span = dayCount(r)
+  let next: DateRange
+  if (span === 1) {
+    next = { start: addDays(r.start, direction), end: addDays(r.start, direction) }
+  } else if (isWeekShaped(r, today)) {
+    const start = addDays(r.start, 7 * direction)
+    next = { start, end: addDays(start, 6) }
+  } else if (isMonthShaped(r, today)) {
+    const start = addMonths(r.start, direction)
+    next = { start, end: lastDayOfMonth(start) }
+  } else {
+    next = { start: addDays(r.start, span * direction), end: addDays(r.end, span * direction) }
   }
+  if (today !== undefined && next.end.getTime() > today.getTime()) {
+    next = { start: next.start, end: today }
+    if (next.start.getTime() > today.getTime()) next = { start: today, end: today }
+  }
+  return next
+}
+
+/** False when the window already reaches today, so › has nowhere to go. */
+export function canStepForward(r: DateRange, today: Date): boolean {
+  return r.end.getTime() < startOfDay(today).getTime()
 }
 
 export type ComparisonId = "prev" | "weekday" | "year" | "none"
@@ -198,7 +277,23 @@ export function comparisonRange(r: DateRange, mode: ComparisonId): DateRange | n
   // falls on the same weekday as its counterpart in `r`.
   if (mode === "year") return { start: addDays(r.start, -364), end: addDays(r.end, -364) }
   if (mode === "prev") {
+    // Weekday for weekday. Anything shorter than a week is compared with the
+    // same days one week earlier: "This week" on a Tuesday is Mon–Tue, and
+    // the days immediately before it are a Saturday and a Sunday, which made
+    // an ordinary week read as a collapse. A single day the same way: Monday
+    // against last Monday, not against Sunday.
     const span = dayCount(r)
+    if (span < 7) return { start: addDays(r.start, -7), end: addDays(r.end, -7) }
+    // A calendar month (whole, or the 1st up to some day) against the same
+    // days of the month before, clipped to that month's length.
+    if (r.start.getDate() === 1 && r.start.getMonth() === r.end.getMonth()
+      && r.start.getFullYear() === r.end.getFullYear()) {
+      const start = addMonths(r.start, -1)
+      const last = lastDayOfMonth(start)
+      const sameDay = new Date(start.getFullYear(), start.getMonth(), r.end.getDate())
+      const end = isSameDay(r.end, lastDayOfMonth(r.start)) || sameDay > last ? last : sameDay
+      return { start, end }
+    }
     return { start: addDays(r.start, -span), end: addDays(r.end, -span) }
   }
   // weekday: the CONTIGUOUS HULL of the four windows `comparisonWindows`
@@ -464,4 +559,76 @@ export function trailingWeeks(today: Date, n: number): WeekWindow[] {
   }
 
   return out
+}
+
+/**
+ * What the window IS, in words, for the line under the dates on the date
+ * control: "This week so far", "Week of Oct 26", "October", "Monday".
+ *
+ * A window reached by the ‹ › arrows or the week row is stored as `from`/`to`
+ * (custom), so the preset id alone would call last week "Custom range". A
+ * custom window that resolves to exactly what a menu preset gives today is
+ * named by that preset; otherwise its shape names it. "so far" marks a window
+ * that ends today, because its figures are still moving.
+ */
+export function describeRange(r: DateRange, presetId: RangeId, today: Date): string {
+  const t = startOfDay(today)
+  const preset = presetId !== "custom"
+    ? PRESETS.find((p) => p.id === presetId)
+    : MENU_PRESETS.find((p) => {
+      const x = p.resolve(t)
+      return isSameDay(x.start, r.start) && isSameDay(x.end, r.end)
+    })
+  const live = isSameDay(r.end, t)
+  if (preset) {
+    if (preset.id === "today") return "Today so far"
+    if (live && (preset.id === "wtd" || preset.id === "mtd" || preset.id === "ytd")) {
+      return `${preset.name} so far`
+    }
+    return preset.name
+  }
+  if (dayCount(r) === 1) return WEEKDAYS[r.start.getDay()]
+  if (isWeekShaped(r, t)) return `Week of ${dayLabel(r.start, false)}`
+  if (isMonthShaped(r, t)) {
+    const name = MONTH_LONG[r.start.getMonth()]
+    return r.start.getFullYear() === t.getFullYear() ? name : `${name} ${r.start.getFullYear()}`
+  }
+  return "Custom range"
+}
+
+const MONTH_LONG = [
+  "January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December",
+]
+
+/**
+ * The comparison in a sentence a reader can check against the calendar:
+ * "Comparing Nov 2 – 3 with Oct 26 – 27". The weekday comparison reads four
+ * windows, so it names the rule instead of four sets of dates.
+ */
+export function compareSentence(r: DateRange, mode: ComparisonId): string {
+  const now = rangeLabel(r, "custom")
+  if (mode === "none") return `Showing ${now} with no comparison.`
+  if (mode === "weekday") {
+    return comparisonWindows(r, mode) === null
+      ? `Showing ${now}.`
+      : `Comparing ${now} with the same days in each of the 4 weeks before.`
+  }
+  const c = comparisonRange(r, mode)
+  return c === null ? `Showing ${now}.` : `Comparing ${now} with ${rangeLabel(c, "custom")}.`
+}
+
+/** True when `r` is exactly the Monday week starting `weekStartDay` (or its running part). */
+export function isWeekWindow(r: DateRange, weekStartDay: Date): boolean {
+  return isSameDay(r.start, weekStartDay) && dayCount(r) <= 7 && weekStart(r.end).getTime() === weekStartDay.getTime()
+}
+
+/** The Monday week holding `day`, ended at `today` while it is still running. */
+export function weekOf(day: Date, today: Date): DateRange {
+  const start = weekStart(day)
+  const whole = addDays(start, 6)
+  const t = startOfDay(today)
+  // A week that has not started yet: today, rather than an inverted window.
+  if (start.getTime() > t.getTime()) return { start: t, end: t }
+  return { start, end: whole.getTime() > t.getTime() ? t : whole }
 }

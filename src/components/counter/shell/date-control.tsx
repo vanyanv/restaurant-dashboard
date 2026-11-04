@@ -5,11 +5,13 @@ import { businessCalendarDate } from "@/lib/counter/business-date"
 import { useEffect, useId, useMemo, useRef, useState } from "react"
 import { startOfMonth } from "date-fns"
 import {
-  COMPARISONS, PRESETS, bucketFor, comparisonWindows, dayCount, rangeLabel, stepRange,
+  COMPARISONS, MENU_PRESETS, PRESET_GROUPS, bucketFor, canStepForward, compareSentence,
+  comparisonWindows, dayCount, describeRange, rangeLabel, stepRange, weekOf,
   type ComparisonId, type DateRange, type PresetId, type RangeId,
 } from "@/lib/counter/date-range"
 import { useFramePlacement } from "./frame-placement"
 import { Calendar } from "./calendar"
+import { RangeWeeks } from "./range-weeks"
 
 /**
  * `bar()`, prototype line 1915 — the most-used control in the product, and the
@@ -62,6 +64,24 @@ import { Calendar } from "./calendar"
  *     the ONLY selectors that paint the current choice, so the attribute is
  *     load-bearing; `role="menuitemradio"` does not take it.
  *
+ * THE NOVEMBER 2026 PASS (owner: "selecting a single date can take multiple
+ * clicks"):
+ *
+ *   - ONE TAP PICKS A DAY. A calendar tap reports that day as the range and
+ *     closes. A range by hand is behind the "A range" switch above the
+ *     calendar, where two taps make one, as before.
+ *   - THE ARROWS WALK CALENDAR UNITS (`stepRange` with `today`): a day, a
+ *     Monday week, a month. They report through `onRange`, so a page wires
+ *     the arrows by wiring `onRange`; there is no separate step callback.
+ *     › is disabled once the window reaches today.
+ *   - PRESETS IN FOUR GROUPS (`MENU_PRESETS`, `PRESET_GROUPS`), ten of them.
+ *   - THE LAST 8 WEEKS AS BUTTONS (`RangeWeeks`), and week numbers down the
+ *     calendar, each one tap for a Monday-to-Sunday week.
+ *   - THE SECOND LINE SAYS WHAT THE WINDOW IS (`describeRange`: "This week so
+ *     far", "Week of Oct 26"), and the foot says which dates it is compared
+ *     with (`compareSentence`).
+ *   - The primary button reads "Done": every pick already applied.
+ *
  * All the date arithmetic stays in `date-range.ts` — note 19 ("a range that
  * only changes the label is a lie") is why: regenerating the series, not just
  * relabelling it, is the CALLER's job once one of these callbacks fires.
@@ -85,22 +105,16 @@ function Chevron({ dir }: { dir: "left" | "right" | "down" }) {
   )
 }
 
-function fmtDay(d: Date): string {
-  return d.toLocaleDateString("en-US", { month: "short", day: "numeric" })
-}
-
-function fmtRange(r: DateRange): string {
-  return r.start.getTime() === r.end.getTime() ? fmtDay(r.start) : `${fmtDay(r.start)} – ${fmtDay(r.end)}`
-}
-
 export interface DateControlProps {
   presetId: RangeId
   comparisonId: ComparisonId
   range: DateRange
   onPreset: (id: PresetId) => void
   onComparison: (id: ComparisonId) => void
-  onStep: (direction: -1 | 1) => void
-  /** An arbitrary window picked off the calendar. Two clicks make one. */
+  /**
+   * Any window that is not a named preset: a day or a range off the
+   * calendar, a week from the week row, and every ‹ › step.
+   */
   onRange: (range: DateRange) => void
 }
 
@@ -110,22 +124,21 @@ export function DateControl({
   range,
   onPreset,
   onComparison,
-  onStep,
   onRange,
 }: DateControlProps) {
   const [open, setOpen] = useState(false)
-  // null = "follow the range", which is what the prototype's setPreset/shift do
-  // when they reset `state.view` to the month the range ENDS in. A month the
-  // reader navigated to survives a comparison change and a half-finished pick,
-  // and is dropped the moment the range itself is replaced.
+  // null = "follow the range": a month the reader navigated to survives a
+  // comparison change and a half-finished pick, and is dropped the moment
+  // the range itself is replaced.
   const [viewMonth, setViewMonth] = useState<Date | null>(null)
   const [pending, setPending] = useState<Date | null>(null)
+  // "day": one tap picks one day. "range": two taps make a range.
+  const [mode, setMode] = useState<"day" | "range">("day")
   const cmpLabelId = useId()
   const containerRef = useRef<HTMLDivElement>(null)
   const mainRef = useRef<HTMLButtonElement>(null)
 
-  // Escape and an outside click both close without choosing anything — a stray
-  // click or a reflex Escape must never fire one of the callbacks.
+  // Escape and an outside click both close without choosing anything.
   useEffect(() => {
     if (!open) return
     const onKeyDown = (e: KeyboardEvent) => {
@@ -142,53 +155,58 @@ export function DateControl({
     }
   }, [open])
 
-  // Preset lengths ("7d") are each preset's OWN span, not the selected range's.
-  // Most are fixed; the calendar-anchored ones need SOME "today" to resolve
-  // against, and the real one is fine here because it only feeds display text.
   const today = useMemo(() => businessCalendarDate(new Date()), [])
 
-  // `.drpop` is 438px wide and right-anchored; below 640px the stylesheet turns
-  // it into a bottom sheet and this returns "position nothing". Note 21.
+  // `.drpop` is right-anchored; below 640px the stylesheet turns it into a
+  // bottom sheet and this returns "position nothing". Note 21.
   const placement = useFramePlacement(open, mainRef, { sheetBelow: 640 })
 
   const label = rangeLabel(range, "custom")
-  // The prototype's `presetName()`: the preset's name, or "Custom range" when
-  // the window is one no preset names. NOT `rangeLabel(range, presetId)` —
-  // that returns the DATES for a custom range, which `.lb` is already showing.
-  const presetName = PRESETS.find((p) => p.id === presetId)?.name ?? "Custom range"
+  const name = describeRange(range, presetId, today)
   const comparison = COMPARISONS.find((c) => c.id === comparisonId) ?? COMPARISONS[0]
 
-  // Filter by what comparisonWindows ACTUALLY returns for this range, rather
-  // than a hardcoded length check. "none" is a deliberate exception: it always
-  // returns null BY DESIGN — the caller opting out, not a range that failed to
-  // resolve.
+  // A comparison the page cannot compute renders an empty delta, which reads
+  // as "no change", so it is not offered. "none" always returns null BY
+  // DESIGN and is always offered.
   const comparisonOptions = COMPARISONS.filter(
     (c) => c.id === "none" || comparisonWindows(range, c.id) !== null,
   )
 
-  // The windows themselves, not their hull — the calendar shades what the page
-  // reads, and for `weekday` below a week those are not the same set of days.
   const compare = comparisonWindows(range, comparisonId)
   const anchorMonth = viewMonth ?? startOfMonth(range.end)
   const days = dayCount(range)
 
-  const prevPreview = stepRange(range, -1)
-  const nextPreview = stepRange(range, 1)
+  const prev = stepRange(range, -1, today)
+  const next = stepRange(range, 1, today)
+  const forward = canStepForward(range, today)
 
-  function replaceRange(fn: () => void) {
+  // A custom window that is exactly what a menu preset gives today presses
+  // that preset, so stepping back to "This week" lights "This week".
+  const activePreset = presetId !== "custom"
+    ? presetId
+    : MENU_PRESETS.find((p) => {
+      const r = p.resolve(today)
+      return r.start.getTime() === range.start.getTime() && r.end.getTime() === range.end.getTime()
+    })?.id
+
+  function choose(fn: () => void, close: boolean) {
     fn()
     setPending(null)
     setViewMonth(null)
+    if (close) setOpen(false)
   }
 
   function pickDay(day: Date) {
+    if (mode === "day") {
+      choose(() => onRange({ start: day, end: day }), true)
+      return
+    }
     if (!pending) {
       setPending(day)
       return
     }
     const [start, end] = day < pending ? [day, pending] : [pending, day]
-    setPending(null)
-    onRange({ start, end })
+    choose(() => onRange({ start, end }), true)
   }
 
   return (
@@ -196,8 +214,8 @@ export function DateControl({
       <button
         className="dr__step"
         type="button"
-        aria-label={`Earlier (${fmtRange(prevPreview)})`}
-        onClick={() => replaceRange(() => onStep(-1))}
+        aria-label={`Earlier (${rangeLabel(prev, "custom")})`}
+        onClick={() => choose(() => onRange(prev), false)}
       >
         <Chevron dir="left" />
       </button>
@@ -213,7 +231,7 @@ export function DateControl({
         <span>
           <span className="lb">{label}</span>
           <span className="cmp">
-            {presetName} · {comparison.short}
+            {name} · {comparison.short}
           </span>
         </span>
         <Chevron dir="down" />
@@ -222,8 +240,9 @@ export function DateControl({
       <button
         className="dr__step dr__next"
         type="button"
-        aria-label={`Later (${fmtRange(nextPreview)})`}
-        onClick={() => replaceRange(() => onStep(1))}
+        aria-label={forward ? `Later (${rangeLabel(next, "custom")})` : "Later (already up to today)"}
+        disabled={!forward}
+        onClick={() => choose(() => onRange(next), false)}
       >
         <Chevron dir="right" />
       </button>
@@ -231,7 +250,7 @@ export function DateControl({
       <button
         className="dr__today"
         type="button"
-        onClick={() => replaceRange(() => onPreset("today"))}
+        onClick={() => choose(() => onPreset("today"), false)}
       >
         Today
       </button>
@@ -244,28 +263,46 @@ export function DateControl({
         }}
       >
         <div className="drpop__presets" role="group" aria-label="Presets">
-          <span className="drpop__k">Presets</span>
-          {PRESETS.map((p) => {
-            const len = dayCount(p.resolve(today))
-            return (
-              <button
-                key={p.id}
-                className="drp"
-                type="button"
-                aria-pressed={p.id === presetId}
-                onClick={() => {
-                  replaceRange(() => onPreset(p.id))
-                  setOpen(false)
-                }}
-              >
-                {p.name}
-                <span className="n">{len}d</span>
-              </button>
-            )
-          })}
+          {PRESET_GROUPS.map((group) => (
+            <div className="drpop__grp" key={group}>
+              <span className="drpop__k">{group}</span>
+              {MENU_PRESETS.filter((p) => p.group === group).map((p) => (
+                <button
+                  key={p.id}
+                  className="drp"
+                  type="button"
+                  aria-pressed={p.id === activePreset}
+                  onClick={() => choose(() => onPreset(p.id), true)}
+                >
+                  {p.name}
+                  <span className="n">{dayCount(p.resolve(today))}d</span>
+                </button>
+              ))}
+            </div>
+          ))}
         </div>
 
         <div className="drpop__cal">
+          <RangeWeeks
+            range={range}
+            today={today}
+            onPick={(week) => choose(() => onRange(week), true)}
+          />
+          <div className="drmode" role="group" aria-label="What a tap on the calendar picks">
+            <button
+              type="button"
+              aria-pressed={mode === "day"}
+              onClick={() => {
+                setMode("day")
+                setPending(null)
+              }}
+            >
+              One day
+            </button>
+            <button type="button" aria-pressed={mode === "range"} onClick={() => setMode("range")}>
+              A range
+            </button>
+          </div>
           <div className="drcals">
             <Calendar
               month={anchorMonth}
@@ -274,9 +311,17 @@ export function DateControl({
               today={today}
               pending={pending}
               onPickDay={pickDay}
+              onPickWeek={(monday) => choose(() => onRange(weekOf(monday, today)), true)}
               onMonthChange={setViewMonth}
             />
           </div>
+          <p className="drhint">
+            {mode === "day"
+              ? "Tap a day to show it. Tap a week number for the whole week."
+              : pending
+                ? "Now tap the last day."
+                : "Tap the first day, then the last."}
+          </p>
         </div>
 
         <div className="drpop__foot">
@@ -295,12 +340,13 @@ export function DateControl({
               </button>
             ))}
           </div>
+          <span className="drcmpline">{compareSentence(range, comparisonId)}</span>
           <span className="spacer" />
           <span className="lbl">
             {bucketFor(range)} buckets · {days} {days === 1 ? "day" : "days"}
           </span>
           <button className="btn btn--primary" type="button" onClick={() => setOpen(false)}>
-            Apply
+            Done
           </button>
         </div>
       </div>

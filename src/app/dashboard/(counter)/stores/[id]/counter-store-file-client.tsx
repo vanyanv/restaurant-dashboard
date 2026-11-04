@@ -18,7 +18,6 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react"
 import { usePathname, useRouter } from "next/navigation"
 import { readCounterParams, writeCounterParams } from "@/lib/counter/url-state"
-import { stepRange } from "@/lib/counter/date-range"
 import {
   addFixedExpense,
   deactivateStore,
@@ -765,7 +764,6 @@ export function CounterStoreFileClient({
           range={range}
           onPreset={(id) => push({ presetId: id })}
           onComparison={(id) => push({ comparisonId: id })}
-          onStep={(direction) => push({ range: stepRange(range, direction) })}
           onRange={(next) => push({ range: next })}
         />
       </PageHead>

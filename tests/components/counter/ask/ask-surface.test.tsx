@@ -3,7 +3,7 @@ import { describe, it, expect, vi } from "vitest"
 import { render, screen, fireEvent } from "@testing-library/react"
 import { AskSurface } from "@/components/counter/ask/ask-surface"
 import { visibleNavGroups } from "@/lib/counter/nav-access"
-import { PRESETS } from "@/lib/counter/date-range"
+import { MENU_PRESETS } from "@/lib/counter/date-range"
 import type { SwitchableStore } from "@/components/counter/shell/store-switcher"
 
 const props = {
@@ -183,12 +183,12 @@ describe("AskSurface", () => {
     expect(rowByLabel("Van Nuys").querySelector(".hint")!.textContent).toBe("Pre-open")
   })
 
-  it("draws Change the range from PRESETS, marking the current one", () => {
+  it("draws Change the range from MENU_PRESETS, marking the current one", () => {
     render(<AskSurface {...props} presetId="d7" onSelectPreset={vi.fn()} />)
     openWith("k", { metaKey: true })
     expect(rowByLabel("Last 7 days").querySelector(".hint")!.textContent).toBe("Current")
     expect(rowByLabel("Yesterday").querySelector(".hint")!.textContent).toBe("Range")
-    for (const p of PRESETS) expect(rowByLabel(p.name), p.name).toBeTruthy()
+    for (const p of MENU_PRESETS) expect(rowByLabel(p.name), p.name).toBeTruthy()
   })
 
   it("draws no group for a thing it cannot change", () => {
@@ -285,7 +285,7 @@ describe("AskSurface", () => {
     const onSelectPreset = vi.fn()
     render(<AskSurface {...props} presetId="d7" onSelectPreset={onSelectPreset} />)
     openWith("k", { metaKey: true })
-    type("month-to-date")
+    type("this month")
     // Row 0 is the free row — "the first row is always the question you
     // actually typed" — so the preset is one down from it.
     fireEvent.keyDown(document, { key: "ArrowDown" })

@@ -513,9 +513,45 @@ export const TOOL_CHOICE_CASES: ToolChoiceCase[] = [
     why: "Refunds are their own tool and are netted out of other totals. Answering from sales gives a number that is wrong in a way nobody would notice.",
   },
   {
-    id: "out-of-scope-weather",
+    id: "weather-weekend",
     question: "What's the weather going to be this weekend?",
+    expectedTools: ["getWeatherAndEvents"],
+    why: "Was out-of-scope-weather until 2026-11-04, when getWeatherAndEvents exposed the forecasts' own weather rows (about 14 days ahead). The failure to catch is the old refusal surviving the new tool.",
+  },
+  {
+    id: "crew-schedule",
+    question: "Who is working at Van Nuys tomorrow?",
+    expectedTools: ["getCrewAndSchedule"],
+    why: "Added 2026-11-04 with the tool. The failure to catch is answering from getLaborActuals or getLaborStaffingForecast, which have hours and headcounts but no names.",
+  },
+  {
+    id: "count-waste",
+    question: "How much went missing on the last count at Hollywood?",
+    expectedTools: ["getCountAndWaste"],
+    why: "Added 2026-11-04 with the tool. listStockCounts says a count happened; only getCountAndWaste has the missing dollars.",
+  },
+  {
+    id: "shop-orders",
+    question: "Are there any merch orders waiting to ship?",
+    expectedTools: ["getShopOrders"],
+    why: "Added 2026-11-04 with the tool. The failure to catch is reading restaurant orders (listOrdersByDay) for a merch question.",
+  },
+  {
+    id: "store-settings",
+    question: "What commission rate are we paying DoorDash at Glendale?",
+    expectedTools: ["getStoreSettings"],
+    why: "Added 2026-11-04 with the tool. The failure to catch is quoting a commission dollar total from getPnlSummary or getChannelMix instead of the rate the owner set.",
+  },
+  {
+    id: "raw-lookup-modifiers",
+    question: "How many orders asked for no onions last month?",
+    expectedTools: ["queryData"],
+    why: "Added 2026-11-04 with queryData. No dedicated lookup counts modifiers; the failure to catch is a 'No data' refusal, or a guess from getTopMenuItems.",
+  },
+  {
+    id: "out-of-scope-competitors",
+    question: "What are the burger places near Hollywood charging for sliders?",
     expectedTools: [],
-    why: "Not in the warehouse. The agent must say so rather than search 58 tools for something adjacent.",
+    why: "Took over the out-of-scope slot from the weather case. Competitor prices are not in the warehouse; the agent must say so rather than search the menu tools for something adjacent.",
   },
 ]

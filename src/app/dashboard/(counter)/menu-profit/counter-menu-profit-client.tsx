@@ -21,7 +21,7 @@ import {
 } from "@/components/counter"
 import { MENU_TABS } from "@/lib/counter/nav"
 import { readCounterParams, writeCounterParams } from "@/lib/counter/url-state"
-import { rangeLabel, stepRange } from "@/lib/counter/date-range"
+import { rangeLabel } from "@/lib/counter/date-range"
 import type { SectionSources } from "@/lib/counter/adapters/types"
 import type { CoverageSection, MenuProfitSections } from "@/lib/counter/adapters/menu-profit"
 
@@ -159,7 +159,6 @@ export function CounterMenuProfitClient({
           range={range}
           onPreset={(id) => push({ presetId: id })}
           onComparison={(id) => push({ comparisonId: id })}
-          onStep={(direction) => push({ range: stepRange(range, direction) })}
           onRange={(next) => push({ range: next })}
         />
       </PageHead>

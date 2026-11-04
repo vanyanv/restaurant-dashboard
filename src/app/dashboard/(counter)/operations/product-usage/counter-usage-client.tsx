@@ -19,7 +19,6 @@ import {
 } from "@/components/counter"
 import { USAGE_TABS } from "@/lib/counter/nav"
 import { readCounterParams, writeCounterParams } from "@/lib/counter/url-state"
-import { stepRange } from "@/lib/counter/date-range"
 import type { SectionSources } from "@/lib/counter/adapters/types"
 import type { ProductUsageSections } from "@/lib/counter/adapters/product-usage"
 
@@ -115,7 +114,6 @@ export function CounterUsageClient({
           range={range}
           onPreset={(id) => push({ presetId: id })}
           onComparison={(id) => push({ comparisonId: id })}
-          onStep={(direction) => push({ range: stepRange(range, direction) })}
           onRange={(next) => push({ range: next })}
         />
       </PageHead>

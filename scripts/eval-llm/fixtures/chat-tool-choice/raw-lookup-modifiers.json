@@ -1,0 +1,8 @@
+{
+  "called": [
+    "queryData"
+  ],
+  "model": "gpt-5-mini",
+  "pass": true,
+  "failures": []
+}

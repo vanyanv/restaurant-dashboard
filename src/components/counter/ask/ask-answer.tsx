@@ -12,6 +12,7 @@ import type { FigureProps } from "@/components/counter/surface/figure"
 import { labelFor } from "@/components/chat/tool-labels"
 import type { AskContext } from "@/lib/counter/ask-context"
 import { failureClause } from "@/lib/counter/ask-meta"
+import { uncheckedLine } from "@/lib/chat/verify-numbers"
 import {
   askAnswer,
   askFailure,
@@ -252,6 +253,7 @@ export function AskAnswerBody({
   // …and is then not repeated underneath itself.
   const note = verdictAbove ? "" : prose
   const caveat = failure ?? (empty ? prose : "")
+  const uncheckedNote = empty ? null : uncheckedLine(answer?.unchecked ?? [])
   const copyText = [
     filed?.verdict ?? "",
     ...filedFigures.map((f) => `${f.label}: ${f.value}${f.delta ? ` (${f.delta})` : ""}`),
@@ -318,6 +320,11 @@ export function AskAnswerBody({
             figures === "mstrip" ? <MStrip cells={cells} /> : <Strip cells={cells} />
           ) : null}
           {caveat ? <p className="callout">{caveat}</p> : null}
+          {/* THE ANSWER CHECK. An amount the answer printed that no lookup
+              returned is named here, under the figures it qualifies, rather
+              than passing as a number the dashboard reported. See
+              `checkAnswerNumbers`. */}
+          {uncheckedNote ? <p className="callout ans__unchecked">{uncheckedNote}</p> : null}
           {/* A TURN THAT FAILED OUTRIGHT COULD NOT BE ASKED AGAIN.
               Both retry affordances on this surface were gated on a turn that
               SUCCEEDED — "Try again" needs `meta.failed`, "Re-ask fresh"
