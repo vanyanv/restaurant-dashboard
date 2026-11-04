@@ -612,11 +612,12 @@ export async function getAllStoresPnL(input: {
   const accountId = session.user.accountId
 
   const result = await cached(
-    // `pnl4:` since 2026-11-03 (each period carries `laborMissingDays`). `pnl3:` since
+    // `pnl5:` since 2026-11-03 (each period carries `laborMissingDays`; skips `pnl4:`,
+    // which the payroll-tax change took the same day). `pnl3:` since
     // 2026-10-28 (`pnl2:` before it grew the sales cascade; pnl3 moved labor
     // dollars to `loadLaborCost`): the answer's shape grew the sales cascade and
     // the commission basis, and a pre-change entry would lack both.
-    `pnl4:account:${accountId}:${stableKey({
+    `pnl5:account:${accountId}:${stableKey({
       s: input.startDate.toISOString(),
       e: input.endDate.toISOString(),
       g: input.granularity,
