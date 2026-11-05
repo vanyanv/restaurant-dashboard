@@ -139,9 +139,11 @@ export function CounterPhoneMoreClient({
 
       {/* The destinations first: they are why a reader opens More. Static,
           so each group resolves with the shell. */}
+      {/* Developer-only rows (desk pages under /dashboard/admin) are left off
+          for an owner, the same rule the rail follows (nav-access.ts). */}
       {MORE_GROUPS.map((g) => (
         <Section key={g.title} title={g.title} data={sections.account} pending={pending}>
-          {() => <MList rows={g.rows} />}
+          {() => <MList rows={role === "DEVELOPER" ? g.rows : g.rows.filter((row) => !DEVELOPER_ONLY_KEYS.has(row.key))} />}
         </Section>
       ))}
 
@@ -190,6 +192,9 @@ export function CounterPhoneMoreClient({
  * Shop, Count & waste, Menu items, Orders, Inventory and Vendors, so on a
  * phone those were reachable only by typing the URL.
  */
+/** More rows whose desk page sits under /dashboard/admin, which only a developer can open. */
+const DEVELOPER_ONLY_KEYS = new Set(["monitoring", "people"])
+
 const r = (key: string, deskHref: string, title: string, detail: string): MListRow => ({
   key,
   href: phoneHref(deskHref),
@@ -254,6 +259,7 @@ const MORE_GROUPS: ReadonlyArray<{ title: string; rows: MListRow[] }> = [
     rows: [
       r("stores", "/dashboard/stores", "Stores", "Rent, commissions, COGS targets"),
       r("monitoring", "/dashboard/admin/monitoring", "Monitoring", "Developer-facing"),
+      r("people", "/dashboard/admin/people", "People", "Who can sign in · invites"),
     ],
   },
 ]

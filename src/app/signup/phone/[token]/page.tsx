@@ -1,22 +1,20 @@
+import Link from "next/link"
 import { getServerSession } from "next-auth"
 import { redirect } from "next/navigation"
 import { authOptions } from "@/lib/auth"
 import { checkInvite } from "../../invite"
-import { CounterPhoneSignupClient } from "./counter-phone-signup-client"
+import { noticeFor } from "../../notice"
+import { CounterPhoneSignupClient, SignupPhoneFrame } from "./counter-phone-signup-client"
 
 export const dynamic = "force-dynamic"
 
+function untilLabel(d: Date): string {
+  return d.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "America/Los_Angeles" })
+}
+
 /**
- * `P.signup.phone()`, at `/signup/phone/<token>` rather than under `/m`.
- *
- * Same reason the phone shutdown notice sits outside that segment: `P.signup`
- * is `bare` on both surfaces, and every route under `/m` inherits the tab bar.
- * An invite screen for someone who does not have an account yet cannot offer
- * five tabs into the account. Next resolves the static `phone` segment ahead
- * of `[token]`, so `/signup/<token>` still reaches the desk page.
- *
- * The invite lookup lives on the desk route; a phone reaches this through the
- * proxy's rewrite, which carries the token with it.
+ * Accept an invite, phone. The proxy rewrites a phone here from
+ * `/signup/<token>`, so the link in the email works on either device.
  */
 export default async function Page(props: {
   params: Promise<{ token: string }>
@@ -33,6 +31,8 @@ export default async function Page(props: {
         <CounterPhoneSignupClient
           token={token}
           email="them@example.com"
+          name=""
+          role="OWNER"
           inviterName={session.user.name ?? "Someone"}
           expiresLabel="—"
           preview
@@ -43,23 +43,36 @@ export default async function Page(props: {
   }
 
   const check = await checkInvite(token)
-  // The four refusals are drawn once, on the desk route. A phone that follows
-  // a dead link lands there rather than on a second copy of the same notice.
-  if (!check.ok) redirect(`/signup/${encodeURIComponent(token)}?desk=1`)
 
+  if (check.ok && check.email) {
+    return (
+      <>
+        <CounterPhoneSignupClient
+          token={check.token}
+          email={check.email}
+          name={check.name ?? ""}
+          role={check.role}
+          inviterName={check.inviterName}
+          expiresLabel={untilLabel(check.expiresAt)}
+          preview={false}
+        />
+        <span hidden data-perf-ready="/signup/phone/[token]" />
+      </>
+    )
+  }
+
+  const notice = check.ok
+    ? noticeFor({ ok: false, reason: "revoked", tokenShort: "", inviterName: check.inviterName })
+    : noticeFor(check)
   return (
-    <>
-      <CounterPhoneSignupClient
-        token={check.token}
-        email={check.inviterEmail}
-        inviterName={check.inviterName}
-        expiresLabel={check.expiresAt.toLocaleDateString("en-US", {
-          month: "long",
-          day: "numeric",
-        })}
-        preview={false}
-      />
-      <span hidden data-perf-ready="/signup/phone/[token]" />
-    </>
+    <SignupPhoneFrame foot="Invite only · links work once, for 7 days">
+      <div className="su-phead">
+        <h1>{notice.headline}</h1>
+        <p>{notice.body}</p>
+      </div>
+      <Link className="mbtn mbtn--primary" href="/m/login">
+        {notice.action}
+      </Link>
+    </SignupPhoneFrame>
   )
 }

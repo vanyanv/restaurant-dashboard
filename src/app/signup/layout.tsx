@@ -1,24 +1,8 @@
-import { Fraunces } from "next/font/google"
-import "@/styles/editorial-tokens.css"
-import "@/styles/editorial-auth.css"
-
-const fraunces = Fraunces({
-  subsets: ["latin"],
-  variable: "--font-fraunces",
-  display: "swap",
-  axes: ["SOFT", "WONK", "opsz"],
-  // See `src/app/not-found.tsx` for why the editorial serif is not preloaded.
-  preload: false,
-})
-
-export default function SignupLayout({
-  children,
-}: {
-  children: React.ReactNode
-}) {
-  return (
-    <div className={`${fraunces.variable} editorial-surface min-h-svh`}>
-      {children}
-    </div>
-  )
+/**
+ * Accepting an invite wears the login page's Counter parts, which the root
+ * layout already loads, so this layout adds nothing. It used to load the
+ * pre-Counter serif and stylesheet for a page that no longer uses them.
+ */
+export default function SignupLayout({ children }: { children: React.ReactNode }) {
+  return children
 }

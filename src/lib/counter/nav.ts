@@ -39,7 +39,7 @@ export type NavId =
   | "analytics" | "pnl" | "cogs" | "labor"
   | "menu" | "recipes"
   | "invoices" | "count" | "inventory" | "ingredients" | "vendors"
-  | "stores" | "settings" | "monitoring"
+  | "stores" | "settings" | "monitoring" | "people"
 
 export interface NavItem {
   id: NavId
@@ -124,6 +124,7 @@ export const NAV_GROUPS: readonly NavGroup[] = [
       { id: "stores", label: "Stores", href: "/dashboard/stores", icon: "Store" },
       { id: "settings", label: "Settings", href: "/dashboard/settings", icon: "Settings2" },
       { id: "monitoring", label: "Monitoring", href: "/dashboard/admin/monitoring", icon: "Activity" },
+      { id: "people", label: "People", href: "/dashboard/admin/people", icon: "UserPlus" },
     ],
   },
 ] as const

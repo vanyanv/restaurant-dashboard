@@ -83,6 +83,7 @@ export const DESKTOP_TO_MOBILE: Record<string, string> = {
   "/dashboard/admin/monitoring/ingredient-audit": "/m/monitoring/ingredient-audit",
   "/dashboard/admin/monitoring/ml": "/m/monitoring/ml",
   "/dashboard/admin/monitoring/people": "/m/monitoring/people",
+  "/dashboard/admin/people": "/m/admin/people",
   // Stores had no mobile equivalent left after the mobile bloat deletion, and
   // this comment said so until `/m/stores` was rebuilt on Counter; the desk
   // path is mapped exactly above now. Analytics was in that list until it was

@@ -63,8 +63,10 @@ export const authOptions: NextAuthOptions = {
             }
           })
 
-          if (!user) {
-            await recordLoginEvent({ emailTried: email, kind: "SIGN_IN_FAILED", headers })
+          // A removed person (Admin > People) fails exactly like a wrong
+          // password: the form does not say which half was wrong.
+          if (!user || user.removedAt) {
+            await recordLoginEvent({ userId: user?.id, emailTried: email, kind: "SIGN_IN_FAILED", headers })
             return null
           }
 
@@ -150,6 +152,20 @@ export const authOptions: NextAuthOptions = {
       }
     })
   ],
+  // next-auth logs the session check ending a removed person's session as
+  // JWT_SESSION_ERROR. That is the feature working, not a fault, so it is
+  // left out of the error log; every other next-auth error is kept.
+  logger: {
+    error(code, metadata) {
+      const message = metadata instanceof Error ? metadata.message : (metadata as { message?: string } | undefined)?.message
+      if (code === "JWT_SESSION_ERROR" && message === "access_removed") return
+      logger.error(`[next-auth][error][${code}]`, metadata)
+    },
+    warn(code) {
+      logger.warn(`[next-auth][warn][${code}]`)
+    },
+    debug() {},
+  },
   session: {
     strategy: "jwt",
     maxAge: 8 * 60 * 60, // 8 hours
@@ -160,11 +176,29 @@ export const authOptions: NextAuthOptions = {
         token.id = user.id
         token.role = user.role
         token.accountId = user.accountId
-      } else if (token.id && (!token.accountId || !token.role)) {
-        const dbUser = await prisma.user.findUnique({
-          where: { id: token.id as string },
-          select: { role: true, accountId: true },
-        })
+      } else if (token.id) {
+        // Every session read asks the database who this still is, so removing
+        // someone on Admin > People signs them out on their next page load and
+        // a role change applies at once. One primary-key read. Throwing here
+        // is how next-auth ends a session: getServerSession returns null and
+        // /api/auth/session clears the cookie.
+        //
+        // A database that does not answer keeps the session as it was: a
+        // blip must not sign everyone out. Only a definite "removed" or "gone"
+        // ends it.
+        let dbUser: { role: Role; accountId: string; removedAt: Date | null } | null | undefined
+        try {
+          dbUser = await prisma.user.findUnique({
+            where: { id: token.id as string },
+            select: { role: true, accountId: true, removedAt: true },
+          })
+        } catch (error) {
+          logger.warn("[auth] session check skipped, database did not answer", {
+            message: error instanceof Error ? error.message : String(error),
+          })
+          dbUser = undefined
+        }
+        if (dbUser === null || dbUser?.removedAt) throw new Error("access_removed")
         if (dbUser) {
           token.role = dbUser.role
           token.accountId = dbUser.accountId

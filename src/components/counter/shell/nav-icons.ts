@@ -21,6 +21,7 @@ import {
   ClipboardCheck,
   ShoppingBag,
   ClipboardList,
+  UserPlus,
 } from "lucide-react"
 
 /**
@@ -57,4 +58,5 @@ export const NAV_ICONS: Record<string, LucideIcon> = {
   ClipboardCheck,
   ShoppingBag,
   ClipboardList,
+  UserPlus,
 }

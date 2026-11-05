@@ -7,8 +7,9 @@ import { rateLimit, RATE_LIMIT_TIERS } from "@/lib/rate-limit"
 const bodySchema = z.object({
   token: z.string().min(8).max(128),
   name: z.string().trim().min(1).max(120),
-  email: z.string().email(),
-  password: z.string().min(6).max(200),
+  /** Ignored when the invite names an email, which every invite from People does. */
+  email: z.string().email().optional(),
+  password: z.string().min(10, "Use at least 10 characters").max(200),
 })
 
 export async function POST(req: Request) {
@@ -19,9 +20,9 @@ export async function POST(req: Request) {
     const json = await req.json()
     const parsed = bodySchema.safeParse(json)
     if (!parsed.success) {
-      return NextResponse.json({ error: "Invalid input" }, { status: 400 })
+      return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Invalid input" }, { status: 400 })
     }
-    const { token, name, email, password } = parsed.data
+    const { token, name, password } = parsed.data
 
     const hashedPassword = await bcrypt.hash(password, 10)
 
@@ -32,6 +33,8 @@ export async function POST(req: Request) {
           select: {
             id: true,
             accountId: true,
+            email: true,
+            role: true,
             expiresAt: true,
             usedAt: true,
             revokedAt: true,
@@ -45,22 +48,36 @@ export async function POST(req: Request) {
           throw new SignupError("This invite has expired", 410)
         }
 
-        const existing = await tx.user.findUnique({
-          where: { email },
-          select: { id: true },
-        })
-        if (existing) throw new SignupError("An account with this email already exists", 409)
+        // The invite says who it is for; the form cannot change that.
+        const email = (invite.email ?? parsed.data.email ?? "").trim().toLowerCase()
+        if (!email) throw new SignupError("This invite doesn't name an email. Ask for a new one", 400)
 
-        const createdUser = await tx.user.create({
-          data: {
-            email,
-            password: hashedPassword,
-            name,
-            role: "OWNER",
-            accountId: invite.accountId,
-          },
-          select: { id: true, email: true },
+        const existing = await tx.user.findFirst({
+          where: { email: { equals: email, mode: "insensitive" } },
+          select: { id: true, accountId: true, removedAt: true },
         })
+        // Someone whose access was removed on this account and was invited
+        // again gets their old row back, so what they entered before keeps
+        // their name. Anyone else with this email already has an account.
+        const revived = existing && existing.removedAt && existing.accountId === invite.accountId
+        if (existing && !revived) throw new SignupError("An account with this email already exists. Sign in instead", 409)
+
+        const createdUser = revived
+          ? await tx.user.update({
+              where: { id: existing.id },
+              data: { password: hashedPassword, name, role: invite.role, removedAt: null },
+              select: { id: true, email: true },
+            })
+          : await tx.user.create({
+              data: {
+                email,
+                password: hashedPassword,
+                name,
+                role: invite.role,
+                accountId: invite.accountId,
+              },
+              select: { id: true, email: true },
+            })
 
         await tx.invite.update({
           where: { id: invite.id },
@@ -70,7 +87,7 @@ export async function POST(req: Request) {
         return createdUser
       })
 
-      return NextResponse.json({ ok: true, userId: user.id }, { status: 201 })
+      return NextResponse.json({ ok: true, userId: user.id, email: user.email }, { status: 201 })
     } catch (err) {
       if (err instanceof SignupError) {
         return NextResponse.json({ error: err.message }, { status: err.status })
