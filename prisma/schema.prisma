@@ -62,17 +62,21 @@ model Account {
   ingredientMatchDecisions      IngredientMatchDecision[]
 }
 
-/// Single-use, time-limited signup token. An OWNER on an account creates
-/// an Invite locally; the invitee opens /signup/{token}, signs up, and is
-/// attached to the same accountId. The invite is marked consumed on
-/// successful signup. Creation is gated to NODE_ENV !== "production" — the
-/// dashboard should not expose invite generation in production. The
-/// public consumption route is always live.
+/// Single-use, time-limited signup token. A DEVELOPER issues one from
+/// Admin > People (`src/lib/counter/actions/people.ts`); the invitee opens
+/// /signup/{token}, signs up with the email the invite names, and is attached
+/// to the same accountId with the invite's role. The invite is marked used on
+/// signup; sending a fresh link revokes the old one.
 model Invite {
   id              String    @id @default(cuid())
   token           String    @unique
   accountId       String
   createdByUserId String
+  /// Who the link is for. Null only on the four rows made before People existed.
+  email           String?
+  /// The name typed when inviting, offered on the signup form.
+  name            String?
+  role            Role      @default(OWNER)
   expiresAt       DateTime
   usedAt          DateTime?
   usedByUserId    String?
@@ -85,6 +89,7 @@ model Invite {
 
   @@index([accountId])
   @@index([token])
+  @@index([accountId, email])
 }
 
 model User {
@@ -96,6 +101,11 @@ model User {
   accountId String
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  /// Set when a developer removes this person's access on Admin > People.
+  /// Sign-in refuses them and every session check treats them as signed out.
+  /// The row stays so the invoices, recipes and counts they entered keep a name.
+  removedAt DateTime?
 
   // Profile
   phone     String?

@@ -1,57 +1,23 @@
 import Link from "next/link"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
-import { Logo } from "@/components/counter"
-import { checkInvite, type InviteCheck } from "../invite"
-import { CounterSignupClient } from "./counter-signup-client"
+import { checkInvite } from "../invite"
+import { noticeFor } from "../notice"
+import { CounterSignupClient, SignupDeskFrame } from "./counter-signup-client"
 
 export const dynamic = "force-dynamic"
 
-const NOTICE_COPY: Record<
-  Exclude<InviteCheck, { ok: true }>["reason"],
-  { stamp: string; tone: "ink" | "warn"; headline: string; body: string }
-> = {
-  missing: {
-    stamp: "No record · 404",
-    tone: "ink",
-    headline: "We couldn't find that invite.",
-    body: "The link may have a typo, or this invite was never created. Ask the person who sent it to generate a new one.",
-  },
-  expired: {
-    stamp: "Past edition · 410",
-    tone: "warn",
-    headline: "This invite has expired.",
-    body: "Invites are good for seven days. Ask the sender to issue a fresh link.",
-  },
-  used: {
-    stamp: "Spent",
-    tone: "ink",
-    headline: "This invite has already been used.",
-    body: "Each invite is single-use. If you already have an account, sign in below.",
-  },
-  revoked: {
-    stamp: "Revoked",
-    tone: "warn",
-    headline: "This invite was revoked.",
-    body: "The sender disabled this link. Ask them to issue a new one if you still need access.",
-  },
+function untilLabel(d: Date): string {
+  return d.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "America/Los_Angeles" })
 }
 
 /**
- * Accept an invite — `P.signup`.
+ * Accept an invite, desk. A link that works shows the form; one that cannot
+ * be used says why in the same frame, so nobody lands on a page that looks
+ * like a different product.
  *
- * `?preview=1` renders the design's composition for a SIGNED-IN reader with
- * the submit disabled, because an invite screen is otherwise invisible until
- * you send one: you cannot read its wording, check what it promises about
- * access, or measure it against its design without minting a real token
- * against a live database. The session is the safeguard — a stranger with a
- * bad token still gets the rejection notice below.
- *
- * The rejection states are NOT part of `P.signup`. The design draws the
- * accepted invite and nothing else, so the four refusals — missing, expired,
- * used, revoked — are this product's own and are left as they were. They are
- * the only editorial markup remaining on this route, and they go when someone
- * decides what a refused invite should look like in Counter.
+ * `?preview=1` while signed in draws the form with a placeholder email and
+ * creates nothing; the fidelity suite and a developer checking the look use it.
  */
 export default async function SignupTokenPage(props: {
   params: Promise<{ token: string }>
@@ -68,7 +34,8 @@ export default async function SignupTokenPage(props: {
           <CounterSignupClient
             token={token}
             email="them@example.com"
-            accountName="this account"
+            name=""
+            role="OWNER"
             inviterName={session.user.name ?? "Someone"}
             expiresLabel="—"
             preview
@@ -81,18 +48,16 @@ export default async function SignupTokenPage(props: {
 
   const check = await checkInvite(token)
 
-  if (check.ok) {
+  if (check.ok && check.email) {
     return (
       <>
         <CounterSignupClient
           token={check.token}
-          email={check.inviterEmail}
-          accountName={check.accountName}
+          email={check.email}
+          name={check.name ?? ""}
+          role={check.role}
           inviterName={check.inviterName}
-          expiresLabel={check.expiresAt.toLocaleDateString("en-US", {
-            month: "long",
-            day: "numeric",
-          })}
+          expiresLabel={untilLabel(check.expiresAt)}
           preview={false}
         />
         <span hidden data-perf-ready="/signup/[token]" />
@@ -100,25 +65,30 @@ export default async function SignupTokenPage(props: {
     )
   }
 
-  const copy = NOTICE_COPY[check.reason]
+  // An invite from before People existed names nobody, so it cannot be
+  // redeemed safely: it reads as "ask for a fresh link".
+  const notice = check.ok
+    ? noticeFor({ ok: false, reason: "revoked", tokenShort: "", inviterName: check.inviterName })
+    : noticeFor(check)
   return (
-    <main className="ct-root login" style={{ gridTemplateColumns: "1fr" }}>
-      <div className="login__form" style={{ maxWidth: 460 }}>
-        <div className="login__logo">
-          <Logo />
-          <span className="cap">Operations</span>
-        </div>
-        <h1>{copy.headline}</h1>
-        <p className="sub">{copy.body}</p>
-        <div className="btnrow" style={{ justifyContent: "center" }}>
-          <Link className="btn btn--primary" href="/login">
-            Go to sign in
-          </Link>
-        </div>
-        <p className="mono" style={{ textAlign: "center", margin: 0 }}>
-          {copy.stamp} · {check.tokenShort}
-        </p>
+    <SignupDeskFrame
+      eyebrow="Invited sign-up"
+      foot="Invite only. Nothing on this page is anyone’s data."
+      facts={[
+        { k: "Access", v: "Invite only" },
+        { k: "Links last", v: "7 days" },
+        { k: "Each link", v: "Works once" },
+      ]}
+    >
+      <div className="login__head">
+        <h1>{notice.headline}</h1>
+        <p className="sub">{notice.body}</p>
       </div>
-    </main>
+      <div className="login__fields">
+        <Link className="btn btn--primary login__go" href="/login">
+          <span className="login__label">{notice.action}</span>
+        </Link>
+      </div>
+    </SignupDeskFrame>
   )
 }

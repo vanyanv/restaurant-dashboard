@@ -1,170 +1,115 @@
 "use client"
 
-import { useState } from "react"
-import { signIn } from "next-auth/react"
-import { useRouter } from "next/navigation"
-import { Logo } from "@/components/counter"
+import type { ReactNode } from "react"
+import { Logo, WelcomeLine, welcomeNext } from "@/components/counter"
+import { SignupFields, roleLine, useSignup } from "../signup-fields"
 
 /**
- * Accept an invite — `P.signup`.
- *
- * The design's own aside is "what a developer can see", and it is the whole
- * reason this page has one: somebody is about to be given the run of an
- * account, and the screen that asks them to pick a password is the last place
- * anyone reads what that means.
- *
- * ## Preview
- *
- * `?preview=1` renders the same composition for a SIGNED-IN reader with the
- * submit disabled and the copy saying so. An invite screen is otherwise
- * invisible until you send one — you cannot look at it, review its wording, or
- * measure it against its design without minting a real token, and minting one
- * against a live database to take a screenshot is not a thing to do. The
- * session is the safeguard; a stranger with a bad token still gets the
- * rejection state.
+ * Accept an invite, desk. The login page's own composition (`.login--sign`):
+ * the lit sign on the left, the form on the right, the same eyebrow, fields,
+ * button and colophon. Where login's sign lists three facts about the
+ * product, this one lists the three about the invite.
  */
+export function SignupDeskFrame({
+  facts,
+  eyebrow,
+  foot,
+  className = "",
+  children,
+  door,
+}: {
+  facts: Array<{ k: string; v: string; pulse?: boolean }>
+  eyebrow: string
+  foot: string
+  className?: string
+  children: ReactNode
+  door?: ReactNode
+}) {
+  return (
+    <main className={`ct-root login login--sign${className}`}>
+      <div className="login__sign">
+        <span className="login__where">Hollywood · Glendale · Van Nuys</span>
+        <div className="login__stage">
+          <div className="login__mark">
+            <span className="login__bloom" aria-hidden="true" />
+            <Logo width={320} />
+            <p className="login__op">Operations</p>
+          </div>
+        </div>
+        <div className="login__svc">
+          {facts.map((f) => (
+            <div key={f.k}>
+              <span className="k">{f.k}</span>
+              <span className="v">
+                {f.pulse ? <i className="login__pulse" aria-hidden="true" /> : null}
+                {f.v}
+              </span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="login__form">
+        <span className="login__eyebrow">{eyebrow}</span>
+        <div className="login__body">{children}</div>
+        <p className="mono login__foot">{foot}</p>
+      </div>
+
+      <div className="login__door" aria-hidden="true">
+        <Logo width={340} priority={false} />
+        {door}
+      </div>
+    </main>
+  )
+}
+
 export function CounterSignupClient({
   token,
   email,
-  accountName,
+  name,
+  role,
   inviterName,
   expiresLabel,
   preview,
 }: {
   token: string
   email: string
-  accountName: string
+  name: string
+  role: "OWNER" | "DEVELOPER"
   inviterName: string
   expiresLabel: string
   preview: boolean
 }) {
-  const [name, setName] = useState("")
-  const [password, setPassword] = useState("")
-  const [busy, setBusy] = useState(false)
-  const [problem, setProblem] = useState<string | null>(null)
-  const router = useRouter()
-
-  async function submit(e: React.FormEvent) {
-    e.preventDefault()
-    if (preview) return
-    setBusy(true)
-    setProblem(null)
-    try {
-      const res = await fetch("/api/auth/signup-with-invite", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ token, name, email, password }),
-      })
-      if (!res.ok) {
-        const body = (await res.json().catch(() => null)) as { error?: string } | null
-        setProblem(body?.error ?? "That did not work. The invite may have just been used.")
-        setBusy(false)
-        return
-      }
-      await signIn("credentials", { email, password, redirect: false })
-      router.push("/dashboard")
-    } catch {
-      setProblem("Something went wrong on our end")
-      setBusy(false)
-    }
-  }
+  const { phase, problem, greeting, submit } = useSignup({ token, email, preview, home: "/dashboard" })
 
   return (
-    <main className="ct-root login">
-      <div className="login__form">
-        <div className="login__logo">
-          <Logo />
-          <span className="cap">Operations</span>
-        </div>
+    <SignupDeskFrame
+      className={`${phase === "bad" ? " is-stutter" : ""}${phase === "good" ? " is-opening" : ""}`}
+      eyebrow="Invited sign-up"
+      foot={preview ? "A preview. Nothing here creates an account." : `This link is only for ${email} and works once.`}
+      facts={[
+        { k: "Invited by", v: inviterName, pulse: true },
+        { k: "Access", v: role === "DEVELOPER" ? "Developer" : "Owner" },
+        { k: "Link good until", v: expiresLabel },
+      ]}
+      door={greeting !== null ? <WelcomeLine greeting={greeting} next={welcomeNext(new Date())} /> : null}
+    >
+      <div className="login__head">
         <h1>{inviterName} invited you</h1>
-        <p className="sub">
-          You are joining <b>{accountName}</b>. Pick a password and you are in.
-        </p>
-
-        {problem !== null ? (
-          <div className="loginmsg" role="alert">
-            <span className="fi">!</span>
-            <div>
-              <b>{problem}</b>
-              <p>Ask whoever invited you to send another.</p>
-            </div>
-          </div>
-        ) : null}
-
-        <form onSubmit={submit} style={{ display: "grid", gap: 16 }}>
-          <div className="field2">
-            <label htmlFor="signup-email">Email</label>
-            <input id="signup-email" className="inp" type="email" value={email} readOnly />
-          </div>
-          <div className="field2">
-            <label htmlFor="signup-name">Your name</label>
-            <input
-              id="signup-name"
-              className="inp"
-              type="text"
-              autoComplete="name"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              required={!preview}
-              disabled={preview}
-            />
-          </div>
-          <div className="field2">
-            <label htmlFor="signup-password">Choose a password</label>
-            <input
-              id="signup-password"
-              className="inp"
-              type="password"
-              autoComplete="new-password"
-              placeholder="At least 10 characters"
-              minLength={10}
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required={!preview}
-              disabled={preview}
-            />
-          </div>
-          <button
-            className="btn btn--primary"
-            type="submit"
-            style={{ justifyContent: "center", padding: 11 }}
-            disabled={busy || preview}
-          >
-            {busy ? "Creating…" : "Create the account"}
-          </button>
-        </form>
-
-        <p className="mono" style={{ textAlign: "center", margin: 0 }}>
-          {preview
-            ? "A preview. Nothing here creates an account."
-            : `This invite expires on ${expiresLabel}.`}
-        </p>
+        <p className="sub">Choose a password and you&rsquo;re in. {roleLine(role)}</p>
       </div>
 
-      <div className="login__aside">
-        <span className="who">What this account can see</span>
-        <p className="qt">
-          Everything the owner sees, plus the monitoring pages the owner never does.
-        </p>
-        <div className="loginstat">
+      {problem !== null ? (
+        <div className="loginmsg" role="alert">
+          <span className="fi">!</span>
           <div>
-            <span className="k">Stores</span>
-            <span className="v">All of them</span>
-          </div>
-          <div>
-            <span className="k">Money pages</span>
-            <span className="v">Yes</span>
-          </div>
-          <div>
-            <span className="k">Monitoring</span>
-            <span className="v">Yes</span>
-          </div>
-          <div>
-            <span className="k">Invited by</span>
-            <span className="v">{inviterName}</span>
+            <b>{problem}</b>
+            <p>If it keeps happening, ask {inviterName} to send you a fresh link.</p>
           </div>
         </div>
-      </div>
-    </main>
+      ) : null}
+
+      <SignupFields email={email} initialName={name} preview={preview} phase={phase} onSubmit={submit} />
+    </SignupDeskFrame>
   )
 }

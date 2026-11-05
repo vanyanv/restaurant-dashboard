@@ -12,6 +12,10 @@ export type InviteCheck =
   | {
       ok: true
       token: string
+      /** Who the link is for. Null only on invites made before People existed. */
+      email: string | null
+      name: string | null
+      role: "OWNER" | "DEVELOPER"
       accountName: string
       inviterName: string
       inviterEmail: string
@@ -21,6 +25,8 @@ export type InviteCheck =
       ok: false
       reason: "missing" | "expired" | "used" | "revoked"
       inviterEmail?: string
+      inviterName?: string
+      email?: string | null
       tokenShort: string
     }
 
@@ -29,6 +35,9 @@ export async function checkInvite(token: string): Promise<InviteCheck> {
     where: { token },
     select: {
       token: true,
+      email: true,
+      name: true,
+      role: true,
       expiresAt: true,
       usedAt: true,
       revokedAt: true,
@@ -45,6 +54,8 @@ export async function checkInvite(token: string): Promise<InviteCheck> {
       ok: false,
       reason: "revoked",
       inviterEmail: invite.createdBy.email,
+      inviterName: invite.createdBy.name || invite.createdBy.email,
+      email: invite.email,
       tokenShort,
     }
   }
@@ -53,6 +64,8 @@ export async function checkInvite(token: string): Promise<InviteCheck> {
       ok: false,
       reason: "used",
       inviterEmail: invite.createdBy.email,
+      inviterName: invite.createdBy.name || invite.createdBy.email,
+      email: invite.email,
       tokenShort,
     }
   }
@@ -61,6 +74,8 @@ export async function checkInvite(token: string): Promise<InviteCheck> {
       ok: false,
       reason: "expired",
       inviterEmail: invite.createdBy.email,
+      inviterName: invite.createdBy.name || invite.createdBy.email,
+      email: invite.email,
       tokenShort,
     }
   }
@@ -68,6 +83,9 @@ export async function checkInvite(token: string): Promise<InviteCheck> {
   return {
     ok: true,
     token: invite.token,
+    email: invite.email,
+    name: invite.name,
+    role: invite.role,
     accountName: invite.account.name,
     inviterName: invite.createdBy.name || invite.createdBy.email,
     inviterEmail: invite.createdBy.email,

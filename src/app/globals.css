@@ -34,6 +34,7 @@
 @import "../styles/counter-pnl.css";
 @import "../styles/counter-menu.css";
 @import "../styles/counter-count.css";
+@import "../styles/counter-people.css";
 
 @theme {
   --color-background: var(--ct-paper);
