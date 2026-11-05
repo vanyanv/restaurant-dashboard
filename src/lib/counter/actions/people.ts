@@ -70,6 +70,30 @@ function activeDevelopers(accountId: string): Promise<number> {
   return prisma.user.count({ where: { accountId, role: "DEVELOPER", removedAt: null } })
 }
 
+/** Every live link for one email on this account, matched without regard to case. */
+function liveInvitesFor(accountId: string, email: string) {
+  return { accountId, email: { equals: email, mode: "insensitive" as const }, usedAt: null, revokedAt: null }
+}
+
+/**
+ * Remove or demote someone without ever leaving the account with no
+ * developer. The count is re-taken inside the same serializable transaction
+ * as the change, so two developers removing each other at once cannot both
+ * succeed.
+ */
+async function changeKeepingADeveloper(accountId: string, change: (tx: Tx) => Promise<unknown>): Promise<void> {
+  await prisma.$transaction(
+    async (tx) => {
+      await change(tx)
+      const left = await tx.user.count({ where: { accountId, role: "DEVELOPER", removedAt: null } })
+      if (left < 1) throw new Refused("They're the last developer. Make someone else a developer first")
+    },
+    { isolationLevel: "Serializable" },
+  )
+}
+
+type Tx = Parameters<Parameters<typeof prisma.$transaction>[0]>[0]
+
 /**
  * Make a link for one person and, unless asked only for the link, email it.
  * Any live link for the same email on this account is switched off first, so
@@ -84,7 +108,7 @@ async function issue(
   const expiresAt = inviteExpiry()
   await prisma.$transaction([
     prisma.invite.updateMany({
-      where: { accountId: me.accountId, email: who.email, usedAt: null, revokedAt: null },
+      where: liveInvitesFor(me.accountId, who.email),
       data: { revokedAt: new Date() },
     }),
     prisma.invite.create({
@@ -170,8 +194,10 @@ export async function cancelInvite(input: { inviteId: string }): Promise<PeopleR
       select: { email: true, name: true },
     })
     if (!inv) return { ok: false, error: "That invite is gone already" }
+    // An old link with no email is switched off on its own; otherwise every
+    // live link for that person goes, so no older one keeps working.
     await prisma.invite.updateMany({
-      where: { accountId: me.accountId, email: inv.email, usedAt: null, revokedAt: null },
+      where: inv.email ? liveInvitesFor(me.accountId, inv.email) : { id: input.inviteId, accountId: me.accountId, usedAt: null, revokedAt: null },
       data: { revokedAt: new Date() },
     })
     return done(`Invite for ${firstName(inv.name, inv.email ?? "them")} cancelled. Their link no longer works`)
@@ -188,13 +214,10 @@ export async function removeAccess(input: { userId: string }): Promise<PeopleRes
     if (!target) return { ok: false, error: "That person isn't on this account" }
     const blocked = removalBlocked({ actorId: me.userId, target, activeDevelopers: await activeDevelopers(me.accountId) })
     if (blocked) return { ok: false, error: blocked }
-    await prisma.$transaction([
-      prisma.user.update({ where: { id: target.id }, data: { removedAt: new Date() } }),
-      prisma.invite.updateMany({
-        where: { accountId: me.accountId, email: target.email, usedAt: null, revokedAt: null },
-        data: { revokedAt: new Date() },
-      }),
-    ])
+    await changeKeepingADeveloper(me.accountId, async (tx) => {
+      await tx.user.update({ where: { id: target.id }, data: { removedAt: new Date() } })
+      await tx.invite.updateMany({ where: liveInvitesFor(me.accountId, target.email), data: { revokedAt: new Date() } })
+    })
     return done(`${firstName(target.name, target.email)}'s access removed. They're signed out`)
   })
 }
@@ -209,7 +232,12 @@ export async function restoreAccess(input: { userId: string }): Promise<PeopleRe
     })
     if (!target) return { ok: false, error: "That person isn't on this account" }
     if (target.removedAt === null) return done(`${firstName(target.name, target.email)} already has access`)
-    await prisma.user.update({ where: { id: target.id }, data: { removedAt: null } })
+    // Back with their old password; a link sent while they were out would
+    // otherwise let someone else holding it reset that password.
+    await prisma.$transaction([
+      prisma.user.update({ where: { id: target.id }, data: { removedAt: null } }),
+      prisma.invite.updateMany({ where: liveInvitesFor(me.accountId, target.email), data: { revokedAt: new Date() } }),
+    ])
     return done(`${firstName(target.name, target.email)} has access again`)
   })
 }
@@ -225,7 +253,7 @@ export async function setPersonRole(input: { userId: string; role: PersonRole })
     if (!target) return { ok: false, error: "That person isn't on this account" }
     const blocked = roleChangeBlocked({ actorId: me.userId, target, to, activeDevelopers: await activeDevelopers(me.accountId) })
     if (blocked) return { ok: false, error: blocked }
-    await prisma.user.update({ where: { id: target.id }, data: { role: to } })
+    await changeKeepingADeveloper(me.accountId, (tx) => tx.user.update({ where: { id: target.id }, data: { role: to } }))
     return done(`${firstName(target.name, target.email)} is now ${to === "DEVELOPER" ? "a" : "an"} ${roleWords(to)}. It applies right away`)
   })
 }

@@ -28,7 +28,10 @@ beforeEach(() => {
   vi.clearAllMocks()
   process.env.NEXTAUTH_URL = "https://dash.example.com/"
   asMock(getServerSession).mockResolvedValue(DEV)
-  asMock(prisma.$transaction).mockResolvedValue([])
+  // Array form resolves; callback form runs against the same mocks as `tx`.
+  asMock(prisma.$transaction).mockImplementation((arg: unknown) =>
+    typeof arg === "function" ? (arg as (tx: typeof prisma) => unknown)(prisma) : Promise.resolve([]),
+  )
   asMock(prisma.user.findFirst).mockResolvedValue(null)
   asMock(prisma.user.count).mockResolvedValue(2)
   asMock(sendEmail).mockResolvedValue({ ok: true })
@@ -52,7 +55,7 @@ describe("invitePerson", () => {
   it("emails a link made for that email and role, switching older links for it off", async () => {
     const r = await invitePerson({ name: "Ana Reyes", email: " Ana@Example.com ", role: "DEVELOPER" })
     expect(r).toEqual({ ok: true, message: "Invite emailed to Ana" })
-    expect(asMock(prisma.invite.updateMany).mock.calls[0][0].where).toMatchObject({ accountId: "acc_1", email: "ana@example.com", usedAt: null, revokedAt: null })
+    expect(asMock(prisma.invite.updateMany).mock.calls[0][0].where).toMatchObject({ accountId: "acc_1", email: { equals: "ana@example.com", mode: "insensitive" }, usedAt: null, revokedAt: null })
     expect(asMock(prisma.invite.create).mock.calls[0][0].data).toMatchObject({ accountId: "acc_1", email: "ana@example.com", name: "Ana Reyes", role: "DEVELOPER", createdByUserId: "u_dev" })
     const sent = asMock(sendEmail).mock.calls[0][0]
     expect(sent.to).toEqual(["ana@example.com"])
@@ -108,7 +111,20 @@ describe("sendFreshLink and cancelInvite", () => {
   it("cancels every live link for that email", async () => {
     asMock(prisma.invite.findFirst).mockResolvedValue({ email: "luis@x.com", name: "Luis" })
     expect((await cancelInvite({ inviteId: "inv_1" })).ok).toBe(true)
-    expect(asMock(prisma.invite.updateMany).mock.calls[0][0].where).toMatchObject({ accountId: "acc_1", email: "luis@x.com" })
+    expect(asMock(prisma.invite.updateMany).mock.calls[0][0].where).toMatchObject({ accountId: "acc_1", email: { equals: "luis@x.com", mode: "insensitive" } })
+  })
+})
+
+describe("cancelInvite on an old link with no email", () => {
+  it("switches off only that link", async () => {
+    asMock(prisma.invite.findFirst).mockResolvedValue({ email: null, name: null })
+    expect((await cancelInvite({ inviteId: "inv_old" })).ok).toBe(true)
+    expect(asMock(prisma.invite.updateMany).mock.calls[0][0].where).toEqual({
+      id: "inv_old",
+      accountId: "acc_1",
+      usedAt: null,
+      revokedAt: null,
+    })
   })
 })
 
@@ -131,6 +147,23 @@ describe("removeAccess, restoreAccess, setPersonRole", () => {
     asMock(prisma.user.findFirst).mockResolvedValue({ id: "u_sam", name: "Sam", email: "sam@x.com", removedAt: new Date() })
     expect(await restoreAccess({ userId: "u_sam" })).toEqual({ ok: true, message: "Sam has access again" })
     expect(asMock(prisma.user.update).mock.calls[0][0].data).toEqual({ removedAt: null })
+    // A link sent while they were out stops working once they're back.
+    expect(asMock(prisma.invite.updateMany).mock.calls[0][0].where).toMatchObject({
+      accountId: "acc_1",
+      email: { equals: "sam@x.com", mode: "insensitive" },
+      usedAt: null,
+      revokedAt: null,
+    })
+  })
+
+  it("refuses a removal that would leave no developer once the change is in (two at once)", async () => {
+    asMock(prisma.user.findFirst).mockResolvedValue({ id: "u_d2", name: "D", email: "d@x.com", role: "DEVELOPER", removedAt: null })
+    // The pre-check sees two developers; by the time the change lands the other one is gone too.
+    asMock(prisma.user.count).mockResolvedValueOnce(2).mockResolvedValueOnce(0)
+    const r = await removeAccess({ userId: "u_d2" })
+    expect(r).toEqual({ ok: false, error: "They're the last developer. Make someone else a developer first" })
+    const opts = asMock(prisma.$transaction).mock.calls[0][1]
+    expect(opts).toEqual({ isolationLevel: "Serializable" })
   })
 
   it("won't demote the last developer", async () => {

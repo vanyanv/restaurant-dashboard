@@ -57,10 +57,9 @@ export const authOptions: NextAuthOptions = {
             return null
           }
 
-          const user = await prisma.user.findUnique({
-            where: {
-              email: credentials.email
-            }
+          // Emails are stored lowercased; people type them however they like.
+          const user = await prisma.user.findFirst({
+            where: { email: { equals: credentials.email.trim(), mode: "insensitive" } },
           })
 
           // A removed person (Admin > People) fails exactly like a wrong

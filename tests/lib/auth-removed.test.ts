@@ -3,7 +3,7 @@
 
 import { describe, it, expect, vi, beforeEach } from "vitest"
 
-vi.mock("@/lib/prisma", () => ({ prisma: { user: { findUnique: vi.fn() } } }))
+vi.mock("@/lib/prisma", () => ({ prisma: { user: { findUnique: vi.fn(), findFirst: vi.fn() } } }))
 vi.mock("@/lib/monitoring/login-audit", () => ({ recordLoginEvent: vi.fn() }))
 vi.mock("@/lib/welcome", () => ({ extractFirstName: () => null, markSignIn: vi.fn(), markSignOut: vi.fn() }))
 
@@ -11,6 +11,7 @@ import { prisma } from "@/lib/prisma"
 import { authOptions } from "@/lib/auth"
 
 const findUnique = prisma.user.findUnique as unknown as ReturnType<typeof vi.fn>
+const findFirst = prisma.user.findFirst as unknown as ReturnType<typeof vi.fn>
 const jwt = authOptions.callbacks!.jwt! as unknown as (a: { token: Record<string, unknown>; user?: unknown }) => Promise<Record<string, unknown>>
 const authorize = (authOptions.providers[0] as unknown as { options: { authorize: (c: unknown, r: unknown) => Promise<unknown> } }).options.authorize
 
@@ -42,7 +43,7 @@ describe("session check", () => {
 
 describe("sign-in", () => {
   it("refuses a removed person like a wrong password", async () => {
-    findUnique.mockResolvedValue({ id: "u_1", email: "a@b.com", password: "x", removedAt: new Date() })
+    findFirst.mockResolvedValue({ id: "u_1", email: "a@b.com", password: "x", removedAt: new Date() })
     expect(await authorize({ email: "a@b.com", password: "whatever" }, { headers: {} })).toBeNull()
   })
 })

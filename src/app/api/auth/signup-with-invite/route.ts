@@ -7,8 +7,6 @@ import { rateLimit, RATE_LIMIT_TIERS } from "@/lib/rate-limit"
 const bodySchema = z.object({
   token: z.string().min(8).max(128),
   name: z.string().trim().min(1).max(120),
-  /** Ignored when the invite names an email, which every invite from People does. */
-  email: z.string().email().optional(),
   password: z.string().min(10, "Use at least 10 characters").max(200),
 })
 
@@ -47,10 +45,20 @@ export async function POST(req: Request) {
         if (invite.expiresAt.getTime() < Date.now()) {
           throw new SignupError("This invite has expired", 410)
         }
+        // The invite says who it is for; the form cannot change that. Old
+        // links made before People named an email are refused outright.
+        if (!invite.email) throw new SignupError("This link no longer works. Ask for a new one", 410)
+        const email = invite.email.trim().toLowerCase()
 
-        // The invite says who it is for; the form cannot change that.
-        const email = (invite.email ?? parsed.data.email ?? "").trim().toLowerCase()
-        if (!email) throw new SignupError("This invite doesn't name an email. Ask for a new one", 400)
+        // Claim the link first, conditionally: two tabs racing, or a cancel
+        // or re-send landing mid-request, leaves exactly one winner and no
+        // account made from a link that was switched off.
+        const now = new Date()
+        const claimed = await tx.invite.updateMany({
+          where: { id: invite.id, usedAt: null, revokedAt: null, expiresAt: { gt: now } },
+          data: { usedAt: now },
+        })
+        if (claimed.count !== 1) throw new SignupError("This link no longer works. Ask for a new one", 410)
 
         const existing = await tx.user.findFirst({
           where: { email: { equals: email, mode: "insensitive" } },
@@ -81,7 +89,7 @@ export async function POST(req: Request) {
 
         await tx.invite.update({
           where: { id: invite.id },
-          data: { usedAt: new Date(), usedByUserId: createdUser.id },
+          data: { usedByUserId: createdUser.id },
         })
 
         return createdUser
