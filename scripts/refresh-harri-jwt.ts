@@ -433,10 +433,26 @@ function jitter(min: number, max: number): number {
   return min + Math.random() * (max - min)
 }
 
+// The persistent profile remembers what was typed last time, so Chromium
+// autofills the email and password fields. Typing on top of that appended to
+// the saved text ("me@x.comme@x.com") and every login was refused. Empty the
+// field first, and check what landed before moving on.
+async function clearField(page: Page, locator: Locator): Promise<void> {
+  await locator.press("ControlOrMeta+A")
+  await locator.press("Backspace")
+  if ((await locator.inputValue().catch(() => "")) !== "") await locator.clear()
+  await page.waitForTimeout(jitter(80, 180))
+}
+
 async function humanType(page: Page, locator: Locator, text: string): Promise<void> {
   await locator.click()
   await page.waitForTimeout(jitter(120, 320))
-  await locator.pressSequentially(text, { delay: jitter(45, 95) })
+  for (let attempt = 0; attempt < 2; attempt++) {
+    await clearField(page, locator)
+    await locator.pressSequentially(text, { delay: jitter(45, 95) })
+    if ((await locator.inputValue().catch(() => text)) === text) return
+  }
+  throw new Error("could not type into a Harri login field (it kept other text in it)")
 }
 
 async function humanClick(page: Page, locator: Locator): Promise<void> {
