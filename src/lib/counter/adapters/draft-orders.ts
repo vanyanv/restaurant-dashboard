@@ -135,11 +135,17 @@ async function buildDrafts(
       select: { canonicalIngredientId: true, invoice: { select: { vendorName: true } } },
     }),
   ])
+  // The window starts on the store's own (LA) business day. When sales for
+  // today are already in, on hand has had them taken off, so counting today's
+  // forecast again would order today's use twice: start tomorrow instead.
+  const todayKey = asOf.toLocaleDateString("en-CA", { timeZone: "America/Los_Angeles" })
+  const soldToday = ctx.sales.some((r) => r.date.toISOString().slice(0, 10) === todayKey)
+  const from = new Date(Date.parse(`${todayKey}T00:00:00Z`) + (soldToday ? DAY_MS : 0))
   const forecast = await computeForecastShapedDepletion({
     accountId,
     storeIds: [storeId],
     ingredientIds: ingredients.map((i) => i.id),
-    from: asOf,
+    from,
     days: FORECAST_DAYS,
   })
 
@@ -187,7 +193,8 @@ async function buildDrafts(
       recipeUnitsPerCase: ing.recipeUnitsPerCase,
       asOf,
     })
-    if (line.short <= 0) {
+    // `orderQty`, not `short`: float noise can leave a sliver short that rounds to 0 cases.
+    if (line.orderQty <= 0) {
       covered++
       continue
     }
@@ -201,15 +208,16 @@ async function buildDrafts(
     const dollars = ing.costPerRecipeUnit != null ? line.orderQty * ing.costPerRecipeUnit : null
     const basis = useForecast ? "store's 14-day sales forecast × recipes" : "recent sales × recipes"
     const how =
-      `Use ${q(line.need)} ${unit} over ${q(line.windowDays)} days ` +
+      `Use ${q(line.need)} ${unit} over ${q(line.windowDays)} days from ${soldToday ? "tomorrow" : "today"} ` +
       `(${q(leadDays)} to arrive + ${coverDays} to last + ${q(line.safetyDays)} buffer) − ${q(oh.onHand)} on hand = ${q(line.short)} ${unit} short` +
       (perCase ? `, ${q(perCase)} ${unit} a case, rounded up` : ", rounded up")
 
-    const key = vendorRaw ?? "No invoice at this store yet"
+    // Grouped on the normalized name, so "SYSCO" and "Sysco" are one vendor.
+    const key = vendorRaw ? normalizeVendorName(vendorRaw) : ""
     let g = groups.get(key)
     if (!g) {
       g = {
-        vendor: key,
+        vendor: vendorRaw ?? "No invoice at this store yet",
         lead: measured != null ? `Arrives in about ${q(measured)} days` : `Delivery time not measured yet, ${FALLBACK_LEAD_DAYS} days used`,
         rows: [],
         dollars: 0,

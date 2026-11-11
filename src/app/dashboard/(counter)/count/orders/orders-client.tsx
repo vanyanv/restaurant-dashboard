@@ -98,14 +98,14 @@ function Drafts({ data }: { data: DraftData }) {
             <p className="cw__sub">
               {lines === 0
                 ? `Nothing to order for ${data.store.name} right now: everything counted is covered for ${data.coverDays} days after the next delivery.`
-                : `${lines} ${lines === 1 ? "item" : "items"} to order from ${data.vendors.length} ${data.vendors.length === 1 ? "vendor" : "vendors"}, about ${money(dollars)} at your latest prices${unpriced > 0 ? ` (${unpriced} without a price, not in that total)` : ""}. Estimate: check it against what you would order.`}
+                : `${lines} ${lines === 1 ? "item" : "items"} to order from ${data.vendors.length} ${data.vendors.length === 1 ? "vendor" : "vendors"}, ${unpriced === lines ? "with no prices on file yet" : `about ${money(dollars)} at your latest prices${unpriced > 0 ? ` (${unpriced} without a price, not in that total)` : ""}`}. Estimate: check it against what you would order.`}
             </p>
           </div>
           {data.vendors.map((v) => (
             <div className="cd-vendor" key={v.vendor}>
               <div className="cd-vendor__head">
                 <h3>{v.vendor}</h3>
-                <span className="cw__mono">{v.lead} · about {money(v.dollars)}</span>
+                <span className="cw__mono">{v.lead} · {v.unpriced === v.rows.length ? "no prices yet" : `about ${money(v.dollars)}${v.unpriced > 0 ? `, ${v.unpriced} unpriced` : ""}`}</span>
               </div>
               <div className="cd-list">
                 {v.rows.map((r) => (
