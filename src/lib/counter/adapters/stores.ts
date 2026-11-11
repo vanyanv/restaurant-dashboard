@@ -341,7 +341,7 @@ const missingInputs = (s: StoreRow): string[] => {
   const gaps: string[] = []
   if (s.rent === null) gaps.push("rent")
   if (s.cogsTarget === null) gaps.push("COGS target")
-  if (s.labor === 0) gaps.push("a labor budget above zero")
+  if (s.labor === 0) gaps.push("labor budget")
   return gaps
 }
 
@@ -434,14 +434,16 @@ function tableOf(d: Data): StoresTable {
       title: shortName(s.name),
       detail: `${stageLabel(s)} · ${s.rent === null ? "no rent on file" : `rent ${money(s.rent)}`}`,
       value: fixedMonthly(s) === 0 ? "—" : money(fixedMonthly(s)),
-      note: missingInputs(s).length === 0 ? "complete" : `${count(missingInputs(s).length)} missing`,
+      // Says WHICH inputs, not "2 missing": a count sends the owner into the
+      // file to find out what the count is of (design review 2026-11-11).
+      note: missingInputs(s).length === 0 ? "complete" : `needs ${missingInputs(s).join(", ")}`,
       noteTone: missingInputs(s).length === 0 ? "up" : "down",
     })),
     primary: (() => {
-      const store = d.stores.find(isTrading) ?? d.stores[0]
-      return store
-        ? { href: `/dashboard/stores/${store.id}`, label: `Open ${shortName(store.name)} file` }
-        : null
+      // Each row already opens its own file. A button naming one store
+      // ("Open Glendale file") read as if that store were special; adding a
+      // store is the one thing the rows cannot do.
+      return d.stores.length > 0 ? { href: "/dashboard/stores/new", label: "Add a store" } : null
     })(),
     meta: `${count(d.stores.length)} · standing inputs, not a period`,
     note:

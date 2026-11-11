@@ -554,7 +554,7 @@ export function CounterPhoneAskClient({
             )}
           </Section>
           <StarterChips starters={ASK_STARTERS} onAsk={submit} />
-          <Section bare quietWhenEmpty title="Recent" data={sections.conversations}>
+          <Section bare quietWhenEmpty quietWhenFailed title="Recent" data={sections.conversations}>
             {(items) =>
               items.length === 0 ? null : (
                 <div className="recent">

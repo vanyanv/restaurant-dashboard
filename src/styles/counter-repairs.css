@@ -3508,3 +3508,20 @@ button.setrow--pick.is-on { background: var(--accent-wash) }
 .ct-phone .storefile__exp { grid-template-columns: 1fr 1fr }
 .ct-phone .storefile__exp > :first-child { grid-column: 1 / -1 }
 .storefile__save { margin-top: 12px }
+
+/*
+ * A view-tab row with five or more tabs on a phone is two rows of three, all
+ * visible (design review 2026-11-11). Scrolling sideways kept each label
+ * whole, but the last tab sat half off the edge and "Links & email" could
+ * only be found by swiping a row nobody knew was a scroller.
+ */
+.ct-phone .pagehead .seg:has(> :nth-child(5)) {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  overflow: visible;
+}
+.ct-phone .pagehead .seg:has(> :nth-child(5)) > * {
+  white-space: normal;
+  text-align: center;
+  justify-content: center;
+}
