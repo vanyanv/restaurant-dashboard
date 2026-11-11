@@ -2561,6 +2561,14 @@ model CheckMark {
   photoKey     String?
   photoType    String?
   photoSize    Int?
+  /// The owner looked at this mark's photo: "ok" (looks good) or "redo"
+  /// (sent back; the task was unticked, or marked missed if the check had
+  /// already closed). Null until someone looks.
+  review       String?
+  /// What the owner said when sending it back.
+  reviewNote   String?
+  reviewedBy   String?
+  reviewedAt   DateTime?
 
   store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
 

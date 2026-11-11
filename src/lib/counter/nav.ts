@@ -203,6 +203,7 @@ export const USAGE_TABS: readonly SubNavItem[] = [
 export const CHECKS_TABS: readonly SubNavItem[] = [
   { label: "Today", href: "/dashboard/checks" },
   { label: "History", href: "/dashboard/checks/history" },
+  { label: "Report", href: "/dashboard/checks/report" },
   { label: "Checklists", href: "/dashboard/checks/checklists" },
   { label: "Crew & PINs", href: "/dashboard/checks/crew" },
   { label: "Links & email", href: "/dashboard/checks/posters" },

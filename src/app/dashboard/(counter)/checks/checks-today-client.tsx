@@ -1,5 +1,6 @@
 "use client"
 
+import { CheckDetail, PlainHead } from "./checks-plain-ui"
 import { useState, useTransition } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
@@ -8,7 +9,7 @@ import { setChecksPaused, setStoreClosed } from "@/lib/counter/actions/checks"
 import { shortStoreName } from "@/lib/checks/names"
 import type { SectionSources } from "@/lib/counter/adapters/types"
 import type { TodayData, TodaySections, CellView } from "@/lib/counter/adapters/checks"
-import { CheckDetail, ChecksHead, Glyph, Legend, OutcomeLine, type Outcome } from "./checks-ui"
+import { ChecksHead, Glyph, Legend, OutcomeLine, type Outcome } from "./checks-ui"
 
 /**
  * Store checks — Today. One card per store with its Morning and Night check
@@ -27,6 +28,17 @@ export function ChecksTodayClient({ sections }: { sections: SectionSources<Today
   return (
     <>
       <ChecksHead sub="Morning and Night · LA time" />
+      <Section bare title="Store checks, made plain" data={sections.today} pending={pending}>
+        {(d) => (
+          <PlainHead
+            sentence={d.plain.sentence}
+            figure={d.plain.share ? `${d.plain.share.pct}%` : null}
+            figureLabel={d.plain.share ? `${d.plain.shareLabel} · ${d.plain.share.done} of ${d.plain.share.total}` : "Nothing was due yesterday"}
+            delta={d.plain.delta}
+            deltaLabel={d.plain.deltaLabel}
+          />
+        )}
+      </Section>
       <Section bare title="Missed checks" data={sections.today} pending={pending}>
         {(d) => <Missed data={d} />}
       </Section>

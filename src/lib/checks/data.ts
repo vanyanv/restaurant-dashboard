@@ -21,6 +21,8 @@ export type GridSubmission = {
   total: number
   /** Tasks nobody ticked, in list order. Empty on a check crew sent. */
   missed: Array<{ section: string; item: string }>
+  /** Every task on the record, in list order, as it stood when it was sent or closed. */
+  tasks: RecordTask[]
   submittedAt: Date
   startedAt: Date | null
   lateMinutes: number
@@ -28,6 +30,9 @@ export type GridSubmission = {
   flags: Array<{ section: string; item: string; note: string }>
   photos: Array<{ id: string; sectionName: string }>
 }
+
+/** One task on a check's record. `at` and `by` are on records from 2026-10-29 on. */
+export type RecordTask = { section: string; item: string; done: boolean; note: string | null; by: string | null; at: Date | null; photo: boolean }
 
 /** One row of a check's log: a tick, an untick or a note, by whom and when. */
 export type GridMark = {
@@ -40,6 +45,9 @@ export type GridMark = {
   crewName: string
   at: Date
   hasPhoto: boolean
+  /** The owner's look at this mark's photo. */
+  review: "ok" | "redo" | null
+  reviewNote: string | null
 }
 
 export type GridCell = {
@@ -84,18 +92,32 @@ export function currentMarks<M extends { itemId: string }>(marks: M[]): Map<stri
 
 /** Tasks on a record, tasks done, and the ones nobody ticked. */
 export function recordCounts(content: unknown): { done: number; total: number; missed: GridSubmission["missed"] } {
+  const tasks = recordTasks(content)
+  return {
+    done: tasks.filter((t) => t.done).length,
+    total: tasks.length,
+    missed: tasks.filter((t) => !t.done).map((t) => ({ section: t.section, item: t.item })),
+  }
+}
+
+/** Every task on a record, in list order. */
+export function recordTasks(content: unknown): RecordTask[] {
   const c = content as SubmissionContent | null
-  let done = 0
-  let total = 0
-  const missed: GridSubmission["missed"] = []
+  const out: RecordTask[] = []
   for (const s of c?.sections ?? []) {
     for (const i of s.items ?? []) {
-      total += 1
-      if (i.done) done += 1
-      else missed.push({ section: s.name, item: i.text })
+      out.push({
+        section: s.name,
+        item: i.text,
+        done: Boolean(i.done),
+        note: i.flag ?? null,
+        by: i.by ?? null,
+        at: i.at ? new Date(i.at) : null,
+        photo: Boolean(i.photo),
+      })
     }
   }
-  return { done, total, missed }
+  return out
 }
 
 export type SubmissionContent = {
@@ -177,7 +199,7 @@ export async function loadCheckGrid(opts: {
       where: { storeId: { in: storeIds }, businessDate: range, store: { accountId: opts.accountId } },
       select: {
         id: true, storeId: true, kind: true, businessDate: true, itemId: true, itemText: true, sectionName: true,
-        done: true, note: true, crewName: true, at: true, photoKey: true,
+        done: true, note: true, crewName: true, at: true, photoKey: true, review: true, reviewNote: true,
       },
       orderBy: [{ at: "asc" }, { id: "asc" }],
     }),
@@ -239,6 +261,8 @@ export async function loadCheckGrid(opts: {
             crewName: m.crewName,
             at: m.at,
             hasPhoto: Boolean(m.photoKey),
+            review: m.review === "ok" || m.review === "redo" ? m.review : null,
+            reviewNote: m.reviewNote,
           }))
         const done = [...currentMarks(log).values()].filter((m) => m.done).length
         const rec = sub ? recordCounts(sub.content) : null
@@ -270,6 +294,7 @@ export async function loadCheckGrid(opts: {
                 done: rec!.done,
                 total: rec!.total,
                 missed: rec!.missed,
+                tasks: recordTasks(sub.content),
                 submittedAt: sub.submittedAt,
                 startedAt: sub.startedAt,
                 lateMinutes: sub.lateMinutes,

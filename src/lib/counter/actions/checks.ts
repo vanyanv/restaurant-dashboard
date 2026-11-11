@@ -17,6 +17,7 @@ import {
   syncCrewFromHarri,
 } from "@/lib/checks/setup"
 import { dayToDb } from "@/lib/checks/time"
+import { loadCheckGrid, type SubmissionContent } from "@/lib/checks/data"
 
 /**
  * The owner's write path for store checks. Every action starts from
@@ -451,6 +452,97 @@ export async function saveCheckReportEmails(input: { emails: string[] }): Promis
     await prisma.account.update({ where: { id: session.user.accountId }, data: { checkReportEmails: emails } })
     revalidateChecks()
     return { ok: true, message: emails.length === 0 ? "Check emails are off." : `Saved. ${emails.length} address${emails.length === 1 ? "" : "es"} get every check.` }
+  } catch (err) {
+    return fail(err)
+  }
+}
+
+const ReviewInput = z.object({
+  markId: z.string().min(1).max(40),
+  verdict: z.enum(["ok", "redo"]),
+  note: text(200).optional(),
+})
+
+/**
+ * The owner looks at a check photo. "ok" says it looks good. "redo" sends the
+ * task back: while the check is open it is unticked on every crew phone with
+ * the owner's note; once the check has closed, the record marks the task
+ * missed. Either way the photo stays in the log with what the owner said.
+ */
+export async function reviewCheckPhoto(raw: z.input<typeof ReviewInput>): Promise<ActionResult> {
+  try {
+    const input = ReviewInput.parse(raw)
+    const session = await getServerSession(authOptions)
+    if (!session?.user) throw new Error("Unauthorized")
+    if (!hasOwnerAccess(session.user.role)) throw new Error("Forbidden")
+    const mark = await prisma.checkMark.findFirst({
+      where: { id: input.markId, photoKey: { not: null }, store: { accountId: session.user.accountId } },
+      select: { id: true, storeId: true, kind: true, businessDate: true, itemId: true, itemText: true, sectionName: true, photoKey: true },
+    })
+    if (!mark) return { ok: false, error: "That photo is no longer there." }
+    await requireOwnerStore(mark.storeId)
+    const who = session.user.name?.trim() || "Owner"
+    const now = new Date()
+
+    if (input.verdict === "ok") {
+      await prisma.checkMark.update({
+        where: { id: mark.id },
+        data: { review: "ok", reviewNote: null, reviewedBy: who, reviewedAt: now },
+      })
+      revalidateChecks()
+      return { ok: true, message: "Marked as looking good." }
+    }
+
+    // A window that has just ended is closed first, so the redo lands on the record.
+    const day = mark.businessDate.toISOString().slice(0, 10)
+    await loadCheckGrid({ accountId: session.user.accountId, storeIds: [mark.storeId], fromDay: day, toDay: day, now })
+    const sub = await prisma.checkSubmission.findFirst({
+      where: { storeId: mark.storeId, kind: mark.kind, businessDate: mark.businessDate, store: { accountId: session.user.accountId } },
+      select: { id: true, content: true },
+    })
+    const note = input.note?.trim() ? `Redo: ${input.note.trim()}` : "Redo: sent back by the owner"
+    await prisma.$transaction(async (tx) => {
+      await tx.checkMark.update({
+        where: { id: mark.id },
+        data: { review: "redo", reviewNote: input.note?.trim() || null, reviewedBy: who, reviewedAt: now },
+      })
+      // The untick every crew phone reads: the task is open again, with why.
+      await tx.checkMark.create({
+        data: {
+          storeId: mark.storeId,
+          kind: mark.kind,
+          businessDate: mark.businessDate,
+          itemId: mark.itemId,
+          itemText: mark.itemText,
+          sectionName: mark.sectionName,
+          done: false,
+          note,
+          crewMemberId: null,
+          crewName: who,
+          at: now,
+        },
+      })
+      if (sub) {
+        const content = sub.content as SubmissionContent
+        let flagged = 0
+        for (const s of content.sections) {
+          for (const i of s.items) {
+            if (i.text === mark.itemText && i.done && (s.name === mark.sectionName || content.sections.length === 1)) {
+              i.done = false
+              i.flag = null
+              i.by = null
+              i.at = null
+              i.photo = false
+            }
+            if (i.done && i.flag) flagged += 1
+          }
+        }
+        await tx.checkSubmission.update({ where: { id: sub.id }, data: { content, flaggedCount: flagged } })
+        if (mark.photoKey) await tx.checkPhoto.deleteMany({ where: { submissionId: sub.id, storageKey: mark.photoKey } })
+      }
+    })
+    revalidateChecks()
+    return { ok: true, message: sub ? "Sent back. The task now counts as missed." : "Sent back. Crew see it open again with your note." }
   } catch (err) {
     return fail(err)
   }
