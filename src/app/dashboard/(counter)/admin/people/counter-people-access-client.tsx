@@ -15,6 +15,7 @@ import {
 } from "@/lib/counter/actions/people"
 import type { SectionSources } from "@/lib/counter/adapters/types"
 import type { PeopleAccessData, PeopleAccessSections, PersonRow, PersonState } from "@/lib/counter/adapters/people-access"
+import { useUrlParam } from "@/components/counter/keep/use-url-param"
 
 /**
  * Admin > People (developer only). Everyone who can sign in, everyone waiting
@@ -104,7 +105,10 @@ function useRun(setFlash: (f: Flash) => void) {
 
 function People({ data }: { data: PeopleAccessData }) {
   const [flash, setFlash] = useState<Flash>(null)
-  const [filter, setFilter] = useState<Filter>("all")
+  // In the URL so leaving and coming back keeps it.
+  const [rawFilter, setRawFilter] = useUrlParam("show", "all")
+  const filter = rawFilter as Filter
+  const setFilter = (f: Filter) => setRawFilter(f)
   const [inviting, setInviting] = useState(false)
   const [confirm, setConfirm] = useState<PersonRow | null>(null)
   const { busy, run } = useRun(setFlash)

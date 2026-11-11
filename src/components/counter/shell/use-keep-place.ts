@@ -21,12 +21,19 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation"
  *    "Fresh launch" = standalone display, on bare `/m`, and no mark in
  *    sessionStorage yet (which dies with the app). Tapping Today later in the
  *    same session finds the mark and stays on Today.
+ *
+ * 3. Refreshes the page's numbers when you come back to it. A tab or phone
+ *    left on Today in the morning otherwise showed the morning's figures in
+ *    the evening, because a server-rendered page never re-reads on its own.
+ *    After more than `STALE_AFTER_MS` away, `router.refresh()` re-runs the
+ *    loaders; client state (typed text, open folds, picks) is kept.
  */
 const TOUCH_KEY = "ct-session-touched-at"
 const PLACE_KEY = "ct-last-place"
 const LAUNCH_KEY = "ct-launched"
 const DAY_MS = 24 * 60 * 60 * 1000
 const PLACE_MAX_AGE_MS = 7 * DAY_MS
+const STALE_AFTER_MS = 5 * 60 * 1000
 
 function read(storage: () => Storage, key: string): string | null {
   try {
@@ -65,6 +72,21 @@ export function useKeepPlace(phone: boolean) {
     write(local, TOUCH_KEY, String(Date.now()))
     fetch("/api/auth/session", { credentials: "same-origin", cache: "no-store" }).catch(() => {})
   }, [])
+
+  // 3. Back after a while: fresh numbers.
+  useEffect(() => {
+    let hiddenAt: number | null = document.visibilityState === "hidden" ? Date.now() : null
+    const onVisibility = () => {
+      if (document.visibilityState === "hidden") {
+        hiddenAt = Date.now()
+        return
+      }
+      if (hiddenAt !== null && Date.now() - hiddenAt > STALE_AFTER_MS) router.refresh()
+      hiddenAt = null
+    }
+    document.addEventListener("visibilitychange", onVisibility)
+    return () => document.removeEventListener("visibilitychange", onVisibility)
+  }, [router])
 
   // 2a. Fresh launch of the home-screen app on Today: go back to the last page.
   useEffect(() => {

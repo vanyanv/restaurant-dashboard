@@ -6,6 +6,7 @@ import { saveShopSettings } from "@/lib/counter/actions/shop"
 import type { SectionSources } from "@/lib/counter/adapters/types"
 import type { SettingsData, SettingsSections } from "@/lib/counter/adapters/shop"
 import { OutcomeLine, ShopHead, useShopAction } from "../shop-ui"
+import { useLeaveGuard } from "@/components/counter/keep/use-leave-guard"
 
 /**
  * Shop — Settings. The switches an owner reaches for: pause the shop, turn
@@ -41,6 +42,18 @@ function Form({ s }: { s: SettingsData }) {
     supportEmail: s.supportEmail,
   })
   const { busy, outcome, run } = useShopAction()
+  // Ask before leaving with edits not saved.
+  const saved = {
+    shopPaused: s.shopPaused,
+    pauseNote: s.pauseNote ?? "",
+    pickupEnabled: s.pickupEnabled,
+    pickupAddress: s.pickupAddress,
+    shippingFlat: cents(s.shippingFlatCents),
+    freeOver: cents(s.shippingFreeOverCents),
+    shipsWithin: s.shipsWithin ?? "",
+    supportEmail: s.supportEmail,
+  }
+  useLeaveGuard(JSON.stringify(v) !== JSON.stringify(saved))
   const bad =
     !MONEY.test(v.shippingFlat.trim())
       ? "Shipping is dollars and cents, like 6.00"

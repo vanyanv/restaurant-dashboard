@@ -8,6 +8,7 @@ import type { CellView, TodayData, TodaySections } from "@/lib/counter/adapters/
 import { CheckDetail, PhoneView, PlainHead } from "@/app/dashboard/(counter)/checks/checks-plain-ui"
 import { ChecksHead, Glyph, Legend } from "@/app/dashboard/(counter)/checks/checks-ui"
 import { ClosedToggle, Missed, PauseLink, PausedNote, Tile } from "@/app/dashboard/(counter)/checks/checks-today-client"
+import { useUrlParam } from "@/components/counter/keep/use-url-param"
 
 /**
  * Store checks on a phone — Today. The same adapter as the desk page, laid out
@@ -48,8 +49,20 @@ export function ChecksTodayPhone({ sections }: { sections: SectionSources<TodayS
 
 type Pick = { storeId: string; day: string; kind: string }
 
+/** A check pick in the URL: `?check=<storeId>~<day>~<kind>`. */
+function encodePick(p: Pick | null): string {
+  return p ? `${p.storeId}~${p.day}~${p.kind}` : ""
+}
+function decodePick(raw: string): Pick | null {
+  const [storeId, day, kind] = raw.split("~")
+  return storeId && day && kind ? { storeId, day, kind } : null
+}
+
 function Stores({ data }: { data: TodayData }) {
-  const [pick, setPick] = useState<Pick | null>(null)
+  // The open check lives in the URL so leaving and coming back keeps it.
+  const [rawPick, setRawPick] = useUrlParam("check", "")
+  const pick = decodePick(rawPick)
+  const setPick = (p: Pick | null) => setRawPick(encodePick(p))
   const picked = (() => {
     if (!pick) return null
     const s = data.stores.find((x) => x.id === pick.storeId)

@@ -23,6 +23,7 @@ import {
   SubNav,
 } from "@/components/counter"
 import { MENU_TABS } from "@/lib/counter/nav"
+import { useUrlParam, useUrlFlag } from "@/components/counter/keep/use-url-param"
 import { readCounterParams, writeCounterParams } from "@/lib/counter/url-state"
 import { rangeLabel } from "@/lib/counter/date-range"
 import { decideProposal, proposeMatches } from "@/lib/counter/actions/proposal"
@@ -277,7 +278,10 @@ export function CounterCatalogClient({
 
   const push = useCallback(
     (next: Parameters<typeof writeCounterParams>[1]) => {
-      const qs = writeCounterParams(params, next).toString()
+      // The live URL, not the render's: this page's own picks (search,
+      // filters) are written with replaceState and must survive a date or
+      // store change.
+      const qs = writeCounterParams(new URLSearchParams(window.location.search), next).toString()
       startTransition(() => {
         router.push(qs ? `${pathname}?${qs}` : pathname, { scroll: false })
       })
@@ -285,9 +289,12 @@ export function CounterCatalogClient({
     [params, pathname, router, startTransition],
   )
 
-  const [search, setSearch] = useState("")
-  const [unmappedOnly, setUnmappedOnly] = useState(params.get("filter") === "unmapped")
-  const [withModifiers, setWithModifiers] = useState(false)
+  // In the URL so leaving and coming back keeps them.
+  const [search, setSearch] = useUrlParam("q", "", 300)
+  const [filter, setFilter] = useUrlParam("filter", "")
+  const unmappedOnly = filter === "unmapped"
+  const setUnmappedOnly = (on: boolean) => setFilter(on ? "unmapped" : "")
+  const [withModifiers, setWithModifiers] = useUrlFlag("mods")
   // The table redraws on every keystroke over a hundred-odd rows; deferring the
   // query keeps the input itself responsive under that.
   const query = useDeferredValue(search)
@@ -331,8 +338,8 @@ export function CounterCatalogClient({
               unmappedOnly={unmappedOnly}
               withModifiers={withModifiers}
               onToggle={(id) => {
-                if (id === "unmapped") setUnmappedOnly((v) => !v)
-                else setWithModifiers((v) => !v)
+                if (id === "unmapped") setUnmappedOnly(!unmappedOnly)
+                else setWithModifiers(!withModifiers)
               }}
               onClear={
                 search || unmappedOnly || withModifiers

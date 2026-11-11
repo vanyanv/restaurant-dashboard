@@ -893,6 +893,7 @@ export function CounterAskClient({
           New answer
         </button>
         <AskComposer
+          draftKey="ask-question"
           // The prototype's "Ask a follow-up about this range…" is now honest —
           // a follow-up here IS a follow-up. Before the thread exists it names
           // the scope instead, which is what a first question is asked under.
