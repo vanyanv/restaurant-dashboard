@@ -126,8 +126,7 @@ function linked(data: HistoryData, day: string | null, kind: string | null): { r
 function firstInteresting(data: HistoryData): { row: number; col: number } | null {
   for (let col = data.days.length - 1; col >= 0; col--) {
     for (let row = 0; row < data.rows.length; row++) {
-      const s = data.rows[row].cells[col].status
-      if (s === "missed" || s === "late") return { row, col }
+      if (data.rows[row].cells[col].problem) return { row, col }
     }
   }
   return null

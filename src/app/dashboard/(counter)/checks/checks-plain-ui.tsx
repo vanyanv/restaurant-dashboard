@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useTransition } from "react"
+import { useEffect, useState, useTransition, type ReactNode } from "react"
 import { useRouter } from "next/navigation"
 import { reviewCheckPhoto } from "@/lib/counter/actions/checks"
 import type { CellView } from "@/lib/counter/adapters/checks"
@@ -320,4 +320,42 @@ export function CheckDetail({ store, label, cell }: { store: string; label: stri
 
 function taskCount(n: number): string {
   return `${n} task${n === 1 ? "" : "s"}`
+}
+
+/**
+ * One check, full screen on a phone, with Back at the top. The page under it
+ * stops scrolling while it is open, and the phone's back gesture closes it
+ * instead of leaving the page.
+ */
+export function PhoneView({ title, onBack, children }: { title: string; onBack: () => void; children: ReactNode }) {
+  useEffect(() => {
+    const prev = document.body.style.overflow
+    document.body.style.overflow = "hidden"
+    // A history entry of its own, so the system back closes the view.
+    window.history.pushState({ ckView: true }, "")
+    const onPop = () => onBack()
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") window.history.back()
+    }
+    window.addEventListener("popstate", onPop)
+    window.addEventListener("keydown", onKey)
+    return () => {
+      document.body.style.overflow = prev
+      window.removeEventListener("popstate", onPop)
+      window.removeEventListener("keydown", onKey)
+    }
+    // Opened once per view; onBack changes identity on every render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+  return (
+    <div className="ckp-view" role="dialog" aria-modal="true" aria-label={title}>
+      <div className="ckp-view__bar">
+        <button type="button" className="ckp-back" onClick={() => window.history.back()}>
+          ‹ Back
+        </button>
+        <span className="ck-mono">{title}</span>
+      </div>
+      <div className="ckp-view__body">{children}</div>
+    </div>
+  )
 }

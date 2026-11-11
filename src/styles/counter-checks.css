@@ -458,3 +458,54 @@ button.ck-gl:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
   .ck-rep__prow b{grid-column:1/-1}
   .ck-rep__prow span::before{content:attr(data-l) " ";display:block;font-size:11px;color:var(--ink-3)}
 }
+
+/* ── Owner phone pages (/m/checks/...) ─────────────────────────────── */
+.ckp-stores{display:grid;gap:12px;padding:12px}
+.ckp-week .ck-gl{width:28px;height:28px;font-size:11px;border-radius:7px}
+.ckp-week .pair{gap:3px}
+.ckp-week > div{gap:4px}
+.ckp-more>summary{list-style:none;cursor:pointer;min-height:40px;display:flex;align-items:center;gap:6px;font-size:var(--t-cap);color:var(--ink-2);font-weight:600}
+.ckp-more>summary::-webkit-details-marker{display:none}
+.ckp-more>summary::before{content:"›";display:inline-block;transition:transform .15s;color:var(--ink-3)}
+.ckp-more[open]>summary::before{transform:rotate(90deg)}
+.ckp-more .ck-row{gap:18px;padding:4px 0 6px}
+.ckp-more .ck-link{min-height:40px}
+/* One check, full screen: above the tab bar, Back at the top. */
+.ckp-view{position:fixed;inset:0;z-index:45;background:var(--paper);display:flex;flex-direction:column;animation:ckp-in .18s var(--ease,ease-out)}
+@keyframes ckp-in{from{transform:translateX(24px);opacity:0}to{transform:none;opacity:1}}
+@media (prefers-reduced-motion:reduce){.ckp-view{animation:none}}
+.ckp-view__bar{display:flex;align-items:center;gap:10px;padding:max(8px,env(safe-area-inset-top,0px)) 8px 8px;border-bottom:1px solid var(--line);background:var(--chrome)}
+.ckp-back{min-height:44px;padding:0 10px;border:0;background:none;color:var(--accent);font:inherit;font-weight:600;font-size:16px;cursor:pointer}
+.ckp-view__body{flex:1;overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;padding-bottom:env(safe-area-inset-bottom,0px)}
+/* History by day. */
+.ckp-hist{display:grid;gap:12px;padding:12px}
+.ckp-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch;margin:0 -12px;padding:0 12px}
+.ckp-scroll .seg{width:max-content}
+.ckp-check{display:flex;align-items:center;gap:8px;min-height:40px;font-size:var(--t-cap);font-weight:600}
+.ckp-check input{width:20px;height:20px;accent-color:var(--accent)}
+.ckp-day{border:1px solid var(--line);border-radius:var(--r);background:var(--surface);overflow:hidden}
+.ckp-day__head{display:flex;justify-content:space-between;align-items:baseline;gap:8px;padding:10px 12px;background:var(--paper);border-bottom:1px solid var(--line)}
+.ckp-day ul{list-style:none;margin:0;padding:0}
+.ckp-day li + li{border-top:1px solid var(--line)}
+.ckp-row{width:100%;display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:10px;align-items:center;min-height:56px;padding:8px 12px;border:0;background:none;color:var(--ink);font:inherit;text-align:left;cursor:pointer}
+.ckp-row:active{background:var(--sunk)}
+.ckp-row__main{display:grid;gap:2px}
+.ckp-row__go{color:var(--ink-3);font-size:20px}
+.ckp-flags{list-style:none;margin:0;padding:0;display:grid;gap:6px;font-size:var(--t-cap)}
+.ckp-flags li{display:flex;justify-content:space-between;gap:10px}
+@media (max-width:760px){
+  /* Bigger taps and no iOS zoom on focus (inputs under 16px zoom the page). */
+  .seg button{min-height:36px;padding:6px 12px}
+  .ck-input{font-size:16px;min-height:40px}
+  .ck-link{min-height:36px}
+  .ck-prv__grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+  /* Checklist editor: the two checks as chips, Save fixed above the tab bar. */
+  .ck-cklist{display:flex;gap:6px;overflow-x:auto;padding:6px}
+  .ck-cklist button{flex:none;min-width:150px;border:1px solid var(--line)}
+  .ck-cklist button[aria-pressed="true"]{box-shadow:inset 0 -3px 0 var(--accent)}
+  .ct-phone .ck-edbar{position:fixed;left:0;right:0;bottom:calc(64px + env(safe-area-inset-bottom,0px));z-index:30;justify-content:flex-end;padding:10px 12px;background:var(--chrome);border-top:1px solid var(--line)}
+  .ck-edbar .btn{min-height:44px}
+  .ct-phone .ck-ed{padding-bottom:72px}
+  .ck-win{grid-template-columns:1fr}
+  .ck-erow .ck-phototag{width:auto}
+}
