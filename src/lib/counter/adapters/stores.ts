@@ -921,8 +921,8 @@ export function getStoreFileSectionPromises(
       ],
       meta: "standing inputs",
       placeMeta: store.geocoded
-        ? "used by weather and event signals"
-        : "weather and event signals wait on coordinates nothing here sets yet",
+        ? "weather and events on"
+        : "no map position yet",
       note:
         defaultRates(store)
           ? `The commission rates are the platform defaults to the digit. Nothing in the product ` +
@@ -989,10 +989,10 @@ export function getStoreFileSectionPromises(
             strong: true,
           },
         ],
-        meta: `for ${count(days)} day${days === 1 ? "" : "s"}`,
+        meta: `over ${count(days)} day${days === 1 ? "" : "s"}`,
         note:
-          `Change the range above and this recalculates. A month-long lease charge ` +
-          `never lands in one day.`,
+          `A month of rent and fixed costs is spread evenly over the days, so a week ` +
+          `carries about a quarter of it and no single day carries the whole bill.`,
       }
     }),
 

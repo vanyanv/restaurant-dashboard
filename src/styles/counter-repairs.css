@@ -3465,3 +3465,46 @@ html[data-theme-switching] .ct-root *::after {
   .drpop__grp{grid-template-columns:1fr 1fr}
   .drweeks__row button{padding:9px 0}
 }
+
+/*
+ * Store file, rebuilt as one grouped list (design review 2026-11-11).
+ *
+ * `.inp` is a flex box with no width, so a bare `<input class="inp">` in a
+ * `.setrow` took the browser's default (about 20 characters) and squeezed
+ * the label beside it to a word per line on a phone. Numbers here are at most
+ * eight characters.
+ */
+.setrow > input.storefile__num { flex: none; width: 112px; text-align: right }
+.setrow > select.fld { flex: none; max-width: 150px }
+
+/* A fixed-expense line: the whole row is the button that loads it. */
+button.setrow--pick {
+  width: 100%;
+  background: none;
+  border: none;
+  border-bottom: 1px solid var(--line);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+button.setrow--pick.is-on { background: var(--accent-wash) }
+.setrow__val { font-variant-numeric: tabular-nums; font-weight: 600 }
+
+/* Add / change a cost: label on top, then the three fields, then buttons. */
+.setrow--stack { flex-direction: column; align-items: stretch; gap: 8px }
+.storefile__exp { display: grid; grid-template-columns: 1fr 110px 120px; gap: 8px }
+.storefile__exp .fld { min-width: 0; width: 100% }
+/* `.fld` draws no box of its own; on this form it sits beside `.inp` fields
+   that do, and unboxed "Name" / "Amount" read as labels, not places to type. */
+.storefile__exp .fld,
+.setrow > select.fld {
+  padding: 10px 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-sm);
+  background: var(--surface);
+  font-size: var(--t-mid);
+}
+.ct-phone .storefile__exp { grid-template-columns: 1fr 1fr }
+.ct-phone .storefile__exp > :first-child { grid-column: 1 / -1 }
+.storefile__save { margin-top: 12px }
