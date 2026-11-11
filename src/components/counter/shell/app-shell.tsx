@@ -8,6 +8,7 @@ import { Topbar } from "./topbar"
 import { MTabs } from "./m-tabs"
 import { PageChromeContext, type PageChrome } from "./page-chrome"
 import { CounterTransitionContext, type CounterTransition } from "./counter-transition"
+import { useKeepPlace } from "./use-keep-place"
 import type { SyncState } from "./sync-chip"
 import type { SwitchableStore } from "./store-switcher"
 import { useEntry } from "@/components/counter/motion/use-entry"
@@ -127,6 +128,7 @@ export function AppShell({
   children: ReactNode
 }) {
   const pathname = usePathname()
+  useKeepPlace(false)
   const searchParams = useSearchParams()
   const router = useRouter()
   // The ONE transition for this surface — see `counter-transition.tsx`. Both

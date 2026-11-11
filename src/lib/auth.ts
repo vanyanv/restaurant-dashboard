@@ -167,7 +167,12 @@ export const authOptions: NextAuthOptions = {
   },
   session: {
     strategy: "jwt",
-    maxAge: 8 * 60 * 60, // 8 hours
+    // 30 days, renewed while in use (`useKeepPlace` touches the session once
+    // a day). It was 8 hours, which signed the owner out between visits and
+    // dropped them on Overview. Removing someone on Admin > People still ends
+    // their session on the next page load: the jwt callback below checks.
+    maxAge: 30 * 24 * 60 * 60,
+    updateAge: 24 * 60 * 60,
   },
   callbacks: {
     async jwt({ token, user }) {
