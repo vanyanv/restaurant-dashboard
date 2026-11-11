@@ -92,3 +92,19 @@
 .cw-ed__row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 .cw-ed__row .cw__input{min-height:38px}
 .cw-ed__row label{display:flex;gap:6px;align-items:center;font-size:13px}
+
+/* Count & waste — Orders (draft orders). Phone first: one card per item, stacked. */
+.cd-vendor{display:grid;gap:10px;padding:14px;border-top:1px solid var(--line)}
+.cd-vendor__head{display:flex;justify-content:space-between;align-items:baseline;gap:10px;flex-wrap:wrap}
+.cd-vendor__head h3{margin:0;font-family:var(--display);font-size:18px}
+.cd-list{display:grid;gap:8px}
+.cd-item{border:1px solid var(--line);border-radius:8px;padding:12px;display:grid;gap:6px;background:var(--surface)}
+.cd-item__top{display:flex;justify-content:space-between;align-items:baseline;gap:10px}
+.cd-item__order{font-size:20px;font-weight:700;font-variant-numeric:tabular-nums;white-space:nowrap}
+.cd-item__when{font-family:var(--mono);font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-2)}
+.cd-item__when--now{color:var(--bad);font-weight:700}
+.cd-item__facts{font-size:13px;color:var(--ink-2);font-variant-numeric:tabular-nums}
+.cd-item details summary{cursor:pointer;font-size:13px;color:var(--ink-2);min-height:32px;display:flex;align-items:center}
+.cd-item details p{margin:0;font-size:13px;font-family:var(--mono);overflow-wrap:anywhere}
+.cd-switch{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+@media (min-width:900px){.cd-list{grid-template-columns:repeat(2,minmax(0,1fr))}}

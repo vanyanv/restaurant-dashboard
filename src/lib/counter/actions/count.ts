@@ -432,3 +432,16 @@ export async function addTopSpendItems(limit = 15): Promise<ActionResult> {
     return fail(err)
   }
 }
+
+/** Turns draft orders on or off for one store. Off, the Orders tab drafts nothing. */
+export async function setDraftOrders(storeId: string, on: boolean): Promise<ActionResult> {
+  try {
+    const store = await requireOwnerStore(storeId)
+    await prisma.store.update({ where: { id: store.id }, data: { draftOrdersOn: on === true } })
+    revalidatePath("/dashboard/count/orders")
+    revalidatePath("/m/count/orders")
+    return { ok: true, message: on ? `Draft orders on for ${store.name}` : `Draft orders off for ${store.name}` }
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "Could not change draft orders" }
+  }
+}

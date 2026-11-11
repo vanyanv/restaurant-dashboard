@@ -180,6 +180,10 @@ model Store {
   // fixedMonthlyLabor, which the owner enters as the all-in figure.
   employerPayrollTaxRate       Float? @default(0.0765)
 
+  // Draft orders (2026-11-11), off by default. The owner turns it on per store
+  // from Count & waste > Orders while testing; off, that page drafts nothing.
+  draftOrdersOn                Boolean @default(false)
+
   // Per-store COGS target as a percent (e.g. 28.5 for 28.5%). Drives the
   // /dashboard/cogs target band and the "vs target" KPI. Nullable so existing
   // stores remain valid until set via the topbar chip.
