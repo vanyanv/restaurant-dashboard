@@ -1,7 +1,8 @@
 import { prisma } from "@/lib/prisma"
 import { cellStatus, type CellStatus, type PauseSpan } from "./status"
-import { addDays, CHECK_KINDS, dayToDb, dbToDay, type CheckKindName, type CheckWindow } from "./time"
+import { addDays, CHECK_KINDS, dayToDb, dbToDay, windowBounds, type CheckKindName, type CheckWindow } from "./time"
 import { ensureCheckSetup } from "./setup"
+import { AUTO_CLOSE_LOOKBACK_MS, autoCloseChecks, type AutoCloseCandidate } from "./close"
 
 /**
  * The one loader behind Today, History and the missed-check alerts: every
@@ -11,7 +12,17 @@ import { ensureCheckSetup } from "./setup"
 
 export type GridSubmission = {
   id: string
+  /** Who sent it; for a check that closed itself, everyone who ticked (may be empty). */
   crewName: string
+  /** The app closed it when the window ended; nobody pressed Submit. */
+  autoClosed: boolean
+  /** Tasks done and on the list, from the record. */
+  done: number
+  total: number
+  /** Tasks nobody ticked, in list order. Empty on a check crew sent. */
+  missed: Array<{ section: string; item: string }>
+  /** Every task on the record, in list order, as it stood when it was sent or closed. */
+  tasks: RecordTask[]
   submittedAt: Date
   startedAt: Date | null
   lateMinutes: number
@@ -19,6 +30,9 @@ export type GridSubmission = {
   flags: Array<{ section: string; item: string; note: string }>
   photos: Array<{ id: string; sectionName: string }>
 }
+
+/** One task on a check's record. `at` and `by` are on records from 2026-10-29 on. */
+export type RecordTask = { section: string; item: string; done: boolean; note: string | null; by: string | null; at: Date | null; photo: boolean }
 
 /** One row of a check's log: a tick, an untick or a note, by whom and when. */
 export type GridMark = {
@@ -31,6 +45,9 @@ export type GridMark = {
   crewName: string
   at: Date
   hasPhoto: boolean
+  /** The owner's look at this mark's photo. */
+  review: "ok" | "redo" | null
+  reviewNote: string | null
 }
 
 export type GridCell = {
@@ -45,11 +62,11 @@ export type GridCell = {
   /** Tasks done so far (the latest mark per task), out of the list's tasks. */
   done: number
   total: number
-  /** Everyone who ticked a task or submitted, in the order they joined. */
+  /** Everyone who ticked a task done or submitted, in the order they joined. An owner who only sent a photo back is not on it. */
   people: string[]
 }
 
-export type GridTemplate = CheckWindow & { kind: CheckKindName; enabled: boolean; createdAt: Date; itemCount: number }
+export type GridTemplate = CheckWindow & { id: string; kind: CheckKindName; enabled: boolean; createdAt: Date; itemCount: number }
 
 export type GridStore = {
   id: string
@@ -73,17 +90,45 @@ export function currentMarks<M extends { itemId: string }>(marks: M[]): Map<stri
   return out
 }
 
-function countItems(content: unknown): number {
+/** Tasks on a record, tasks done, and the ones nobody ticked. */
+export function recordCounts(content: unknown): { done: number; total: number; missed: GridSubmission["missed"] } {
+  const tasks = recordTasks(content)
+  return {
+    done: tasks.filter((t) => t.done).length,
+    total: tasks.length,
+    missed: tasks.filter((t) => !t.done).map((t) => ({ section: t.section, item: t.item })),
+  }
+}
+
+/** Every task on a record, in list order. */
+export function recordTasks(content: unknown): RecordTask[] {
   const c = content as SubmissionContent | null
-  return (c?.sections ?? []).reduce((n, s) => n + (s.items?.length ?? 0), 0)
+  const out: RecordTask[] = []
+  for (const s of c?.sections ?? []) {
+    for (const i of s.items ?? []) {
+      out.push({
+        section: s.name,
+        item: i.text,
+        done: Boolean(i.done),
+        note: i.flag ?? null,
+        by: i.by ?? null,
+        at: i.at ? new Date(i.at) : null,
+        photo: Boolean(i.photo),
+      })
+    }
+  }
+  return out
 }
 
 export type SubmissionContent = {
   sections: Array<{
     name: string
     photoRequired: boolean
-    /** `by`, `at` and `photo` are on checks submitted from the shared form (2026-10-29 on). */
-    items: Array<{ text: string; done: boolean; flag: string | null; by?: string | null; at?: string | null; photo?: boolean }>
+    /**
+     * `by`, `at` and `photo` are on checks submitted from the shared form (2026-10-29 on).
+     * `itemId` is the checklist task, on records from 2026-11-11 on; older ones match by text.
+     */
+    items: Array<{ itemId?: string; text: string; done: boolean; flag: string | null; by?: string | null; at?: string | null; photo?: boolean }>
   }>
 }
 
@@ -104,6 +149,11 @@ export async function loadCheckGrid(opts: {
   fromDay: string
   toDay: string
   now: Date
+  /**
+   * Close any check whose window just ended with nothing sent (see
+   * `close.ts`), then read again. On by default; the second read turns it off.
+   */
+  autoClose?: boolean
 }): Promise<GridStore[]> {
   const stores = await prisma.store.findMany({
     where: {
@@ -123,7 +173,7 @@ export async function loadCheckGrid(opts: {
     prisma.checkTemplate.findMany({
       where: { storeId: { in: storeIds }, store: { accountId: opts.accountId } },
       select: {
-        storeId: true, kind: true, opensAtMin: true, submitFromMin: true, dueAtMin: true, dueByWeekday: true,
+        id: true, storeId: true, kind: true, opensAtMin: true, submitFromMin: true, dueAtMin: true, dueByWeekday: true,
         graceMin: true, enabled: true, createdAt: true,
         sections: { select: { _count: { select: { items: true } } } },
       },
@@ -132,7 +182,7 @@ export async function loadCheckGrid(opts: {
       where: { storeId: { in: storeIds }, businessDate: range, store: { accountId: opts.accountId } },
       select: {
         id: true, storeId: true, kind: true, businessDate: true, crewName: true,
-        submittedAt: true, startedAt: true, lateMinutes: true, flaggedCount: true, content: true,
+        submittedAt: true, startedAt: true, lateMinutes: true, flaggedCount: true, autoClosed: true, content: true,
         photos: { select: { id: true, sectionName: true }, orderBy: { createdAt: "asc" } },
       },
     }),
@@ -152,7 +202,7 @@ export async function loadCheckGrid(opts: {
       where: { storeId: { in: storeIds }, businessDate: range, store: { accountId: opts.accountId } },
       select: {
         id: true, storeId: true, kind: true, businessDate: true, itemId: true, itemText: true, sectionName: true,
-        done: true, note: true, crewName: true, at: true, photoKey: true,
+        done: true, note: true, crewName: true, at: true, photoKey: true, review: true, reviewNote: true,
       },
       orderBy: [{ at: "asc" }, { id: "asc" }],
     }),
@@ -172,10 +222,11 @@ export async function loadCheckGrid(opts: {
   const days: string[] = []
   for (let d = opts.fromDay; d <= opts.toDay; d = addDays(d, 1)) days.push(d)
 
-  return stores.map((store) => {
+  const out = stores.map((store) => {
     const tpls = CHECK_KINDS.map((kind) => templates.find((t) => t.storeId === store.id && t.kind === kind))
       .filter((t): t is NonNullable<typeof t> => Boolean(t))
       .map((t) => ({
+        id: t.id,
         kind: t.kind as CheckKindName,
         opensAtMin: t.opensAtMin,
         submitFromMin: t.submitFromMin,
@@ -213,15 +264,19 @@ export async function loadCheckGrid(opts: {
             crewName: m.crewName,
             at: m.at,
             hasPhoto: Boolean(m.photoKey),
+            review: m.review === "ok" || m.review === "redo" ? m.review : null,
+            reviewNote: m.reviewNote,
           }))
         const done = [...currentMarks(log).values()].filter((m) => m.done).length
-        const people = [...new Set([...log.map((m) => m.crewName), ...(sub ? [sub.crewName] : [])])]
+        const rec = sub ? recordCounts(sub.content) : null
+        // An auto-closed record names everyone who ticked; it is not a person.
+        const people = [...new Set([...log.filter((m) => m.done).map((m) => m.crewName), ...(sub && !sub.autoClosed && sub.crewName ? [sub.crewName] : [])])]
         cells.push({
           day,
           kind: t.kind,
           marks: log,
-          done: sub ? countItems(sub.content) : done,
-          total: sub ? countItems(sub.content) : t.itemCount,
+          done: rec ? rec.done : done,
+          total: rec ? rec.total : t.itemCount,
           people,
           status: cellStatus({
             day,
@@ -229,7 +284,7 @@ export async function loadCheckGrid(opts: {
             enabled: t.enabled,
             // A store that isn't open yet has nothing to miss.
             closed: preOpen || closedDays.includes(day),
-            submission: sub ?? null,
+            submission: sub && rec ? { lateMinutes: sub.lateMinutes, done: rec.done, total: rec.total } : null,
             now: opts.now,
             since: t.createdAt,
             pauses: storePauses,
@@ -238,6 +293,11 @@ export async function loadCheckGrid(opts: {
             ? {
                 id: sub.id,
                 crewName: sub.crewName,
+                autoClosed: sub.autoClosed,
+                done: rec!.done,
+                total: rec!.total,
+                missed: rec!.missed,
+                tasks: recordTasks(sub.content),
                 submittedAt: sub.submittedAt,
                 startedAt: sub.startedAt,
                 lateMinutes: sub.lateMinutes,
@@ -254,6 +314,25 @@ export async function loadCheckGrid(opts: {
     }
     return { id: store.id, name: store.name, preOpen, pausedSince, templates: tpls, closedDays, cells }
   })
+
+  if (opts.autoClose === false) return out
+  // A window that just ended with nothing sent: close it from the shared form,
+  // then read again so every screen sees the record.
+  let wrote = 0
+  for (const store of out) {
+    const candidates: AutoCloseCandidate[] = []
+    for (const c of store.cells) {
+      if (c.status !== "missed" || c.submission) continue
+      const t = store.templates.find((x) => x.kind === c.kind)
+      if (!t) continue
+      const ended = opts.now.getTime() - windowBounds(c.day, t).closes.getTime()
+      if (ended < 0 || ended > AUTO_CLOSE_LOOKBACK_MS) continue
+      candidates.push({ kind: c.kind, day: c.day, window: t, templateId: t.id })
+    }
+    if (candidates.length === 0) continue
+    wrote += await autoCloseChecks({ store: { id: store.id, accountId: opts.accountId }, candidates, now: opts.now })
+  }
+  return wrote > 0 ? loadCheckGrid({ ...opts, autoClose: false }) : out
 }
 
 /** "Maria G." */

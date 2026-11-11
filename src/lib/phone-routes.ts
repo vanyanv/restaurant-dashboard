@@ -107,10 +107,11 @@ export const DESKTOP_TO_MOBILE: Record<string, string> = {
   // what happens when that owner is on a phone.
   "/dashboard/forbidden": "/m/forbidden",
   "/dashboard/settings": "/m/more",
-  // Store checks, rebuilt for the phone: the same five tabs and the same
-  // clients as the desk, drawn inside the phone shell.
+  // Store checks, rebuilt for the phone: the same six tabs, each drawn for
+  // the phone (stacked cards, a full-screen check), inside the phone shell.
   "/dashboard/checks": "/m/checks",
   "/dashboard/checks/history": "/m/checks/history",
+  "/dashboard/checks/report": "/m/checks/report",
   "/dashboard/checks/checklists": "/m/checks/checklists",
   "/dashboard/checks/crew": "/m/checks/crew",
   "/dashboard/checks/posters": "/m/checks/posters",

@@ -17,6 +17,7 @@ import {
   syncCrewFromHarri,
 } from "@/lib/checks/setup"
 import { dayToDb } from "@/lib/checks/time"
+import { loadCheckGrid, type SubmissionContent } from "@/lib/checks/data"
 
 /**
  * The owner's write path for store checks. Every action starts from
@@ -451,6 +452,138 @@ export async function saveCheckReportEmails(input: { emails: string[] }): Promis
     await prisma.account.update({ where: { id: session.user.accountId }, data: { checkReportEmails: emails } })
     revalidateChecks()
     return { ok: true, message: emails.length === 0 ? "Check emails are off." : `Saved. ${emails.length} address${emails.length === 1 ? "" : "es"} get every check.` }
+  } catch (err) {
+    return fail(err)
+  }
+}
+
+const ReviewInput = z.object({
+  markId: z.string().min(1).max(40),
+  verdict: z.enum(["ok", "redo"]),
+  note: text(200).optional(),
+})
+
+/**
+ * The owner looks at a check photo. "ok" says it looks good. "redo" sends the
+ * task back: while the check is open it is unticked on every crew phone with
+ * the owner's note; once the check has closed, the record marks the task
+ * missed. Either way the photo stays in the log with what the owner said.
+ */
+/**
+ * Turns one task on a record back to not done. Matches on the task id when the
+ * record has one (from 2026-11-11); older records match on the task's wording
+ * in its section, and only when exactly one task there has that wording.
+ */
+function sendBack(content: SubmissionContent, mark: { itemId: string; itemText: string; sectionName: string }): boolean {
+  const all = content.sections.flatMap((s) => s.items.map((i) => ({ s, i })))
+  let hits = all.filter(({ i }) => i.itemId === mark.itemId)
+  if (hits.length === 0) {
+    hits = all.filter(({ s, i }) => !i.itemId && i.text === mark.itemText && s.name === mark.sectionName)
+    if (hits.length !== 1) return false
+  }
+  let changed = false
+  for (const { i } of hits) {
+    if (!i.done) continue
+    i.done = false
+    i.flag = null
+    i.by = null
+    i.at = null
+    i.photo = false
+    changed = true
+  }
+  return changed
+}
+
+function flaggedIn(content: SubmissionContent): number {
+  return content.sections.reduce((n, s) => n + s.items.filter((i) => i.done && i.flag).length, 0)
+}
+
+export async function reviewCheckPhoto(raw: z.input<typeof ReviewInput>): Promise<ActionResult> {
+  try {
+    const input = ReviewInput.parse(raw)
+    const session = await getServerSession(authOptions)
+    if (!session?.user) throw new Error("Unauthorized")
+    if (!hasOwnerAccess(session.user.role)) throw new Error("Forbidden")
+    const mark = await prisma.checkMark.findFirst({
+      where: { id: input.markId, photoKey: { not: null }, store: { accountId: session.user.accountId } },
+      select: {
+        id: true, storeId: true, kind: true, businessDate: true, itemId: true, itemText: true, sectionName: true,
+        photoKey: true, done: true, review: true,
+      },
+    })
+    if (!mark) return { ok: false, error: "That photo is no longer there." }
+    await requireOwnerStore(mark.storeId)
+    if (mark.review === "redo") return { ok: false, error: "This photo was already sent back." }
+    // Only the tick that stands can be judged: a newer tick or untick on the task
+    // (crew redid it, or someone else sent it back) makes this photo old news.
+    const latest = await prisma.checkMark.findFirst({
+      where: { storeId: mark.storeId, kind: mark.kind, businessDate: mark.businessDate, itemId: mark.itemId },
+      orderBy: [{ at: "desc" }, { id: "desc" }],
+      select: { id: true },
+    })
+    if (!mark.done || latest?.id !== mark.id) {
+      return { ok: false, error: "This task changed since the photo was taken. Refresh to see the latest." }
+    }
+    const who = session.user.name?.trim() || "Owner"
+    const now = new Date()
+
+    if (input.verdict === "ok") {
+      await prisma.checkMark.update({
+        where: { id: mark.id },
+        data: { review: "ok", reviewNote: null, reviewedBy: who, reviewedAt: now },
+      })
+      revalidateChecks()
+      return { ok: true, message: "Marked as looking good." }
+    }
+
+    const note = input.note?.trim() ? `Redo: ${input.note.trim()}` : "Redo: sent back by the owner"
+    await prisma.$transaction(async (tx) => {
+      // Guarded on review, so a double tap writes one untick, not two.
+      const claimed = await tx.checkMark.updateMany({
+        // NULL is not "not redo" in SQL, so a photo never looked at needs its own arm.
+        where: { id: mark.id, OR: [{ review: null }, { review: { not: "redo" } }] },
+        data: { review: "redo", reviewNote: input.note?.trim() || null, reviewedBy: who, reviewedAt: now },
+      })
+      if (claimed.count === 0) return
+      // The untick every crew phone reads: the task is open again, with why.
+      await tx.checkMark.create({
+        data: {
+          storeId: mark.storeId,
+          kind: mark.kind,
+          businessDate: mark.businessDate,
+          itemId: mark.itemId,
+          itemText: mark.itemText,
+          sectionName: mark.sectionName,
+          done: false,
+          note,
+          crewMemberId: null,
+          crewName: who,
+          at: now,
+        },
+      })
+    })
+
+    // The record, if the check has one. The window is closed first (after the
+    // untick, so a window that ends between the two still gets the redo on its
+    // record: a close ignores marks after its end and would keep the task done).
+    const day = mark.businessDate.toISOString().slice(0, 10)
+    await loadCheckGrid({ accountId: session.user.accountId, storeIds: [mark.storeId], fromDay: day, toDay: day, now })
+    const sub = await prisma.$transaction(async (tx) => {
+      const sub = await tx.checkSubmission.findFirst({
+        where: { storeId: mark.storeId, kind: mark.kind, businessDate: mark.businessDate, store: { accountId: session.user.accountId } },
+        select: { id: true, content: true },
+      })
+      if (!sub) return null
+      const content = sub.content as SubmissionContent
+      const hit = sendBack(content, mark)
+      if (hit) {
+        await tx.checkSubmission.update({ where: { id: sub.id }, data: { content, flaggedCount: flaggedIn(content) } })
+        if (mark.photoKey) await tx.checkPhoto.deleteMany({ where: { submissionId: sub.id, storageKey: mark.photoKey } })
+      }
+      return sub
+    })
+    revalidateChecks()
+    return { ok: true, message: sub ? "Sent back. The task now counts as missed." : "Sent back. Crew see it open again with your note." }
   } catch (err) {
     return fail(err)
   }

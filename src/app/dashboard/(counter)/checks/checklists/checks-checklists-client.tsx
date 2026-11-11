@@ -15,8 +15,8 @@ import { ChecksHead, OutcomeLine, StorePicker, type Outcome } from "../checks-ui
 
 /**
  * Store checks — Checklists. One store and one check at a time: the window
- * (crew can see it from, Submit opens, Submit closes, per night if the close
- * moves), then each section's tasks in English and Spanish side by side, each
+ * (crew can see it from, Submit opens, when it closes itself, per night if
+ * the close moves), then each section's tasks in English and Spanish side by side, each
  * with its own photo switch. A missing Spanish line shows crew the English one.
  */
 export function ChecksChecklistsClient({ sections }: { sections: SectionSources<ChecklistsSections> }) {
@@ -128,7 +128,8 @@ function Editor({ data }: { data: ChecklistsData }) {
     <div style={{ display: "grid", gap: 14, padding: 14 }}>
       <div className="ck-spread">
         <StorePicker stores={data.stores} current={data.store.id} path="/dashboard/checks/checklists" />
-        <div className="ck-row">
+        {/* On a phone this row sticks to the bottom, so Save is never a scroll away. */}
+        <div className="ck-row ck-edbar">
           <OutcomeLine outcome={outcome} />
           <button type="button" className="btn" onClick={copy} disabled={busy}>
             Copy to other stores
@@ -193,7 +194,7 @@ function Editor({ data }: { data: ChecklistsData }) {
               />
             </label>
             <label className="ck-field">
-              <span className="ck-mono">Submit closes · then missed</span>
+              <span className="ck-mono">Closes itself at</span>
               <input
                 className="ck-input"
                 type="time"
@@ -254,7 +255,7 @@ function Editor({ data }: { data: ChecklistsData }) {
                   update((t) => void (t.dueByWeekday = e.target.checked ? Array(7).fill(t.dueAtMin) : []))
                 }
               />
-              Submit closes at a different time on some nights. For Night: 2:00 am after a 1 am close, 3:00 am after a 3 am close.
+              It closes itself at a different time on some nights. For Night: 2:00 am after a 1 am close, 3:00 am after a 3 am close.
             </label>
             {t.dueByWeekday.length === 7 && (
               <div className="ck-days">
@@ -264,7 +265,7 @@ function Editor({ data }: { data: ChecklistsData }) {
                     <input
                       className="ck-input"
                       type="time"
-                      aria-label={`Submit closes on ${label}`}
+                      aria-label={`Closes itself on ${label}`}
                       value={toTime(t.dueByWeekday[d])}
                       onChange={(e) =>
                         update((t) => void (t.dueByWeekday[d] = afterOpen(fromTime(e.target.value), t.submitFromMin)))

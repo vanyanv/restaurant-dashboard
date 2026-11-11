@@ -2492,6 +2492,10 @@ model CheckSubmission {
   /// 0 when on time.
   lateMinutes  Int       @default(0)
   flaggedCount Int       @default(0)
+  /// The app closed this check when its window ended (nobody pressed
+  /// Submit). `content` then holds every task with `done` true or false, and
+  /// the false ones were missed. `crewName` lists who ticked, or is empty.
+  autoClosed   Boolean   @default(false)
   content      Json
 
   store      Store         @relation(fields: [storeId], references: [id], onDelete: Cascade)
@@ -2557,6 +2561,14 @@ model CheckMark {
   photoKey     String?
   photoType    String?
   photoSize    Int?
+  /// The owner looked at this mark's photo: "ok" (looks good) or "redo"
+  /// (sent back; the task was unticked, or marked missed if the check had
+  /// already closed). Null until someone looks.
+  review       String?
+  /// What the owner said when sending it back.
+  reviewNote   String?
+  reviewedBy   String?
+  reviewedAt   DateTime?
 
   store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
 

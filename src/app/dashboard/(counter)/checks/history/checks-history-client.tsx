@@ -1,11 +1,12 @@
 "use client"
 
+import { CheckDetail } from "../checks-plain-ui"
 import { Fragment, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { Section, useCounterTransition, usePageChrome, useSurfaceHref } from "@/components/counter"
 import type { SectionSources } from "@/lib/counter/adapters/types"
 import type { HistoryData, HistorySections } from "@/lib/counter/adapters/checks"
-import { CheckDetail, ChecksHead, Glyph, Legend, StorePicker } from "../checks-ui"
+import { ChecksHead, Glyph, Legend, StorePicker } from "../checks-ui"
 
 /**
  * Store checks — History. One row per store and check, by day. Clicking a square
@@ -47,6 +48,7 @@ function History({ data }: { data: HistoryData }) {
 
   return (
     <div style={{ display: "grid", gap: 14, padding: 14 }}>
+      <p className="ck-plain__say" style={{ margin: 0 }}>{data.sentence}</p>
       <div className="ck-spread">
         <StorePicker
           stores={data.stores}
@@ -124,8 +126,7 @@ function linked(data: HistoryData, day: string | null, kind: string | null): { r
 function firstInteresting(data: HistoryData): { row: number; col: number } | null {
   for (let col = data.days.length - 1; col >= 0; col--) {
     for (let row = 0; row < data.rows.length; row++) {
-      const s = data.rows[row].cells[col].status
-      if (s === "missed" || s === "late") return { row, col }
+      if (data.rows[row].cells[col].problem) return { row, col }
     }
   }
   return null

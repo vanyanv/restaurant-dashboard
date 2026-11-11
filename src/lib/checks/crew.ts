@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma"
 import { currentMarks, loadCheckGrid, type GridCell, type GridMark } from "./data"
 import { ensureCheckSetup } from "./setup"
+import { loadSections } from "./sections"
 import {
   addDays,
   CHECK_KINDS,
@@ -44,6 +45,11 @@ export type CrewDayRow = {
   doneBy: string | null
   doneAt: string | null
   late: number
+  /** The check closed itself when its window ended. `doneAt` is when. */
+  autoClosed: boolean
+  /** Tasks done and on the list, once it is in (sent or closed). */
+  tasksDone: number
+  tasksTotal: number
 }
 
 export type CrewItem = { id: string; en: string; es: string | null; photoRequired: boolean }
@@ -165,6 +171,9 @@ export async function loadCrewView(store: CrewStore, now: Date): Promise<CrewVie
       doneBy: cell?.submission?.crewName ?? null,
       doneAt: cell?.submission ? clockLabel(cell.submission.submittedAt) : null,
       late: cell?.submission?.lateMinutes ?? 0,
+      autoClosed: cell?.submission?.autoClosed ?? false,
+      tasksDone: cell?.submission?.done ?? 0,
+      tasksTotal: cell?.submission?.total ?? 0,
     }]
   })
 
@@ -217,28 +226,7 @@ export function markStates(log: GridMark[]): CrewMarkState[] {
   }))
 }
 
-export async function loadSections(storeId: string, kind: CheckKindName): Promise<CrewSection[]> {
-  const tpl = await prisma.checkTemplate.findUnique({
-    where: { storeId_kind: { storeId, kind } },
-    select: {
-      sections: {
-        orderBy: { position: "asc" },
-        select: {
-          id: true, nameEn: true, nameEs: true,
-          items: { orderBy: { position: "asc" }, select: { id: true, textEn: true, textEs: true, photoRequired: true } },
-        },
-      },
-    },
-  })
-  return (tpl?.sections ?? [])
-    .filter((s) => s.items.length > 0)
-    .map((s) => ({
-      id: s.id,
-      en: s.nameEn,
-      es: s.nameEs,
-      items: s.items.map((i) => ({ id: i.id, en: i.textEn, es: i.textEs, photoRequired: i.photoRequired })),
-    }))
-}
+export { loadSections }
 
 /** The public link printed on a store's poster. */
 export function checkLink(code: string): string {

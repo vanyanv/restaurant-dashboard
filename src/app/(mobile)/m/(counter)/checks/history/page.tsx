@@ -2,11 +2,11 @@ import { getServerSession } from "next-auth"
 import { redirect } from "next/navigation"
 import { authOptions, hasOwnerAccess } from "@/lib/auth"
 import { getChecksHistorySectionPromises } from "@/lib/counter/adapters/checks"
-import { ChecksHistoryClient } from "@/app/dashboard/(counter)/checks/history/checks-history-client"
+import { ChecksHistoryPhone } from "./checks-history-phone"
 
 export const dynamic = "force-dynamic"
 
-/** Store checks on a phone — History: store × check rows by day, with the detail of any square. Same adapter and client as the desk page. */
+/** Store checks on a phone — History: store × check rows by day, a card per day, newest first. Same adapter as the desk page, laid out for a phone. */
 export default async function Page({
   searchParams,
 }: {
@@ -26,7 +26,7 @@ export default async function Page({
 
   return (
     <>
-      <ChecksHistoryClient sections={sections} />
+      <ChecksHistoryPhone sections={sections} />
       <span hidden data-perf-ready="/m/checks/history" />
     </>
   )
