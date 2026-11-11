@@ -124,8 +124,11 @@ export type SubmissionContent = {
   sections: Array<{
     name: string
     photoRequired: boolean
-    /** `by`, `at` and `photo` are on checks submitted from the shared form (2026-10-29 on). */
-    items: Array<{ text: string; done: boolean; flag: string | null; by?: string | null; at?: string | null; photo?: boolean }>
+    /**
+     * `by`, `at` and `photo` are on checks submitted from the shared form (2026-10-29 on).
+     * `itemId` is the checklist task, on records from 2026-11-11 on; older ones match by text.
+     */
+    items: Array<{ itemId?: string; text: string; done: boolean; flag: string | null; by?: string | null; at?: string | null; photo?: boolean }>
   }>
 }
 

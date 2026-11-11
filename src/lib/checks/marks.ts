@@ -81,6 +81,7 @@ export function snapshotForm(active: ActiveCheck, rows: MarkRow[]): FormSnapshot
         photos.push({ sectionName: i.en, storageKey: m.photoKey, contentType: m.photoType ?? "image/jpeg", size: m.photoSize ?? 0 })
       }
       return {
+        itemId: i.id,
         text: i.en,
         done,
         flag: done ? m?.note ?? null : null,

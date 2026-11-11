@@ -79,6 +79,7 @@ export function closedForm(sections: CrewSection[], rows: CloseMark[]): ClosedFo
         if (m.photoKey) photos.push({ sectionName: i.en, storageKey: m.photoKey, contentType: m.photoType ?? "image/jpeg", size: m.photoSize ?? 0 })
       }
       return {
+        itemId: i.id,
         text: i.en,
         done: isDone,
         flag: isDone ? m?.note ?? null : null,

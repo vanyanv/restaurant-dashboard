@@ -165,8 +165,11 @@ export function checkReport(grid: GridStore[], days: string[]): CheckReportFigur
     photosSentBack += cell.marks.filter((m) => m.review === "redo").length
     const tpl = store.templates.find((t) => t.kind === cell.kind)
     const due = tpl ? windowBounds(cell.day, tpl).due.getTime() : Infinity
-    const standing = cell.submission?.tasks.filter((t) => t.done && t.by) ??
-      [...currentMarks(cell.marks).values()].filter((m) => m.done).map((m) => ({ by: m.crewName, at: m.at, note: m.note }))
+    // Records from before 2026-10-29 name nobody on their tasks: credit the ticks instead.
+    const credited = cell.submission?.tasks.filter((t) => t.done && t.by) ?? []
+    const standing = credited.length > 0
+      ? credited
+      : [...currentMarks(cell.marks).values()].filter((m) => m.done).map((m) => ({ by: m.crewName, at: m.at, note: m.note }))
     const mine = new Map<string, number[]>()
     for (const t of standing) {
       const by = t.by!

@@ -721,34 +721,41 @@ function Checklist({
     setQueued(queue.current.length)
   }
 
-  const flushing = useRef(false)
-  const flush = useCallback(async () => {
-    if (flushing.current || queue.current.length === 0) return
-    flushing.current = true
-    try {
-      while (queue.current.length > 0) {
-        const q = queue.current[0]
-        const r = await post(q)
-        if (r === "offline") break
-        queue.current = queue.current.slice(1)
-        writeQueue(qKey, queue.current)
-        setQueued(queue.current.length)
-        // A newer tap on the same task may be waiting behind this one.
-        if (!queue.current.some((x) => x.itemId === q.itemId)) clearPending(q.itemId)
+  /** The flush in progress, so a second caller (Submit) waits for it instead of skipping. */
+  const flushing = useRef<Promise<void> | null>(null)
+  const flush = useCallback((): Promise<void> => {
+    if (flushing.current) return flushing.current
+    if (queue.current.length === 0) return Promise.resolve()
+    const run = (async () => {
+      try {
+        while (queue.current.length > 0) {
+          const q = queue.current[0]
+          const r = await post(q)
+          if (r === "offline") break
+          // By identity: a tap while this was in flight may have reordered the queue.
+          queue.current = queue.current.filter((x) => x !== q)
+          writeQueue(qKey, queue.current)
+          setQueued(queue.current.length)
+          // A newer tap on the same task may be waiting behind this one.
+          if (!queue.current.some((x) => x.itemId === q.itemId)) clearPending(q.itemId)
+        }
+      } finally {
+        flushing.current = null
       }
-    } finally {
-      flushing.current = false
-    }
+    })()
+    flushing.current = run
+    return run
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [qKey])
   useEffect(() => {
     if (queued === 0) return
     const id = window.setInterval(() => void flush(), FLUSH_MS)
-    window.addEventListener("online", flush)
+    const onOnline = () => void flush()
+    window.addEventListener("online", onOnline)
     void flush()
     return () => {
       window.clearInterval(id)
-      window.removeEventListener("online", flush)
+      window.removeEventListener("online", onOnline)
     }
   }, [queued, flush])
 
@@ -789,6 +796,8 @@ function Checklist({
     setSending(true)
     setError("")
     try {
+      // Twice: the first may be a flush already running that started before the last tap.
+      await flush()
       await flush()
       if (queue.current.length > 0) {
         setError(t.queued(queue.current.length))
