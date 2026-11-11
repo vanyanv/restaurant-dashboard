@@ -81,10 +81,9 @@ function CostForm({ cost }: { cost: IngredientCost }) {
   const [unit, setUnit] = useState(cost.recipeUnit ?? "")
   const [locked, setLocked] = useState(cost.costLocked)
   // Ask before leaving with a typed price or unit not saved.
-  useLeaveGuard(
-    price.trim() !== (cost.costNow === null ? "" : String(cost.costNow)) ||
-      unit.trim() !== (cost.recipeUnit ?? ""),
-  )
+  // Numbers compare as numbers: "2.50" saved comes back as 2.5.
+  const typedPrice = price.trim() === "" ? null : Number(price.trim())
+  useLeaveGuard(typedPrice !== cost.costNow || unit.trim() !== (cost.recipeUnit ?? ""))
   const [error, setError] = useState<string | null>(null)
 
   const save = (nextLocked: boolean) => {

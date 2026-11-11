@@ -15,6 +15,13 @@ import { useEffect, useRef } from "react"
  * Links that stay on the same path (a `?store=` switch, a `#` jump) and links
  * opening a new tab are let through.
  */
+/** How many mounted guards hold unsaved edits right now. */
+let guarding = 0
+/** True while any page has unsaved edits (the shell skips its refresh then). */
+export function hasUnsavedEdits() {
+  return guarding > 0
+}
+
 export const LEAVE_MESSAGE = "You have changes that aren't saved. Leave without saving?"
 
 export function useLeaveGuard(dirty: boolean, message = LEAVE_MESSAGE) {
@@ -23,6 +30,7 @@ export function useLeaveGuard(dirty: boolean, message = LEAVE_MESSAGE) {
 
   useEffect(() => {
     if (!dirty) return
+    guarding++
 
     const onBeforeUnload = (e: BeforeUnloadEvent) => {
       if (!dirtyRef.current) return
@@ -51,6 +59,7 @@ export function useLeaveGuard(dirty: boolean, message = LEAVE_MESSAGE) {
     window.addEventListener("beforeunload", onBeforeUnload)
     document.addEventListener("click", onClick, true)
     return () => {
+      guarding--
       window.removeEventListener("beforeunload", onBeforeUnload)
       document.removeEventListener("click", onClick, true)
     }

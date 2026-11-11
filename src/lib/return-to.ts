@@ -11,7 +11,7 @@
  */
 export const RETURN_TO_PARAM = "callbackUrl"
 
-const NOT_A_PLACE = [/^\/login(\/|$|\?)/, /^\/m\/login(\/|$|\?)/, /^\/api(\/|$|\?)/, /^\/signup(\/|$|\?)/]
+const NOT_A_PLACE = [/^\/login([/?#]|$)/, /^\/m\/login([/?#]|$)/, /^\/api([/?#]|$)/, /^\/signup([/?#]|$)/]
 
 export function safeReturnTo(raw: string | null | undefined, fallback: string): string {
   if (!raw) return fallback

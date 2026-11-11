@@ -107,11 +107,19 @@ function decodePick(raw: string): Pick | null {
 function Stores({ data }: { data: TodayData }) {
   // The open check lives in the URL so leaving and coming back keeps it.
   const [rawPick, setRawPick] = useUrlParam("check", "")
-  const pick: Pick | null = decodePick(rawPick) ?? (() => {
+  const fallbackPick = (): Pick | null => {
     const s = data.stores.find((x) => !x.preOpen)
     const c = s?.cells.find((x) => x?.live) ?? s?.cells.find(Boolean)
     return s && c ? { storeId: s.id, day: c.day, kind: c.kind } : null
-  })()
+  }
+  // A remembered pick that no longer matches a cell (yesterday's day, an old
+  // link) falls back to the default rather than an empty panel.
+  const fromUrl = decodePick(rawPick)
+  const pick: Pick | null =
+    fromUrl &&
+    data.stores.some((s) => s.id === fromUrl.storeId && s.cells.some((c) => c?.day === fromUrl.day && c?.kind === fromUrl.kind))
+      ? fromUrl
+      : fallbackPick()
   const setPick = (p: Pick | null) => setRawPick(encodePick(p))
   const picked = (() => {
     if (!pick) return null

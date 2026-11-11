@@ -109,3 +109,15 @@ describe("useLeaveGuard", () => {
     expect(confirm).not.toHaveBeenCalled()
   })
 })
+
+describe("hasUnsavedEdits", () => {
+  it("is true only while a dirty guard is mounted", async () => {
+    const { hasUnsavedEdits } = await import("@/components/counter/keep/use-leave-guard")
+    const { rerender, unmount } = renderHook(({ d }) => useLeaveGuard(d), { initialProps: { d: false } })
+    expect(hasUnsavedEdits()).toBe(false)
+    rerender({ d: true })
+    expect(hasUnsavedEdits()).toBe(true)
+    unmount()
+    expect(hasUnsavedEdits()).toBe(false)
+  })
+})

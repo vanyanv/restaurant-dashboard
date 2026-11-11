@@ -6,6 +6,7 @@ import { PageHead, SubNav, useSurfaceHref } from "@/components/counter"
 import { CHECKS_TABS } from "@/lib/counter/nav"
 import type { CellStatus } from "@/lib/checks/status"
 import type { CellView } from "@/lib/counter/adapters/checks"
+import { hasUnsavedEdits, LEAVE_MESSAGE } from "@/components/counter/keep/use-leave-guard"
 
 /**
  * Pieces shared by the five Store checks tabs: the page head with its tabs,
@@ -159,6 +160,8 @@ export function StorePicker({
   const router = useRouter()
   const target = useSurfaceHref()(path)
   const go = (id: string | null) => {
+    // Switching store reloads the page's data; ask first over unsaved edits.
+    if (hasUnsavedEdits() && !window.confirm(LEAVE_MESSAGE)) return
     const q = new URLSearchParams(extra ?? "")
     if (id) q.set("store", id)
     else q.delete("store")

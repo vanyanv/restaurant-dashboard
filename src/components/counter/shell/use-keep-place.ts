@@ -2,6 +2,7 @@
 
 import { useEffect } from "react"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
+import { hasUnsavedEdits } from "@/components/counter/keep/use-leave-guard"
 
 /**
  * "Pick up where you left off", the half that lives in the browser. The
@@ -65,12 +66,27 @@ export function useKeepPlace(phone: boolean) {
   const router = useRouter()
   const query = searchParams.toString()
 
-  // 1. Renew the session at most once a day.
+  // 1. Renew the session at most once a day: on load, and again whenever the
+  //    page comes back into view (a tab or phone app left open for days
+  //    otherwise never reloads). The day is only marked after a good answer,
+  //    so a failed read is retried next time.
   useEffect(() => {
-    const last = Number(read(local, TOUCH_KEY) ?? 0)
-    if (Date.now() - last < DAY_MS) return
-    write(local, TOUCH_KEY, String(Date.now()))
-    fetch("/api/auth/session", { credentials: "same-origin", cache: "no-store" }).catch(() => {})
+    const touch = () => {
+      const last = Number(read(local, TOUCH_KEY) ?? 0)
+      if (Date.now() - last < DAY_MS) return
+      fetch("/api/auth/session", { credentials: "same-origin", cache: "no-store" })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((s: { user?: unknown } | null) => {
+          if (s?.user) write(local, TOUCH_KEY, String(Date.now()))
+        })
+        .catch(() => {})
+    }
+    touch()
+    const onVisible = () => {
+      if (document.visibilityState === "visible") touch()
+    }
+    document.addEventListener("visibilitychange", onVisible)
+    return () => document.removeEventListener("visibilitychange", onVisible)
   }, [])
 
   // 3. Back after a while: fresh numbers.
@@ -81,7 +97,9 @@ export function useKeepPlace(phone: boolean) {
         hiddenAt = Date.now()
         return
       }
-      if (hiddenAt !== null && Date.now() - hiddenAt > STALE_AFTER_MS) router.refresh()
+      // Not over unsaved edits: a refresh re-keys some editors (the recipe
+      // draft is matched to the loaded lines) and would drop what was typed.
+      if (hiddenAt !== null && Date.now() - hiddenAt > STALE_AFTER_MS && !hasUnsavedEdits()) router.refresh()
       hiddenAt = null
     }
     document.addEventListener("visibilitychange", onVisibility)
@@ -98,7 +116,9 @@ export function useKeepPlace(phone: boolean) {
     try {
       const saved = JSON.parse(read(local, PLACE_KEY) ?? "null") as { href?: string; at?: number } | null
       const href = saved?.href
-      if (!href || !href.startsWith("/m/") || href.startsWith("/m/login")) return
+      // Today with a store or date (`/m?store=…`) counts; bare `/m` is where
+      // we already are.
+      if (!href || !(href.startsWith("/m/") || href.startsWith("/m?")) || href.startsWith("/m/login")) return
       if (Date.now() - (saved.at ?? 0) > PLACE_MAX_AGE_MS) return
       router.replace(href, { scroll: false })
     } catch {

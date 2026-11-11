@@ -42,18 +42,30 @@ function Form({ s }: { s: SettingsData }) {
     supportEmail: s.supportEmail,
   })
   const { busy, outcome, run } = useShopAction()
-  // Ask before leaving with edits not saved.
-  const saved = {
-    shopPaused: s.shopPaused,
-    pauseNote: s.pauseNote ?? "",
-    pickupEnabled: s.pickupEnabled,
-    pickupAddress: s.pickupAddress,
-    shippingFlat: cents(s.shippingFlatCents),
-    freeOver: cents(s.shippingFreeOverCents),
-    shipsWithin: s.shipsWithin ?? "",
-    supportEmail: s.supportEmail,
+  // Ask before leaving with edits not saved. Compared in the shape the save
+  // sends (trimmed text, cents), so "6.5" saved and shown back as "6.50" is
+  // not "unsaved".
+  const sent = {
+    shopPaused: v.shopPaused,
+    pauseNote: v.pauseNote.trim() || null,
+    pickupEnabled: v.pickupEnabled,
+    pickupAddress: v.pickupAddress.trim(),
+    shippingFlatCents: toCents(v.shippingFlat),
+    shippingFreeOverCents: v.freeOver.trim() === "" ? null : toCents(v.freeOver),
+    shipsWithin: v.shipsWithin.trim() || null,
+    supportEmail: v.supportEmail.trim(),
   }
-  useLeaveGuard(JSON.stringify(v) !== JSON.stringify(saved))
+  const stored = {
+    shopPaused: s.shopPaused,
+    pauseNote: s.pauseNote?.trim() || null,
+    pickupEnabled: s.pickupEnabled,
+    pickupAddress: s.pickupAddress.trim(),
+    shippingFlatCents: s.shippingFlatCents,
+    shippingFreeOverCents: s.shippingFreeOverCents,
+    shipsWithin: s.shipsWithin?.trim() || null,
+    supportEmail: s.supportEmail.trim(),
+  }
+  useLeaveGuard(JSON.stringify(sent) !== JSON.stringify(stored))
   const bad =
     !MONEY.test(v.shippingFlat.trim())
       ? "Shipping is dollars and cents, like 6.00"

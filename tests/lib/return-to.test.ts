@@ -16,7 +16,7 @@ describe("safeReturnTo", () => {
   })
 
   it("refuses sign-in screens and API routes", () => {
-    for (const bad of ["/login", "/login?callbackUrl=/x", "/m/login", "/api/auth/session", "/signup/abc"]) {
+    for (const bad of ["/login", "/login?callbackUrl=/x", "/m/login", "/m/login#done", "/login#x", "/api#x", "/api/auth/session", "/signup/abc"]) {
       expect(safeReturnTo(bad, "/m")).toBe("/m")
     }
   })

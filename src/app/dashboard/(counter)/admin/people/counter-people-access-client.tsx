@@ -107,7 +107,7 @@ function People({ data }: { data: PeopleAccessData }) {
   const [flash, setFlash] = useState<Flash>(null)
   // In the URL so leaving and coming back keeps it.
   const [rawFilter, setRawFilter] = useUrlParam("show", "all")
-  const filter = rawFilter as Filter
+  const filter: Filter = (["all", "in", "waiting", "ran_out", "removed"] as string[]).includes(rawFilter) ? (rawFilter as Filter) : "all"
   const setFilter = (f: Filter) => setRawFilter(f)
   const [inviting, setInviting] = useState(false)
   const [confirm, setConfirm] = useState<PersonRow | null>(null)
