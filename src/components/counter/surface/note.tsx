@@ -103,7 +103,10 @@ export function splitLongNote(children: ReactNode): { lead: string; rest: string
   if (typeof children !== "string") return null
   const text = children.trim()
   if (text.length <= LONG_NOTE) return null
-  const m = /^(.+?[.!?])\s+(?=[A-Z0-9"“(])/.exec(text)
+  // The lead is at least 30 characters, so an abbreviation near the start
+  // ("St. James…", "e.g. Uber") is never taken for the end of the first
+  // sentence and the sentence that matters folded away behind it.
+  const m = /^(.{30,}?[.!?])\s+(?=[A-Z0-9"“(])/.exec(text)
   if (!m) return { lead: text, rest: null }
   const lead = m[1]
   const rest = text.slice(m[0].length).trim()
