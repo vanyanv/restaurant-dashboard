@@ -1008,9 +1008,13 @@ function buildSchedule(
   const notSent = days.filter((d) => d.costMissing && d.actualHours === 0).length
   let sentence: string
   if (notSent > 0 && week.actualHours === 0) {
+    // `costMissing` only fires on store-days that SOLD (missingLaborByDay), so a
+    // closed day never lands here. It can still be a day nobody clocked in,
+    // which is why this does not promise the hours are merely late.
     sentence =
       (scheduled === null ? "" : `${hoursText(scheduled)} published. `) +
-      "Hours worked haven't arrived from Harri yet; they come with the next Harri sync."
+      "No hours worked from Harri for these dates. If they were worked, they come " +
+      "with the next Harri sync."
   } else if (scheduled === null) {
     sentence =
       `${hoursText(week.actualHours)} were worked in this range and no shift was published ` +
@@ -1025,10 +1029,13 @@ function buildSchedule(
         `${hoursText(Math.abs(gap))} ${gap > 0 ? "over" : "under"}` +
         (rate === null ? "." : `, about ${money(Math.abs(gap) * rate)} of labor.`)
   }
-  if (notSent > 0 && week.actualHours > 0) {
+  // Store-days, not days: on a multi-store day one store can be missing while
+  // another reported hours, and that day still reads low.
+  const missing = days.reduce((n, d) => n + d.missingStoreDays, 0)
+  if (missing > 0 && week.actualHours > 0) {
     sentence +=
-      ` ${notSent === 1 ? "One day hasn't" : `${notSent} days haven't`} arrived from Harri ` +
-      "yet, so hours worked read low."
+      ` ${missing === 1 ? "One store-day has" : `${missing} store-days have`} no hours ` +
+      "from Harri yet, so hours worked read low."
   }
 
   return {
