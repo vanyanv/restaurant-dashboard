@@ -62,7 +62,7 @@ export type GridCell = {
   /** Tasks done so far (the latest mark per task), out of the list's tasks. */
   done: number
   total: number
-  /** Everyone who ticked a task or submitted, in the order they joined. */
+  /** Everyone who ticked a task done or submitted, in the order they joined. An owner who only sent a photo back is not on it. */
   people: string[]
 }
 
@@ -267,7 +267,7 @@ export async function loadCheckGrid(opts: {
         const done = [...currentMarks(log).values()].filter((m) => m.done).length
         const rec = sub ? recordCounts(sub.content) : null
         // An auto-closed record names everyone who ticked; it is not a person.
-        const people = [...new Set([...log.map((m) => m.crewName), ...(sub && !sub.autoClosed && sub.crewName ? [sub.crewName] : [])])]
+        const people = [...new Set([...log.filter((m) => m.done).map((m) => m.crewName), ...(sub && !sub.autoClosed && sub.crewName ? [sub.crewName] : [])])]
         cells.push({
           day,
           kind: t.kind,

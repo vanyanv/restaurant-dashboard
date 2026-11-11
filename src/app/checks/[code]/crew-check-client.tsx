@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import type { ActiveCheck, CrewItem, CrewMarkState, CrewView } from "@/lib/checks/crew"
 import { shortStoreName } from "@/lib/checks/names"
 
@@ -65,9 +65,13 @@ const T = {
     hi: (n: string) => `Hi ${n}`,
     doneOf: (a: number, b: number) => `${a} of ${b} done`,
     alsoOn: (names: string) => `Also on it: ${names}`,
-    nextUp: (s: string) => `Next up · ${s}`,
-    markDone: "Mark done",
-    takePhotoFinish: "Take photo to finish",
+    more: (task: string) => `More for ${task}`,
+    doneWithNote: "Done, with a note",
+    takePhoto: "Take the photo",
+    closingSoon: (left: string) => `${left} left. Anything not ticked when it closes counts as missed.`,
+    queued: (n: number) => `No signal. ${n} tick${n === 1 ? "" : "s"} kept on this phone, sending when it's back.`,
+    redo: (note: string) => `Sent back · ${note.replace(/^Redo:?\s*/i, "")}`,
+    sectionLeft: (n: number) => (n === 0 ? "Done" : `${n} left`),
     photoRequired: "Photo required · tap to open camera",
     stamp: (at: string, by: string, photo: boolean) => `${at} · ${by}${photo ? " · photo" : ""}`,
     allTasksDone: "All tasks done.",
@@ -146,9 +150,13 @@ const T = {
     hi: (n: string) => `Hola ${n}`,
     doneOf: (a: number, b: number) => `${a} de ${b} hechas`,
     alsoOn: (names: string) => `También aquí: ${names}`,
-    nextUp: (s: string) => `Sigue · ${s}`,
-    markDone: "Marcar hecha",
-    takePhotoFinish: "Tomar foto para terminar",
+    more: (task: string) => `Más para ${task}`,
+    doneWithNote: "Hecha, con una nota",
+    takePhoto: "Tomar la foto",
+    closingSoon: (left: string) => `Quedan ${left}. Lo que no esté marcado al cerrar cuenta como no hecho.`,
+    queued: (n: number) => `Sin señal. ${n} marca${n === 1 ? "" : "s"} guardada${n === 1 ? "" : "s"} en este teléfono; se envían al volver la señal.`,
+    redo: (note: string) => `Devuelta · ${note.replace(/^Redo:?\s*/i, "")}`,
+    sectionLeft: (n: number) => (n === 0 ? "Hecha" : `Faltan ${n}`),
     photoRequired: "Foto obligatoria · toca para abrir la cámara",
     stamp: (at: string, by: string, photo: boolean) => `${at} · ${by}${photo ? " · foto" : ""}`,
     allTasksDone: "Todas las tareas están hechas.",
@@ -576,6 +584,32 @@ function Pin({
   )
 }
 
+/** A tick that could not reach the server, kept until the signal is back. */
+type Queued = { itemId: string; done: boolean; note?: string; seen?: string; photo?: Blob }
+/** In the last 15 minutes before a check closes itself, the header turns yellow and the phone buzzes once. */
+const CLOSING_SOON_MS = 15 * 60_000
+const FLUSH_MS = 5_000
+
+function queueKey(code: string, a: ActiveCheck) {
+  return `checks.queue.${code}.${a.kind}.${a.day}`
+}
+function readQueue(key: string): Queued[] {
+  try {
+    const raw = localStorage.getItem(key)
+    return raw ? (JSON.parse(raw) as Queued[]) : []
+  } catch {
+    return []
+  }
+}
+function writeQueue(key: string, q: Queued[]) {
+  try {
+    // Photos stay in memory only; a reload keeps the ticks, not the pictures.
+    const plain = q.filter((x) => !x.photo)
+    if (plain.length === 0) localStorage.removeItem(key)
+    else localStorage.setItem(key, JSON.stringify(plain))
+  } catch {}
+}
+
 function Checklist({
   code,
   t,
@@ -597,13 +631,23 @@ function Checklist({
   onDone: (r: Receipt) => void
   onSignedOut: () => void
 }) {
-  /** Taps sent but not answered yet, shown as if they had landed. */
-  const [pending, setPending] = useState<Record<string, boolean>>({})
+  const qKey = queueKey(code, active)
+  /** Ticks kept on the phone while there is no signal, oldest first. */
+  const queue = useRef<Queued[]>(readQueue(qKey))
+  /** Taps sent but not answered yet, or waiting for signal, shown as if they had landed. */
+  const [pending, setPending] = useState<Record<string, boolean>>(() =>
+    Object.fromEntries(queue.current.map((q) => [q.itemId, q.done])),
+  )
+  const [queued, setQueued] = useState(queue.current.length)
   /** The task being flagged, with the note and mark it had when the sheet opened. */
   const [flagFor, setFlagFor] = useState<{ item: CrewItem; note: string; seen?: string } | null>(null)
   /** A done task someone tapped: shows who did it, and undo is a second, deliberate tap. */
   const [doneFor, setDoneFor] = useState<CrewItem | null>(null)
+  /** The ⋯ menu on a task not done yet: a note, or the photo. */
+  const [menuFor, setMenuFor] = useState<CrewItem | null>(null)
   const [photoFor, setPhotoFor] = useState<{ item: CrewItem; blob: Blob; url: string } | null>(null)
+  /** Sections folded or unfolded by hand; untouched ones fold when they are all done. */
+  const [folded, setFolded] = useState<Record<string, boolean>>({})
   const [error, setError] = useState("")
   const [sending, setSending] = useState(false)
   const camera = useRef<HTMLInputElement>(null)
@@ -625,46 +669,105 @@ function Checklist({
   const tasksLeft = base.total - done - photosLeft
   const canSubmit = active.practice || (now >= active.submitFrom && now <= active.closesAt)
   const others = active.people.filter((p) => p !== who.name)
-  const next = useMemo(() => {
-    for (const s of active.sections) {
-      for (const i of s.items) {
-        const mark = base.state.get(i.id)
-        const isDone = i.id in pending ? pending[i.id] : Boolean(mark?.done)
-        if (!isDone) return { item: i, section: txt(s.en, s.es) }
-      }
-    }
-    return null
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [active, pending, lang])
+  const leftMs = active.closesAt - now
+  const closingSoon = !active.practice && leftMs > 0 && leftMs <= CLOSING_SOON_MS && done < base.total
 
-  const send = async (item: CrewItem, opts: { done: boolean; note?: string; photo?: Blob; seen?: string }) => {
-    setError("")
-    setPending((p) => ({ ...p, [item.id]: opts.done }))
+  // One buzz when the last 15 minutes start, on phones that can.
+  const buzzed = useRef(false)
+  useEffect(() => {
+    if (!closingSoon || buzzed.current) return
+    buzzed.current = true
+    try {
+      navigator.vibrate?.([200, 100, 200])
+    } catch {}
+  }, [closingSoon])
+
+  const clearPending = (id: string) =>
+    setPending((p) => {
+      const { [id]: _, ...rest } = p
+      return rest
+    })
+
+  /** One request. "offline" means it never reached the server and can be tried again. */
+  const post = async (q: Queued): Promise<"ok" | "refused" | "offline"> => {
     try {
       const form = new FormData()
       form.set("pass", who.pass)
-      form.set("itemId", item.id)
-      form.set("done", opts.done ? "1" : "0")
-      if (opts.note) form.set("note", opts.note)
-      if (opts.seen) form.set("seen", opts.seen)
-      if (opts.photo) form.set("photo", opts.photo, `${item.id}.jpg`)
+      form.set("itemId", q.itemId)
+      form.set("done", q.done ? "1" : "0")
+      if (q.note) form.set("note", q.note)
+      if (q.seen) form.set("seen", q.seen)
+      if (q.photo) form.set("photo", q.photo, `${q.itemId}.jpg`)
       const res = await fetch(`/api/checks/${encodeURIComponent(code)}/mark`, { method: "POST", body: form })
       const body = (await res.json().catch(() => ({}))) as { error?: string; view?: CrewView }
+      // A gateway error with no answer from the app is the network's, not the app saying no.
+      if (res.status >= 502 && !body.error) return "offline"
       if (body.view) setView(body.view)
       if (!res.ok) {
         setError(body.error ?? t.offline)
         if (res.status === 401) window.setTimeout(onSignedOut, 2500)
+        return "refused"
       }
-      return res.ok
+      return "ok"
     } catch {
-      setError(t.offline)
-      return false
-    } finally {
-      setPending((p) => {
-        const { [item.id]: _, ...rest } = p
-        return rest
-      })
+      return "offline"
     }
+  }
+
+  const keep = (q: Queued) => {
+    // The newest tap on a task replaces any older one still waiting.
+    queue.current = [...queue.current.filter((x) => x.itemId !== q.itemId), q]
+    writeQueue(qKey, queue.current)
+    setQueued(queue.current.length)
+  }
+
+  const flushing = useRef(false)
+  const flush = useCallback(async () => {
+    if (flushing.current || queue.current.length === 0) return
+    flushing.current = true
+    try {
+      while (queue.current.length > 0) {
+        const q = queue.current[0]
+        const r = await post(q)
+        if (r === "offline") break
+        queue.current = queue.current.slice(1)
+        writeQueue(qKey, queue.current)
+        setQueued(queue.current.length)
+        // A newer tap on the same task may be waiting behind this one.
+        if (!queue.current.some((x) => x.itemId === q.itemId)) clearPending(q.itemId)
+      }
+    } finally {
+      flushing.current = false
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [qKey])
+  useEffect(() => {
+    if (queued === 0) return
+    const id = window.setInterval(() => void flush(), FLUSH_MS)
+    window.addEventListener("online", flush)
+    void flush()
+    return () => {
+      window.clearInterval(id)
+      window.removeEventListener("online", flush)
+    }
+  }, [queued, flush])
+
+  const send = async (item: CrewItem, opts: { done: boolean; note?: string; photo?: Blob; seen?: string }) => {
+    setError("")
+    setPending((p) => ({ ...p, [item.id]: opts.done }))
+    const q: Queued = { itemId: item.id, ...opts }
+    // Behind a tick still waiting for signal: wait in line, so they land in order.
+    if (queue.current.length > 0) {
+      keep(q)
+      return true
+    }
+    const r = await post(q)
+    if (r === "offline") {
+      keep(q)
+      return true
+    }
+    clearPending(item.id)
+    return r === "ok"
   }
 
   const openCamera = (item: CrewItem) => {
@@ -686,6 +789,11 @@ function Checklist({
     setSending(true)
     setError("")
     try {
+      await flush()
+      if (queue.current.length > 0) {
+        setError(t.queued(queue.current.length))
+        return
+      }
       const res = await fetch(`/api/checks/${encodeURIComponent(code)}/submit`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -708,10 +816,15 @@ function Checklist({
 
   const label = active.label[lang]
   const leftText = t.left(tasksLeft, photosLeft)
+  const closeAt = new Date(active.closesAt).toLocaleTimeString(lang === "es" ? "es-US" : "en-US", {
+    hour: "numeric",
+    minute: "2-digit",
+    timeZone: "America/Los_Angeles",
+  }).toLowerCase()
 
   return (
     <>
-      <div className="ckc__head" style={{ marginTop: 0, padding: "12px 16px", top: 0 }}>
+      <div className={`ckc__head${closingSoon ? " ckb__head--soon" : ""}`} style={{ marginTop: 0, padding: "12px 16px", top: 0 }}>
         <div className="ckc__top">
           <span>
             <b style={{ fontFamily: "var(--display)", fontSize: 19, fontWeight: 400 }}>{label}</b>{" "}
@@ -728,78 +841,96 @@ function Checklist({
             <i key={i.id} className={stateOf(i.id).done ? "f" : ""} />
           ))}
         </div>
-        <div style={{ display: "flex", justifyContent: "space-between", gap: 8, fontSize: 13.5 }}>
-          <span className="ckc__dim">{t.doneOf(done, base.total)}</span>
-          {others.length > 0 && (
-            <span className="ckb__who">
-              <i />
-              {t.alsoOn(others.join(", "))}
+        <div style={{ display: "flex", justifyContent: "space-between", gap: 8, fontSize: 13.5, flexWrap: "wrap" }}>
+          <b>{t.doneOf(done, base.total)}</b>
+          {!active.practice && leftMs > 0 && (
+            <span className="ckb__count" role="timer">
+              {t.closesItself(closeAt, durationLabel(leftMs))}
             </span>
           )}
         </div>
+        {closingSoon && (
+          <div className="ckb__soon" role="alert">
+            {t.closingSoon(durationLabel(leftMs))}
+          </div>
+        )}
+        {others.length > 0 && (
+          <span className="ckb__who" style={{ fontSize: 13 }}>
+            <i />
+            {t.alsoOn(others.join(", "))}
+          </span>
+        )}
       </div>
 
       {active.practice && <PracticeBanner t={t} />}
-
-      {next ? (
-        <div className="ckb__next">
-          <span className="ck-mono">{t.nextUp(next.section)}</span>
-          <b>{txt(next.item.en, next.item.es)}</b>
-          {next.item.photoRequired ? (
-            <button type="button" className="ckc__btn" onClick={() => openCamera(next.item)}>
-              <CameraIcon /> {t.takePhotoFinish}
-            </button>
-          ) : (
-            <button type="button" className="ckc__btn ckc__btn--light" onClick={() => void send(next.item, { done: true })}>
-              ✓ {t.markDone}
-            </button>
-          )}
+      {queued > 0 && (
+        <div className="ckb__queued" role="status">
+          {t.queued(queued)}
         </div>
-      ) : (
+      )}
+
+      {done === base.total && (
         <div className="ckb__alldone">
           {t.allTasksDone} {canSubmit ? t.tapSubmit : t.comeBack(active.submitFromLabel, active.dueLabel)}
         </div>
       )}
 
-      {active.sections.map((s) => (
-        <section key={s.id} style={{ display: "grid", gap: 8 }} aria-label={txt(s.en, s.es)}>
-          <div className="ckc__sect">
-            <b>{txt(s.en, s.es)}</b>
-            <span className="ck-mono">
-              {s.items.filter((i) => stateOf(i.id).done).length} / {s.items.length}
-            </span>
-          </div>
-          {s.items.map((i) => {
-            const { done: isDone, mark } = stateOf(i.id)
-            const flagged = isDone && Boolean(mark?.note) && !(i.id in pending)
-            const cls = `ckc__row${isDone ? " done" : ""}${flagged ? " is-flag" : ""}${!isDone && i.photoRequired ? " cam" : ""}`
-            return (
-              <div key={i.id} style={{ display: "grid", gap: 2 }}>
-                <button type="button" className={cls} aria-pressed={isDone} onClick={() => tap(i)}>
-                  <span className="ck">{flagged ? "!" : isDone ? "✓" : i.photoRequired ? <CameraIcon size={16} /> : ""}</span>
-                  <span>
-                    {txt(i.en, i.es)}
-                    {isDone && mark && !(i.id in pending) && (
-                      <span className="ckb__stamp">{t.stamp(mark.at, mark.by, mark.hasPhoto)}</span>
+      {active.sections.map((s) => {
+        const left = s.items.filter((i) => !stateOf(i.id).done).length
+        const isFolded = folded[s.id] ?? left === 0
+        const name = txt(s.en, s.es)
+        return (
+          <section key={s.id} className="ckb__sec" aria-label={name}>
+            <button
+              type="button"
+              className={`ckb__sechead${left === 0 ? " done" : ""}`}
+              aria-expanded={!isFolded}
+              onClick={() => setFolded((f) => ({ ...f, [s.id]: !isFolded }))}
+            >
+              <b>{name}</b>
+              <span className="ck-mono">
+                {s.items.length - left} / {s.items.length} · {t.sectionLeft(left)}
+              </span>
+              <span className="ckb__caret" aria-hidden>
+                ›
+              </span>
+            </button>
+            {!isFolded &&
+              s.items.map((i) => {
+                const { done: isDone, mark } = stateOf(i.id)
+                const waiting = i.id in pending
+                const flagged = isDone && Boolean(mark?.note) && !waiting
+                // The owner sent a photo back: the untick carries their note.
+                const redo = !isDone && !waiting && mark && !mark.done && mark.note ? mark.note : null
+                const task = txt(i.en, i.es)
+                const cls = `ckc__row${isDone ? " done" : ""}${flagged ? " is-flag" : ""}${!isDone && i.photoRequired ? " cam" : ""}${redo ? " is-redo" : ""}`
+                return (
+                  <div key={i.id} className="ckb__task">
+                    <button type="button" className={cls} aria-pressed={isDone} onClick={() => tap(i)}>
+                      <span className="ck">{flagged ? "!" : isDone ? "✓" : i.photoRequired ? <CameraIcon size={16} /> : ""}</span>
+                      <span>
+                        {task}
+                        {isDone && mark && !waiting && <span className="ckb__stamp">{t.stamp(mark.at, mark.by, mark.hasPhoto)}</span>}
+                        {flagged && (
+                          <small>
+                            {t.needsAttention} · {mark!.note}
+                          </small>
+                        )}
+                        {redo && <small className="ckb__redo">{t.redo(redo)}</small>}
+                        {!isDone && i.photoRequired && <span className="ckb__need">{t.photoRequired}</span>}
+                      </span>
+                    </button>
+                    {!isDone && (
+                      <button type="button" className="ckb__more" aria-label={t.more(task)} onClick={() => setMenuFor(i)}>
+                        ⋯
+                      </button>
                     )}
-                    {flagged && (
-                      <small>
-                        {t.needsAttention} · {mark!.note}
-                      </small>
-                    )}
-                    {!isDone && i.photoRequired && <span className="ckb__need">{t.photoRequired}</span>}
-                  </span>
-                </button>
-                {!isDone && (
-                  <button type="button" className="ckc__flagbtn" onClick={() => setFlagFor({ item: i, note: mark?.note ?? "", seen: mark?.markId })}>
-                    {t.problem}
-                  </button>
-                )}
-              </div>
-            )
-          })}
-        </section>
-      ))}
+                  </div>
+                )
+              })}
+          </section>
+        )
+      })}
       <p className="ckc__dim" style={{ fontSize: 12.5 }}>{t.undoHelp}</p>
 
       <div className="ckc__foot" style={{ padding: "10px 16px max(14px, env(safe-area-inset-bottom, 0px))" }}>
@@ -836,6 +967,24 @@ function Checklist({
           setPhotoFor({ item, blob, url: URL.createObjectURL(blob) })
         }}
       />
+      {menuFor && (
+        <TaskMenu
+          t={t}
+          title={txt(menuFor.en, menuFor.es)}
+          photo={menuFor.photoRequired}
+          onNote={() => {
+            const mark = stateOf(menuFor.id).mark
+            setFlagFor({ item: menuFor, note: "", seen: mark?.markId })
+            setMenuFor(null)
+          }}
+          onPhoto={() => {
+            const item = menuFor
+            setMenuFor(null)
+            openCamera(item)
+          }}
+          onCancel={() => setMenuFor(null)}
+        />
+      )}
       {photoFor && (
         <PhotoSheet
           t={t}
@@ -899,6 +1048,45 @@ function Checklist({
         )
       })()}
     </>
+  )
+}
+
+/** The ⋯ on a task not done yet: finish it with a note, or take its photo. */
+function TaskMenu({
+  t,
+  title,
+  photo,
+  onNote,
+  onPhoto,
+  onCancel,
+}: {
+  t: Tx
+  title: string
+  photo: boolean
+  onNote: () => void
+  onPhoto: () => void
+  onCancel: () => void
+}) {
+  return (
+    <div className="ckc__sheet" role="dialog" aria-modal="true" aria-label={title} onClick={onCancel}>
+      <div onClick={(e) => e.stopPropagation()}>
+        <h2>{title}</h2>
+        {photo && (
+          <button type="button" className="ckc__btn" onClick={onPhoto}>
+            <CameraIcon /> {t.takePhoto}
+          </button>
+        )}
+        <button type="button" className={`ckc__btn${photo ? " ckc__btn--light" : ""}`} onClick={onNote}>
+          {t.doneWithNote}
+        </button>
+        <p className="ckc__dim" style={{ margin: 0, fontSize: 13 }}>
+          {t.flagHelp}
+        </p>
+        <button type="button" className="ckc__btn ckc__btn--ghost" onClick={onCancel}>
+          {t.cancel}
+        </button>
+      </div>
+    </div>
   )
 }
 

@@ -9,8 +9,9 @@ import { CHECK_LABEL, clockLabel, durationLabel, weekdayOf, windowBounds, type C
  * person did. Pure: everything here is counted from `loadCheckGrid`'s cells,
  * so the Today page, the check detail and the Report can never disagree.
  *
- * Nothing is estimated. A check closed before checks closed themselves has
- * no task list, so it adds to "checks" counts but never to a task count.
+ * Nothing is estimated. A check with a record counts its record's tasks. A
+ * missed check with no record (from before checks closed themselves) counts
+ * the ticks it got against its list, so nothing ticked is every task missed.
  */
 
 /** Ticks this close together by one person read as ticked at the end, not as the work was done. */

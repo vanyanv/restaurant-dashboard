@@ -64,14 +64,9 @@
 .ckb__tone-bad { color: var(--bad) }
 .ckb__tone-dim { color: var(--ink-2) }
 
-/* Checklist: who else is on it, the next task, photo tasks. */
+/* Checklist: who else is on it, the countdown, folding sections, photo tasks. */
 .ckb__who { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--ink-2) }
 .ckb__who i { width: 8px; height: 8px; border-radius: 50%; background: var(--good); flex: none }
-.ckb__next { background: var(--ink); color: var(--surface); padding: 16px; display: grid; gap: 12px }
-.ckb__next .ck-mono { color: var(--line) }
-.ckb__next b { font-size: 19px; line-height: 1.25 }
-.ckb__next .ckc__btn { min-height: 54px }
-.ckb__next .ckc__btn--light { background: var(--surface) }
 .ckb__alldone { background: var(--good-wash); border: 1px solid var(--good); color: var(--good); padding: 14px 16px; font-weight: 700 }
 .ckb .ckc__row.cam .ck { border-radius: 0; border-color: var(--accent-hi); background: var(--accent-wash); color: var(--warn) }
 .ckb__need { display: block; font-family: var(--mono); font-size: 10.5px; letter-spacing: .05em; text-transform: uppercase; color: var(--warn); font-weight: 600; margin-top: 2px }
@@ -98,3 +93,27 @@
 .ckb__progress { font-size: 13.5px }
 .ckb__back { width: auto; justify-self: start; min-height: 44px; font-family: var(--sans); font-size: 14px; font-weight: 600; letter-spacing: 0 }
 .ckb .ckc__btn.ckb__back { font-family: var(--sans); font-size: 14px; font-weight: 600; letter-spacing: 0 }
+
+/* The countdown in the sticky header, and its last 15 minutes in yellow. */
+.ckb__count { font-family: var(--mono); font-size: 12px; color: var(--ink-2) }
+.ckb .ckc__head.ckb__head--soon { background: var(--accent-wash); border-bottom: 3px solid var(--accent) }
+.ckb__soon { background: var(--accent); color: var(--ink); padding: 8px 10px; font-size: 14px; font-weight: 700; line-height: 1.3 }
+/* Ticks kept on the phone while there is no signal. */
+.ckb__queued { background: var(--ink); color: var(--surface); padding: 10px 14px; font-size: 14px; font-weight: 600 }
+/* A section folds once it is done; tap the bar to open it again. */
+.ckb__sec { display: grid; gap: 8px }
+.ckb__sechead { display: grid; grid-template-columns: minmax(0, 1fr) auto 20px; align-items: center; gap: 10px; min-height: 52px;
+  padding: 8px 12px; border: 1.5px solid var(--line-strong); background: var(--surface); color: var(--ink); font: inherit; text-align: left; cursor: pointer }
+.ckb__sechead b { font-family: var(--display); font-weight: 400; font-size: 18px; letter-spacing: .02em }
+.ckb__sechead.done { background: var(--good-wash); border-color: var(--good) }
+.ckb__sechead.done .ck-mono { color: var(--good) }
+.ckb__caret { font-size: 22px; line-height: 1; color: var(--ink-2); transition: transform .15s; justify-self: end }
+.ckb__sechead[aria-expanded="true"] .ckb__caret { transform: rotate(90deg) }
+@media (prefers-reduced-motion: reduce) { .ckb__caret { transition: none } }
+/* One row per task: the big tap target ticks it, ⋯ holds the note and the photo. */
+.ckb__task { display: grid; grid-template-columns: minmax(0, 1fr) 52px; gap: 6px; align-items: stretch }
+.ckb__task > .ckc__row:only-child { grid-column: 1 / -1 }
+.ckb__more { border: 1.5px solid var(--line-strong); background: var(--surface); color: var(--ink); font-size: 22px; font-weight: 800; line-height: 1; cursor: pointer; min-height: 60px }
+.ckb__more:active { background: var(--chrome) }
+.ckb .ckc__row.is-redo { border-color: var(--bad); background: var(--bad-wash) }
+.ckb__redo { color: var(--bad) !important; font-weight: 700 !important }

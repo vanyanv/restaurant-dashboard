@@ -26,7 +26,7 @@ export function ChecksHead({ sub, children }: { sub: string; children?: ReactNod
 const GLYPH: Record<CellStatus, { cls: string; mark: ReactNode; label: string }> = {
   on_time: { cls: "ck-gl--ok", mark: "✓", label: "On time" },
   late: { cls: "ck-gl--late", mark: <span>!</span>, label: "Late" },
-  partial: { cls: "ck-gl--part", mark: "◐", label: "Some tasks missed" },
+  partial: { cls: "ck-gl--part", mark: "−", label: "Some tasks missed" },
   missed: { cls: "ck-gl--miss", mark: "✕", label: "Missed" },
   closed: { cls: "ck-gl--closed", mark: "–", label: "Store closed" },
   open: { cls: "ck-gl--open", mark: "◷", label: "Open" },

@@ -97,7 +97,7 @@ export function RecordSections({ cell, open }: { cell: CellView; open?: boolean 
               {s.items.map((i) => (
                 <li key={i.item} className={i.done ? "" : "miss"}>
                   <span className="g" aria-hidden>
-                    {i.done ? (i.late ? "◐" : "✓") : "✕"}
+                    {i.done ? (i.late ? "!" : "✓") : "✕"}
                   </span>
                   <span>
                     {i.item}
@@ -250,15 +250,7 @@ export function CheckDetail({ store, label, cell }: { store: string; label: stri
       <TickStrip cell={cell} />
       <PhotoReview cell={cell} caption={caption} />
       <RecordSections cell={cell} />
-      {cell.people.length > 0 && (
-        <div className="ck-people" aria-label="Who worked on it">
-          {cell.people.map((p) => (
-            <span key={p}>
-              {p} · {taskCount(cell.log.filter((l) => l.by === p && (l.action === "done" || l.action === "note")).length)}
-            </span>
-          ))}
-        </div>
-      )}
+      <People cell={cell} />
       {hasLog ? (
         <details className="ck-logfold" open={!hasRecord}>
         <summary className="ck-mono">Every tick, untick and note · {cell.log.length}</summary>
@@ -314,6 +306,33 @@ export function CheckDetail({ store, label, cell }: { store: string; label: stri
           onClose={() => setOpen(null)}
         />
       )}
+    </div>
+  )
+}
+
+/**
+ * Who did what: tasks that stand to each person, from the record when there
+ * is one (a task sent back no longer counts), else from the ticks so far.
+ * Someone with nothing standing, like an owner who sent a photo back, is left out.
+ */
+function People({ cell }: { cell: CellView }) {
+  const counts = new Map<string, number>()
+  if (cell.tasks.length > 0) {
+    for (const s of cell.tasks) for (const i of s.items) if (i.done && i.by) counts.set(i.by, (counts.get(i.by) ?? 0) + 1)
+  } else {
+    const latest = new Map<string, { by: string; done: boolean }>()
+    for (const l of cell.log) if (l.action === "done" || l.action === "note" || l.action === "undone") latest.set(l.text, { by: l.by, done: l.action !== "undone" })
+    for (const v of latest.values()) if (v.done) counts.set(v.by, (counts.get(v.by) ?? 0) + 1)
+  }
+  const people = cell.people.filter((p) => (counts.get(p) ?? 0) > 0)
+  if (people.length === 0) return null
+  return (
+    <div className="ck-people" aria-label="Who worked on it">
+      {people.map((p) => (
+        <span key={p}>
+          {p} · {taskCount(counts.get(p)!)}
+        </span>
+      ))}
     </div>
   )
 }
