@@ -1499,7 +1499,7 @@ function loadEverything(input: LaborSectionsInput) {
         return Promise.resolve(
           notComputed<LeakLedger>(
             // No hours worked inside the range, so no blended rate to cost a clock-in against.
-            "No hours were worked in this range, so there is nothing to cost.",
+            "No hours are recorded for this range yet, so clock-in alerts cannot be costed.",
           ),
         )
       }

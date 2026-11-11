@@ -1490,7 +1490,7 @@ export function getCogsSectionPromises(
           if (plan === null) {
             return notComputed<ItemsSection>(
               // No published plan; ranking against an invented one would be the page grading itself.
-              "Set a food-cost target in store settings to rank items against it.",
+              "Set a food-cost target in store settings to rank items against it. With several stores picked, they need the same target, or pick one store.",
             )
           }
           if (d.items.length === 0) return notComputed<ItemsSection>(NO_COGS_OWED)

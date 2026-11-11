@@ -257,11 +257,12 @@ function checklistOf(d: NewStoreData): NewStoreChecklist {
     }),
     meta: `${count(d.stores.length)} stores · measured, not a template`,
     note:
-      `Your stores, and what each one still needs. ` +
+      // The zero-labor warning LEADS when it applies: a long note folds after
+      // its first sentence, and this is the one line here that changes a P&L.
       (zeroLabor.length > 0
-        ? `${zeroLabor.map((s) => s.name).join(" and ")} reads zero fixed labor rather than ` +
-          `unset — someone saved a zero, which the P&L takes at its word. `
-        : "") +
+        ? `${zeroLabor.map((s) => s.name).join(" and ")} has fixed labor saved as $0, and ` +
+          `the P&L uses that zero. `
+        : `Your stores, and what each one still needs. `) +
       // Nothing tells a default rate from one read off a contract, so they are marked, not flagged.
       `Commission rates still at the default are marked so you can check them ` +
       `against your contracts.`,
