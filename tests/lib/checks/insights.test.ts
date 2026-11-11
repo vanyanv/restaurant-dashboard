@@ -1,4 +1,7 @@
-import { describe, expect, it } from "vitest"
+import { describe, expect, it, vi } from "vitest"
+
+// insights.ts reads `currentMarks` from data.ts, which opens a database client on import.
+vi.mock("@/lib/prisma", () => ({ prisma: {} }))
 import type { GridCell, GridMark, GridStore, RecordTask } from "@/lib/checks/data"
 import { BURST_MIN, checkReport, taskShare, tickBurst, tickTimeline } from "@/lib/checks/insights"
 
