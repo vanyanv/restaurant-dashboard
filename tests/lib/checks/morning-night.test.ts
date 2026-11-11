@@ -154,8 +154,8 @@ describe("check report email", () => {
       photoCount: 1,
       link: "https://dash.example/dashboard/checks/history?store=s1&day=2026-10-29&kind=MORNING",
     })
-    expect(r.subject).toBe("Van Nuys · Morning check submitted 4:45 pm by Maria G.")
-    expect(r.text).toContain("Done by Ana P., Luis R.")
+    expect(r.subject).toBe("Van Nuys · Morning check: all 2 done, sent 4:45 pm by Maria G.")
+    expect(r.text).toContain("Ticked by Ana P., Luis R.")
     expect(r.text).toContain("10:00 am")
     expect(r.html).toContain("Door &#60;broken&#62;")
     expect(r.html).not.toContain("<broken>")
@@ -166,8 +166,8 @@ describe("check report email", () => {
 describe("missed check alert", () => {
   it("folds a store's bad day into one line", () => {
     const a = storeDayAlert("Hollywood", "2026-10-28", [
-      { kind: "MORNING", missed: true, line: "Morning was due by 5:30 pm and nobody submitted it." },
-      { kind: "EVENING", missed: false, line: "Night was sent 4 min late by Ana P." },
+      { kind: "MORNING", level: "missed", line: "Morning was due by 5:30 pm and nobody submitted it." },
+      { kind: "EVENING", level: "late", line: "Night was sent 4 min late by Ana P." },
     ])
     expect(a.severity).toBe("WATCH")
     expect(a.title).toMatch(/^Hollywood · Morning missed, Night late · /)

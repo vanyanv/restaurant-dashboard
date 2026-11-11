@@ -106,7 +106,7 @@ describe("getLaborActuals", () => {
 
 describe("getCleaningChecks", () => {
   const sub = (crewName: string, lateMinutes: number, flags: Array<{ section: string; item: string; note: string }> = []) => ({
-    id: "x", crewName, submittedAt: new Date(), startedAt: null, lateMinutes, flaggedCount: flags.length, flags, photos: [{ id: "p", sectionName: "Kitchen" }],
+    id: "x", crewName, autoClosed: false, done: 8, total: 8, missed: [], submittedAt: new Date(), startedAt: null, lateMinutes, flaggedCount: flags.length, flags, photos: [{ id: "p", sectionName: "Kitchen" }],
   })
 
   it("counts statuses, lists problems newest first, and never returns photos", async () => {
@@ -121,6 +121,13 @@ describe("getCleaningChecks", () => {
           { day: "2026-10-20", kind: "EVENING", status: "missed", submission: null, startedBy: null },
           { day: "2026-10-21", kind: "EVENING", status: "late", submission: sub("Vardan", 25, [{ section: "Kitchen", item: "Clean the fryer", note: "Out of degreaser" }]), startedBy: null },
           { day: "2026-10-21", kind: "TRANSITION", status: "open", submission: null, startedBy: null },
+          {
+            day: "2026-10-19",
+            kind: "EVENING",
+            status: "partial",
+            submission: { ...sub("Maria G., Jose M.", 0), autoClosed: true, done: 6, total: 8, missed: [{ section: "Kitchen", item: "Mop floors" }, { section: "Front", item: "Restock bags" }] },
+            startedBy: null,
+          },
         ],
       },
     ] as never)
@@ -130,13 +137,16 @@ describe("getCleaningChecks", () => {
     expect(assertOwnerOwnsStores).toHaveBeenCalledWith("acct-A", ["s1"])
     expect(vi.mocked(loadCheckGrid).mock.calls[0][0]).toMatchObject({ accountId: "acct-A", storeIds: ["s1"], fromDay: "2026-10-20" })
     const store = out.stores[0]
-    expect(store.counts).toEqual({ on_time: 1, late: 1, missed: 1, open: 1, closed: 0 })
-    // One of three due checks on time; the open one is not due yet.
-    expect(store.onTimePct).toBe(33)
+    expect(store.counts).toEqual({ on_time: 1, late: 1, partial: 1, missed: 1, open: 1, closed: 0 })
+    // One of four due checks on time; the open one is not due yet.
+    expect(store.onTimePct).toBe(25)
     expect(store.problems.map((p) => [p.date, p.check, p.status])).toEqual([
       ["2026-10-21", "Night", "late"],
       ["2026-10-20", "Night", "missed"],
+      ["2026-10-19", "Night", "partial"],
     ])
+    // A check that closed itself names what was missed, and nobody "submitted" it.
+    expect(store.problems[2]).toMatchObject({ tasksDone: 6, tasksTotal: 8, missedTasks: ["Mop floors", "Restock bags"], submittedBy: null })
     expect(store.flagged).toEqual([
       { date: "2026-10-21", check: "Night", section: "Kitchen", item: "Clean the fryer", note: "Out of degreaser", submittedBy: "Vardan" },
     ])

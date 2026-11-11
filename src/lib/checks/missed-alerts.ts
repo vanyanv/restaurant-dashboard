@@ -15,18 +15,26 @@ import { addDays, CHECK_LABEL, dayLabel, dueAtFor, laInstant, clockLabel, todayL
  * checks cron and whenever the owner opens Store checks.
  */
 
-type Problem = { kind: CheckKindName; missed: boolean; line: string }
+/**
+ * One check that went wrong. `missed` is a check with nothing done; `partial`
+ * closed itself with some tasks missed (`tasks` of them); `late` was all done
+ * but after the due time.
+ */
+type Problem = { kind: CheckKindName; level: "missed" | "partial" | "late"; tasks?: number; line: string }
 
 export function storeDayAlert(store: string, day: string, problems: Problem[]) {
-  const missed = problems.filter((p) => p.missed)
-  const late = problems.filter((p) => !p.missed)
-  const names = (ps: Problem[]) => ps.map((p) => CHECK_LABEL[p.kind].en).join(" and ")
+  const label = (p: Problem) => CHECK_LABEL[p.kind].en
+  const missed = problems.filter((p) => p.level === "missed")
+  const partial = problems.filter((p) => p.level === "partial")
+  const late = problems.filter((p) => p.level === "late")
+  const names = (ps: Problem[]) => ps.map(label).join(" and ")
   const parts = [
     missed.length > 0 ? `${names(missed)} missed` : "",
+    ...partial.map((p) => `${label(p)} ${p.tasks ?? 0} task${p.tasks === 1 ? "" : "s"} missed`),
     late.length > 0 ? `${names(late)} late` : "",
   ].filter(Boolean)
   return {
-    severity: missed.length > 0 ? ("WATCH" as const) : ("INFO" as const),
+    severity: missed.length + partial.length > 0 ? ("WATCH" as const) : ("INFO" as const),
     title: `${store} · ${parts.join(", ")} · ${dayLabel(day)}`,
     body: problems.map((p) => p.line).join(" "),
   }
@@ -47,21 +55,44 @@ export async function recordCheckAlerts(opts: { accountId?: string; now: Date; d
     for (const store of grid) {
       const byDay = new Map<string, Problem[]>()
       for (const cell of store.cells) {
-        if (cell.status !== "missed" && cell.status !== "late") continue
+        if (cell.status !== "missed" && cell.status !== "partial" && cell.status !== "late") continue
         const tpl = store.templates.find((t) => t.kind === cell.kind)
         if (!tpl) continue
         const label = CHECK_LABEL[cell.kind].en
         const due = clockLabel(laInstant(cell.day, dueAtFor(cell.day, tpl)))
-        const missed = cell.status === "missed"
-        const line = missed
-          ? `${label} was due by ${due} and nobody submitted it.`
-          : `${label} was sent ${cell.submission?.lateMinutes ?? 0} min late by ${cell.submission?.crewName ?? "crew"}.`
-        byDay.set(cell.day, [...(byDay.get(cell.day) ?? []), { kind: cell.kind, missed, line }])
+        const sub = cell.submission
+        const closedAt = sub ? clockLabel(sub.submittedAt) : ""
+        let problem: Problem
+        if (cell.status === "partial" && sub) {
+          problem = {
+            kind: cell.kind,
+            level: "partial",
+            tasks: sub.missed.length,
+            line: `${label} closed at ${closedAt} with ${sub.done} of ${sub.total} done. Missed: ${sub.missed.map((m) => m.item).join(", ")}.`,
+          }
+        } else if (cell.status === "missed") {
+          problem = {
+            kind: cell.kind,
+            level: "missed",
+            line: sub?.autoClosed
+              ? `${label} closed at ${closedAt} with nothing ticked.`
+              : `${label} was due by ${due} and nobody submitted it.`,
+          }
+        } else {
+          problem = {
+            kind: cell.kind,
+            level: "late",
+            line: sub?.autoClosed
+              ? `${label} was all done, the last task ${sub.lateMinutes} min after ${due}.`
+              : `${label} was sent ${sub?.lateMinutes ?? 0} min late by ${sub?.crewName || "crew"}.`,
+          }
+        }
+        byDay.set(cell.day, [...(byDay.get(cell.day) ?? []), problem])
       }
 
       for (const [day, problems] of byDay) {
         const alert = storeDayAlert(store.name, day, problems)
-        const metadata = { day, checks: problems.map((p) => ({ kind: p.kind, status: p.missed ? "missed" : "late" })) }
+        const metadata = { day, checks: problems.map((p) => ({ kind: p.kind, status: p.level })) }
         const dedupeKey = `STORE_CHECK:${store.id}:${day}`
         const exists = await prisma.alert.findUnique({
           where: { dedupeKey },

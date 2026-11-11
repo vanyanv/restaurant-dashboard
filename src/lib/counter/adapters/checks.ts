@@ -68,6 +68,10 @@ export type CellView = {
   total: number
   /** Everyone who ticked a task or submitted. */
   people: string[]
+  /** The check closed itself when its window ended; nobody pressed Submit. */
+  autoClosed: boolean
+  /** Tasks nobody ticked before it closed, in list order. */
+  missed: Array<{ section: string; item: string }>
   /** Open now: crew can still tick and submit it. */
   live: boolean
   /** The Today tile, worked out here so the page never reads `status`. */
@@ -78,8 +82,8 @@ export type CellView = {
     at: string
     by: string
     text: string
-    /** "done", "undone", "note" or "submitted". */
-    action: "done" | "undone" | "note" | "submitted"
+    /** "done", "undone", "note", "submitted" (crew pressed Submit) or "closed" (it closed itself). */
+    action: "done" | "undone" | "note" | "submitted" | "closed"
     note: string | null
     /** The mark's photo, served by /api/checks/mark-photo/<id>. */
     photo: boolean
@@ -103,7 +107,11 @@ function cellView(store: GridStore, cell: GridCell, now: Date): CellView {
     photo: m.hasPhoto,
   }))
   if (sub) {
-    log.push({ id: sub.id, at: clockLabel(sub.submittedAt), by: sub.crewName, text: "Submitted", action: "submitted", note: null, photo: false })
+    log.push(
+      sub.autoClosed
+        ? { id: sub.id, at: clockLabel(sub.submittedAt), by: "", text: closedLine(sub), action: "closed", note: null, photo: false }
+        : { id: sub.id, at: clockLabel(sub.submittedAt), by: sub.crewName, text: "Submitted", action: "submitted", note: null, photo: false },
+    )
   }
   switch (cell.status) {
     case "on_time":
@@ -112,9 +120,12 @@ function cellView(store: GridStore, cell: GridCell, now: Date): CellView {
     case "late":
       label = `Late, ${durationLabel((sub?.lateMinutes ?? 0) * 60_000)}`
       break
+    case "partial":
+      label = `${cell.done} of ${cell.total} done`
+      break
     case "missed":
       label = "Missed"
-      meta = `Due ${clockLabel(b.due)} · nobody submitted`
+      meta = sub?.autoClosed ? "Nothing was ticked" : `Due ${clockLabel(b.due)} · nobody submitted`
       break
     case "closed":
       label = store.preOpen ? "Not open yet" : "Store closed"
@@ -148,13 +159,24 @@ function cellView(store: GridStore, cell: GridCell, now: Date): CellView {
       break
     }
   }
-  if (sub) meta = `${clockLabel(sub.submittedAt)} · ${sub.crewName}`
+  if (sub) {
+    meta = sub.autoClosed
+      ? `Closed itself ${clockLabel(sub.submittedAt)}${sub.missed.length > 0 ? ` · ${sub.missed.length} missed` : ""}`
+      : `${clockLabel(sub.submittedAt)} · ${sub.crewName}`
+  }
   const sent = cell.status === "on_time" || cell.status === "late"
+  const short = cell.status === "partial" || (cell.status === "missed" && Boolean(sub))
   const live = cell.status === "open"
   const tile: CellView["tile"] = {
-    tone: sent ? "ok" : cell.status === "missed" ? "miss" : live ? "open" : null,
-    headline: sent && sub ? `Sent ${clockLabel(sub.submittedAt)}` : cell.status === "paused" ? "Paused" : label,
-    sub: sent
+    tone: sent ? "ok" : cell.status === "missed" || cell.status === "partial" ? "miss" : live ? "open" : null,
+    headline: sent && sub
+      ? sub.autoClosed ? `All ${cell.total} done` : `Sent ${clockLabel(sub.submittedAt)}`
+      : cell.status === "partial"
+        ? `${sub?.missed.length ?? 0} missed`
+        : cell.status === "paused" ? "Paused" : label,
+    sub: short
+      ? missedPreview(sub?.missed ?? [])
+      : sent
       ? cell.people.join(", ") || sub?.crewName || null
       : live
         ? cell.people.length > 0
@@ -176,15 +198,31 @@ function cellView(store: GridStore, cell: GridCell, now: Date): CellView {
     started: !sub && cell.startedBy ? `${cell.startedBy.name} started ${clockLabel(cell.startedBy.at)}` : null,
     submittedAt: sub ? clockLabel(sub.submittedAt) : null,
     startedAt: sub?.startedAt ? clockLabel(sub.startedAt) : null,
-    by: sub?.crewName ?? null,
+    by: sub && !sub.autoClosed ? sub.crewName : null,
     dueLabel: clockLabel(b.due),
     done: cell.done,
     total: cell.total,
     people: cell.people,
+    autoClosed: Boolean(sub?.autoClosed),
+    missed: sub?.missed ?? [],
     live,
     tile,
     log,
   }
+}
+
+/** "Closed itself · 18 of 21 done" for the log's last line. */
+function closedLine(sub: NonNullable<GridCell["submission"]>): string {
+  if (sub.done === 0) return "Closed itself · nothing ticked"
+  if (sub.missed.length === 0) return `Closed itself · all ${sub.total} done`
+  return `Closed itself · ${sub.done} of ${sub.total} done`
+}
+
+/** "Mop floors, Wipe soda machine +1 more" */
+function missedPreview(missed: Array<{ item: string }>): string | null {
+  if (missed.length === 0) return null
+  const shown = missed.slice(0, 2).map((m) => m.item).join(", ")
+  return missed.length > 2 ? `${shown} +${missed.length - 2} more` : shown
 }
 
 // ─── Today ──────────────────────────────────────────────────────────────────
@@ -242,10 +280,14 @@ export function getChecksTodaySectionPromises(opts: { accountId: string; now?: D
         const missedParts: string[] = []
         let missedCount = 0
         for (const s of grid) {
-          const m = s.cells.filter((c) => c.status === "missed" && recent.includes(c.day))
+          const m = s.cells.filter((c) => (c.status === "missed" || c.status === "partial") && recent.includes(c.day))
           if (m.length === 0) continue
           missedCount += m.length
-          missedParts.push(`${shortStoreName(s.name)}: ${m.map((c) => short(c.day, c.kind)).join(", ")}.`)
+          missedParts.push(
+            `${shortStoreName(s.name)}: ${m
+              .map((c) => (c.status === "partial" ? `${short(c.day, c.kind)} (${c.submission?.missed.length ?? 0} tasks missed)` : short(c.day, c.kind)))
+              .join(", ")}.`,
+          )
         }
         const missed: TodayData["missed"] = missedCount === 0
           ? null

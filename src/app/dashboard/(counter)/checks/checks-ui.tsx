@@ -26,6 +26,7 @@ export function ChecksHead({ sub, children }: { sub: string; children?: ReactNod
 const GLYPH: Record<CellStatus, { cls: string; mark: ReactNode; label: string }> = {
   on_time: { cls: "ck-gl--ok", mark: "✓", label: "On time" },
   late: { cls: "ck-gl--late", mark: <span>!</span>, label: "Late" },
+  partial: { cls: "ck-gl--part", mark: "◐", label: "Some tasks missed" },
   missed: { cls: "ck-gl--miss", mark: "✕", label: "Missed" },
   closed: { cls: "ck-gl--closed", mark: "–", label: "Store closed" },
   open: { cls: "ck-gl--open", mark: "◷", label: "Open" },
@@ -73,7 +74,7 @@ export function Glyph({
 export function Legend() {
   return (
     <div className="ck-legend">
-      {(["on_time", "late", "missed", "closed", "paused"] as const).map((s) => (
+      {(["on_time", "late", "partial", "missed", "closed", "paused"] as const).map((s) => (
         <span key={s}>
           <Glyph status={s} small />
           {GLYPH[s].label}
@@ -215,11 +216,28 @@ export function CheckDetail({ store, label, cell }: { store: string; label: stri
         {cell.label}
       </div>
       <dl className="ck-kv">
-        {cell.submittedAt && (<><dt>Submitted</dt><dd>{cell.submittedAt}{cell.by ? ` by ${cell.by}` : ""}</dd></>)}
+        {cell.submittedAt && cell.autoClosed && (<><dt>Closed</dt><dd>{cell.submittedAt} · closed itself</dd></>)}
+        {cell.submittedAt && !cell.autoClosed && (<><dt>Submitted</dt><dd>{cell.submittedAt}{cell.by ? ` by ${cell.by}` : ""}</dd></>)}
         {cell.total > 0 && (<><dt>Tasks</dt><dd>{cell.done} of {cell.total} done</dd></>)}
         {!cell.submittedAt && (<><dt>Closes</dt><dd>{cell.dueLabel}</dd></>)}
         {cell.meta && !cell.submittedAt && (<><dt>Now</dt><dd>{cell.meta}</dd></>)}
       </dl>
+      {cell.missed.length > 0 && (
+        <div className="ck-missed" aria-label="Tasks nobody ticked">
+          <b>
+            {cell.missed.length === cell.total ? `Nothing was ticked · all ${cell.total} missed` : `Missed · ${cell.missed.length}`}
+          </b>
+          {cell.missed.length < cell.total && (
+            <ul>
+              {cell.missed.map((m) => (
+                <li key={`${m.section}:${m.item}`}>
+                  {m.item} <span className="ck-meta">· {m.section}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
       {cell.people.length > 0 && (
         <div className="ck-people" aria-label="Who worked on it">
           {cell.people.map((p) => (
@@ -234,10 +252,10 @@ export function CheckDetail({ store, label, cell }: { store: string; label: stri
           {cell.log.map((l) => (
             <div key={l.id}>
               <time>{l.at}</time>
-              <span className={l.action === "undone" ? "undone" : l.action === "submitted" ? "sent" : ""}>
+              <span className={l.action === "undone" ? "undone" : l.action === "submitted" || l.action === "closed" ? "sent" : ""}>
                 {l.action === "undone" ? `Unticked: ${l.text}` : l.text}
                 {l.note ? <span className="ck-tone-warn"> · {l.note}</span> : null}
-                <span className="who"> · {l.by}</span>
+                {l.by ? <span className="who"> · {l.by}</span> : null}
               </span>
               {l.photo ? (
                 <button type="button" style={{ padding: 0, border: 0, background: "none", cursor: "zoom-in" }} onClick={() => setOpen({ id: l.id, section: l.text, mark: true })} aria-label={`Open ${l.text} photo`}>

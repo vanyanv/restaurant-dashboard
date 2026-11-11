@@ -17,6 +17,8 @@
 .ck-gl--late{border:1.5px solid var(--warn);background:linear-gradient(135deg,var(--warn) 50%,var(--warn-wash) 50%);color:var(--ink)}
 .ck-gl--late span{background:var(--warn-wash);border-radius:3px;padding:0 3px;font-size:10px}
 .ck-gl--miss{border:2px solid var(--bad);background:var(--surface);color:var(--bad)}
+/* Closed itself with some tasks missed: half filled, in the miss colour. */
+.ck-gl--part{border:2px solid var(--bad);background:linear-gradient(0deg,var(--bad-wash) 50%,var(--surface) 50%);color:var(--bad);font-size:10px}
 .ck-gl--closed{border:1.5px solid var(--line-strong);color:var(--ink-3);
   background:repeating-linear-gradient(135deg,var(--sunk) 0 3px,var(--surface) 3px 6px)}
 .ck-gl--open{border:2px solid var(--signal);background:var(--signal-wash);color:var(--ink)}
@@ -366,3 +368,8 @@ button.ck-gl:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .ckc__sheet textarea{width:100%;min-height:84px;border:1px solid var(--line-strong);border-radius:12px;padding:10px;font:inherit;font-size:16px;background:var(--surface);color:var(--ink)}
 .ckc__chips{display:flex;flex-wrap:wrap;gap:6px}
 .ckc__chips button{border:1px solid var(--line-strong);background:var(--paper);border-radius:999px;padding:8px 12px;font:inherit;font-size:13px;color:var(--ink);cursor:pointer}
+
+/* A check that closed itself: the tasks nobody ticked, first in the detail. */
+.ck-missed{display:grid;gap:4px;padding:10px 12px;border-radius:var(--r-sm);background:var(--bad-wash);color:var(--bad)}
+.ck-missed b{font-weight:600}
+.ck-missed ul{margin:0;padding-left:16px;display:grid;gap:2px;color:var(--ink)}

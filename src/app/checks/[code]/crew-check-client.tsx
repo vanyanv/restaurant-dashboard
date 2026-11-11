@@ -45,6 +45,9 @@ const T = {
     opensAt: (t: string) => `Opens at ${t}`,
     sentBy: (at: string, who: string) => `Sent ${at} by ${who}`,
     missed: "Missed",
+    closedItself: (at: string, a: number, b: number) =>
+      a === b ? `Closed ${at} · all ${b} tasks done` : a === 0 ? `Closed ${at} · nothing was ticked` : `Closed ${at} · ${a} of ${b} done, ${b - a} missed`,
+    closesItself: (at: string, left: string) => `Closes by itself at ${at} · ${left} left`,
     closedNow: "Closed",
     off: "Switched off",
     progress: (a: number, b: number) => `${a} of ${b} tasks done`,
@@ -123,6 +126,9 @@ const T = {
     opensAt: (t: string) => `Abre a las ${t}`,
     sentBy: (at: string, who: string) => `Enviada ${at} por ${who}`,
     missed: "No se hizo",
+    closedItself: (at: string, a: number, b: number) =>
+      a === b ? `Cerrada ${at} · las ${b} tareas hechas` : a === 0 ? `Cerrada ${at} · no se marcó nada` : `Cerrada ${at} · ${a} de ${b} hechas, faltaron ${b - a}`,
+    closesItself: (at: string, left: string) => `Se cierra sola a las ${at} · quedan ${left}`,
     closedNow: "Cerrada",
     off: "Apagada",
     progress: (a: number, b: number) => `${a} de ${b} tareas hechas`,
@@ -420,6 +426,9 @@ function Home({
               ? t.submitNow(a.dueLabel, durationLabel(a.dueAt - now))
               : t.openUntil(a.submitFromLabel, a.dueLabel)
             tone = "ckb__tone-good"
+          } else if (r.autoClosed && r.doneAt) {
+            line = t.closedItself(r.doneAt, r.tasksDone, r.tasksTotal)
+            tone = r.tasksDone === r.tasksTotal ? "ckb__tone-good" : "ckb__tone-bad"
           } else if ((r.status === "on_time" || r.status === "late") && r.doneBy && r.doneAt) {
             line = t.sentBy(r.doneAt, r.doneBy)
             tone = "ckb__tone-good"

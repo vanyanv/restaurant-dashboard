@@ -2492,6 +2492,10 @@ model CheckSubmission {
   /// 0 when on time.
   lateMinutes  Int       @default(0)
   flaggedCount Int       @default(0)
+  /// The app closed this check when its window ended (nobody pressed
+  /// Submit). `content` then holds every task with `done` true or false, and
+  /// the false ones were missed. `crewName` lists who ticked, or is empty.
+  autoClosed   Boolean   @default(false)
   content      Json
 
   store      Store         @relation(fields: [storeId], references: [id], onDelete: Cascade)

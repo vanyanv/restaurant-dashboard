@@ -6,9 +6,11 @@ import { windowBounds, windowPhase, type CheckWindow } from "./time"
  * all call this, so no two screens can disagree about whether a check was
  * missed.
  *
- *   on_time   submitted by the due time
- *   late      submitted inside the grace period
- *   missed    the grace period ended with nothing submitted
+ *   on_time   every task done, by the due time
+ *   late      every task done, the last one inside the grace period
+ *   partial   the check closed itself with some tasks done and some missed
+ *   missed    the window ended with no task done (or, before checks closed
+ *             themselves, with nothing submitted)
  *   closed    the owner marked the store closed that day
  *   open      crew can work on it now: ticking before Submit unlocks, or
  *             taking submissions (past due counts while grace lasts)
@@ -21,6 +23,7 @@ import { windowBounds, windowPhase, type CheckWindow } from "./time"
 export type CellStatus =
   | "on_time"
   | "late"
+  | "partial"
   | "missed"
   | "closed"
   | "open"
@@ -34,7 +37,12 @@ export type CellInput = {
   window: CheckWindow
   enabled: boolean
   closed: boolean
-  submission: { lateMinutes: number } | null
+  /**
+   * The check's record, sent by crew or closed by the app. `done` and
+   * `total` count its tasks; a row without them (crew submits always had
+   * every task done) counts as complete.
+   */
+  submission: { lateMinutes: number; done?: number; total?: number } | null
   now: Date
   /**
    * When this check was set up for the store. A window that had already
@@ -64,7 +72,11 @@ export function windowPaused(day: string, window: CheckWindow, pauses: PauseSpan
 
 export function cellStatus(input: CellInput): CellStatus {
   if (windowPaused(input.day, input.window, input.pauses)) return "paused"
-  if (input.submission) return input.submission.lateMinutes > 0 ? "late" : "on_time"
+  if (input.submission) {
+    const { done, total, lateMinutes } = input.submission
+    if (total !== undefined && done !== undefined && done < total) return done === 0 ? "missed" : "partial"
+    return lateMinutes > 0 ? "late" : "on_time"
+  }
   if (input.closed) return "closed"
   if (!input.enabled) return "off"
   if (input.since && windowBounds(input.day, input.window).closes.getTime() < input.since.getTime()) return "before"
@@ -77,7 +89,7 @@ export function cellStatus(input: CellInput): CellStatus {
 /** Whether a status counts toward the on-time rate, and how. */
 export function countsToward(status: CellStatus): "on_time" | "not_on_time" | null {
   if (status === "on_time") return "on_time"
-  if (status === "late" || status === "missed") return "not_on_time"
+  if (status === "late" || status === "partial" || status === "missed") return "not_on_time"
   return null
 }
 

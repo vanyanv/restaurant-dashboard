@@ -27,8 +27,8 @@ const params = z
   })
   .strict()
 
-type Counted = "on_time" | "late" | "missed" | "open" | "closed"
-const COUNTED: readonly Counted[] = ["on_time", "late", "missed", "open", "closed"]
+type Counted = "on_time" | "late" | "partial" | "missed" | "open" | "closed"
+const COUNTED: readonly Counted[] = ["on_time", "late", "partial", "missed", "open", "closed"]
 
 export type CleaningChecksResult = {
   from: string
@@ -39,8 +39,21 @@ export type CleaningChecksResult = {
     /** Share of due checks done by the due time, 0..100. Null when none were due. */
     onTimePct: number | null
     counts: Record<Counted, number>
-    /** Late and missed checks, newest first. */
-    problems: Array<{ date: string; check: string; status: "late" | "missed"; lateMinutes: number | null; submittedBy: string | null }>
+    /**
+     * Late, partly done and missed checks, newest first. "partial" closed
+     * itself when its window ended with some tasks done; `missedTasks` names
+     * the ones nobody ticked.
+     */
+    problems: Array<{
+      date: string
+      check: string
+      status: "late" | "partial" | "missed"
+      lateMinutes: number | null
+      submittedBy: string | null
+      tasksDone: number | null
+      tasksTotal: number | null
+      missedTasks: string[]
+    }>
     /** Items the crew marked as needing attention, newest first. */
     flagged: Array<{ date: string; check: string; section: string; item: string; note: string; submittedBy: string }>
   }>
@@ -90,13 +103,17 @@ export const getCleaningChecks: ChatTool<typeof params, CleaningChecksResult> = 
           onTimePct: onTimeRate(statuses),
           counts,
           problems: newestFirst
-            .filter((c) => c.status === "late" || c.status === "missed")
+            .filter((c) => c.status === "late" || c.status === "partial" || c.status === "missed")
             .map((c) => ({
               date: c.day,
               check: CHECK_LABEL[c.kind].en,
-              status: c.status as "late" | "missed",
+              status: c.status as "late" | "partial" | "missed",
               lateMinutes: c.submission ? c.submission.lateMinutes : null,
-              submittedBy: c.submission?.crewName ?? null,
+              // A check that closed itself was sent by nobody; crewName lists who ticked.
+              submittedBy: c.submission && !c.submission.autoClosed ? c.submission.crewName : null,
+              tasksDone: c.submission ? c.submission.done : null,
+              tasksTotal: c.submission ? c.submission.total : null,
+              missedTasks: c.submission?.missed.map((m) => m.item) ?? [],
             })),
           flagged: newestFirst.flatMap((c) =>
             (c.submission?.flags ?? []).map((f) => ({
