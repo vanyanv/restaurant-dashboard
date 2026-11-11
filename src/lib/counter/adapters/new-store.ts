@@ -135,12 +135,11 @@ function formOf(d: NewStoreData): NewStoreForm {
   return {
     meta: "three fields, all the action reads",
     lifecycleNote:
-      `The prototype has a fourth field here — a lifecycle select, "Pre-open · skip ` +
-      `forecasting". The create action does not read one, so every store starts pre-open ` +
-      `and the nightly model skips it until the stage is moved on. That is the right ` +
-      `default and it is not a choice made here; ${count(preOpen)} of ` +
-      `${count(d.stores.length)} stores on this account are sitting at it now. A select ` +
-      `that looks like a choice and is not read is worse than this sentence.`,
+      // The create action reads no lifecycle field: every store starts pre-open and
+      // the nightly model skips it until the stage is moved on.
+      `New stores start as "Pre-open", so forecasts skip them until you change the ` +
+      `stage in the store's settings. ${count(preOpen)} of ${count(d.stores.length)} ` +
+      `stores are pre-open now.`,
   }
 }
 
@@ -258,15 +257,14 @@ function checklistOf(d: NewStoreData): NewStoreChecklist {
     }),
     meta: `${count(d.stores.length)} stores · measured, not a template`,
     note:
-      `The prototype puts a checklist of six invented rows here. These are the stores that ` +
-      `exist, and two of them are opening, so this is the same list with real answers. ` +
+      `Your stores, and what each one still needs. ` +
       (zeroLabor.length > 0
         ? `${zeroLabor.map((s) => s.name).join(" and ")} reads zero fixed labor rather than ` +
           `unset — someone saved a zero, which the P&L takes at its word. `
         : "") +
-      `A store on default commission rates is not necessarily wrong; nothing in the product ` +
-      `distinguishes a default from a rate somebody read off a contract, which is why they ` +
-      `are marked rather than flagged.`,
+      // Nothing tells a default rate from one read off a contract, so they are marked, not flagged.
+      `Commission rates still at the default are marked so you can check them ` +
+      `against your contracts.`,
   }
 }
 

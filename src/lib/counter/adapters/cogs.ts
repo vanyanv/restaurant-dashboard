@@ -540,9 +540,10 @@ function noCostRows(d: CogsData): boolean {
 }
 
 /** The words every COGS section uses when an operational store simply has no rows. */
+// DailyCogsItem carries no line inside the range.
 const NO_COGS_OWED =
-  "a cost of goods for this range — DailyCogsItem carries no line inside it, so nothing was " +
-  "sold that a recipe could be costed against"
+  "No food cost for these dates yet. It shows once the day's sales are costed " +
+  "against your recipes."
 
 /* ── The head block ───────────────────────────────────────────────────── */
 
@@ -1426,9 +1427,8 @@ function movedSection(
   return mapReadyTo(sd, (moves) =>
     movedRows(moves).length === 0
       ? notComputed<MovedSection>(
-          `an ingredient price movement — no recipe ingredient carries ${count(MIN_READINGS)} ` +
-            `normalized invoice prices in ${count(HISTORY_DAYS)} days, so there is nothing to ` +
-            `compare a price against`,
+          `Not enough price history yet. No recipe ingredient has ${count(MIN_READINGS)} ` +
+            `invoice prices in the last ${count(HISTORY_DAYS)} days to compare against.`,
         )
       : ready(buildMoved(moves)),
   )
@@ -1474,8 +1474,8 @@ export function getCogsSectionPromises(
         mapReadyTo(cogsSd, (d) =>
           d.window.categories.length === 0
             ? notComputed<CategoriesSection>(
-                "a category split for this range — no DailyCogsItem line inside it carries a " +
-                  "menu category, so there is nothing to divide the cost between",
+                "None of the items sold in this range has a menu category, so the cost " +
+                  "can't be split by category.",
               )
             : ready(buildCategories(d.window)),
         ),
@@ -1489,9 +1489,8 @@ export function getCogsSectionPromises(
           const plan = d.window.plan
           if (plan === null) {
             return notComputed<ItemsSection>(
-              "the items losing the most against plan — no food-cost plan is published for " +
-                "this selection, and ranking items against a plan invented here would be the " +
-                "page grading itself",
+              // No published plan; ranking against an invented one would be the page grading itself.
+              "Set a food-cost target in store settings to rank items against it.",
             )
           }
           if (d.items.length === 0) return notComputed<ItemsSection>(NO_COGS_OWED)
@@ -1557,8 +1556,8 @@ export function getStoreCogsSectionPromises(
         mapReadyTo(cogsSd, (d) =>
           d.items.every((i) => i.foodPct === null)
             ? notComputed<WorstSection>(
-                "a worst-margin ranking for this range — no item inside it carries both a cost " +
-                  "and menu revenue, so no item has a food-cost ratio of its own",
+                "No item in this range has both a recipe cost and sales, so there is nothing " +
+                  "to rank.",
               )
             : ready(buildWorst(d.items, d.window.plan)),
         ),

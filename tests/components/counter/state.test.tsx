@@ -73,7 +73,7 @@ describe("Empty", () => {
 
   it("a filter that matched nothing offers a different next step", () => {
     render(<Empty reason="no_match" />)
-    expect(screen.getByText(/nothing matched/i)).toBeTruthy()
+    expect(screen.getByText(/nothing in this range/i)).toBeTruthy()
   })
 
   it("emits the prototype's bodyEmpty(): .empty > .t + .s", () => {

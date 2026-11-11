@@ -1664,8 +1664,9 @@ function serviceSection(sd: SectionData<ServiceProfile | null>): SectionData<Ser
   return mapReadyTo(sd, (profile) =>
     profile === null
       ? notComputed<ServiceSection>(
-          "an hourly shape for this range — OtterHourlySummary starts on 2026-02-25 " +
-            "and needs at least three covered days before an average hour means anything",
+          // OtterHourlySummary starts on 2026-02-25; an average hour needs three covered days.
+          "Hourly sales need at least three days of hourly data. Pick a longer range " +
+            "to see when the orders come.",
         )
       : ready(buildService(profile)),
   )

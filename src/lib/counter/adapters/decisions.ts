@@ -1353,8 +1353,9 @@ export function buildAccuracy(view: DecisionsView): SectionData<Accuracy> {
   // honest option. `failed` would blame a query that answered fine.
   if (s === null || s.sampleSize <= 0) {
     return notComputed<Accuracy>(
-      "the forecast's own track record — MlForecastEvaluation has published no " +
-        "reconciled window for this store yet",
+      // MlForecastEvaluation has published no reconciled window for this store yet.
+      "The forecast hasn't been checked against real sales for this store yet. " +
+        "Its track record shows once a full week has been compared.",
     )
   }
 
@@ -1726,7 +1727,7 @@ export function getDecisionsSectionPromises(
     const asOf = parseDayKey(view.asOf) ?? new Date()
     const resolved = await resolveStoreContext(input.storeId, input.accountId)
     if (!resolved.ok) {
-      return notComputed<RunOut>("what runs out — no store is in view")
+      return notComputed<RunOut>("Pick a store to see what runs out.")
     }
     const runOut = await loadRunOut({
       accountId: input.accountId,
@@ -1806,7 +1807,8 @@ export function getDecisionsSectionPromises(
         const picked = selectDay(view, settled, input.day)
         if (picked === null) {
           return notComputed<DayDetail>(
-            "a day to detail — no forecast rows have been written for this store's week",
+            // No forecast rows have been written for this store's week.
+            "No forecast has been made for this store's week yet, so there is no day to show.",
           )
         }
         return ready(

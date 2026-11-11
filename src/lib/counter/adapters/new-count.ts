@@ -241,11 +241,9 @@ function groupsOf(d: NewCountData): NewCountGroups {
     })),
     meta: `${plural(d.groups.length, "category", "categories")} · ${plural(d.totalLines, "line")}`,
     note:
-      `The prototype groups this by room — walk-in, dry store, line, freezer — and no room ` +
-      `exists in this data. What an ingredient carries is a supplier category, so that is ` +
-      `what these are. It is not a walk route: Paper/Supplies and Dry Goods are shelves apart ` +
-      `in most kitchens, and a count ordered this way will send someone back to the same ` +
-      `place twice. Grouping by area needs an area on the ingredient first.`,
+      // Ingredients carry a supplier category, not a storage room, so that is the grouping.
+      `Grouped by supplier category. Ingredients don't record where they're stored ` +
+      `yet, so this isn't in walk-around order.`,
   }
 }
 
@@ -325,14 +323,11 @@ function openOf(d: NewCountData): NewCountOpen {
               d.targetOpen.lines === 0
                 ? "nothing entered"
                 : `${plural(d.targetOpen.lines, "line")} entered`
-            } — startOrResumeStockCount returns the existing session rather than creating a ` +
-            `second. That is right behaviour, and invisible, which is why it is said here ` +
-            `rather than left to be discovered. `
+            }, so this picks up where it left off. `
           : `${count(d.open.length)} count${d.open.length === 1 ? " is" : "s are"} open on ` +
             `other stores, the oldest ${daysAgo(oldest.startedAt)}. This opens a new one on ` +
-            `the store you are looking at. `) +
-      `There is no send-to-phone and no print: neither exists behind the prototype's other ` +
-      `two buttons, and a button that does nothing is worse than one that is absent.`,
+            `the store you are looking at. `),
+      // No send-to-phone and no print: neither exists, and a dead button is worse than none.
   }
 }
 

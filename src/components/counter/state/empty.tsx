@@ -20,7 +20,7 @@ import type { EmptyReason } from "@/lib/counter/section-data"
 const COPY: Record<EmptyReason, { head: string; body: string }> = {
   select_store: {
     head: "Pick a store",
-    body: "Choose a store in the store picker to see its inventory and record adjustments.",
+    body: "Choose a store at the top of the page to see its inventory.",
   },
   /*
    * "No sales have been rung up", not "This store has no sales".
@@ -45,14 +45,14 @@ const COPY: Record<EmptyReason, { head: string; body: string }> = {
     body: "No sales have been rung up, because trading has not started. Figures appear here once it does.",
   },
   no_match: {
-    head: "Nothing matched",
-    body: "No rows fall inside the current filters and date range. Widen either to see figures.",
+    head: "Nothing in this range",
+    body: "Try a longer date range or fewer filters.",
   },
   no_delivery: {
     head: "No delivery in this window",
     body:
-      "Invoices arrive every few days, so a short window is often empty — nothing is " +
-      "missing. Widen the range to see what was bought.",
+      "Deliveries come every few days, so a short range is often empty. Try a longer " +
+      "range to see what was bought.",
   },
   nothing_received: {
     head: "No invoices received",
@@ -72,8 +72,8 @@ const COPY: Record<EmptyReason, { head: string; body: string }> = {
   no_ingredients: {
     head: "The catalogue is empty",
     body:
-      "Ingredients are read off the lines of your invoices, so the catalogue fills as " +
-      "invoices arrive. Nothing has been read in yet.",
+      "Ingredients come from your invoice lines, so this fills as invoices arrive. " +
+      "None have been read in yet.",
   },
   verdict_carried_it: {
     head: "It is all in the verdict",
@@ -90,8 +90,7 @@ const COPY: Record<EmptyReason, { head: string; body: string }> = {
   no_recipes: {
     head: "No recipes yet",
     body:
-      "A recipe says what one menu item is made of, which is how a plate gets a cost. " +
-      "None have been built yet — they start from the menu.",
+      "A recipe gives a menu item its cost. Start one from Menu items.",
   },
   /*
    * The thirteenth, and the only one whose next step is OURS rather than the
@@ -108,9 +107,8 @@ const COPY: Record<EmptyReason, { head: string; body: string }> = {
   no_labor_synced: {
     head: "Labor has not synced",
     body:
-      "Sales are here, but the hours to divide them by come from the scheduling system " +
-      "and have not been pulled into this database yet. The figure returns with the next " +
-      "labor sync — nothing is lost in the meantime.",
+      "Sales are in, but hours from Harri haven't arrived yet. This fills in after the " +
+      "next Harri sync.",
   },
   /*
    * One of the few whose next step is partly OURS rather than the reader's.
@@ -125,9 +123,8 @@ const COPY: Record<EmptyReason, { head: string; body: string }> = {
   no_counts: {
     head: "Nothing has been counted yet",
     body:
-      "Cover is what is on the shelf divided by what the week will get through, and the " +
-      "shelf half of that comes from a finished stock count. Complete one and this fills " +
-      "in — the forecast side is already running.",
+      "This needs one finished stock count to know what's on the shelf. Finish a count " +
+      "and it fills in.",
   },
   all_clear: {
     head: "Nothing needs you",
