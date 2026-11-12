@@ -531,9 +531,10 @@ function noHarriRows(d: LaborData): boolean {
 }
 
 /** The words every labour section uses when an operational store simply has no rows. */
+// HarriPositionDaily and HarriShift carry no row inside the range.
 const NO_HARRI_OWED =
-  "hours for this range — HarriPositionDaily and HarriShift carry no row inside it, " +
-  "so there is nothing worked and nothing published to read"
+  "No hours from Harri for these dates yet. Recent days can take until the next " +
+  "Harri sync, which runs every 4 hours."
 
 /* ── The head block ───────────────────────────────────────────────────── */
 
@@ -753,9 +754,9 @@ function buildHeadline(input: {
     })
   } else {
     phoneCells.push({
-      label: "SPLH",
+      label: "Sales per labor hour",
       value: money(week.splh, { cents: true }),
-      delta: "net sales an hour",
+      delta: "net sales ÷ hours worked",
       deltaTone: "is-flat",
     })
   }
@@ -925,11 +926,13 @@ function foldHours(
   days: LaborDay[],
   range: DateRange,
   granularity: Granularity,
-): { labels: string[]; actual: number[]; scheduled: (number | null)[] } {
+): { labels: string[]; actual: (number | null)[]; scheduled: (number | null)[] } {
   if (granularity === "daily") {
     return {
       labels: days.map((d) => d.label),
-      actual: days.map((d) => d.actualHours),
+      // A day Harri has not sent yet is a gap, not a day nobody worked: drawing
+      // it as 0 read "126 h scheduled, 0.0 h worked" while the shift was on.
+      actual: days.map((d) => (d.costMissing && d.actualHours === 0 ? null : d.actualHours)),
       scheduled: days.map((d) => d.scheduledHours),
     }
   }
@@ -1002,8 +1005,17 @@ function buildSchedule(
 
   const scheduled = week.scheduledHours
   const rate = week.blendedRate
+  const notSent = days.filter((d) => d.costMissing && d.actualHours === 0).length
   let sentence: string
-  if (scheduled === null) {
+  if (notSent > 0 && week.actualHours === 0) {
+    // `costMissing` only fires on store-days that SOLD (missingLaborByDay), so a
+    // closed day never lands here. It can still be a day nobody clocked in,
+    // which is why this does not promise the hours are merely late.
+    sentence =
+      (scheduled === null ? "" : `${hoursText(scheduled)} published. `) +
+      "No hours worked from Harri for these dates. If they were worked, they come " +
+      "with the next Harri sync."
+  } else if (scheduled === null) {
     sentence =
       `${hoursText(week.actualHours)} were worked in this range and no shift was published ` +
       "against them, so there is nothing to read the hours against."
@@ -1016,6 +1028,14 @@ function buildSchedule(
       : `${hoursText(scheduled)} published, ${hoursText(week.actualHours)} worked — ` +
         `${hoursText(Math.abs(gap))} ${gap > 0 ? "over" : "under"}` +
         (rate === null ? "." : `, about ${money(Math.abs(gap) * rate)} of labor.`)
+  }
+  // Store-days, not days: on a multi-store day one store can be missing while
+  // another reported hours, and that day still reads low.
+  const missing = days.reduce((n, d) => n + d.missingStoreDays, 0)
+  if (missing > 0 && week.actualHours > 0) {
+    sentence +=
+      ` ${missing === 1 ? "One store-day has" : `${missing} store-days have`} no hours ` +
+      "from Harri yet, so hours worked read low."
   }
 
   return {
@@ -1478,8 +1498,8 @@ function loadEverything(input: LaborSectionsInput) {
       if (rate === null) {
         return Promise.resolve(
           notComputed<LeakLedger>(
-            "a leak ledger for this range — no hours were worked inside it, so there is no " +
-              "blended rate to cost a clock-in against",
+            // No hours worked inside the range, so no blended rate to cost a clock-in against.
+            "No hours are recorded for this range yet, so clock-in alerts cannot be costed.",
           ),
         )
       }
@@ -1529,8 +1549,9 @@ function leaksSection(
     if (week === null) return carry<LaborData, LeaksSection>(laborSd)
     if (ledger.rows.length === 0) {
       return notComputed<LeaksSection>(
-        "a leak ledger for this range — HarriTimekeepingAlert raised no alert inside it, " +
-          "which is an empty ledger rather than a clean one",
+        // HarriTimekeepingAlert raised no alert inside it: an empty ledger, not a clean one.
+        "Harri sent no clock-in alerts for this range. That can mean a clean week or " +
+          "that alerts aren't reaching us, so it isn't shown as clean.",
       )
     }
     return ready(buildLeaks(ledger, week))
@@ -1553,7 +1574,8 @@ function rolesSection(laborSd: SectionData<LaborData>): SectionData<RolesSection
   return mapReadyTo(laborSd, (d) =>
     d.roles.length === 0
       ? notComputed<RolesSection>(
-          "a role split for this range — HarriPositionDaily carries no position row inside it",
+          // HarriPositionDaily carries no position row inside the range.
+          "Harri hasn't sent hours by role for these dates yet.",
         )
       : ready(buildRoles(d.roles, d.week)),
   )
@@ -1564,8 +1586,9 @@ function trendSection(sd: SectionData<LaborTrendWeek[]>): SectionData<TrendSecti
   return mapReadyTo(sd, (weeks) =>
     weeks.length === 0 || weeks.every((w) => w.cost === 0 && w.hours === 0)
       ? notComputed<TrendSection>(
-          `${TREND_WEEKS} weeks of labor history — HarriPositionDaily carries no row in any ` +
-            "of them, so there is no trend to draw",
+          // HarriPositionDaily carries no row in any of the weeks.
+          `No labor history from Harri in the last ${TREND_WEEKS} weeks, so there is ` +
+            "no trend to draw.",
         )
       : ready(buildTrend(weeks)),
   )
@@ -1622,8 +1645,8 @@ export function getLaborSectionPromises(
           // absence, not an empty chart (A-R12).
           curve === null
             ? notComputed<CurveSection>(
-                `a staffing curve for ${curveLabel} — neither a published shift nor a demand ` +
-                  "forecast covers that day",
+                `Nothing to plot for ${curveLabel}: there are no published shifts and no ` +
+                  "sales forecast for that day.",
               )
             : ready(buildCurve(curve, curveLabel)),
         ),

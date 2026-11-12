@@ -1,27 +1,16 @@
-import Link from "next/link"
-import { PageHead } from "@/components/mobile/page-head"
-import { Panel } from "@/components/mobile/panel"
+import { CounterPhoneNotFoundClient } from "./(counter)/not-found/counter-phone-not-found-client"
 
 // Renders inside the (mobile) `/m` layout by placement, so the tab bar
 // stays visible — unlike the root `not-found.tsx`, which bypasses it.
+//
+// Until 2026-11-11 this drew the pre-Counter serif 404 and said the page "may
+// live on the desktop dashboard", which stopped being true when every desk
+// page got a phone page. It now draws the same Counter 404 as /m/not-found.
 export default function MobileNotFound() {
   return (
-    <div data-perf-ready="/m/not-found">
-      <PageHead dept="404" title="Not found" />
-
-      <div className="dock-in dock-in-2">
-        <Panel flush>
-          <div className="m-empty m-empty--flush">
-            This page doesn&rsquo;t exist on mobile. It may live on the
-            desktop dashboard.
-          </div>
-        </Panel>
-      </div>
-
-      <div className="dock-in dock-in-3" style={{ marginTop: 14 }}>
-        <Link href="/m" className="m-toolbar-btn">
-          Back to Home →
-        </Link>
+    <div data-perf-ready="/m/not-found" className="ct-root ct-phone">
+      <div className="mscroll">
+        <CounterPhoneNotFoundClient />
       </div>
     </div>
   )

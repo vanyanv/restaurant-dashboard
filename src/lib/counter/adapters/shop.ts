@@ -42,7 +42,7 @@ import type { SectionData } from "@/lib/counter/section-data"
  * function, `orderState` in `src/lib/shop/status.ts`, on every tab.
  */
 
-const NOT_CONNECTED = "The shop isn't connected to this dashboard yet"
+const NOT_CONNECTED = "The shop isn't connected to this dashboard yet."
 
 const TZ = "America/Los_Angeles"
 const dateTime = new Intl.DateTimeFormat("en-US", {

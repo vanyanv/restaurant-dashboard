@@ -527,10 +527,9 @@ function rosterOf(d: InventoryData): InventoryRoster {
     }),
     meta: `${count(shown.length)} of ${count(d.ingredients.length)} · least defined first`,
     note:
-      `What is known about each ingredient, not how much of it is on the shelf. There is no ` +
-      `par level in this schema and no completed count to measure a quantity from, so the ` +
-      `prototype's On hand, Par and Variance columns have nothing behind them. These six do, ` +
-      `and they are the ones that have to be filled in before the other three can exist.`,
+      // No par level in the schema and no completed count, so On hand / Par / Variance have nothing behind them.
+      `What's known about each ingredient, not how much is on the shelf. Fill these in ` +
+      `first; amounts on hand come after the first finished count.`,
   }
 }
 

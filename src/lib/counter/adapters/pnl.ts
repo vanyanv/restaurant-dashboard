@@ -1387,8 +1387,9 @@ export function getPnlSectionPromises(input: PnlSectionsInput): StreamedSections
     // Half an answer drawn as a whole panel is exactly what note 44 is about.
     trust: Promise.resolve(
       notComputed<never>(
-        "a per-line provenance model (which days of labor are clocked and which are prorated) " +
-          "and an unposted-food-inside-this-range query — neither exists",
+        // Needs a per-line provenance model and an unposted-food query; neither exists.
+        "Not available yet: which labor days come from Harri and which are spread " +
+          "from a monthly figure.",
       ),
     ),
 
@@ -1401,8 +1402,8 @@ export function getPnlSectionPromises(input: PnlSectionsInput): StreamedSections
     // picture of an explanation to it and no explanation.
     foodCause: Promise.resolve(
       notComputed<never>(
-        "a cause-attribution model — points of the food gap per ingredient, which needs each " +
-          "ingredient's share of spend over the range beside its price move",
+        // Needs a cause-attribution model: each ingredient's share of spend beside its price move.
+        "Not available yet: how much of the food-cost change each ingredient caused.",
       ),
     ),
   }

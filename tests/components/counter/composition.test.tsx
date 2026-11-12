@@ -77,7 +77,7 @@ describe("Section + Strip + Table composition", () => {
     renderSection(empty("no_match"))
     expect(screen.queryByText("$7,468")).toBeNull()
     expect(screen.queryByText("Row A")).toBeNull()
-    expect(screen.getByText(/nothing matched/i)).toBeTruthy()
+    expect(screen.getByText(/nothing in this range/i)).toBeTruthy()
   })
 
   it("not_computed: children never render — only the owed notice", () => {

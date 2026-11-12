@@ -5,6 +5,13 @@
  * section reads as a design that never wanted it. Naming the owed work is the
  * only option that is honest about what the reader is not being shown.
  *
+ * THE `owed` STRING IS SHOWN TO THE OWNER AS IT IS. Write it as a plain,
+ * complete sentence about what is missing and, where there is one, what fixes
+ * it: "No hours from Harri for these dates yet." Never a table or model name;
+ * put that in a code comment beside the string. Until 2026-11-11 this rendered
+ * "<owed> — designed, not yet built", and owners read database names such as
+ * "HarriPositionDaily carries no row" on Labor and COGS.
+ *
  * OUR sixth state — the prototype has five and no equivalent of this one, so
  * there is no `bodyNotComputed()` to port and this keeps its own treatment.
  *
@@ -25,11 +32,9 @@ export function Owed({ owed }: { owed: string }) {
   return (
     <div>
       <p className="font-ct-mono text-ct-micro uppercase tracking-wider text-ct-ink-3">
-        Not computed yet
+        Not available yet
       </p>
-      <p className="mt-1.5 max-w-[52ch] text-ct-cap text-ct-ink-2">
-        {owed} — designed, not yet built. Nothing is shown rather than a figure that would be wrong.
-      </p>
+      <p className="mt-1.5 max-w-[52ch] text-ct-body text-ct-ink-2">{owed}</p>
     </div>
   )
 }

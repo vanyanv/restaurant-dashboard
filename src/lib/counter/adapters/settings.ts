@@ -455,13 +455,9 @@ function signinsOf(d: SettingsData): SettingsSignins {
     })),
     meta: `${count(total)} sign-ins in ${count(SIGNIN_DAYS)} days`,
     note:
-      `The prototype lists devices with an "End" button and a "Sign out everywhere". ` +
-      `Auth here is JWT and there is no session table to enumerate, so a device list would ` +
-      `be derived from a sign-in with no later sign-out — and there have been ` +
-      `${count(total)} sign-ins and ${count(d.signouts)} sign-outs in ` +
-      `${count(SIGNIN_DAYS)} days. Every session ever recorded still reads as live, so ` +
-      `there is nothing to end. What the data does answer is where sign-ins came from, ` +
-      `which is this.`,
+      // Auth is JWT with no session table, so devices can't be listed or ended.
+      `Where sign-ins came from in the last ${count(SIGNIN_DAYS)} days ` +
+      `(${count(total)} sign-ins). Signing out other devices isn't available yet.`,
   }
 }
 
@@ -503,14 +499,8 @@ function teamOf(d: SettingsData): SettingsTeam {
             `set to ${wrong.map((p) => p.timezone).join(" and ")} while every store is in ` +
             `${d.storeTimezoneHint} — the schema default rather than a choice. `
       })() +
-      `The prototype's team panel shows a Manager who sees one store and cannot open ` +
-      `Settings or Monitoring. The Role enum in this database has ` +
-      `${count(d.roles.length)} values — ${d.roles.join(" and ")} — so there is no manager ` +
-      `to invite and no gate that can fail. There are ${count(d.invites.total)} invite rows ` +
-      `(${count(d.invites.live)} live, ${count(d.invites.used)} used, ` +
-      `${count(d.invites.revoked)} revoked) and nothing anywhere that creates one: an ` +
-      `invite record, a signup page and a route that redeems a token, with no issuer. So ` +
-      `there is no "Invite someone" button here.`,
+      // The Role enum has no manager value and nothing issues invites.
+      `Only owner accounts exist for now, so there is no one to invite yet.`,
   }
 }
 
@@ -530,11 +520,8 @@ function preferencesOf(d: SettingsData): SettingsPreferences {
     ],
     meta: "two of these are real",
     note:
-      `Timezone and theme are the preferences this product keeps: timezone on your ` +
-      `account, theme in this browser. The prototype lists three more and says of the ` +
-      `theme "Light — the only one", which stopped being true when Counter shipped a ` +
-      `dark theme. The other three are listed as unstored rather than dropped, because ` +
-      `a settings page that silently omits them reads as though they were never asked for.`,
+      `Timezone is saved on your account and theme in this browser. Week start, ` +
+      `currency and density aren't saved settings yet.`,
   }
 }
 

@@ -241,6 +241,13 @@ const COUNTER_ROOT_EXCEPTIONS: Array<{ file: string; token: string }> = [
   // this file's ported `.mtabs` markup.
   { file: "components/counter/shell/m-tabs.tsx", token: "ct-root" },
   { file: "components/counter/shell/m-tabs.tsx", token: "ct-phone" },
+  // The phone 404, for the same reason as `MTabs`: `(mobile)/m/not-found.tsx`
+  // renders under `(mobile)/m/layout.tsx`, outside `PhoneShell`, and until
+  // 2026-11-11 drew the pre-Counter serif 404. It now opens its own alias
+  // layer around nothing but `CounterPhoneNotFoundClient`'s Counter markup,
+  // a sibling of the editorial surface, never an ancestor of editorial content.
+  { file: "app/(mobile)/m/not-found.tsx", token: "ct-root" },
+  { file: "app/(mobile)/m/not-found.tsx", token: "ct-phone" },
 ]
 
 function tsxFiles(dir: string): string[] {
@@ -318,9 +325,11 @@ describe("the Counter/editorial token-name collision stays harmless", () => {
     // The two newest files are the crew's store-check page and its refusal,
     // public for the same reason as the invite: a PIN, not an account.
     //
-    // Twenty-two entries, thirteen files.
-    expect(COUNTER_ROOT_EXCEPTIONS).toHaveLength(22)
-    expect(new Set(COUNTER_ROOT_EXCEPTIONS.map((x) => x.file)).size).toBe(13)
+    // The fourteenth is the phone 404, a sibling root like the bottom bar.
+    //
+    // Twenty-four entries, fourteen files.
+    expect(COUNTER_ROOT_EXCEPTIONS).toHaveLength(24)
+    expect(new Set(COUNTER_ROOT_EXCEPTIONS.map((x) => x.file)).size).toBe(14)
     // `ct-phone` is only ever worn with `ct-root`; a file carrying it alone
     // would be redeclaring the type scale over the wrong ink and ground.
     const phone = COUNTER_ROOT_EXCEPTIONS.filter((x) => x.token === "ct-phone")

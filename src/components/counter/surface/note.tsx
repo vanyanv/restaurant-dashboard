@@ -64,9 +64,51 @@ export function Note({
   else if (bare) cls.push("ct-note--bare")
   if (measure) cls.push("ct-note--measure")
   if (tone) cls.push(`ct-note--${tone}`)
+  const split = !tone && !live ? splitLongNote(children) : null
+  if (split) {
+    cls.push("ct-note--plain")
+    return (
+      <div className={cls.join(" ")}>
+        <p>{split.lead}</p>
+        {split.rest && (
+          <details className="ct-note__more">
+            <summary>How this is worked out</summary>
+            <p>{split.rest}</p>
+          </details>
+        )}
+      </div>
+    )
+  }
   return (
     <p className={cls.join(" ")} {...(live ? { role: "status" } : {})}>
       {children}
     </p>
   )
+}
+
+/**
+ * Above this many characters a note stops being a caption and becomes an
+ * explanation. Owners read those on a phone in 11px mono, 8 to 15 lines deep,
+ * between a figure and the table they came for (design review, 2026-11-11).
+ */
+const LONG_NOTE = 160
+
+/**
+ * A long plain-string note keeps its first sentence on screen, in the body
+ * face, and folds the rest behind "How this is worked out". Short notes and
+ * notes built from markup render exactly as before. A long note that is one
+ * sentence keeps it whole, with nothing folded.
+ */
+export function splitLongNote(children: ReactNode): { lead: string; rest: string | null } | null {
+  if (typeof children !== "string") return null
+  const text = children.trim()
+  if (text.length <= LONG_NOTE) return null
+  // The lead is at least 30 characters, so an abbreviation near the start
+  // ("St. James…", "e.g. Uber") is never taken for the end of the first
+  // sentence and the sentence that matters folded away behind it.
+  const m = /^(.{30,}?[.!?])\s+(?=[A-Z0-9"“(])/.exec(text)
+  if (!m) return { lead: text, rest: null }
+  const lead = m[1]
+  const rest = text.slice(m[0].length).trim()
+  return { lead, rest: rest.length > 0 ? rest : null }
 }

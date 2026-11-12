@@ -346,15 +346,14 @@ describe("absences", () => {
     const s = await load()
     expect(s.trust.status).toBe("not_computed")
     if (s.trust.status !== "not_computed") throw new Error("unreachable")
-    expect(s.trust.owed).toMatch(/provenance/)
-    expect(s.trust.owed).toMatch(/unposted/)
+    expect(s.trust.owed).toMatch(/which labor days come from Harri/)
   })
 
   it("owes the food-cause decomposition, naming what a cause would need", async () => {
     const s = await load()
     expect(s.foodCause.status).toBe("not_computed")
     if (s.foodCause.status !== "not_computed") throw new Error("unreachable")
-    expect(s.foodCause.owed).toMatch(/attribution/)
+    expect(s.foodCause.owed).toMatch(/each ingredient caused/)
   })
 
   it("draws no meter on labour, because this schema publishes no labour band", async () => {

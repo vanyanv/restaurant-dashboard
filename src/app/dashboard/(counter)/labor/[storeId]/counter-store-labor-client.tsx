@@ -130,7 +130,7 @@ const WEEK_COLUMNS: Column[] = [
   { key: "day", label: "Day" },
   { key: "sales", label: "Sales", numeric: true },
   { key: "hours", label: "Hours", numeric: true },
-  { key: "splh", label: "SPLH", numeric: true },
+  { key: "splh", label: "Sales / labor hr", numeric: true },
   { key: "laborPct", label: "Labor %", numeric: true },
   { key: "verdict", label: "Against the schedule" },
 ]

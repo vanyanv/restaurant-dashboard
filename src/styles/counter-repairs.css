@@ -501,6 +501,18 @@ button.wkd {
 /* A readable line length on a note that runs to prose. */
 .ct-note--measure { max-width: 56ch }
 
+/* A long explanatory note: first sentence in the body face, the rest folded
+   (src/components/counter/surface/note.tsx, splitLongNote). The mono face
+   stays for short captions only. */
+.mono.ct-note--plain { font-family: var(--sans); font-size: var(--t-body); letter-spacing: 0; text-transform: none; color: var(--ink-2); line-height: 1.5; max-width: 68ch }
+.ct-note--plain > p { margin: 0 }
+.ct-note__more { margin-top: 4px }
+.ct-note__more > summary { cursor: pointer; font-size: var(--t-cap); color: var(--ink-3); list-style: none; min-height: 32px; display: inline-flex; align-items: center }
+.ct-note__more > summary::-webkit-details-marker { display: none }
+.ct-note__more > summary::before { content: "+"; margin-right: 5px }
+.ct-note__more[open] > summary::before { content: "−" }
+.ct-note__more > p { margin: 2px 0 0; font-size: var(--t-cap); color: var(--ink-2) }
+
 /* Two flush notes in a row are ONE flush block with a paragraph break, not two
    blocks stacked. Left to the plain rule they would put 13px of their own
    padding on either side of the break and read as 26px of dead air; the pages
