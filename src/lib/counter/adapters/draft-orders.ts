@@ -6,7 +6,7 @@ import {
 } from "@/lib/inventory/store-inventory-context"
 import { computeForecastShapedDepletion } from "@/lib/inventory/forecast-depletion"
 import { normalizeVendorName } from "@/lib/vendor-normalize"
-import { draftLine, type DraftLine } from "@/lib/counter/draft-orders"
+import { daysUntilOut, draftLine, type DraftLine } from "@/lib/counter/draft-orders"
 import { fmtQty } from "@/lib/counter/count-layers"
 import { classify, guardSection, type StreamedSections } from "./types"
 import type { SectionData } from "@/lib/counter/section-data"
@@ -68,6 +68,36 @@ export type DraftVendor = {
   unpriced: number
 }
 
+/** One line of the Stock view: what is on the shelf and how long it lasts. */
+export type StockRow = {
+  id: string
+  name: string
+  onHand: string
+  perDay: string
+  /** Days until it runs out at expected use; null when it can't be read. */
+  daysLeft: number | null
+  /** Days until an order must be placed to arrive in time (lead + buffer). */
+  orderAt: number | null
+  /** "Runs out Fri Nov 14", "Lasts 60+ days", "Not counted". */
+  runsOut: string
+  status: "now" | "soon" | "ok" | "unknown"
+  statusText: string
+  counted: string
+  stale: boolean
+}
+
+/** One card per store: how big its draft is right now. */
+export type StoreSummary = {
+  id: string
+  name: string
+  skip: boolean
+  lines: number
+  urgent: number
+  dollars: number
+  unpriced: number
+  notCounted: number
+}
+
 export type DraftData = {
   stores: DraftStore[]
   store: DraftStore
@@ -76,6 +106,8 @@ export type DraftData = {
   covered: number
   notCounted: string[]
   belowZero: string[]
+  stock: StockRow[]
+  summaries: StoreSummary[]
 }
 
 export type DraftSections = { drafts: SectionData<DraftData | null> }
@@ -116,8 +148,24 @@ export function getDraftOrderSectionPromises(opts: { accountId: string; storeId?
         ).map((s) => ({ id: s.id, name: s.name, skip: s.draftSkipCount }))
         const store = stores.find((s) => s.id === opts.storeId) ?? stores[0]
         if (!store) return null
-        const base: DraftData = { stores, store, coverDays: opts.coverDays, vendors: [], covered: 0, notCounted: [], belowZero: [] }
-        return { ...base, ...(await buildDrafts(opts.accountId, store.id, opts.coverDays, new Date(), store.skip)) }
+        const asOf = new Date()
+        // Every store is drafted so the store cards can compare them; the
+        // picked one is shown in full.
+        const built = await Promise.all(stores.map((s) => buildDrafts(opts.accountId, s.id, opts.coverDays, asOf, s.skip)))
+        const summaries: StoreSummary[] = stores.map((s, i) => {
+          const b = built[i]
+          const rows = b.vendors.flatMap((v) => v.rows)
+          return {
+            ...s,
+            lines: rows.length,
+            urgent: rows.filter((r) => r.urgent).length,
+            dollars: b.vendors.reduce((t, v) => t + v.dollars, 0),
+            unpriced: b.vendors.reduce((t, v) => t + v.unpriced, 0),
+            notCounted: b.notCounted.length,
+          }
+        })
+        const mine = built[stores.indexOf(store)]
+        return { stores, store, coverDays: opts.coverDays, summaries, ...mine }
       }, { retryAction: "count.orders", isEmpty: (d) => d === null, emptyReason: "no_stores" }),
       "count.orders",
     ),
@@ -130,7 +178,7 @@ async function buildDrafts(
   coverDays: number,
   asOf: Date,
   skipCount: boolean,
-): Promise<Pick<DraftData, "vendors" | "covered" | "notCounted" | "belowZero">> {
+): Promise<Pick<DraftData, "vendors" | "covered" | "notCounted" | "belowZero" | "stock">> {
   const [ingredients, leadRows, liveCtx, vendorLines, olderCounts] = await Promise.all([
     prisma.canonicalIngredient.findMany({
       where: { accountId },
@@ -199,6 +247,7 @@ async function buildDrafts(
   const groups = new Map<string, DraftVendor>()
   const notCounted: string[] = []
   const belowZero: string[] = []
+  const stock: StockRow[] = []
   let covered = 0
 
   for (const ing of ingredients) {
@@ -215,10 +264,20 @@ async function buildDrafts(
     const oh = runningOnHandFromContext(ctx, ing)
     if (oh.baseAt === null) {
       notCounted.push(ing.name)
+      stock.push({
+        id: ing.id, name: ing.name, onHand: "—", perDay: `${q(tailRate)} ${unit}`, daysLeft: null, orderAt: null,
+        runsOut: "Not counted", status: "unknown", statusText: "Count it", counted: "Never counted", stale: false,
+      })
       continue
     }
+    const counted = countedLabel(oh.baseAt, asOf)
+    const stale = asOf.getTime() - oh.baseAt.getTime() > STALE_COUNT_DAYS * DAY_MS
     if (oh.onHand < 0) {
       belowZero.push(ing.name)
+      stock.push({
+        id: ing.id, name: ing.name, onHand: `${q(oh.onHand)} ${unit}`, perDay: `${q(tailRate)} ${unit}`, daysLeft: null, orderAt: null,
+        runsOut: "Reads below zero", status: "unknown", statusText: "Count again", counted, stale,
+      })
       continue
     }
 
@@ -234,13 +293,32 @@ async function buildDrafts(
       recipeUnitsPerCase: ing.recipeUnitsPerCase,
       asOf,
     })
+    const { when, urgent } = whenLabel(line, asOf)
+    const daysLeft = daysUntilOut(oh.onHand, series, tailRate)
+    const ordering = line.orderQty > 0
+    stock.push({
+      id: ing.id,
+      name: ing.name,
+      onHand: `${q(oh.onHand)} ${unit}`,
+      perDay: `${q(line.perDay)} ${unit}`,
+      daysLeft,
+      orderAt: leadDays + line.safetyDays,
+      runsOut:
+        daysLeft == null ? "Not used lately"
+        : daysLeft >= 60 ? "Lasts 60+ days"
+        : daysLeft < 1 ? "Runs out today"
+        : `Runs out ${dayLabel(new Date(from.getTime() + daysLeft * DAY_MS))}`,
+      status: !ordering ? "ok" : urgent ? "now" : "soon",
+      statusText: !ordering ? "Enough" : when,
+      counted,
+      stale,
+    })
     // `orderQty`, not `short`: float noise can leave a sliver short that rounds to 0 cases.
-    if (line.orderQty <= 0) {
+    if (!ordering) {
       covered++
       continue
     }
 
-    const { when, urgent } = whenLabel(line, asOf)
     const perCase = ing.recipeUnitsPerCase
     const caseWord = (ing.caseUnit ?? "case").toLowerCase() === "cs" ? "case" : (ing.caseUnit ?? "case").toLowerCase()
     const order = line.cases != null
@@ -281,8 +359,8 @@ async function buildDrafts(
       how,
       dollars,
       partial: oh.partial,
-      counted: countedLabel(oh.baseAt, asOf),
-      stale: asOf.getTime() - oh.baseAt.getTime() > STALE_COUNT_DAYS * DAY_MS,
+      counted,
+      stale,
     })
     if (dollars != null) g.dollars += dollars
     else g.unpriced++
@@ -291,5 +369,9 @@ async function buildDrafts(
   const vendors = [...groups.values()]
   for (const g of vendors) g.rows.sort((a, b) => Number(b.urgent) - Number(a.urgent) || a.name.localeCompare(b.name))
   vendors.sort((a, b) => Number(b.rows.some((r) => r.urgent)) - Number(a.rows.some((r) => r.urgent)) || a.vendor.localeCompare(b.vendor))
-  return { vendors, covered, notCounted, belowZero }
+  // Soonest to run out first; unreadable lines (not counted, below zero) on top
+  // because they need a hand before anything else can be trusted.
+  const rank = (r: StockRow) => (r.status === "unknown" ? -1 : r.daysLeft ?? 999)
+  stock.sort((a, b) => rank(a) - rank(b) || a.name.localeCompare(b.name))
+  return { vendors, covered, notCounted, belowZero, stock }
 }

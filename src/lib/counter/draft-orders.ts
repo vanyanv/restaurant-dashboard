@@ -114,3 +114,21 @@ export function draftLine(input: DraftInput): DraftLine {
     perDay,
   }
 }
+
+/**
+ * Days until the shelf runs out: walk the expected use day by day (then
+ * `tailRate` past the series) until it adds up to `onHand`. Part days count
+ * as fractions. Null when nothing is used; capped at `cap` days.
+ */
+export function daysUntilOut(onHand: number, series: number[], tailRate: number, cap = 60): number | null {
+  if (!(onHand > 0)) return 0
+  let left = onHand
+  for (let i = 0; i < series.length && i < cap; i++) {
+    const use = Math.max(0, series[i])
+    if (use >= left) return i + left / use
+    left -= use
+  }
+  const start = Math.min(series.length, cap)
+  if (!(tailRate > 0)) return series.some((v) => v > 0) ? cap : null
+  return Math.min(cap, start + left / tailRate)
+}

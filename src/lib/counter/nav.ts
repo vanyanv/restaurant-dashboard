@@ -214,7 +214,7 @@ export const COUNT_TABS: readonly SubNavItem[] = [
   { label: "Count", href: "/dashboard/count" },
   { label: "Waste", href: "/dashboard/count/waste" },
   { label: "Report", href: "/dashboard/count/report" },
-  { label: "Orders", href: "/dashboard/count/orders" },
+  { label: "Restock", href: "/dashboard/count/orders" },
   { label: "Setup", href: "/dashboard/count/setup" },
 ] as const
 

@@ -7,7 +7,7 @@ import { OrdersClient } from "@/app/dashboard/(counter)/count/orders/orders-clie
 
 export const dynamic = "force-dynamic"
 
-/** Count & waste — Orders on a phone: the desk client, drawn in the phone shell. */
+/** Count & waste — Restock on a phone: the desk client, drawn in the phone shell. */
 export default async function Page({ searchParams }: { searchParams: Promise<{ store?: string; cover?: string }> }) {
   const session = await getServerSession(authOptions)
   if (!session) redirect("/login")

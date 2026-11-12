@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest"
-import { demandOver, draftLine, parseCoverDays } from "@/lib/counter/draft-orders"
+import { daysUntilOut, demandOver, draftLine, parseCoverDays } from "@/lib/counter/draft-orders"
 
 const asOf = new Date("2026-11-11T20:00:00Z")
 
@@ -57,4 +57,21 @@ test("parseCoverDays only takes the offered choices", () => {
   expect(parseCoverDays("14")).toBe(14)
   expect(parseCoverDays("5")).toBe(7)
   expect(parseCoverDays(undefined)).toBe(7)
+})
+
+describe("daysUntilOut", () => {
+  test("walks the forecast day by day", () => {
+    // 10 a day, 25 on hand: out halfway through day 3.
+    expect(daysUntilOut(25, [10, 10, 10, 10], 10)).toBeCloseTo(2.5)
+  })
+  test("uses the tail rate past the series", () => {
+    expect(daysUntilOut(50, [10, 10], 5)).toBeCloseTo(8)
+  })
+  test("empty shelf is zero days, nothing used is null", () => {
+    expect(daysUntilOut(0, [10], 10)).toBe(0)
+    expect(daysUntilOut(5, [], 0)).toBeNull()
+  })
+  test("caps far-off dates", () => {
+    expect(daysUntilOut(1000, [], 1)).toBe(60)
+  })
 })

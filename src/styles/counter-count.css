@@ -109,3 +109,70 @@
 .cd-switch{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
 @media (min-width:900px){.cd-list{grid-template-columns:repeat(2,minmax(0,1fr))}}
 .cd-item__stale{color:var(--bad)}
+
+/* Count & waste — Restock. Phone: store cards, one sentence, the big draft
+   number, then Order or Stock one tap apart. Desk (≥1000px): stock on the
+   left, the draft order beside it and sticky, so both read at once. */
+.rs{display:grid}
+.rs-stores{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;padding:14px 14px 0}
+.rs-store{display:grid;gap:2px;justify-items:start;text-align:left;padding:10px 12px;border:1px solid var(--line-strong);border-radius:8px;
+  background:var(--surface);color:var(--ink);font:inherit;cursor:pointer;min-height:64px}
+.rs-store b{font-size:15px}
+.rs-store span{font-size:13px;color:var(--ink-2);font-variant-numeric:tabular-nums}
+.rs-store small{font-family:var(--mono);font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3)}
+.rs-store small.rs-store__now{color:var(--bad);font-weight:700}
+.rs-store[aria-pressed="true"]{border-color:var(--ink);box-shadow:inset 0 0 0 1px var(--ink)}
+.rs-lead{border-bottom:1px solid var(--line)}
+.rs-lead__say{margin:0;font-size:16px;line-height:1.4;font-weight:600}
+.rs-lead__num{display:grid;gap:4px}
+.rs-lead__num b{font-size:32px;font-weight:600;letter-spacing:-.03em;line-height:1;font-variant-numeric:tabular-nums}
+.rs-lead__num small{font-size:13px;color:var(--ink-2)}
+.rs-seg{display:grid;grid-template-columns:1fr 1fr;gap:4px;padding:4px;border-radius:10px;background:var(--sunk)}
+.rs-seg button{min-height:44px;border:0;border-radius:8px;background:none;font:inherit;font-size:15px;font-weight:600;color:var(--ink-2);cursor:pointer}
+.rs-seg button[aria-selected="true"]{background:var(--surface);color:var(--ink);box-shadow:0 1px 2px var(--line-strong)}
+.rs-pane[data-on="false"]{display:none}
+.rs-copy{flex:0 0 auto;min-height:40px;font-size:14px}
+.rs-list{grid-template-columns:minmax(0,1fr)}
+.rs-fold{border-top:1px solid var(--line)}
+.rs-fold>summary{cursor:pointer;padding:14px;font-weight:600;min-height:48px;display:flex;align-items:center}
+
+/* Stock rows: a card per item on the phone, a table row on the desk. */
+.rs-stock{display:grid}
+.rs-srow{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:6px 12px;align-items:center;padding:12px 14px;border-bottom:1px solid var(--line);font-variant-numeric:tabular-nums}
+.rs-srow:last-child{border-bottom:0}
+.rs-srow--head{display:none}
+.rs-srow__name{font-weight:600;font-size:15px}
+.rs-srow__fig{font-size:13px;color:var(--ink-2)}
+.rs-srow__fig::before{content:attr(data-label) " ";color:var(--ink-3)}
+.rs-srow__fig+.rs-srow__fig{justify-self:end}
+.rs-srow__bar{grid-column:1/-1}
+.rs-srow__out{grid-column:1/-1;display:grid;gap:2px;font-size:13px;color:var(--ink-2)}
+.rs-srow__out small{font-size:12px;color:var(--ink-3)}
+.rs-pill{justify-self:end;font-family:var(--mono);font-size:11px;letter-spacing:.06em;text-transform:uppercase;padding:4px 8px;border-radius:5px;white-space:nowrap;grid-row:1;grid-column:2}
+.rs-pill--now{background:var(--bad-wash);color:var(--bad);font-weight:700}
+.rs-pill--soon{background:var(--signal-wash);color:var(--signal-ink)}
+.rs-pill--ok{background:var(--good-wash);color:var(--good)}
+.rs-pill--unknown{background:var(--sunk);color:var(--ink-2)}
+.rs-bar{display:flex;align-items:center;gap:8px}
+.rs-bar__track{position:relative;flex:1;height:8px;border-radius:4px;background:var(--sunk)}
+.rs-bar__fill{position:absolute;inset:0 auto 0 0;border-radius:4px;background:var(--good)}
+.rs-bar__fill--now{background:var(--bad)}
+.rs-bar__fill--soon{background:var(--signal)}
+.rs-bar__tick{position:absolute;top:-3px;bottom:-3px;width:2px;margin-left:-1px;background:var(--ink)}
+.rs-bar__n{font-size:12px;color:var(--ink-2);min-width:36px;text-align:right}
+.rs-bar--none{display:block;height:8px}
+
+@media (min-width:1000px){
+  .rs-seg{display:none}
+  .rs-pane[data-on="false"]{display:block}
+  .rs-split{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(340px,1fr);align-items:start}
+  .rs-pane--stock{border-right:1px solid var(--line)}
+  .rs-pane--order{position:sticky;top:12px;max-height:calc(100vh - 24px);overflow-y:auto}
+  .rs-srow{grid-template-columns:minmax(140px,1.4fr) 90px 80px minmax(120px,1.2fr) minmax(120px,1fr) 120px;padding:10px 14px}
+  .rs-srow--head{display:grid;font-family:var(--mono);font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3);border-bottom:1px solid var(--line-strong)}
+  .rs-srow__fig{text-align:right;font-size:14px;color:var(--ink);justify-self:end}
+  .rs-srow__fig::before{content:none}
+  .rs-srow__out{grid-column:auto}
+  .rs-srow__bar{grid-column:auto}
+  .rs-pill{grid-row:auto;grid-column:auto}
+}

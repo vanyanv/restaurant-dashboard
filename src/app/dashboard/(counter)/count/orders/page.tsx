@@ -7,7 +7,7 @@ import { OrdersClient } from "./orders-client"
 
 export const dynamic = "force-dynamic"
 
-/** Count & waste — Orders: draft orders per store and vendor, on or off per store. */
+/** Count & waste — Restock: stock per store and draft orders per vendor. */
 export default async function Page({ searchParams }: { searchParams: Promise<{ store?: string; cover?: string }> }) {
   const session = await getServerSession(authOptions)
   if (!session) redirect("/login")
