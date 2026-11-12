@@ -180,7 +180,10 @@ async function invoiceSignal(accountId: string, storeId: string | null): Promise
     id: "invoices",
     label: "Invoices",
     value: `${n} in review`,
-    delta: sample.map((i) => i.invoiceNumber).join(" · ") || null,
+    // De-duplicated: one vendor can send several bills under one number
+    // (statements, re-sends), and "N100119 · N100119 · N100119" reads as a
+    // glitch rather than three bills.
+    delta: [...new Set(sample.map((i) => i.invoiceNumber).filter(Boolean))].join(" · ") || null,
     tone: "signal",
     question: "Which invoices do not reconcile?",
   }

@@ -39,6 +39,15 @@ function Report({ data }: { data: ReportData }) {
     router.push(href(`/dashboard/checks/report?${q.toString()}`))
   }
   const delta = f.share && data.prevPct !== null ? f.share.pct - data.prevPct : null
+  const quiet = f.checks.due === 0 && f.people.length === 0
+  const tiles: { n: number; label: string; tone?: "good" | "warn" | "bad" }[] = [
+    { n: f.checks.complete, label: "all done", tone: "good" },
+    { n: f.checks.partial, label: "some missed", tone: "warn" },
+    { n: f.checks.missed, label: "not started", tone: "bad" },
+    { n: f.checks.late, label: "done late", tone: "warn" },
+    { n: f.rushed, label: "ticked in a rush", tone: "warn" },
+    { n: f.photosSentBack, label: "photos sent back" },
+  ]
 
   return (
     <div className="ck-rep">
@@ -61,16 +70,23 @@ function Report({ data }: { data: ReportData }) {
         deltaLabel={`vs the ${data.range} days before`}
       />
 
-      <div className="ck-rep__tiles">
-        <Tile n={f.checks.due} label="checks due" />
-        <Tile n={f.checks.complete} label="all done" tone="good" />
-        <Tile n={f.checks.partial} label="some missed" tone={f.checks.partial ? "warn" : undefined} />
-        <Tile n={f.checks.missed} label="not started" tone={f.checks.missed ? "bad" : undefined} />
-        <Tile n={f.checks.late} label="done late" tone={f.checks.late ? "warn" : undefined} />
-        <Tile n={f.rushed} label="ticked in a rush" tone={f.rushed ? "warn" : undefined} />
-        <Tile n={f.photosSentBack} label="photos sent back" />
-      </div>
+      {/* Quiet days (design review 2026-11-11): five "0" tiles and three empty
+          cards said what the sentence above already says. Nothing due means
+          the sentence alone; otherwise a tile shows only when it counts
+          something, beside "checks due". */}
+      {quiet ? null : (
+        <div className="ck-rep__tiles">
+          <Tile n={f.checks.due} label="checks due" />
+          {tiles
+            .filter((t) => t.n > 0)
+            .map((t) => (
+              <Tile key={t.label} n={t.n} label={t.label} tone={t.tone} />
+            ))}
+        </div>
+      )}
 
+      {quiet ? null : (
+      <>
       <div className="ck-rep__grid">
         <div className="ck-rep__card">
           <h3>Missed most</h3>
@@ -158,6 +174,8 @@ function Report({ data }: { data: ReportData }) {
           </>
         )}
       </div>
+      </>
+      )}
     </div>
   )
 }

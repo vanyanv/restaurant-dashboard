@@ -30,8 +30,11 @@ export function PlainHead({
   return (
     <div className="ck-plain">
       <p className="ck-plain__say">{sentence}</p>
+      {/* No figure, no figure row: a lone "—" under a sentence that already
+          says nothing was due repeats it as a glyph (design review 2026-11-11). */}
+      {figure === null ? null : (
       <div className="ck-plain__fig">
-        <b>{figure ?? "—"}</b>
+        <b>{figure}</b>
         <span className="ck-meta">{figureLabel}</span>
         {delta !== null && delta !== 0 && (
           <span className={`ck-plain__delta ${delta > 0 ? "up" : "down"}`}>
@@ -40,6 +43,7 @@ export function PlainHead({
         )}
         {delta === 0 && <span className="ck-meta">Same as {deltaLabel.replace(/^vs /, "")}</span>}
       </div>
+      )}
     </div>
   )
 }

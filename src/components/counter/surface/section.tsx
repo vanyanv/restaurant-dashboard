@@ -211,6 +211,14 @@ type SectionProps<T> = {
    */
   quietWhenEmpty?: boolean
   /**
+   * Render NOTHING when the load failed, too. Only for an offer the page has
+   * another way to reach: the phone Ask page's "Recent" list, whose threads
+   * button sits in the header. There, "Recent did not load" was a paragraph
+   * of apology under the fixed composer (design review 2026-11-11) about a
+   * shortcut, not a figure.
+   */
+  quietWhenFailed?: boolean
+  /**
    * Draw the section as a fold: the head becomes a native `<summary>` the
    * reader taps to open or close the body. `"closed"` starts it shut, for a
    * worklist the owner reads on demand rather than first (owner, 2026-11-03:
@@ -242,6 +250,7 @@ function SectionBody<T>({
   bare = false,
   pending = false,
   quietWhenEmpty = false,
+  quietWhenFailed = false,
   fold,
   children,
 }: Omit<SectionProps<T>, "data"> & { data: SectionData<T> }) {
@@ -313,6 +322,7 @@ function SectionBody<T>({
   if (data.status === "loading") {
     body = wrap(<Skeleton />, true)
   } else if (data.status === "failed") {
+    if (quietWhenFailed) return null
     body = wrap(
       <Failed title={title} error={data.error} retryAction={data.retryAction} onRetry={onRetry} />,
       true,
