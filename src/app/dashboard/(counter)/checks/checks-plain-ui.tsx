@@ -139,7 +139,7 @@ export function PhotoReview({ cell, caption }: { cell: CellView; caption: string
   )
 }
 
-function PhotoCard({ p, onOpen }: { p: CellView["markPhotos"][number]; onOpen: () => void }) {
+function PhotoCard({ p, onOpen, onReviewed }: { p: CellView["markPhotos"][number]; onOpen: () => void; onReviewed?: () => void }) {
   const router = useRouter()
   const [busy, start] = useTransition()
   const [asking, setAsking] = useState(false)
@@ -152,6 +152,7 @@ function PhotoCard({ p, onOpen }: { p: CellView["markPhotos"][number]; onOpen: (
       if (r.ok) {
         setAsking(false)
         router.refresh()
+        onReviewed?.()
       }
     })
   return (
@@ -208,20 +209,157 @@ const DAY_FMT: Intl.DateTimeFormatOptions = { timeZone: "UTC", weekday: "short",
 /**
  * One check on one day: status, who took part, and the full log, every tick,
  * untick and note with its time and person, then the submit. Today and
- * History both open it.
+ * History both open it. `wide` is the desk History layout: a header that says
+ * how it went in a sentence, then three columns (what wasn't done, the photos
+ * one at a time, when it happened) so nothing scrolls inside a narrow box.
  */
-export function CheckDetail({ store, label, cell }: { store: string; label: string; cell: CellView }) {
+export function CheckDetail({
+  store,
+  label,
+  cell,
+  wide,
+  actions,
+}: {
+  store: string
+  label: string
+  cell: CellView
+  wide?: boolean
+  actions?: ReactNode
+}) {
   const [open, setOpen] = useState<{ id: string; section: string; mark: boolean } | null>(null)
   const caption = `${store} · ${label} · ${cell.day}`
   const hasLog = cell.log.length > 0
   const hasRecord = cell.tasks.length > 0
+
+  const missed = cell.missed.length > 0 && (
+    <div className="ck-missed" aria-label="Tasks nobody ticked">
+      <b>
+        {cell.missed.length === cell.total ? `Nothing was ticked · all ${cell.total} missed` : `Missed · ${cell.missed.length}`}
+      </b>
+      {cell.missed.length < cell.total && (
+        <ul>
+          {cell.missed.map((m) => (
+            <li key={`${m.section}:${m.item}`}>
+              {m.item} <span className="ck-meta">· {m.section}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  )
+  const log = hasLog && (
+    <details className="ck-logfold" open={wide || !hasRecord}>
+      <summary className="ck-mono">Every tick, untick and note · {cell.log.length}</summary>
+      <div className="ck-log" aria-label="Every tick, with its time">
+        {cell.log.map((l) => (
+          <div key={l.id}>
+            <time>{l.at}</time>
+            <span className={l.action === "undone" ? "undone" : l.action === "submitted" || l.action === "closed" ? "sent" : ""}>
+              {l.action === "undone" ? `Unticked: ${l.text}` : l.text}
+              {l.note ? <span className="ck-tone-warn"> · {l.note}</span> : null}
+              {l.by ? <span className="who"> · {l.by}</span> : null}
+            </span>
+            {l.photo ? (
+              <button type="button" style={{ padding: 0, border: 0, background: "none", cursor: "zoom-in" }} onClick={() => setOpen({ id: l.id, section: l.text, mark: true })} aria-label={`Open ${l.text} photo`}>
+                {/* eslint-disable-next-line @next/next/no-img-element -- private, session-gated image route */}
+                <img src={markPhotoSrc(l.id)} alt="" loading="lazy" />
+              </button>
+            ) : (
+              <span />
+            )}
+          </div>
+        ))}
+      </div>
+    </details>
+  )
+  // Section photos from before per-task photos: only when there is no log to carry them.
+  const sectionPhotos = !hasLog && cell.photos.length > 0 && (
+    <div className="ck-big">
+      {cell.photos.map((p) => (
+        <button key={p.id} type="button" onClick={() => setOpen({ id: p.id, section: p.section, mark: false })} aria-label={`Open ${p.section} photo`}>
+          {/* eslint-disable-next-line @next/next/no-img-element -- private, session-gated image route */}
+          <img src={photoSrc(p.id)} alt="" loading="lazy" />
+          <span className="ck-mono">{p.section}</span>
+        </button>
+      ))}
+    </div>
+  )
+  const flags = cell.flags.length > 0 && !hasLog && (
+    <ul style={{ margin: 0, paddingLeft: 16, display: "grid", gap: 4 }}>
+      {cell.flags.map((f) => (
+        <li key={f.item} className="ck-meta">
+          <b className="ck-tone-warn">Flagged</b> {f.item}: “{f.note}”
+        </li>
+      ))}
+    </ul>
+  )
+  const quiet = !hasLog && cell.live && <span className="ck-meta">Nobody has ticked anything yet.</span>
+  const lightbox = open && (
+    <Lightbox
+      photo={{ id: open.id, section: open.section }}
+      src={open.mark ? markPhotoSrc(open.id) : undefined}
+      caption={caption}
+      onClose={() => setOpen(null)}
+    />
+  )
+  const day = new Date(`${cell.day}T12:00:00Z`).toLocaleDateString("en-US", wide ? DAY_FMT_LONG : DAY_FMT)
+
+  if (wide) {
+    const hasPhotos = cell.markPhotos.length > 0 || Boolean(sectionPhotos)
+    return (
+      <article className="ck-wide" aria-label={`${store} ${label} ${day}`}>
+        <header className="ck-wide__head">
+          <div className="ck-wide__title">
+            <div className="ck-mono">
+              {store} · {label}
+            </div>
+            <h3>{day}</h3>
+            <p className="ck-wide__say">
+              <Glyph status={cell.status} flagged={cell.flags.length > 0} small />
+              <span>{wideSentence(cell)}</span>
+            </p>
+          </div>
+          {actions}
+        </header>
+        <div className={`ck-wide__cols${hasPhotos ? "" : " no-photos"}`}>
+          <section className="ck-wide__col" aria-label="What wasn't done">
+            <span className="ck-mono">{cell.missed.length > 0 ? "What wasn't done" : "Tasks"}</span>
+            {missed}
+            <RecordSections cell={cell} />
+            <People cell={cell} />
+            {flags}
+            {quiet}
+            {!missed && !hasRecord && !flags && !quiet && <span className="ck-meta">No task list was saved for this check.</span>}
+          </section>
+          {hasPhotos && (
+            <section className="ck-wide__col" aria-label="Photos">
+              {cell.markPhotos.length > 0 ? <PhotoViewer cell={cell} caption={caption} /> : (
+                <>
+                  <span className="ck-mono">Photos · {cell.photos.length}</span>
+                  {sectionPhotos}
+                </>
+              )}
+            </section>
+          )}
+          <section className="ck-wide__col" aria-label="When it happened">
+            <span className="ck-mono">When it happened</span>
+            <BurstNote cell={cell} />
+            <TickStrip cell={cell} />
+            {log || <span className="ck-meta">Nothing was ticked.</span>}
+          </section>
+        </div>
+        {lightbox}
+      </article>
+    )
+  }
+
   return (
     <div className="ck-drawer">
       <div>
         <div className="ck-mono">
           {store} · {label}
         </div>
-        <h3>{new Date(`${cell.day}T12:00:00Z`).toLocaleDateString("en-US", DAY_FMT)}</h3>
+        <h3>{day}</h3>
       </div>
       <div className="ck-st">
         <Glyph status={cell.status} flagged={cell.flags.length > 0} />
@@ -234,82 +372,132 @@ export function CheckDetail({ store, label, cell }: { store: string; label: stri
         {!cell.submittedAt && (<><dt>Closes</dt><dd>{cell.dueLabel}</dd></>)}
         {cell.meta && !cell.submittedAt && (<><dt>Now</dt><dd>{cell.meta}</dd></>)}
       </dl>
-      {cell.missed.length > 0 && (
-        <div className="ck-missed" aria-label="Tasks nobody ticked">
-          <b>
-            {cell.missed.length === cell.total ? `Nothing was ticked · all ${cell.total} missed` : `Missed · ${cell.missed.length}`}
-          </b>
-          {cell.missed.length < cell.total && (
-            <ul>
-              {cell.missed.map((m) => (
-                <li key={`${m.section}:${m.item}`}>
-                  {m.item} <span className="ck-meta">· {m.section}</span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-      )}
+      {missed}
       <BurstNote cell={cell} />
       <TickStrip cell={cell} />
       <PhotoReview cell={cell} caption={caption} />
       <RecordSections cell={cell} />
       <People cell={cell} />
-      {hasLog ? (
-        <details className="ck-logfold" open={!hasRecord}>
-        <summary className="ck-mono">Every tick, untick and note · {cell.log.length}</summary>
-        <div className="ck-log" aria-label="Every tick, with its time">
-          {cell.log.map((l) => (
-            <div key={l.id}>
-              <time>{l.at}</time>
-              <span className={l.action === "undone" ? "undone" : l.action === "submitted" || l.action === "closed" ? "sent" : ""}>
-                {l.action === "undone" ? `Unticked: ${l.text}` : l.text}
-                {l.note ? <span className="ck-tone-warn"> · {l.note}</span> : null}
-                {l.by ? <span className="who"> · {l.by}</span> : null}
-              </span>
-              {l.photo ? (
-                <button type="button" style={{ padding: 0, border: 0, background: "none", cursor: "zoom-in" }} onClick={() => setOpen({ id: l.id, section: l.text, mark: true })} aria-label={`Open ${l.text} photo`}>
-                  {/* eslint-disable-next-line @next/next/no-img-element -- private, session-gated image route */}
-                  <img src={markPhotoSrc(l.id)} alt="" loading="lazy" />
-                </button>
-              ) : (
-                <span />
-              )}
-            </div>
-          ))}
-        </div>
-        </details>
-      ) : (
-        cell.photos.length > 0 && (
-          <div className="ck-big">
-            {cell.photos.map((p) => (
-              <button key={p.id} type="button" onClick={() => setOpen({ id: p.id, section: p.section, mark: false })} aria-label={`Open ${p.section} photo`}>
+      {log || sectionPhotos}
+      {flags}
+      {quiet}
+      {lightbox}
+    </div>
+  )
+}
+
+const DAY_FMT_LONG: Intl.DateTimeFormatOptions = { timeZone: "UTC", weekday: "long", month: "short", day: "numeric" }
+
+/** "18 of 21 done, 3 missed. Closed itself at 2:30 AM." Said from the cell, never from a guess. */
+function wideSentence(cell: CellView): string {
+  const parts: string[] = []
+  if (cell.total > 0) {
+    parts.push(
+      cell.missed.length > 0
+        ? `${cell.done} of ${cell.total} done, ${cell.missed.length} missed.`
+        : `All ${cell.total} done${cell.problem ? ", late" : ""}.`,
+    )
+  } else {
+    parts.push(`${cell.label}.`)
+  }
+  if (cell.submittedAt) parts.push(cell.autoClosed ? `Closed itself at ${cell.submittedAt}.` : `Submitted ${cell.submittedAt}${cell.by ? ` by ${cell.by}` : ""}.`)
+  else if (cell.live) parts.push(`Closes ${cell.dueLabel}.`)
+  return parts.join(" ")
+}
+
+/**
+ * The photos one at a time: one large enough to judge, a strip of the rest
+ * under it, Looks good / Redo moving on to the next, ← → between them, and
+ * "All the rest look good" for a clean night. The column stays one height
+ * whether a check has three photos or fifteen.
+ */
+export function PhotoViewer({ cell, caption }: { cell: CellView; caption: string }) {
+  const router = useRouter()
+  const photos = cell.markPhotos
+  const [at, setAt] = useState(() => Math.max(0, photos.findIndex((p) => p.review === null)))
+  const [open, setOpen] = useState(false)
+  const [busy, start] = useTransition()
+  const [outcome, setOutcome] = useState<Outcome>(null)
+  const i = Math.min(at, photos.length - 1)
+  const p = photos[i]
+  const go = (n: number) => setAt((n + photos.length) % photos.length)
+  const checked = photos.filter((x) => x.review !== null).length
+  const rest = photos.filter((x) => x.review === null && x.id !== p?.id)
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement | null
+      if (open || (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable))) return
+      if (e.key === "ArrowRight") setAt((n) => (n + 1) % photos.length)
+      if (e.key === "ArrowLeft") setAt((n) => (n - 1 + photos.length) % photos.length)
+    }
+    window.addEventListener("keydown", onKey)
+    return () => window.removeEventListener("keydown", onKey)
+  }, [open, photos.length])
+
+  if (!p) return null
+  const allRest = () =>
+    start(async () => {
+      const todo = photos.filter((x) => x.review === null)
+      let failed: string | null = null
+      for (const x of todo) {
+        const r = await reviewCheckPhoto({ markId: x.id, verdict: "ok" })
+        if (!r.ok) {
+          failed = r.error
+          break
+        }
+      }
+      setOutcome(failed ? { ok: false, text: failed } : { ok: true, text: `${todo.length} marked as looking good.` })
+      router.refresh()
+    })
+
+  return (
+    <div className="ck-pv">
+      <div className="ck-spread">
+        <span className="ck-mono">Photos · {photos.length}</span>
+        <span className="ck-meta">
+          {checked} of {photos.length} checked
+        </span>
+      </div>
+      <PhotoCard key={p.id} p={p} onOpen={() => setOpen(true)} onReviewed={() => go(i + 1)} />
+      {photos.length > 1 && (
+        <>
+          <div className="ck-pv__nav">
+            <button type="button" className="btn btn--quiet" onClick={() => go(i - 1)} aria-label="Previous photo">
+              ‹
+            </button>
+            <span className="ck-meta">
+              {i + 1} of {photos.length}
+            </span>
+            <button type="button" className="btn btn--quiet" onClick={() => go(i + 1)} aria-label="Next photo">
+              ›
+            </button>
+          </div>
+          <div className="ck-pv__film" role="list" aria-label="All photos">
+            {photos.map((x, j) => (
+              <button
+                key={x.id}
+                type="button"
+                role="listitem"
+                className={`ck-pv__thumb${x.review ? ` is-${x.review}` : ""}`}
+                aria-current={j === i}
+                aria-label={`${x.task}${x.review === "ok" ? ", looks good" : x.review === "redo" ? ", sent back" : ""}`}
+                onClick={() => setAt(j)}
+              >
                 {/* eslint-disable-next-line @next/next/no-img-element -- private, session-gated image route */}
-                <img src={photoSrc(p.id)} alt="" loading="lazy" />
-                <span className="ck-mono">{p.section}</span>
+                <img src={markPhotoSrc(x.id)} alt="" loading="lazy" />
               </button>
             ))}
           </div>
-        )
+        </>
       )}
-      {cell.flags.length > 0 && !hasLog && (
-        <ul style={{ margin: 0, paddingLeft: 16, display: "grid", gap: 4 }}>
-          {cell.flags.map((f) => (
-            <li key={f.item} className="ck-meta">
-              <b className="ck-tone-warn">Flagged</b> {f.item}: “{f.note}”
-            </li>
-          ))}
-        </ul>
+      {rest.length > 0 && (
+        <button type="button" className="btn btn--quiet" disabled={busy} onClick={allRest}>
+          {busy ? "Saving…" : p.review === null ? `All ${rest.length + 1} left look good` : `All ${rest.length} left look good`}
+        </button>
       )}
-      {!hasLog && cell.live && <span className="ck-meta">Nobody has ticked anything yet.</span>}
-      {open && (
-        <Lightbox
-          photo={{ id: open.id, section: open.section }}
-          src={open.mark ? markPhotoSrc(open.id) : undefined}
-          caption={caption}
-          onClose={() => setOpen(null)}
-        />
-      )}
+      <OutcomeLine outcome={outcome} />
+      {open && <Lightbox photo={{ id: p.id, section: p.task }} src={markPhotoSrc(p.id)} caption={caption} onClose={() => setOpen(false)} />}
     </div>
   )
 }
