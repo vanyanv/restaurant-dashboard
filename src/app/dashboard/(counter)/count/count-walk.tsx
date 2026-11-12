@@ -404,7 +404,7 @@ export function CountWalk({ data, base }: { data: WalkData; base: "/dashboard/co
         rawOf={rawOf}
         savedIds={savedIds}
         onType={(it, vals) => setTyped((t) => ({ ...t, [it.id]: vals }))}
-        onSave={(it, clean) => start(async () => { await saveItem(it, clean) })}
+        onSave={(it, clean) => new Promise<boolean>((done) => start(async () => { done(await saveItem(it, clean)) }))}
       />
 
       <OutcomeLine outcome={outcome} />
@@ -478,7 +478,7 @@ function ItemScreen({
     if (next) next.focus()
     else save()
   }
-  const caseNote = it.layers.length > 1 ? `1 ${it.layers[0].label.toLowerCase()} = ${showQty(it.layers[0].per, it.unit)}` : null
+  const caseNote = it.layers.length > 1 ? `1 ${oneOf(it.layers[0].label)} = ${showQty(it.layers[0].per, it.unit)}` : null
 
   return (
     <div className="cw">
@@ -506,7 +506,7 @@ function ItemScreen({
           <div className="cw__fld" key={i}>
             <label className="cw__lb" htmlFor={`cw-${it.id}-${i}`}>
               {l.label}
-              <small>{l.per === 1 ? it.unit : `${showQty(l.per, it.unit)} each`}{l.quarters ? " · in quarters" : ""}</small>
+              <small>{l.per === 1 ? it.unit : it.unit === "each" ? `${l.per.toLocaleString()} per ${oneOf(l.label)}` : `${showQty(l.per, it.unit)} each`}{l.quarters ? " · in quarters" : ""}</small>
             </label>
             <button type="button" className="cw__step" aria-label={`One less ${l.label}`} onClick={() => bump(i, -1)}>−</button>
             <input
@@ -564,7 +564,7 @@ function Sheet({
   rawOf: (it: WalkItem) => string[]
   savedIds: Set<string>
   onType: (it: WalkItem, vals: string[]) => void
-  onSave: (it: WalkItem, clean: number[]) => void
+  onSave: (it: WalkItem, clean: number[]) => Promise<boolean>
 }) {
   const savedText = useRef<Record<string, string>>({})
   const moveDown = (idx: number, layer: number) => {
@@ -586,7 +586,9 @@ function Sheet({
     if (!raw.some((s) => s.trim() !== "")) return
     if (savedText.current[it.id] === key) return
     savedText.current[it.id] = key
-    onSave(it, cleanOf(raw))
+    void onSave(it, cleanOf(raw)).then((ok) => {
+      if (!ok && savedText.current[it.id] === key) delete savedText.current[it.id]
+    })
   }
   return (
     <div className="cw-sheet" role="table" aria-label="Count sheet">
@@ -679,4 +681,11 @@ function StorePick({ cards, base }: { cards: WalkData["storeCards"]; base: "/das
       </div>
     </div>
   )
+}
+
+/** "Cases" → "case", "Boxes" → "box": a layer label read as one of it. */
+function oneOf(label: string): string {
+  const w = label.toLowerCase()
+  if (/(x|ch|sh)es$/.test(w)) return w.slice(0, -2)
+  return w.endsWith("s") ? w.slice(0, -1) : w
 }

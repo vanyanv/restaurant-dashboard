@@ -4,6 +4,7 @@ import {
   describeShelf,
   guessArea,
   normalizeArea,
+  storedAreasFor,
   areaLabel,
   layersFor,
   parseLayers,
@@ -110,5 +111,13 @@ describe("normalizeArea", () => {
     expect(normalizeArea("line")).toBe("fridge")
     expect(normalizeArea("dry")).toBe("dry")
     expect(areaLabel("walk_in")).toBe("Refrigeration")
+  })
+})
+
+describe("storedAreasFor", () => {
+  it("includes the old ids that now show as the same section", () => {
+    expect(storedAreasFor("fridge").sort()).toEqual(["fridge", "line", "walk_in"])
+    expect(storedAreasFor("walk_in").sort()).toEqual(["fridge", "line", "walk_in"])
+    expect(storedAreasFor("dry")).toEqual(["dry"])
   })
 })

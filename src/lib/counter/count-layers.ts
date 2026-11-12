@@ -34,6 +34,12 @@ export function normalizeArea(id: string): string {
   return LEGACY_AREAS[id] ?? id
 }
 
+/** Every stored area id that shows as this section, old ids included. */
+export function storedAreasFor(id: string): string[] {
+  const n = normalizeArea(id)
+  return [n, ...Object.keys(LEGACY_AREAS).filter((k) => LEGACY_AREAS[k] === n)]
+}
+
 export function areaLabel(id: string): string {
   const n = normalizeArea(id)
   return COUNT_AREAS.find((a) => a.id === n)?.label ?? id

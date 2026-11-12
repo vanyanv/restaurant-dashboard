@@ -10,6 +10,7 @@ import {
   WASTE_REASON_IDS,
   fmtQty,
   layersFor,
+  shelfTotal,
   showQty,
   unitChoices,
   valuesFit,
@@ -184,6 +185,10 @@ export function getCountWalkSectionPromises(opts: { accountId: string; storeId?:
             if (Array.isArray(vals)) typed.set(itemId, vals.map((n) => (typeof n === "number" ? n : 0)))
           }
         }
+        // An ingredient counted at two stops has one line holding both; this
+        // stop's own last count is its own breakdown, never the combined line.
+        const stops = new Map<string, number>()
+        for (const it of items) stops.set(it.canonicalIngredientId, (stops.get(it.canonicalIngredientId) ?? 0) + 1)
         return {
           stores,
           picked: stores.some((s) => s.id === opts.storeId) || stores.length === 1,
@@ -215,9 +220,14 @@ export function getCountWalkSectionPromises(opts: { accountId: string; storeId?:
               cost: it.canonicalIngredient.costPerRecipeUnit,
               layers,
               values: valuesFit(layers, values) ? values : null,
-              last: prev
-                ? { qty: prev.qtyInRecipeUnit, day: dayLabel(prev.stockCount.countedAt), values: valuesFit(layers, prevVals) ? prevVals : null }
-                : null,
+              last: (() => {
+                if (!prev) return null
+                const fits = valuesFit(layers, prevVals)
+                const day = dayLabel(prev.stockCount.countedAt)
+                if (fits && prevVals) return { qty: shelfTotal(layers, prevVals), day, values: prevVals }
+                if ((stops.get(it.canonicalIngredientId) ?? 0) > 1) return null
+                return { qty: prev.qtyInRecipeUnit, day, values: null }
+              })(),
             }]
           }),
           waste: {

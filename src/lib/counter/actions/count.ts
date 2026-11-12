@@ -20,6 +20,7 @@ import {
   describeShelf,
   guessArea,
   normalizeArea,
+  storedAreasFor,
   layersFor,
   resolveLayers,
   shelfTotal,
@@ -365,7 +366,7 @@ export async function moveCountItem(input: { id: string; dir: "up" | "down" }): 
     })
     if (!item) return { ok: false, error: "That item isn't on your count list" }
     const list = await prisma.countItem.findMany({
-      where: { accountId: owner.accountId, area: item.area, active: true },
+      where: { accountId: owner.accountId, area: { in: storedAreasFor(item.area) }, active: true },
       orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
       select: { id: true },
     })
