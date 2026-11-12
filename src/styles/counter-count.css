@@ -240,3 +240,15 @@
   .cw-sheet__vs{font-size:13px;color:var(--ink-2)}
   .cw-sheet__vs--off{color:var(--bad);font-weight:700}
 }
+
+/* Which store are you counting? Big targets: the one choice before counting. */
+.cw-pick{display:grid;gap:10px}
+.cw-pick__store{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 12px;align-items:center;min-height:84px;padding:16px;
+  border:1px solid var(--line-strong);border-radius:12px;background:var(--surface);color:var(--ink);text-decoration:none}
+.cw-pick__store:hover{border-color:var(--ink)}
+.cw-pick__store b{font-family:var(--display);font-size:24px;letter-spacing:-.02em;line-height:1.1}
+.cw-pick__store span{grid-column:1;font-size:14px;color:var(--ink-2)}
+.cw-pick__store span.cw-pick__open{color:var(--signal-ink);font-weight:600}
+.cw-pick__store i{grid-column:2;grid-row:1/span 2;font-style:normal;font-size:28px;color:var(--ink-3)}
+.cw-store{display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap}
+@media (min-width:1000px){.cw-pick{grid-template-columns:repeat(auto-fit,minmax(240px,1fr));max-width:900px}}

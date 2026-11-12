@@ -106,8 +106,20 @@ export type WalkItem = {
   last: { qty: number; day: string; values: number[] | null } | null
 }
 
+/** One card on "Which store are you counting?". */
+export type StoreCard = {
+  id: string
+  name: string
+  /** Items saved on this store's open count, or null when none is open. */
+  inProgress: number | null
+  lastFinished: string | null
+}
+
 export type WalkData = {
   stores: StoreOption[]
+  /** True when the page was opened for a store; false shows the store pick first. */
+  picked: boolean
+  storeCards: StoreCard[]
   store: StoreOption
   count: { id: string; started: string } | null
   lastFinished: string | null
@@ -124,7 +136,7 @@ export function getCountWalkSectionPromises(opts: { accountId: string; storeId?:
         const store = pickStore(stores, opts.storeId)
         if (!store) return null
         const cutoff = new Date(Date.now() - 7 * DAY_MS)
-        const [items, open, last, waste, lastLines] = await Promise.all([
+        const [items, open, last, waste, lastLines, openAll, lastAll] = await Promise.all([
           countItems(opts.accountId),
           prisma.stockCount.findFirst({
             where: { storeId: store.id, store: { accountId: opts.accountId }, status: "IN_PROGRESS", startedAt: { gte: cutoff } },
@@ -147,7 +159,21 @@ export function getCountWalkSectionPromises(opts: { accountId: string; storeId?:
             orderBy: { stockCount: { countedAt: "desc" } },
             select: { canonicalIngredientId: true, qtyInRecipeUnit: true, breakdown: true, stockCount: { select: { countedAt: true } } },
           }),
+          // For the store pick: each store's open count and last finished one.
+          prisma.stockCount.findMany({
+            where: { store: { accountId: opts.accountId }, status: "IN_PROGRESS", startedAt: { gte: cutoff } },
+            orderBy: { startedAt: "desc" },
+            select: { storeId: true, _count: { select: { lines: true } } },
+          }),
+          prisma.stockCount.groupBy({
+            by: ["storeId"],
+            where: { store: { accountId: opts.accountId }, status: "COMPLETED" },
+            _max: { countedAt: true },
+          }),
         ])
+        const openBy = new Map<string, number>()
+        for (const o of openAll) if (!openBy.has(o.storeId)) openBy.set(o.storeId, o._count.lines)
+        const lastAllBy = new Map(lastAll.map((r) => [r.storeId, r._max.countedAt]))
         const lastBy = new Map<string, (typeof lastLines)[number]>()
         for (const l of lastLines) if (!lastBy.has(l.canonicalIngredientId)) lastBy.set(l.canonicalIngredientId, l)
         const typed = new Map<string, number[]>()
@@ -160,6 +186,11 @@ export function getCountWalkSectionPromises(opts: { accountId: string; storeId?:
         }
         return {
           stores,
+          picked: stores.some((s) => s.id === opts.storeId) || stores.length === 1,
+          storeCards: stores.map((s) => {
+            const at = lastAllBy.get(s.id)
+            return { id: s.id, name: s.name, inProgress: openBy.get(s.id) ?? null, lastFinished: at ? dayLabel(at) : null }
+          }),
           store,
           count: open ? { id: open.id, started: open.startedAt.toISOString() } : null,
           lastFinished: last ? dayLabel(last.countedAt) : null,

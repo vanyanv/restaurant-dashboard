@@ -2,12 +2,12 @@
 
 import { useEffect, useRef, useState, useTransition, type KeyboardEvent } from "react"
 import Link from "next/link"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import { useSurfaceHref } from "@/components/counter"
 import { finishCount, saveCountItem, startCount } from "@/lib/counter/actions/count"
 import type { WalkData, WalkItem } from "@/lib/counter/adapters/count"
 import { COUNT_AREAS, describeShelf, fmtQty, hasAnyValue, shelfTotal, showQty } from "@/lib/counter/count-layers"
-import { money, OutcomeLine, StoreChips, type Outcome } from "./count-ui"
+import { money, OutcomeLine, type Outcome } from "./count-ui"
 import { clearDraft, readDraft, writeDraft } from "@/components/counter/keep/use-draft"
 
 /**
@@ -118,6 +118,25 @@ export function CountWalk({ data, base }: { data: WalkData; base: "/dashboard/co
   useEffect(() => {
     window.scrollTo({ top: 0 })
   }, [screen.kind, screen.kind === "item" ? screen.idx : -1])
+
+  /*
+   * Picking a store on "Which store are you counting?" lands here with
+   * `?walk=1`: on a phone the count opens straight on the next item to count,
+   * so the store is the one choice made before counting starts. The desk
+   * stays on the sheet, which is already the walk.
+   */
+  const params = useSearchParams()
+  const autoWalk = useRef<(() => void) | null>(null)
+  const walked = useRef(false)
+  useEffect(() => {
+    if (!restored || walked.current || params.get("walk") !== "1") return
+    walked.current = true
+    router.replace(`${base}?${new URLSearchParams({ store: data.store.id }).toString()}`, { scroll: false })
+    if (window.matchMedia("(min-width: 1000px)").matches) return
+    autoWalk.current?.()
+  }, [restored, params, router, base, data.store.id])
+
+  if (!data.picked) return <StorePick cards={data.storeCards} base={base} />
 
   const items = data.items
   const done = items.filter((i) => savedIds.has(i.id)).length
@@ -243,6 +262,7 @@ export function CountWalk({ data, base }: { data: WalkData; base: "/dashboard/co
     return (
       <ItemScreen
         key={items[screen.idx].id}
+        storeName={data.store.name}
         it={items[screen.idx]}
         idx={screen.idx}
         section={sections.find((s) => s.id === items[screen.idx].area)!}
@@ -335,12 +355,16 @@ export function CountWalk({ data, base }: { data: WalkData; base: "/dashboard/co
   }
 
   // ── start: sections on a phone, the sheet on the desk ─────────────────────
+  autoWalk.current = resumeIdx >= 0 ? () => open(resumeIdx) : null
   const resumeName = resumeIdx >= 0 ? items[resumeIdx].name : null
   const resumeArea = resumeIdx >= 0 ? items[resumeIdx].areaLabel : null
   return (
     <div className="cw cw--start">
       <div className="cw__top">
-        <StoreChips stores={data.stores} current={data.store.id} path={base} />
+        <div className="cw-store">
+          <h2 className="cw__h">{data.store.name}</h2>
+          {data.stores.length > 1 && <Link className="cw__link" href={base}>Change store</Link>}
+        </div>
         <p className="cw__say">
           {countId
             ? done === items.length
@@ -404,6 +428,7 @@ export function CountWalk({ data, base }: { data: WalkData; base: "/dashboard/co
 }
 
 function ItemScreen({
+  storeName,
   it,
   idx,
   section,
@@ -417,6 +442,7 @@ function ItemScreen({
   onSave,
   onBad,
 }: {
+  storeName: string
   it: WalkItem
   idx: number
   section: { label: string; idxs: number[] }
@@ -459,7 +485,7 @@ function ItemScreen({
       <div className="cw__top">
         <div className="cw__meta">
           <button type="button" className="cw__link" onClick={onBack}>‹ Sections</button>
-          <span className="cw__mono">{section.label} · {pos + 1} of {section.idxs.length}</span>
+          <span className="cw__mono">{storeName} · {section.label} · {pos + 1} of {section.idxs.length}</span>
         </div>
         <div className="cw-dots" aria-hidden="true">
           {section.idxs.map((i) => (
@@ -624,6 +650,33 @@ function Sheet({
           })}
         </div>
       ))}
+    </div>
+  )
+}
+
+/** The first screen of the count: which store. Picking one starts the walk. */
+function StorePick({ cards, base }: { cards: WalkData["storeCards"]; base: "/dashboard/count" | "/m/count" }) {
+  return (
+    <div className="cw">
+      <div className="cw__top">
+        <h2 className="cw__h">Which store are you counting?</h2>
+        <p className="cw__sub">Pick the store you&apos;re standing in. The count opens on the first item to count.</p>
+      </div>
+      <div className="cw-pick">
+        {cards.map((c) => (
+          <Link key={c.id} className="cw-pick__store" href={`${base}?${new URLSearchParams({ store: c.id, walk: "1" }).toString()}`}>
+            <b>{c.name}</b>
+            <span className={c.inProgress != null ? "cw-pick__open" : undefined}>
+              {c.inProgress != null
+                ? `Count in progress, ${c.inProgress} counted. Pick up where you left off`
+                : c.lastFinished
+                  ? `Last counted ${c.lastFinished}`
+                  : "Not counted yet"}
+            </span>
+            <i aria-hidden="true">›</i>
+          </Link>
+        ))}
+      </div>
     </div>
   )
 }
