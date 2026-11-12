@@ -108,3 +108,4 @@
 .cd-item details p{margin:0;font-size:13px;font-family:var(--mono);overflow-wrap:anywhere}
 .cd-switch{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
 @media (min-width:900px){.cd-list{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.cd-item__stale{color:var(--bad)}

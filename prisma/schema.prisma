@@ -180,9 +180,11 @@ model Store {
   // fixedMonthlyLabor, which the owner enters as the all-in figure.
   employerPayrollTaxRate       Float? @default(0.0765)
 
-  // Draft orders (2026-11-11), off by default. The owner turns it on per store
-  // from Count & waste > Orders while testing; off, that page drafts nothing.
-  draftOrdersOn                Boolean @default(false)
+  // Draft orders (2026-11-11): "Skip this week's count", per store, from
+  // Count & waste > Orders. On, the draft ignores counts from the last 7 days
+  // and rolls on hand forward from the count before, so the owner can see what
+  // ordering looks like when a count is skipped. Off (default) uses the latest.
+  draftSkipCount               Boolean @default(false)
 
   // Per-store COGS target as a percent (e.g. 28.5 for 28.5%). Drives the
   // /dashboard/cogs target band and the "vs target" KPI. Nullable so existing

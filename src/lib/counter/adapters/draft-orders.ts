@@ -13,8 +13,9 @@ import type { SectionData } from "@/lib/counter/section-data"
 
 /**
  * Count & waste — Orders: a draft of what each vendor should bring a store,
- * for the owner to test against what they would have ordered. Off per store
- * until the owner turns it on (`Store.draftOrdersOn`). The arithmetic is
+ * for the owner to test against what they would have ordered. "Skip this
+ * week's count" (`Store.draftSkipCount`) drafts as if the last 7 days' counts
+ * never happened, rolling on hand forward from the count before. The arithmetic is
  * `draftLine` in `draft-orders.ts`; this file only gathers its inputs.
  *
  * Tenancy: the store is matched on `accountId`, ingredients and lead times are
@@ -25,8 +26,12 @@ const DAY_MS = 86_400_000
 const FORECAST_DAYS = 14
 /** Used when a vendor has too few invoices to measure. Said on the line. */
 const FALLBACK_LEAD_DAYS = 3
+/** Past this many days since the last count, a line says the count was skipped. */
+const STALE_COUNT_DAYS = 7
+/** "Skip this week's count" ignores counts newer than this. */
+const SKIP_WINDOW_DAYS = 7
 
-export type DraftStore = { id: string; name: string; on: boolean }
+export type DraftStore = { id: string; name: string; skip: boolean }
 
 export type DraftRow = {
   id: string
@@ -49,6 +54,10 @@ export type DraftRow = {
   dollars: number | null
   /** Some deliveries since the count could not be turned into recipe units. */
   partial: boolean
+  /** "Counted today" / "Counted 9 days ago": how far the on-hand has rolled forward. */
+  counted: string
+  /** More than a week since the last count, so the estimate has drifted further. */
+  stale: boolean
 }
 
 export type DraftVendor = {
@@ -79,6 +88,13 @@ function dayLabel(d: Date): string {
   return d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", timeZone: "America/Los_Angeles" })
 }
 
+function countedLabel(at: Date, asOf: Date): string {
+  const days = Math.floor((asOf.getTime() - at.getTime()) / DAY_MS)
+  if (days <= 0) return "Counted today"
+  if (days === 1) return "Counted yesterday"
+  return `Counted ${days} days ago`
+}
+
 function whenLabel(line: DraftLine, asOf: Date): { when: string; urgent: boolean } {
   if (line.short <= 0) return { when: "Covered", urgent: false }
   if (line.status === "urgent" || line.status === "reorder_now" || !line.orderBy) return { when: "Order today", urgent: true }
@@ -94,15 +110,14 @@ export function getDraftOrderSectionPromises(opts: { accountId: string; storeId?
         const stores = (
           await prisma.store.findMany({
             where: { accountId: opts.accountId, isActive: true },
-            select: { id: true, name: true, draftOrdersOn: true },
+            select: { id: true, name: true, draftSkipCount: true },
             orderBy: { name: "asc" },
           })
-        ).map((s) => ({ id: s.id, name: s.name, on: s.draftOrdersOn }))
+        ).map((s) => ({ id: s.id, name: s.name, skip: s.draftSkipCount }))
         const store = stores.find((s) => s.id === opts.storeId) ?? stores[0]
         if (!store) return null
         const base: DraftData = { stores, store, coverDays: opts.coverDays, vendors: [], covered: 0, notCounted: [], belowZero: [] }
-        if (!store.on) return base
-        return { ...base, ...(await buildDrafts(opts.accountId, store.id, opts.coverDays, new Date())) }
+        return { ...base, ...(await buildDrafts(opts.accountId, store.id, opts.coverDays, new Date(), store.skip)) }
       }, { retryAction: "count.orders", isEmpty: (d) => d === null, emptyReason: "no_stores" }),
       "count.orders",
     ),
@@ -114,8 +129,9 @@ async function buildDrafts(
   storeId: string,
   coverDays: number,
   asOf: Date,
+  skipCount: boolean,
 ): Promise<Pick<DraftData, "vendors" | "covered" | "notCounted" | "belowZero">> {
-  const [ingredients, leadRows, ctx, vendorLines] = await Promise.all([
+  const [ingredients, leadRows, liveCtx, vendorLines, olderCounts] = await Promise.all([
     prisma.canonicalIngredient.findMany({
       where: { accountId },
       orderBy: { name: "asc" },
@@ -134,7 +150,32 @@ async function buildDrafts(
       orderBy: { invoice: { invoiceDate: "desc" } },
       select: { canonicalIngredientId: true, invoice: { select: { vendorName: true } } },
     }),
+    // Only for "Skip this week's count": the counts from before the last 7 days.
+    skipCount
+      ? prisma.stockCountLine.findMany({
+          where: {
+            stockCount: {
+              storeId,
+              store: { accountId },
+              status: "COMPLETED",
+              countedAt: { lt: new Date(asOf.getTime() - SKIP_WINDOW_DAYS * DAY_MS) },
+            },
+          },
+          orderBy: { stockCount: { countedAt: "desc" } },
+          select: { canonicalIngredientId: true, qtyInRecipeUnit: true, stockCount: { select: { countedAt: true } } },
+        })
+      : Promise.resolve(null),
   ])
+  // Skipping swaps only the starting count. Invoices, sales and waste after it
+  // are then rolled forward by the same `runningOnHandFromContext`.
+  let ctx = liveCtx
+  if (olderCounts) {
+    const base = new Map<string, { qtyInRecipeUnit: number; countedAt: Date }>()
+    for (const l of olderCounts) {
+      if (!base.has(l.canonicalIngredientId)) base.set(l.canonicalIngredientId, { qtyInRecipeUnit: l.qtyInRecipeUnit, countedAt: l.stockCount.countedAt })
+    }
+    ctx = { ...liveCtx, lastCountByIngredient: base }
+  }
   // The window starts on the store's own (LA) business day. When sales for
   // today are already in, on hand has had them taken off, so counting today's
   // forecast again would order today's use twice: start tomorrow instead.
@@ -240,6 +281,8 @@ async function buildDrafts(
       how,
       dollars,
       partial: oh.partial,
+      counted: countedLabel(oh.baseAt, asOf),
+      stale: asOf.getTime() - oh.baseAt.getTime() > STALE_COUNT_DAYS * DAY_MS,
     })
     if (dollars != null) g.dollars += dollars
     else g.unpriced++

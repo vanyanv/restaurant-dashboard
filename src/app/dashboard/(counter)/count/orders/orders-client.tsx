@@ -6,14 +6,14 @@ import { useRouter } from "next/navigation"
 import { Section, useCounterTransition, usePageChrome, useSurfaceHref } from "@/components/counter"
 import type { SectionSources } from "@/lib/counter/adapters/types"
 import type { DraftData, DraftSections } from "@/lib/counter/adapters/draft-orders"
-import { setDraftOrders } from "@/lib/counter/actions/count"
+import { setDraftSkipCount } from "@/lib/counter/actions/count"
 import { COVER_DAY_CHOICES } from "@/lib/counter/draft-orders"
 import { CountHead, money, OutcomeLine, StoreChips, type Outcome } from "../count-ui"
 
 /**
  * Count & waste — Orders. A draft of what to order from each vendor, built
- * from the count, invoices and sales through recipes. Off per store until the
- * owner turns it on; every figure on it is labelled an estimate and shows how
+ * from the count, invoices and sales through recipes. "Skip this week's count"
+ * shows what the draft is when the latest count is left out; every figure on it is labelled an estimate and shows how
  * it was reached. Nothing here places an order.
  */
 export function OrdersClient({ sections }: { sections: SectionSources<DraftSections> }) {
@@ -37,9 +37,9 @@ function Drafts({ data }: { data: DraftData }) {
   const path = "/dashboard/count/orders"
   const cover = String(data.coverDays)
 
-  function toggle(on: boolean) {
+  function toggle(skip: boolean) {
     start(async () => {
-      const r = await setDraftOrders(data.store.id, on)
+      const r = await setDraftSkipCount(data.store.id, skip)
       setOutcome(r.ok ? { ok: true, text: r.message ?? "Saved" } : { ok: false, text: r.error })
       router.refresh()
     })
@@ -55,21 +55,27 @@ function Drafts({ data }: { data: DraftData }) {
         <StoreChips stores={data.stores} current={data.store.id} path={path} extra={{ cover }} />
         <div className="cd-switch">
           <span>
-            <b>Draft orders for {data.store.name}: {data.store.on ? "On" : "Off"}</b>
+            <b>Skip this week&apos;s count at {data.store.name}: {data.store.skip ? "On" : "Off"}</b>
+            <br />
+            <small style={{ color: "var(--ink-2)" }}>
+              {data.store.skip
+                ? "Counts from the last 7 days are left out. On hand is rolled forward from the count before."
+                : "Using the latest count. Turn on to see what the order would be without it."}
+            </small>
           </span>
           <button
             type="button"
-            className={`cw__btn ${data.store.on ? "" : "cw__btn--primary"}`}
+            className={`cw__btn ${data.store.skip ? "cw__btn--primary" : ""}`}
             style={{ flex: "0 0 auto" }}
             disabled={busy}
-            onClick={() => toggle(!data.store.on)}
+            aria-pressed={data.store.skip}
+            onClick={() => toggle(!data.store.skip)}
           >
-            {data.store.on ? "Turn off" : "Turn on"}
+            {data.store.skip ? "Turn off" : "Turn on"}
           </button>
         </div>
         <OutcomeLine outcome={outcome} />
-        {data.store.on && (
-          <div className="cw__chips" role="group" aria-label="Order enough to last">
+        <div className="cw__chips" role="group" aria-label="Order enough to last">
             <span className="cw__mono" style={{ alignSelf: "center" }}>Last after it arrives</span>
             {COVER_DAY_CHOICES.map((n) => (
               <button
@@ -82,18 +88,10 @@ function Drafts({ data }: { data: DraftData }) {
                 {n} days
               </button>
             ))}
-          </div>
-        )}
+        </div>
       </div>
 
-      {!data.store.on ? (
-        <div className="cw-pad">
-          <p className="cw__sub">
-            Off for {data.store.name}. Turn it on to see what each vendor should bring, worked out from your last count, invoices since then and what sales used through recipes. It only drafts. Nothing is ordered or sent.
-          </p>
-        </div>
-      ) : (
-        <>
+      <>
           <div className="cw-pad">
             <p className="cw__sub">
               {lines === 0
@@ -120,6 +118,10 @@ function Drafts({ data }: { data: DraftData }) {
                       {r.caseNote ? ` · ${r.caseNote}` : ""}
                       {r.dollars != null ? ` · about ${money(r.dollars)}` : " · no price yet"}
                     </span>
+                    <span className={`cd-item__facts ${r.stale ? "cd-item__stale" : ""}`}>
+                      {r.counted}
+                      {r.stale ? ". A count was skipped, so on hand is rolled forward from then using invoices and sales, and may be further off." : ""}
+                    </span>
                     {r.needCaseSize && <span className="cd-item__facts">No case size set, so this is in {r.unit}. Set it on the ingredient page.</span>}
                     {r.partial && <span className="cd-item__facts">Some deliveries since the count need a case size, so on hand may read low.</span>}
                     <details>
@@ -136,7 +138,7 @@ function Drafts({ data }: { data: DraftData }) {
               {data.covered > 0 && <p className="cw__sub">{data.covered} counted {data.covered === 1 ? "item is" : "items are"} covered and left off.</p>}
               {data.notCounted.length > 0 && (
                 <p className="cw__sub">
-                  Can&apos;t draft until counted once at {data.store.name}: {data.notCounted.join(", ")}.{" "}
+                  {data.store.skip ? "No count from before the last 7 days, so no draft" : `Can't draft until counted at ${data.store.name}`}: {data.notCounted.join(", ")}.{" "}
                   <Link href={href(`/dashboard/count?store=${data.store.id}`)}>Start a count</Link>
                 </p>
               )}
@@ -145,8 +147,7 @@ function Drafts({ data }: { data: DraftData }) {
               )}
             </div>
           )}
-        </>
-      )}
+      </>
     </div>
   )
 }
