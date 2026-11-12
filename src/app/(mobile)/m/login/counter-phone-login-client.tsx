@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react"
 import { signIn, getSession } from "next-auth/react"
+import { RETURN_TO_PARAM, safeReturnTo } from "@/lib/return-to"
 import {
   Logo,
   WelcomeLine,
@@ -124,7 +125,13 @@ export function CounterPhoneLoginClient() {
       // the phone arrived on Today with no bottom bar until it was reloaded.
       // The welcome marquee is decided in that layout too.
       timer.current = setTimeout(
-        () => window.location.replace("/m"),
+        () =>
+          window.location.replace(
+            safeReturnTo(
+              new URLSearchParams(window.location.search).get(RETURN_TO_PARAM),
+              "/m",
+            ),
+          ),
         reduced ? PHONE_FLOOD_MS : Math.max(PHONE_FLOOD_MS, welcomeHoldMs(hello)),
       )
     } catch {

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useTransition } from "react"
+import { useEffect, useState, useTransition } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { useSurfaceHref } from "@/components/counter"
@@ -8,6 +8,7 @@ import { deleteWaste, logWaste } from "@/lib/counter/actions/count"
 import type { WasteData } from "@/lib/counter/adapters/count"
 import { WASTE_REASONS, fmtQty, showQty, type WasteReason } from "@/lib/counter/count-layers"
 import { money, OutcomeLine, StoreChips, type Outcome } from "./count-ui"
+import { clearDraft, readDraft, writeDraft } from "@/components/counter/keep/use-draft"
 
 /**
  * The waste log: what, how much, why. Ten seconds, any time of day. The
@@ -26,6 +27,29 @@ export function WasteLog({ data, base }: { data: WasteData; base: "/dashboard/co
   const [reason, setReason] = useState<WasteReason | null>(null)
   const [note, setNote] = useState("")
   const [filter, setFilter] = useState("")
+
+  // A waste entry half filled in (item picked, amount typed) is kept in this
+  // browser per store, so stepping away and coming back finds it as it was.
+  type WasteDraft = { pick: string | null; layer: number; amount: string; reason: WasteReason | null; note: string }
+  const draftKey = `waste-entry:${data.store.id}`
+  const [restored, setRestored] = useState(false)
+  useEffect(() => {
+    const d = readDraft<WasteDraft>(draftKey)
+    if (d && d.pick && data.items.some((i) => i.ingredientId === d.pick)) {
+      setPick(d.pick)
+      setLayer(d.layer ?? 0)
+      setAmount(d.amount ?? "")
+      setReason(d.reason ?? null)
+      setNote(d.note ?? "")
+    }
+    setRestored(true)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draftKey])
+  useEffect(() => {
+    if (!restored) return
+    if (!pick) clearDraft(draftKey)
+    else writeDraft<WasteDraft>(draftKey, { pick, layer, amount, reason, note })
+  }, [restored, draftKey, pick, layer, amount, reason, note])
 
   const item = data.items.find((i) => i.ingredientId === pick) ?? null
   const unit = item?.layers[layer] ?? null

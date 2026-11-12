@@ -599,6 +599,7 @@ export function CounterPhoneAskClient({
       </PhoneSheet>
 
       <AskComposer
+        draftKey="ask-question"
         // Honest now that a follow-up is a follow-up. Before the thread exists
         // it names the scope instead, which is what a first question is asked
         // under.

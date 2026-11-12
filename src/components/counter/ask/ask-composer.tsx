@@ -1,5 +1,6 @@
 "use client"
 
+import { useDraft } from "@/components/counter/keep/use-draft"
 import { useEffect, useRef, useState } from "react"
 import { AskGlyph } from "@/components/counter/surface/ask-glyph"
 import { applySlashCommand, matchSlashCommands } from "@/lib/chat/composer"
@@ -49,6 +50,7 @@ export function AskComposer({
   onEffort,
   prefill = null,
   mic = false,
+  draftKey,
 }: {
   placeholder: string
   onSubmit: (question: string) => void
@@ -71,8 +73,13 @@ export function AskComposer({
    * them. Off by default; the surfaces that show it opt in.
    */
   mic?: boolean
+  /**
+   * Keep an unsent question in this browser under this key, so leaving the
+   * page (or the app) and coming back finds it still in the field.
+   */
+  draftKey?: string
 }) {
-  const [value, setValue] = useState("")
+  const [value, setValue, clearValueDraft] = useDraft(draftKey ?? null, "", { isEmpty: (v) => v.trim() === "" })
   const [cursor, setCursor] = useState(0)
   const ta = useRef<HTMLTextAreaElement>(null)
 
@@ -165,6 +172,7 @@ export function AskComposer({
     const q = value.trim()
     if (!q || busy) return
     setValue("")
+    clearValueDraft()
     onSubmit(q)
   }
   const take = (i: number) => {

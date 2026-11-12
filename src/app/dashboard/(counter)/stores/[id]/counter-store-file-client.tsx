@@ -36,6 +36,7 @@ import type {
   StoreFileRate,
   StoreFileSections,
 } from "@/lib/counter/adapters/stores"
+import { useLeaveGuard } from "@/components/counter/keep/use-leave-guard"
 
 /**
  * One store's file — `P.storecosts`.
@@ -156,6 +157,12 @@ function StoreFileForm({
   useEffect(() => {
     setTarget(data.cogsTarget === null ? "" : String(data.cogsTarget))
   }, [data.cogsTarget])
+
+  // Ask before leaving with store settings typed but not saved.
+  useLeaveGuard(
+    JSON.stringify(form) !== JSON.stringify(formOf(data)) ||
+      target !== (data.cogsTarget === null ? "" : String(data.cogsTarget)),
+  )
 
   function save() {
     setSaid(null)

@@ -15,6 +15,7 @@ import {
   type SwitchableStore,
 } from "@/components/counter"
 import { MENU_TABS } from "@/lib/counter/nav"
+import { useUrlParam } from "@/components/counter/keep/use-url-param"
 import { readCounterParams, writeCounterParams } from "@/lib/counter/url-state"
 import { rangeLabel } from "@/lib/counter/date-range"
 import { count, pct } from "@/lib/counter/format"
@@ -79,7 +80,10 @@ export function CounterMenuItemsClient({
 
   const push = useCallback(
     (next: Parameters<typeof writeCounterParams>[1]) => {
-      const qs = writeCounterParams(params, next).toString()
+      // The live URL, not the render's: this page's own picks (search,
+      // filters) are written with replaceState and must survive a date or
+      // store change.
+      const qs = writeCounterParams(new URLSearchParams(window.location.search), next).toString()
       startTransition(() => {
         router.push(qs ? `${pathname}?${qs}` : pathname, { scroll: false })
       })
@@ -195,8 +199,11 @@ function Body({ data }: { data: MenuItemsData }) {
 
 function AllItems({ data }: { data: MenuItemsData }) {
   const surface = useSurfaceHref()
-  const [category, setCategory] = useState<string | null>(null)
-  const [search, setSearch] = useState("")
+  // In the URL so leaving and coming back keeps them.
+  const [rawCategory, setRawCategory] = useUrlParam("cat", "")
+  const category = rawCategory === "" ? null : rawCategory
+  const setCategory = (c: string | null) => setRawCategory(c ?? "")
+  const [search, setSearch] = useUrlParam("q", "", 300)
   const query = useDeferredValue(search).trim().toLowerCase()
   const rows = data.items.filter(
     (r) => (!category || r.category === category) && (!query || r.name.toLowerCase().includes(query)),

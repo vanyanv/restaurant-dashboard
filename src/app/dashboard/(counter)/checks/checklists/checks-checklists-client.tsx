@@ -12,6 +12,7 @@ import type {
   EditorTemplate,
 } from "@/lib/counter/adapters/checks"
 import { ChecksHead, OutcomeLine, StorePicker, type Outcome } from "../checks-ui"
+import { useLeaveGuard } from "@/components/counter/keep/use-leave-guard"
 
 /**
  * Store checks — Checklists. One store and one check at a time: the window
@@ -67,6 +68,8 @@ function Editor({ data }: { data: ChecklistsData }) {
     Object.fromEntries(data.templates.map((t) => [t.kind, structuredClone(t)])),
   )
   const [dirty, setDirty] = useState<Record<string, boolean>>({})
+  // Ask before leaving with list edits not saved.
+  useLeaveGuard(Object.values(dirty).some(Boolean))
   const [outcome, setOutcome] = useState<Outcome>(null)
   const [busy, start] = useTransition()
   const t = drafts[kind]
