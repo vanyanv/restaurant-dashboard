@@ -48,20 +48,31 @@ export function Glyph({
   onClick,
   pressed,
   title,
+  size,
+  count,
+  dim,
 }: {
   status: CellStatus
   small?: boolean
+  /** Square size in px for the desk History grid; the default is 24. */
+  size?: number
+  /** Tasks missed, shown inside a missed or partial square instead of its mark. */
+  count?: number
+  /** Faded by "Only problems". */
+  dim?: boolean
   flagged?: boolean
   onClick?: () => void
   pressed?: boolean
   title?: string
 }) {
   const g = GLYPH[status]
-  const cls = `ck-gl ${g.cls}${small ? " ck-gl--sm" : ""}${flagged ? " ck-gl--flag" : ""}`
+  const cls = `ck-gl ${g.cls}${small ? " ck-gl--sm" : ""}${flagged ? " ck-gl--flag" : ""}${dim ? " ck-gl--dim" : ""}`
+  const mark = count && (status === "partial" || status === "missed") ? count : g.mark
+  const style = size ? { width: size, height: size } : undefined
   if (onClick) {
     return (
-      <button type="button" className={cls} onClick={onClick} aria-pressed={pressed} title={title ?? g.label} aria-label={title ?? g.label}>
-        {g.mark}
+      <button type="button" className={cls} style={style} onClick={onClick} aria-pressed={pressed} title={title ?? g.label} aria-label={title ?? g.label}>
+        {mark}
       </button>
     )
   }
