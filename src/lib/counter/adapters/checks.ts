@@ -531,19 +531,9 @@ export function getChecksHistorySectionPromises(opts: {
           })
         }
         const rows: HistoryData["rows"] = []
-        const flagCount = new Map<string, { store: string; item: string; count: number }>()
         for (const s of grid) {
           s.templates.forEach((t, i) => {
-            const cells = days.map((d) => {
-              const c = s.cells.find((x) => x.day === d.day && x.kind === t.kind)!
-              for (const f of c.submission?.flags ?? []) {
-                const k = `${s.id}:${f.item}`
-                const cur = flagCount.get(k) ?? { store: s.name, item: f.item, count: 0 }
-                cur.count += 1
-                flagCount.set(k, cur)
-              }
-              return cellView(s, c, now)
-            })
+            const cells = days.map((d) => cellView(s, s.cells.find((x) => x.day === d.day && x.kind === t.kind)!, now))
             rows.push({
               storeId: s.id,
               store: s.name,
@@ -555,12 +545,31 @@ export function getChecksHistorySectionPromises(opts: {
             })
           })
         }
-        const topFlags = [...flagCount.values()].sort((a, b) => b.count - a.count).slice(0, 6)
+        const topFlags = topFlagsOf(grid, days.map((d) => d.day))
         return { range, storeId: only?.id ?? null, stores, days, rows, topFlags, sentence: historySentence(grid, range) }
       }, { retryAction: "checks.history", isEmpty: (d) => d.rows.length === 0, emptyReason: "no_stores" }),
       "checks.history",
     ),
   }
+}
+
+/** The items crew flagged most on the given days, per store; History's phone page and the Report show it. */
+function topFlagsOf(grid: GridStore[], days: string[]): Array<{ store: string; item: string; count: number }> {
+  const inRange = new Set(days)
+  const count = new Map<string, { store: string; item: string; count: number }>()
+  for (const s of grid) {
+    const kinds = new Set(s.templates.map((t) => t.kind))
+    for (const c of s.cells) {
+      if (!inRange.has(c.day) || !kinds.has(c.kind)) continue
+      for (const f of c.submission?.flags ?? []) {
+        const k = `${s.id}:${f.item}`
+        const cur = count.get(k) ?? { store: s.name, item: f.item, count: 0 }
+        cur.count += 1
+        count.set(k, cur)
+      }
+    }
+  }
+  return [...count.values()].sort((a, b) => b.count - a.count).slice(0, 6)
 }
 
 function historySentence(grid: GridStore[], range: number): string {
@@ -584,6 +593,8 @@ export type ReportData = {
   figures: CheckReportFigures
   /** The share of tasks done in the range before, for the change. */
   prevPct: number | null
+  /** The items crew flagged most in the range. */
+  topFlags: Array<{ store: string; item: string; count: number }>
 }
 
 export type ReportSections = { report: SectionData<ReportData> }
@@ -622,6 +633,7 @@ export function getChecksReportSectionPromises(opts: {
           sentence: reportSentence(figures, range),
           figures,
           prevPct: prev?.pct ?? null,
+          topFlags: topFlagsOf(grid, days),
         }
       }, { retryAction: "checks.report", isEmpty: (d) => d.stores.length === 0, emptyReason: "no_stores" }),
       "checks.report",

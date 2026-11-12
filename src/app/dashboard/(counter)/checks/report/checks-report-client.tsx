@@ -144,6 +144,27 @@ function Report({ data }: { data: ReportData }) {
         </div>
       </div>
 
+      {data.topFlags.length > 0 && (
+        <div className="ck-rep__card">
+          <h3>Flagged most</h3>
+          <ol className="ck-rep__bars">
+            {data.topFlags.map((t) => (
+              <li key={`${t.store}:${t.item}`}>
+                <div className="ck-rep__barhead">
+                  <span>{t.item}</span>
+                  <b>{t.count}×</b>
+                </div>
+                <div className="ck-rep__bar" aria-hidden>
+                  <span style={{ width: `${(t.count / data.topFlags[0].count) * 100}%` }} />
+                </div>
+                {data.storeId ? null : <span className="ck-meta">{t.store}</span>}
+              </li>
+            ))}
+          </ol>
+          <p className="ck-meta">Tasks crew marked as needing attention.</p>
+        </div>
+      )}
+
       <div className="ck-rep__card ck-rep__people">
         <h3>Crew</h3>
         {f.people.length === 0 ? (
