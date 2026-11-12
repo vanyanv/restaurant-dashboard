@@ -1,23 +1,21 @@
 "use client"
 
 import {
-  DateControl,
   Kv,
   MathLines,
   Note,
   PageHead,
   Section,
   Strip,
-  Table,
   useCounterTransition,
   usePageChrome,
-  type Row,
   SubNav,
   useSurfaceHref,
 } from "@/components/counter"
-import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react"
-import { usePathname, useRouter } from "next/navigation"
-import { readCounterParams, writeCounterParams } from "@/lib/counter/url-state"
+import { useEffect, useRef, useState, useTransition } from "react"
+import { useRouter } from "next/navigation"
+import { ready } from "@/lib/counter/section-data"
+import { money } from "@/lib/counter/format"
 import {
   addFixedExpense,
   deactivateStore,
@@ -33,7 +31,6 @@ import type { SectionSources } from "@/lib/counter/adapters/types"
 import type {
   StoreFileEditable,
   StoreExpenseLine,
-  StoreFileRate,
   StoreFileSections,
 } from "@/lib/counter/adapters/stores"
 import { useLeaveGuard } from "@/components/counter/keep/use-leave-guard"
@@ -41,11 +38,9 @@ import { useLeaveGuard } from "@/components/counter/keep/use-leave-guard"
 /**
  * One store's file — `P.storecosts`.
  *
- * Read-only. Every field here is editable at `/dashboard/stores/[id]/edit`,
- * which is still the pre-Counter form; rebuilding a form is a different job
- * from rebuilding a page, and half-rebuilding one is worse than leaving it.
- * This surface's job is to show which inputs are missing and what each one
- * decides, which is what the list page links here for.
+ * Every input is shown once, as a field, grouped the way an owner thinks
+ * about them (Monthly costs, App commissions, Labor and targets, Store), with
+ * one Save. The desk route and `/m/stores/[id]/edit` both render this.
  */
 
 /** A number field that keeps a blank blank rather than turning it into zero. */
@@ -248,163 +243,188 @@ function StoreFileForm({
     })
   }
 
+  /*
+   * ONE LIST, EACH INPUT ONCE (design review, 2026-11-11).
+   *
+   * The page used to show every input twice: read-only "Operating inputs",
+   * "Delivery commission" and "Targets" panels that looked like fields, then
+   * "Edit this file" with the real fields at the bottom. On a phone that was
+   * 4,475 px, and owners tapped the read-only copies first. Now the fields ARE
+   * the page, grouped the way an owner thinks about them, with one Save.
+   *
+   * Each group is its own `Section` over the one `editable` value it was
+   * handed, so the groups get the Counter section frame without a second
+   * load. Fixed-expense lines sit in Monthly costs, beside rent, because
+   * that is where an owner looks for a recurring bill.
+   */
+  const loaded = ready(data)
+  const rateInput = (key: (typeof RATE_FIELDS)[number]["key"], label: string, required: boolean) => (
+    <input
+      className="inp storefile__num"
+      type="number"
+      min="0"
+      max="100"
+      step="0.1"
+      inputMode="decimal"
+      aria-label={`${label} commission percent`}
+      placeholder={required ? undefined : "Not known"}
+      value={form[key]}
+      onChange={(e) => setForm((p) => ({ ...p, [key]: e.target.value }))}
+    />
+  )
+
   return (
     <>
-      {MONEY_FIELDS.map((f) => (
-        <div className="setrow" key={f.key}>
-          <div className="tx">
-            <b>{f.label}</b>
-            <span>{f.hint}</span>
-          </div>
-          <input
-            className="inp"
-            type="number"
-            min="0"
-            step="1"
-            inputMode="decimal"
-            aria-label={f.label}
-            placeholder="Not set"
-            value={form[f.key]}
-            onChange={(e) => setForm((p) => ({ ...p, [f.key]: e.target.value }))}
-          />
-        </div>
-      ))}
+      <Section title="Monthly costs" meta={() => "spread across the days on the P&L"} data={loaded}>
+        {() => (
+          <>
+            {MONEY_FIELDS.map((f) => (
+              <div className="setrow" key={f.key}>
+                <div className="tx">
+                  <b>{f.label}</b>
+                  <span>{f.hint}</span>
+                </div>
+                <input
+                  className="inp storefile__num"
+                  type="number"
+                  min="0"
+                  step="1"
+                  inputMode="decimal"
+                  aria-label={f.label}
+                  placeholder="Not set"
+                  value={form[f.key]}
+                  onChange={(e) => setForm((p) => ({ ...p, [f.key]: e.target.value }))}
+                />
+              </div>
+            ))}
+            <ExpenseEditor
+              storeId={data.storeId}
+              lines={data.expenseLines}
+              picked={picked}
+              onPick={onPick}
+            />
+          </>
+        )}
+      </Section>
 
-      {RATE_FIELDS.map((f) => (
-        <div className="setrow" key={f.key}>
-          <div className="tx">
-            <b>{f.label} commission</b>
-            <span>
-              Charged on the price after discounts · {data.observed[f.key]}
-            </span>
-          </div>
-          <input
-            className="inp"
-            type="number"
-            min="0"
-            max="100"
-            step="0.1"
-            inputMode="decimal"
-            aria-label={`${f.label} commission percent`}
-            placeholder={f.required ? undefined : "Not known"}
-            value={form[f.key]}
-            onChange={(e) => setForm((p) => ({ ...p, [f.key]: e.target.value }))}
-          />
-        </div>
-      ))}
+      <Section title="App commissions" meta={() => "percent of the price after discounts"} data={loaded}>
+        {() => (
+          <>
+            {RATE_FIELDS.map((f) => (
+              <div className="setrow" key={f.key}>
+                <div className="tx">
+                  <b>{f.label}</b>
+                  <span>{data.observed[f.key]}</span>
+                </div>
+                {rateInput(f.key, f.label, f.required)}
+              </div>
+            ))}
+          </>
+        )}
+      </Section>
 
-      {/* Employer payroll tax: loaded onto Harri wages in every labor figure. */}
-      <div className="setrow">
-        <div className="tx">
-          <b>Employer payroll tax</b>
-          <span>
-            Added to Harri wages on every labor figure · 7.65% is federal FICA; add your
-            California UI and ETT rates · blank adds none
-          </span>
-        </div>
-        <input
-          className="inp"
-          type="number"
-          min="0"
-          max="100"
-          step="0.01"
-          inputMode="decimal"
-          aria-label="Employer payroll tax percent"
-          placeholder="None"
-          value={form.payrollTax}
-          onChange={(e) => setForm((p) => ({ ...p, payrollTax: e.target.value }))}
-        />
-      </div>
+      <Section title="Labor and targets" data={loaded}>
+        {() => (
+          <>
+            {/* Employer payroll tax: loaded onto Harri wages in every labor figure. */}
+            <div className="setrow">
+              <div className="tx">
+                <b>Employer payroll tax</b>
+                <span>Added to Harri wages. 7.65% is the federal share; add your California rates. Blank adds none.</span>
+              </div>
+              <input
+                className="inp storefile__num"
+                type="number"
+                min="0"
+                max="100"
+                step="0.01"
+                inputMode="decimal"
+                aria-label="Employer payroll tax percent"
+                placeholder="None"
+                value={form.payrollTax}
+                onChange={(e) => setForm((p) => ({ ...p, payrollTax: e.target.value }))}
+              />
+            </div>
+            {/* `.setrow`, not `.editrow` — see the history of this row in git:
+                borrowed `.editrow` once rendered its label and hint on one
+                italic line over an unboxed number. */}
+            <div className="setrow">
+              <div className="tx">
+                <b>Food-cost target</b>
+                <span>The plan line on food-cost charts. Blank means no plan, not zero.</span>
+              </div>
+              <input
+                className="inp storefile__num"
+                type="number"
+                min="0"
+                max="100"
+                step="0.1"
+                inputMode="decimal"
+                aria-label="Food cost target percent"
+                placeholder="No plan"
+                value={target}
+                onChange={(e) => setTarget(e.target.value)}
+              />
+            </div>
+          </>
+        )}
+      </Section>
 
-      {/* Lifecycle: what the nightly model and every "trading" badge read. */}
-      <div className="setrow">
-        <div className="tx">
-          <b>Lifecycle</b>
-          <span>Pre-open skips forecasts; warming up borrows them; open is a trading store</span>
-        </div>
-        <select
-          className="fld"
-          value={form.stage}
-          aria-label="Lifecycle stage"
-          onChange={(e) =>
-            setForm((p) => ({ ...p, stage: e.target.value as StoreFileEditable["stage"] }))
-          }
-        >
-          {STAGES.map((st) => (
-            <option key={st.value} value={st.value}>
-              {st.label}
-            </option>
-          ))}
-        </select>
-      </div>
+      <Section title="Store" data={loaded}>
+        {() => (
+          <>
+            {/* Lifecycle: what the nightly model and every "trading" badge read. */}
+            <div className="setrow">
+              <div className="tx">
+                <b>Stage</b>
+                <span>Pre-open skips forecasts and syncs. Open is a trading store.</span>
+              </div>
+              <select
+                className="fld"
+                value={form.stage}
+                aria-label="Lifecycle stage"
+                onChange={(e) =>
+                  setForm((p) => ({ ...p, stage: e.target.value as StoreFileEditable["stage"] }))
+                }
+              >
+                {STAGES.map((st) => (
+                  <option key={st.value} value={st.value}>
+                    {st.label}
+                  </option>
+                ))}
+              </select>
+            </div>
 
-      <ChecksPauseRow storeId={data.storeId} since={data.checksPausedSince} />
+            <ChecksPauseRow storeId={data.storeId} since={data.checksPausedSince} />
 
-      {/*
-        * `.setrow`, like the five fields above it — not `.editrow`.
-        *
-        * `.editrow` is the expense table's row: a four-column grid
-        * (`1fr 118px 96px auto`) for a name, an amount, a cadence and a
-        * button. Borrowed here it had to be overridden inline to two columns,
-        * its `.nm > em` description renders INLINE where `.setrow span` is
-        * `display:block`, and `.fld` carries no border where `.inp` does. So
-        * the one row on this form that sets the food-cost target read
-        * "Food-cost targetThe plan line on every food-cost chart for this
-        * store" on a single line, in italic, over a bare unboxed number —
-        * beside five siblings with a bold label, a grey line under it and a
-        * bordered field.
-        */}
-      <div className="setrow">
-        <div className="tx">
-          <b>Food-cost target</b>
-          <span>The plan line on every food-cost chart for this store</span>
-        </div>
-        <input
-          className="inp"
-          type="number"
-          min="0"
-          max="100"
-          step="0.1"
-          inputMode="decimal"
-          aria-label="Food cost target percent"
-          value={target}
-          onChange={(e) => setTarget(e.target.value)}
-        />
-      </div>
+            {/* `P.storecosts` draws "Deactivate this store" and "Delete" side
+                by side. In this codebase those are ONE operation:
+                `deleteStore` sets `isActive: false` and touches nothing else.
+                So one button, named for what actually happens. See
+                `deactivateStore`. It is a row here, away from Save, so the
+                two are never pressed for each other. */}
+            <div className="setrow">
+              <div className="tx">
+                <b>Deactivate this store</b>
+                <span>Hides it from every page. Its history stays.</span>
+              </div>
+              <button className="btn" type="button" disabled={saving} onClick={deactivate}>
+                Deactivate
+              </button>
+            </div>
+          </>
+        )}
+      </Section>
 
-      <ExpenseEditor
-        storeId={data.storeId}
-        lines={data.expenseLines}
-        picked={picked}
-        onPick={onPick}
-      />
-
-      <div className="btnrow" style={{ marginTop: 12 }}>
+      <div className="btnrow storefile__save">
         <button className="btn btn--primary" type="button" disabled={saving} onClick={save}>
-          {saving ? "Saving\u2026" : "Save the inputs"}
-        </button>
-        {/* `P.storecosts` draws "Deactivate this store" and "Delete" side by
-            side and then explains underneath that "deleting a store does not
-            delete its history". In this codebase those are ONE operation:
-            `deleteStore` sets `isActive: false` and touches nothing else. So
-            one button, named for what actually happens. See
-            `deactivateStore`. */}
-        <button
-          className="btn"
-          type="button"
-          disabled={saving}
-          onClick={deactivate}
-        >
-          Deactivate this store
+          {saving ? "Saving…" : "Save changes"}
         </button>
       </div>
 
       <Note live={said !== null} tone={said === null ? undefined : said.ok ? "good" : "bad"}>
         {said?.text ??
-          `Commissions are percents \u2014 type 25 for 25% \u2014 charged on the price ` +
-            `after discounts; a blank pickup or Grubhub rate means not known. The food-cost target is ` +
-            `the line every food-cost chart for this store is drawn against; leave it blank for ` +
-            `no plan, which is not the same as a plan of zero.`}
+          "Save changes keeps every cost, commission, payroll tax, target and stage above. Type 25 for 25%."}
       </Note>
     </>
   )
@@ -595,70 +615,81 @@ function ExpenseEditor({
      together — and this editor renders inside the form that already sits in
      it. A second one is an extra landmark and, worse, a second inset around
      content that is already inset. The gate caught it. */
+  /* A FRAGMENT, NOT A `.sec__body`: this renders inside the Monthly costs
+     section, which already has one. A second is a second inset. */
   return (
     <>
-      <div className="setrow">
-        <div className="tx">
-          <b>{selected ? "Edit this fixed expense" : "Add a fixed expense"}</b>
-          <span>
-            Name, amount and cadence — weekly, monthly or yearly. It becomes its own
-            P&amp;L row. Press a line in the table above to edit it instead.
-          </span>
-        </div>
-        <button className="btn" type="button" disabled={saving} onClick={submit}>
-          {saving ? "Saving…" : selected ? "Save this line" : "Add a line"}
-        </button>
-      </div>
-
-      <div className="editrow" style={{ gridTemplateColumns: "1fr 120px 120px" }}>
-        <input
-          className="fld"
-          type="text"
-          value={label}
-          placeholder="Rent, fixed labor, towels…"
-          aria-label="Expense name"
-          onChange={(e) => setLabel(e.target.value)}
-        />
-        <input
-          className="fld"
-          type="text"
-          inputMode="decimal"
-          value={amount}
-          placeholder="Amount"
-          aria-label="Expense amount"
-          onChange={(e) => setAmount(e.target.value)}
-        />
-        <select
-          className="fld"
-          value={frequency}
-          aria-label="Cadence"
-          onChange={(e) =>
-            setFrequency(e.target.value as "WEEKLY" | "MONTHLY" | "YEARLY")
-          }
+      {lines.map((l) => (
+        <button
+          type="button"
+          key={l.id}
+          className={l.id === selected ? "setrow setrow--pick is-on" : "setrow setrow--pick"}
+          aria-pressed={l.id === selected}
+          onClick={() => setSelected(l.id === selected ? null : l.id)}
         >
-          <option value="WEEKLY">Weekly</option>
-          <option value="MONTHLY">Monthly</option>
-          <option value="YEARLY">Yearly</option>
-        </select>
-      </div>
+          <span className="tx">
+            <b>{l.label}</b>
+            <span>
+              {l.frequency === "MONTHLY"
+                ? "Monthly"
+                : `${l.frequency === "WEEKLY" ? "Weekly" : "Yearly"} ${money(l.amount)}`}
+              {" · tap to change"}
+            </span>
+          </span>
+          <span className="setrow__val">{money(l.monthly)}/mo</span>
+        </button>
+      ))}
 
-      <div className="setrow">
+      <div className="setrow setrow--stack">
         <div className="tx">
-          <b>Remove a fixed expense</b>
+          <b>{selected ? "Change this cost" : "Add another monthly cost"}</b>
           <span>
             {selected
-              ? "This deletes the line. The P&L rows it produced in past periods are recomputed from the lines that remain."
-              : "Press a line in the table above to select it."}
+              ? "Change it and save, or remove it. Past P&L periods recompute from what remains."
+              : "Insurance, software, a loan payment. Each one becomes its own P&L line."}
           </span>
         </div>
-        <button
-          className="btn"
-          type="button"
-          disabled={saving || selected === null}
-          onClick={remove}
-        >
-          Remove this line
-        </button>
+        <div className="storefile__exp">
+          <input
+            className="fld"
+            type="text"
+            value={label}
+            placeholder="Name"
+            aria-label="Expense name"
+            onChange={(e) => setLabel(e.target.value)}
+          />
+          <input
+            className="fld"
+            type="text"
+            inputMode="decimal"
+            value={amount}
+            placeholder="Amount"
+            aria-label="Expense amount"
+            onChange={(e) => setAmount(e.target.value)}
+          />
+          <select
+            className="fld"
+            value={frequency}
+            aria-label="How often"
+            onChange={(e) =>
+              setFrequency(e.target.value as "WEEKLY" | "MONTHLY" | "YEARLY")
+            }
+          >
+            <option value="WEEKLY">Weekly</option>
+            <option value="MONTHLY">Monthly</option>
+            <option value="YEARLY">Yearly</option>
+          </select>
+        </div>
+        <div className="btnrow">
+          <button className="btn" type="button" disabled={saving} onClick={submit}>
+            {saving ? "Saving…" : selected ? "Save this cost" : "Add it"}
+          </button>
+          {selected ? (
+            <button className="btn" type="button" disabled={saving} onClick={remove}>
+              Remove it
+            </button>
+          ) : null}
+        </div>
       </div>
 
       {said ? <Note tone="bad">{said}</Note> : null}
@@ -667,53 +698,24 @@ function ExpenseEditor({
 }
 
 /**
- * `.editrow` — a name, its note, and the figure the owner typed.
+ * One store's file — `P.storecosts`, rebuilt after the 2026-11-11 design
+ * review as the owner reads it:
  *
- * Not a shared primitive: the prototype emits `.editrow` inline on four pages
- * with four different column templates, and `.editrow` is not a landmark, so
- * hoisting it would buy nothing the gate can see and would fix a grid it
- * varies on purpose.
- */
-function EditRows({ rows, columns }: { rows: StoreFileRate[]; columns?: string }) {
-  return (
-    <>
-      {rows.map((r) => (
-        <div className="editrow" key={r.key} style={columns ? { gridTemplateColumns: columns } : undefined}>
-          <span className="nm">
-            {r.label}
-            {r.note ? <span>{r.note}</span> : null}
-          </span>
-          <span className="amt">
-            {r.unitLeads ? <em>{r.unit}</em> : null}
-            {r.value}
-            {r.unitLeads ? null : <em>{r.unit}</em>}
-          </span>
-        </div>
-      ))}
-    </>
-  )
-}
-
-/**
- * One store's file — `P.storecosts`, composed as the prototype composes it:
+ *   strip -> monthly costs -> app commissions -> labor and targets -> store
+ *   -> save -> folded "how this is worked out" (math, where it lands, place).
  *
- *   strip -> operating inputs -> split(how it reaches the P&L, location file)
- *   -> fixed expenses -> tri(commissions, targets, where it lands) -> edit.
+ * **No date control.** The prototype had one because the math panel prorates
+ * fixed cost to a range. That panel is now a fold an owner opens on purpose,
+ * and a date picker on a settings page read as "these settings change by
+ * date", which they do not. The math still uses the URL's range (the default
+ * when there is none) and says how many days it covers.
  *
- * **The date control belongs here.** `P.storecosts` does not declare
- * `nodate`, unlike `P.stores`, because every fixed cost on the page is
- * prorated to the selected range. This page carried the store LIST's rule for
- * a while and lost three panels to it.
- *
- * **No "Needs you" queue.** The page had one; the design has none. A store
- * file states what is missing in the fields themselves — a blank rent reads as
- * a blank rent — and a queue restating that is the same fact twice.
+ * **No "Needs you" queue.** A store file states what is missing in the fields
+ * themselves — a blank rent reads as a blank rent.
  */
 export function CounterStoreFileClient({
   title,
   storeId,
-  params: paramsString,
-  today,
   sections,
 }: {
   title: string
@@ -726,10 +728,6 @@ export function CounterStoreFileClient({
   sections: SectionSources<StoreFileSections>
 }) {
   const surface = useSurfaceHref()
-  const router = useRouter()
-  const pathname = usePathname()
-  const params = useMemo(() => new URLSearchParams(paramsString), [paramsString])
-  const counterParams = useMemo(() => readCounterParams(params, today), [params, today])
 
   usePageChrome({
     leaf: title,
@@ -740,46 +738,20 @@ export function CounterStoreFileClient({
     ],
   })
 
-  const { pending, startTransition } = useCounterTransition()
+  const { pending } = useCounterTransition()
 
-  // Which fixed-expense line the editor below is holding. Component state
-  // rather than the URL: unlike the alert inbox's selection this is a
-  // half-finished edit, not a thing worth linking someone to.
+  // Which fixed-expense line the editor is holding. Component state rather
+  // than the URL: a half-finished edit is not a thing worth linking to.
   const [pickedExpense, setPickedExpense] = useState<string | null>(null)
-
-  const push = useCallback(
-    (next: Parameters<typeof writeCounterParams>[1]) => {
-      const qs = writeCounterParams(params, next).toString()
-      startTransition(() => {
-        router.push(qs ? `${pathname}?${qs}` : pathname, { scroll: false })
-      })
-    },
-    [params, pathname, router, startTransition],
-  )
-
-  const { range, presetId, comparisonId } = counterParams
 
   return (
     <>
       <PageHead
         title={title}
-        sub="Store file · operating inputs only you can tell us · every figure here lands on the P&L"
-      >
-        <DateControl
-          presetId={presetId}
-          comparisonId={comparisonId}
-          range={range}
-          onPreset={(id) => push({ presetId: id })}
-          onComparison={(id) => push({ comparisonId: id })}
-          onRange={(next) => push({ range: next })}
-        />
-      </PageHead>
+        sub="Store file · the costs and rates only you can tell us. Every number here feeds the P&L."
+      />
 
-      {/* `VIEWS.stores` — see `storesViewTabs` in `nav.ts`. The phone grew this
-          bar first; the desk had a "New store" button on the list page and
-          nothing at all on the other two, so the create form and the store file
-          each sat with no way back to their siblings. Same three tabs, same
-          order, one helper. */}
+      {/* `VIEWS.stores` — see `storesViewTabs` in `nav.ts`. */}
       <SubNav items={storesViewTabs("/dashboard/stores", storeId).map((t) => ({ ...t, href: surface(t.href) }))} label="Stores" />
 
       <Section bare title="The figures" data={sections.head} pending={pending}>
@@ -793,131 +765,47 @@ export function CounterStoreFileClient({
         )}
       </Section>
 
+      <Section bare title="Your inputs" data={sections.editable} pending={pending}>
+        {(e) => (
+          <StoreFileForm data={e} picked={pickedExpense} onPick={setPickedExpense} />
+        )}
+      </Section>
+
       <Section
-        title="Operating inputs"
-        meta={() => "the four the P&L expects"}
-        data={sections.operating}
+        title="How this is worked out"
+        meta={(m) => m.meta}
+        data={sections.math}
         pending={pending}
+        fold="closed"
       >
-        {(o) => (
+        {(m) => (
           <>
-            <EditRows rows={o.rows} />
+            <MathLines rows={m.rows} />
             <Note>
-              {o.note}
+              {m.note}
             </Note>
           </>
         )}
       </Section>
 
-      <div className="split">
-        <Section
-          title="How it reaches the P&L"
-          meta={(m) => m.meta}
-          data={sections.math}
-          pending={pending}
-        >
-          {(m) => (
-            <>
-              <MathLines rows={m.rows} />
-              <Note>
-                {m.note}
-              </Note>
-            </>
-          )}
-        </Section>
-
-        <Section
-          title="Location file"
-          meta={(i) => i.placeMeta}
-          data={sections.inputs}
-          pending={pending}
-        >
-          {(i) => <Kv rows={i.place} />}
-        </Section>
-      </div>
-
       <Section
-        title="Fixed expenses"
-        meta={(e) => e.meta}
-        data={sections.expenses}
+        title="Where each input lands"
+        meta={() => "on the P&L"}
+        data={sections.lands}
         pending={pending}
-        pad={false}
+        fold="closed"
       >
-        {(e) => (
-          <Table
-            columns={e.columns}
-            // Pressable so one row can be loaded into the editor below. The
-            // rows carried no affordance at all before — see `ExpenseEditor`
-            // for why the controls are one set down there rather than a pair
-            // on every row.
-            rows={e.rows.map(
-              // Rebuilt rather than spread: `Row` forbids `href` and
-              // `onSelect` together, and a spread of the union carries a
-              // possible `href` that TypeScript cannot narrow away. Expense
-              // rows have no destination, so key and cells are all there is.
-              (r): Row => ({
-                key: r.key,
-                cells: r.cells,
-                onSelect: () => setPickedExpense(r.key),
-                selected: r.key === pickedExpense,
-              }),
-            )}
-          />
-        )}
+        {(rows) => <Kv rows={rows} />}
       </Section>
 
-      <div className="tri">
-        <Section
-          title="Delivery commission"
-          meta={() => "charged on the price after discounts"}
-          data={sections.commissions}
-          pending={pending}
-        >
-          {(c) => (
-            <>
-              <EditRows rows={c.rows} columns="1fr 86px" />
-              <Note>
-                {c.note}
-              </Note>
-            </>
-          )}
-        </Section>
-
-        <Section
-          title="Targets"
-          meta={() => "drives the COGS band and the prime ceiling"}
-          data={sections.targets}
-          pending={pending}
-        >
-          {(t) => (
-            <>
-              <EditRows rows={t.rows} columns="1fr 86px" />
-              <Note>
-                {t.note}
-              </Note>
-            </>
-          )}
-        </Section>
-
-        <Section
-          title="Where it lands"
-          meta={() => "on the P&L"}
-          data={sections.lands}
-          pending={pending}
-        >
-          {(rows) => <Kv rows={rows} />}
-        </Section>
-      </div>
-
       <Section
-        title="Edit this file"
-        meta={() => "every figure above comes from here"}
-        data={sections.editable}
+        title="Location"
+        meta={(i) => i.placeMeta}
+        data={sections.inputs}
         pending={pending}
+        fold="closed"
       >
-        {(e) => (
-          <StoreFileForm data={e} picked={pickedExpense} onPick={setPickedExpense} />
-        )}
+        {(i) => <Kv rows={i.place} />}
       </Section>
     </>
   )
