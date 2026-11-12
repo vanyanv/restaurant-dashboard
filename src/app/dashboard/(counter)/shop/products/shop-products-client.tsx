@@ -7,6 +7,7 @@ import { createShopProduct, saveShopProduct, setShopProductStatus, setShopProduc
 import type { SectionSources } from "@/lib/counter/adapters/types"
 import type { ProductEdit, ProductLine, ProductsData, ProductsSections, StockView } from "@/lib/counter/adapters/shop"
 import { OutcomeLine, ShopHead, useShopAction } from "../shop-ui"
+import { useLeaveGuard } from "@/components/counter/keep/use-leave-guard"
 
 /**
  * Shop — Products. The rack as a table: photo, name, price, stock and
@@ -219,6 +220,7 @@ function Editor({ p, onClose }: { p: ProductEdit; onClose: () => void }) {
     perOrderLimit: Number.isInteger(limit) && limit !== p.perOrderLimit ? limit : undefined,
   }
   const dirty = Object.values(diff).some((x) => x !== undefined)
+  useLeaveGuard(dirty)
   const badPrice = !/^\d+(\.\d{1,2})?$/.test(v.price.trim())
 
   return (

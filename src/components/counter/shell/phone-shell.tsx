@@ -7,6 +7,7 @@ import { MTop } from "./m-top"
 import { MDateSheet } from "./m-date-sheet"
 import { PageChromeContext, type PageChrome } from "./page-chrome"
 import { CounterTransitionContext, type CounterTransition } from "./counter-transition"
+import { useKeepPlace } from "./use-keep-place"
 import type { SwitchableStore } from "./store-switcher"
 import { readCounterParams, writeCounterParams } from "@/lib/counter/url-state"
 import { askHref, ASK_PHONE_ROUTE } from "@/lib/counter/ask-context"
@@ -61,6 +62,7 @@ export function PhoneShell({
   children: ReactNode
 }) {
   const pathname = usePathname()
+  useKeepPlace(true)
   const searchParams = useSearchParams()
   const router = useRouter()
   // The ONE transition for this surface — see `counter-transition.tsx`. Every

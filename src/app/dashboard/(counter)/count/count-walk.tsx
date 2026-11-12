@@ -8,6 +8,7 @@ import { finishCount, saveCountItem, startCount } from "@/lib/counter/actions/co
 import type { WalkData, WalkItem } from "@/lib/counter/adapters/count"
 import { COUNT_AREAS, describeShelf, fmtQty, hasAnyValue, shelfTotal, showQty } from "@/lib/counter/count-layers"
 import { money, OutcomeLine, StoreChips, type Outcome } from "./count-ui"
+import { clearDraft, readDraft, writeDraft } from "@/components/counter/keep/use-draft"
 
 /**
  * The weekly count, one stop at a time. A list of every item in walk order
@@ -42,6 +43,42 @@ export function CountWalk({ data, base }: { data: WalkData; base: "/dashboard/co
     Object.fromEntries(data.items.filter((i) => i.values).map((i) => [i.id, i.values!.map((v) => (v ? fmtQty(v).replace(/,/g, "") : ""))])),
   )
   const [savedIds, setSavedIds] = useState<Set<string>>(() => new Set(data.items.filter((i) => i.values).map((i) => i.id)))
+
+  /*
+   * Leaving mid-count (a call, the app closed, another page) used to drop you
+   * back at the item list and lose numbers typed but not yet saved. The item
+   * you were on and the unsaved typing are kept in this browser, per store,
+   * and put back when you return. Saved items always come from the server.
+   */
+  const draftKey = `count-walk:${data.store.id}`
+  const [restored, setRestored] = useState(false)
+  useEffect(() => {
+    const d = readDraft<{ countId: string | null; itemId: string | null; typed: Record<string, string[]> }>(draftKey)
+    // A draft from a count that has since been finished (or a different one)
+    // is not this count's work.
+    if (d && d.countId === (data.count?.id ?? null)) {
+      const unsaved = Object.entries(d.typed ?? {}).filter(([id]) => !savedIds.has(id))
+      if (unsaved.length) setTyped((t) => ({ ...t, ...Object.fromEntries(unsaved) }))
+      const idx = d.itemId ? data.items.findIndex((i) => i.id === d.itemId) : -1
+      if (idx >= 0 && data.count?.id) setScreen({ kind: "item", idx })
+    } else if (d) {
+      clearDraft(draftKey)
+    }
+    setRestored(true)
+    // Once per store.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draftKey])
+  useEffect(() => {
+    if (!restored) return
+    if (screen.kind === "done") {
+      clearDraft(draftKey)
+      return
+    }
+    const unsaved = Object.fromEntries(Object.entries(typed).filter(([id]) => !savedIds.has(id)))
+    const itemId = screen.kind === "item" ? (data.items[screen.idx]?.id ?? null) : null
+    if (!itemId && Object.keys(unsaved).length === 0) clearDraft(draftKey)
+    else writeDraft(draftKey, { countId, itemId, typed: unsaved })
+  }, [restored, screen, typed, savedIds, countId, draftKey, data.items])
 
   // A new screen starts at its top, not wherever the list was scrolled to.
   useEffect(() => {

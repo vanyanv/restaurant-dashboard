@@ -7,6 +7,7 @@ import type { SectionSources } from "@/lib/counter/adapters/types"
 import type { CellView, HistoryData, HistorySections } from "@/lib/counter/adapters/checks"
 import { CheckDetail, PhoneView } from "@/app/dashboard/(counter)/checks/checks-plain-ui"
 import { ChecksHead, Glyph, StorePicker } from "@/app/dashboard/(counter)/checks/checks-ui"
+import { useUrlFlag } from "@/components/counter/keep/use-url-param"
 
 /**
  * Store checks on a phone — History. The desk's grid is 30 columns wide, so
@@ -34,7 +35,7 @@ type Entry = { key: string; store: string; label: string; cell: CellView }
 function Days({ data }: { data: HistoryData }) {
   const router = useRouter()
   const href = useSurfaceHref()
-  const [onlyMisses, setOnlyMisses] = useState(false)
+  const [onlyMisses, setOnlyMisses] = useUrlFlag("misses")
   // The key, not the entry: a photo sent back refreshes the data, and the
   // open check should show it.
   const [openKey, setOpenKey] = useState<string | null>(null)

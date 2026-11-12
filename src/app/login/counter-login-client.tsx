@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import { signIn, getSession } from "next-auth/react"
 import { useRouter } from "next/navigation"
+import { RETURN_TO_PARAM, safeReturnTo } from "@/lib/return-to"
 import {
   Logo,
   WelcomeLine,
@@ -175,7 +176,13 @@ export function CounterLoginClient() {
       const hello = greetingFor(session.user.name)
       setGreeting(hello)
       timer.current = setTimeout(
-        () => router.push("/dashboard"),
+        () =>
+          router.push(
+            safeReturnTo(
+              new URLSearchParams(window.location.search).get(RETURN_TO_PARAM),
+              "/dashboard",
+            ),
+          ),
         reduced ? DOOR_WIPE_MS : welcomeHoldMs(hello),
       )
     } catch {

@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useDeferredValue, useMemo, useState } from "react"
+import { useCallback, useDeferredValue, useMemo } from "react"
 import { usePathname, useRouter } from "next/navigation"
 import {
   Chart,
@@ -23,6 +23,7 @@ import type { SectionSources } from "@/lib/counter/adapters/types"
 import type { InvoiceList, InvoicesSections, ProductRow } from "@/lib/counter/adapters/invoices"
 import { InvoiceGlyph, InvoiceLegend, InvoicesHead } from "../invoices-ui"
 import { VIEWS, VIEW_LABEL, inView, type View } from "./views"
+import { useUrlParam } from "@/components/counter/keep/use-url-param"
 
 /**
  * Invoices — All invoices. One list with a chip per view and a search box,
@@ -91,7 +92,10 @@ export function AllInvoicesClient({
 
   const push = useCallback(
     (next: Parameters<typeof writeCounterParams>[1]) => {
-      const qs = writeCounterParams(params, next).toString()
+      // The live URL, not the render's: this page's own picks (search,
+      // filters) are written with replaceState and must survive a date or
+      // store change.
+      const qs = writeCounterParams(new URLSearchParams(window.location.search), next).toString()
       startTransition(() => {
         router.push(qs ? `${pathname}?${qs}` : pathname, { scroll: false })
       })
@@ -168,8 +172,11 @@ export function AllInvoicesClient({
 
 function InvoiceTable({ list, initialView }: { list: InvoiceList; initialView: View }) {
   const surface = useSurfaceHref()
-  const [view, setView] = useState<View>(initialView)
-  const [search, setSearch] = useState("")
+  // Both live in the URL so leaving and coming back keeps them.
+  const [rawView, setRawView] = useUrlParam("view", "all", 0, initialView)
+  const view: View = (VIEWS as readonly string[]).includes(rawView) ? (rawView as View) : "all"
+  const setView = setRawView as (v: View) => void
+  const [search, setSearch] = useUrlParam("q", "", 300)
   const query = useDeferredValue(search)
   const needle = query.trim().toLowerCase()
 

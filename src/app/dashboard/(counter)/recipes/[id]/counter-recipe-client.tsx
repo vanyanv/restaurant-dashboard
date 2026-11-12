@@ -42,6 +42,7 @@ import type {
   RecipeBuilder,
   RecipeSections,
 } from "@/lib/counter/adapters/recipe"
+import { useLeaveGuard } from "@/components/counter/keep/use-leave-guard"
 
 /**
  * The cost-per-serving chart is the last section on the page, so its chunk
@@ -241,6 +242,8 @@ export function CounterRecipeClient({
    * preview taken before the save. So the save says so explicitly.
    */
   const clearDraft = useCallback(() => setDraft(null), [])
+  // Ask before leaving with recipe edits not saved. A save clears the draft.
+  useLeaveGuard(draft !== null)
 
   const editField = useCallback(
     (b: RecipeBuilder, key: BuilderField["key"], value: string) =>
