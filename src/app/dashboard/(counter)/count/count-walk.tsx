@@ -295,7 +295,7 @@ export function CountWalk({ data, base }: { data: WalkData; base: "/dashboard/co
   // ── before you finish ──────────────────────────────────────────────────
   if (screen.kind === "review") {
     return (
-      <div className="cw">
+      <div className="cw cw--focus">
         <div className="cw__top">
           <button type="button" className="cw__link" onClick={() => setScreen({ kind: "list" })}>‹ Sections</button>
           <h2 className="cw__h">Before you finish</h2>
@@ -368,9 +368,9 @@ export function CountWalk({ data, base }: { data: WalkData; base: "/dashboard/co
         <p className="cw__say">
           {countId
             ? done === items.length
-              ? `Everything is counted at ${data.store.name}. Look it over and finish.`
-              : `${done} of ${items.length} counted at ${data.store.name}.${resumeName ? ` Next up: ${resumeName} in ${resumeArea}.` : ""}`
-            : `${items.length} items to count at ${data.store.name}, in ${sections.length} sections.`}
+              ? "Everything is counted. Look it over and finish."
+              : `${done} of ${items.length} counted.${resumeName ? ` Next up: ${resumeName} in ${resumeArea}.` : ""}`
+            : `${items.length} items to count, in ${sections.length} sections.`}
           {" "}
           {data.lastFinished ? `Last full count ${data.lastFinished}.` : "This is the first count for this store."}
         </p>
@@ -408,20 +408,18 @@ export function CountWalk({ data, base }: { data: WalkData; base: "/dashboard/co
       />
 
       <OutcomeLine outcome={outcome} />
-      <div className="cw__foot cw__foot--stick cw__foot--col">
+      <div className="cw__foot cw__foot--stick cw-start-foot">
         {resumeIdx >= 0 ? (
           <button type="button" className="cw__btn cw__btn--primary cw-phone-only" disabled={busy} onClick={() => open(resumeIdx)}>
             {busy ? "Opening…" : countId && done > 0 ? `Resume at ${resumeName}` : "Start the count"}
           </button>
         ) : null}
-        <div className="cw__foot">
-          <Link className="cw__btn" href={`${base}/waste?store=${data.store.id}`}>
-            Log waste{data.waste.n ? ` · ${data.waste.n} this week` : ""}
-          </Link>
-          <button type="button" className={`cw__btn ${resumeIdx < 0 ? "cw__btn--primary" : ""}`} disabled={busy || !countId || done === 0} onClick={() => setScreen({ kind: "review" })}>
-            Review and finish
-          </button>
-        </div>
+        <Link className="cw__btn cw-desk-only" href={`${base}/waste?store=${data.store.id}`}>
+          Log waste{data.waste.n ? ` · ${data.waste.n} this week` : ""}
+        </Link>
+        <button type="button" className={`cw__btn ${resumeIdx < 0 ? "cw__btn--primary" : ""}`} disabled={busy || !countId || done === 0} onClick={() => setScreen({ kind: "review" })}>
+          <span className="cw-phone-only">Finish</span><span className="cw-desk-only">Review and finish</span>
+        </button>
       </div>
     </div>
   )
@@ -481,11 +479,11 @@ function ItemScreen({
   const caseNote = it.layers.length > 1 ? `1 ${oneOf(it.layers[0].label)} = ${showQty(it.layers[0].per, it.unit)}` : null
 
   return (
-    <div className="cw">
+    <div className="cw cw--focus">
       <div className="cw__top">
         <div className="cw__meta">
           <button type="button" className="cw__link" onClick={onBack}>‹ Sections</button>
-          <span className="cw__mono">{storeName} · {section.label} · {pos + 1} of {section.idxs.length}</span>
+          <span className="cw__mono" title={storeName}>{section.label} · {pos + 1} of {section.idxs.length}</span>
         </div>
         <div className="cw-dots" aria-hidden="true">
           {section.idxs.map((i) => (
@@ -591,8 +589,25 @@ function Sheet({
     })
   }
   return (
-    <div className="cw-sheet" role="table" aria-label="Count sheet">
-      <div className="cw-sheet__row cw-sheet__row--head" role="row">
+    <div className="cw-sheet">
+      <div className="cw-sheet__pin">
+        <nav className="cw-sheet__jump" aria-label="Jump to section">
+          {sections.map((s) => (
+            <a key={s.id} href={`#cw-sec-${s.id}`} className={s.done === s.idxs.length ? "ok" : ""}>
+              {s.label} <span>{s.done}/{s.idxs.length}</span>
+            </a>
+          ))}
+        </nav>
+        <div className="cw-sheet__row cw-sheet__row--head" aria-hidden="true">
+          <span>Item</span>
+          <span>Last count</span>
+          <span>Count it</span>
+          <span>On hand</span>
+          <span>vs last</span>
+        </div>
+      </div>
+      <div role="table" aria-label="Count sheet">
+      <div className="cw-sheet__row cw-sheet__row--head cw-sr" role="row">
         <span role="columnheader">Item</span>
         <span role="columnheader">Last count</span>
         <span role="columnheader">Count it</span>
@@ -601,7 +616,7 @@ function Sheet({
       </div>
       {sections.map((s) => (
         <div role="rowgroup" key={s.id}>
-          <div className="cw-sheet__sec" role="row">
+          <div className="cw-sheet__sec" role="row" id={`cw-sec-${s.id}`}>
             <span role="cell">{s.label}</span>
             <span role="cell">{s.done} of {s.idxs.length}</span>
           </div>
@@ -652,6 +667,7 @@ function Sheet({
           })}
         </div>
       ))}
+      </div>
     </div>
   )
 }
