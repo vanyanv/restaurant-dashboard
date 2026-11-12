@@ -21,6 +21,7 @@ import { readCounterParams, writeCounterParams } from "@/lib/counter/url-state"
 import type { SectionSources } from "@/lib/counter/adapters/types"
 import type { IngredientCost, IngredientSections } from "@/lib/counter/adapters/ingredient"
 import { saveIngredientCost } from "@/lib/counter/actions/ingredient"
+import { useLeaveGuard } from "@/components/counter/keep/use-leave-guard"
 
 /**
  * One ingredient, composed from `P.ingredient.desk()`
@@ -79,6 +80,10 @@ function CostForm({ cost }: { cost: IngredientCost }) {
   const [price, setPrice] = useState(cost.costNow === null ? "" : String(cost.costNow))
   const [unit, setUnit] = useState(cost.recipeUnit ?? "")
   const [locked, setLocked] = useState(cost.costLocked)
+  // Ask before leaving with a typed price or unit not saved.
+  // Numbers compare as numbers: "2.50" saved comes back as 2.5.
+  const typedPrice = price.trim() === "" ? null : Number(price.trim())
+  useLeaveGuard(typedPrice !== cost.costNow || unit.trim() !== (cost.recipeUnit ?? ""))
   const [error, setError] = useState<string | null>(null)
 
   const save = (nextLocked: boolean) => {

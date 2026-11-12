@@ -12,6 +12,7 @@
 import { withAuth } from "next-auth/middleware"
 import { NextResponse } from "next/server"
 import { PHONE_UA, mobilePathFor } from "@/lib/phone-routes"
+import { loginPathFor } from "@/lib/return-to"
 
 const shutdownAt = process.env.SERVICE_SHUTDOWN_AT
 
@@ -153,7 +154,11 @@ export default withAuth(
     }
 
     if (!token) {
-      return NextResponse.redirect(new URL("/login", req.url))
+      // Remember the page they asked for, so signing back in (an expired
+      // session, a reopened tab) lands there instead of on Overview/Today.
+      return NextResponse.redirect(
+        new URL(loginPathFor(path + req.nextUrl.search), req.url),
+      )
     }
 
     /*

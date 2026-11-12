@@ -6,6 +6,7 @@ import { saveShopSettings } from "@/lib/counter/actions/shop"
 import type { SectionSources } from "@/lib/counter/adapters/types"
 import type { SettingsData, SettingsSections } from "@/lib/counter/adapters/shop"
 import { OutcomeLine, ShopHead, useShopAction } from "../shop-ui"
+import { useLeaveGuard } from "@/components/counter/keep/use-leave-guard"
 
 /**
  * Shop — Settings. The switches an owner reaches for: pause the shop, turn
@@ -41,6 +42,30 @@ function Form({ s }: { s: SettingsData }) {
     supportEmail: s.supportEmail,
   })
   const { busy, outcome, run } = useShopAction()
+  // Ask before leaving with edits not saved. Compared in the shape the save
+  // sends (trimmed text, cents), so "6.5" saved and shown back as "6.50" is
+  // not "unsaved".
+  const sent = {
+    shopPaused: v.shopPaused,
+    pauseNote: v.pauseNote.trim() || null,
+    pickupEnabled: v.pickupEnabled,
+    pickupAddress: v.pickupAddress.trim(),
+    shippingFlatCents: toCents(v.shippingFlat),
+    shippingFreeOverCents: v.freeOver.trim() === "" ? null : toCents(v.freeOver),
+    shipsWithin: v.shipsWithin.trim() || null,
+    supportEmail: v.supportEmail.trim(),
+  }
+  const stored = {
+    shopPaused: s.shopPaused,
+    pauseNote: s.pauseNote?.trim() || null,
+    pickupEnabled: s.pickupEnabled,
+    pickupAddress: s.pickupAddress.trim(),
+    shippingFlatCents: s.shippingFlatCents,
+    shippingFreeOverCents: s.shippingFreeOverCents,
+    shipsWithin: s.shipsWithin?.trim() || null,
+    supportEmail: s.supportEmail.trim(),
+  }
+  useLeaveGuard(JSON.stringify(sent) !== JSON.stringify(stored))
   const bad =
     !MONEY.test(v.shippingFlat.trim())
       ? "Shipping is dollars and cents, like 6.00"

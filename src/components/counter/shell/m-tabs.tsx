@@ -3,6 +3,7 @@
 import Link from "next/link"
 import { usePathname, useSearchParams } from "next/navigation"
 import { activePhoneTab, PHONE_TABS, type PhoneTab } from "@/lib/counter/phone-tabs"
+import { scopeQuery } from "@/lib/counter/url-state"
 
 /**
  * `.mtabs` — the phone's bottom bar, which this product did not have.
@@ -52,7 +53,10 @@ export function MTabs() {
   // On a desk page (see `AppShell`'s `.ct-deskbar`) the tab is the one its
   // phone twin would light: `/dashboard/count/setup` is Count, not Today.
   const active = activePhoneTab(pathname.replace(/^\/dashboard(?=\/|$)/, "/m"))
-  const qs = searchParams?.toString() ?? ""
+  // Only the window and the store travel (as on the rail): a page's own
+  // picks — a search, a filter, the open check — stay on that page. Carrying
+  // `?q=` onto Ask made Ask send it as a question.
+  const qs = scopeQuery(new URLSearchParams(searchParams?.toString() ?? ""))
 
   /*
    * THE TOKEN ROOT TRAVELS WITH THE BAR, and that is not decoration.

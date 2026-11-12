@@ -10,6 +10,7 @@ import { shortStoreName } from "@/lib/checks/names"
 import type { SectionSources } from "@/lib/counter/adapters/types"
 import type { TodayData, TodaySections, CellView } from "@/lib/counter/adapters/checks"
 import { ChecksHead, Glyph, Legend, OutcomeLine, type Outcome } from "./checks-ui"
+import { useUrlParam } from "@/components/counter/keep/use-url-param"
 
 /**
  * Store checks — Today. One card per store with its Morning and Night check
@@ -94,12 +95,32 @@ function SumRow({ name, cells }: { name: string; cells: NonNullable<TodayData["m
 
 type Pick = { storeId: string; day: string; kind: string }
 
+/** A check pick in the URL: `?check=<storeId>~<day>~<kind>`. */
+function encodePick(p: Pick | null): string {
+  return p ? `${p.storeId}~${p.day}~${p.kind}` : ""
+}
+function decodePick(raw: string): Pick | null {
+  const [storeId, day, kind] = raw.split("~")
+  return storeId && day && kind ? { storeId, day, kind } : null
+}
+
 function Stores({ data }: { data: TodayData }) {
-  const [pick, setPick] = useState<Pick | null>(() => {
+  // The open check lives in the URL so leaving and coming back keeps it.
+  const [rawPick, setRawPick] = useUrlParam("check", "")
+  const fallbackPick = (): Pick | null => {
     const s = data.stores.find((x) => !x.preOpen)
     const c = s?.cells.find((x) => x?.live) ?? s?.cells.find(Boolean)
     return s && c ? { storeId: s.id, day: c.day, kind: c.kind } : null
-  })
+  }
+  // A remembered pick that no longer matches a cell (yesterday's day, an old
+  // link) falls back to the default rather than an empty panel.
+  const fromUrl = decodePick(rawPick)
+  const pick: Pick | null =
+    fromUrl &&
+    data.stores.some((s) => s.id === fromUrl.storeId && s.cells.some((c) => c?.day === fromUrl.day && c?.kind === fromUrl.kind))
+      ? fromUrl
+      : fallbackPick()
+  const setPick = (p: Pick | null) => setRawPick(encodePick(p))
   const picked = (() => {
     if (!pick) return null
     const s = data.stores.find((x) => x.id === pick.storeId)
