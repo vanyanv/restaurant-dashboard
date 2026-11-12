@@ -176,3 +176,79 @@
   .rs-srow__bar{grid-column:auto}
   .rs-pill{grid-row:auto;grid-column:auto}
 }
+
+/* The count: phone start (sections), one item, Before you finish, and the
+   desk sheet. The phone and the sheet share one state; which one shows is
+   only a matter of width. */
+.cw__say{margin:0;font-size:16px;line-height:1.4;font-weight:600}
+.cw__mono--bad{color:var(--bad)}
+.cw__foot--col{flex-direction:column}
+.cw__foot--col>.cw__btn{flex:none}
+.cw__foot--stick{position:sticky;bottom:0;z-index:2;background:var(--paper);padding:10px 0 max(10px,env(safe-area-inset-bottom,0px));border-top:1px solid var(--line)}
+.cw-phone{display:grid;gap:6px}
+.cw-sec{display:flex;gap:12px;align-items:center;width:100%;min-height:58px;padding:8px 14px;border:0;border-bottom:1px solid var(--line);
+  background:none;font:inherit;color:var(--ink);text-align:left;cursor:pointer}
+.cw-sec:last-child{border-bottom:0}
+.cw-sec:hover{background:var(--paper)}
+.cw-sec__name{flex:1;min-width:0;display:grid;gap:2px}
+.cw-sec__name b{font-size:16px;font-weight:600}
+.cw-sec__name small{font-size:13px;color:var(--signal-ink)}
+.cw-sec__n{font-size:14px;color:var(--ink-2);font-variant-numeric:tabular-nums;white-space:nowrap}
+.cw-sec__n--ok{color:var(--good);font-weight:600}
+.cw-dots{display:flex;gap:4px}
+.cw-dots i{flex:1;height:4px;border-radius:2px;background:var(--line)}
+.cw-dots i.ok{background:var(--good)}
+.cw-dots i.on{background:var(--ink)}
+.cw-last{display:flex;align-items:baseline;justify-content:space-between;gap:10px;flex-wrap:wrap;padding:10px 12px;border-radius:10px;background:var(--surface);border:1px solid var(--line)}
+.cw-last b{font-size:15px;font-weight:600;font-variant-numeric:tabular-nums}
+.cw-item-foot{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,2fr)}
+.cw-rv{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:12px;display:grid;gap:8px}
+.cw-rv--bad{border-color:var(--bad)}
+.cw-rv__top{display:flex;justify-content:space-between;gap:10px;align-items:baseline;font-size:16px}
+.cw-rv__top span{font-weight:700;font-variant-numeric:tabular-nums}
+.cw-rv__row{display:flex;align-items:center;gap:8px;padding:10px 12px;border-bottom:1px solid var(--line)}
+.cw-rv__row:last-child{border-bottom:0}
+.cw-rv__name{flex:1;min-width:0;display:grid;gap:2px}
+.cw-rv__name small{font-size:13px;color:var(--ink-2)}
+.cw-rv__btn{flex:0 0 auto;min-height:44px;font-size:14px}
+
+/* Desk sheet */
+.cw-sheet{display:none}
+@media (min-width:1000px){
+  .cw--start{max-width:none}
+  .cw-phone,.cw-phone-only{display:none}
+  .cw--start .cw__foot--stick{max-width:560px;border-top:0;background:none;position:static}
+  .cw-sheet{display:block;background:var(--surface);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+  .cw-sheet__row{display:grid;grid-template-columns:minmax(200px,1.4fr) minmax(150px,1fr) minmax(260px,1.6fr) 110px minmax(150px,1fr);
+    gap:14px;align-items:center;padding:8px 16px;border-bottom:1px solid var(--line);font-variant-numeric:tabular-nums}
+  .cw-sheet__row--head{font-family:var(--mono);font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3);border-bottom:1px solid var(--line-strong)}
+  .cw-sheet__row--off{background:var(--bad-wash)}
+  .cw-sheet__sec{display:flex;justify-content:space-between;padding:8px 16px;background:var(--paper);border-bottom:1px solid var(--line);
+    font-family:var(--mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3)}
+  .cw-sheet__name{display:flex;gap:10px;align-items:center;min-width:0}
+  .cw-sheet__name>span:last-child{display:grid;gap:1px;min-width:0}
+  .cw-sheet__name b{font-size:15px}
+  .cw-sheet__name small,.cw-sheet__last small{font-size:12px;color:var(--ink-3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .cw-sheet__last{display:grid;gap:1px;font-size:14px;color:var(--ink-2)}
+  .cw-sheet__ins{display:flex;gap:8px;flex-wrap:wrap}
+  .cw-sheet__ins label{display:grid;gap:2px;justify-items:center}
+  .cw-sheet__ins input{width:72px;height:38px;box-sizing:border-box;text-align:center;font:inherit;font-size:16px;font-weight:600;
+    border:1px solid var(--line-strong);border-radius:8px;background:var(--surface);color:var(--ink)}
+  .cw-sheet__ins input:focus{outline:2px solid var(--ink);outline-offset:1px}
+  .cw-sheet__ins small{font-size:11px;color:var(--ink-3);max-width:80px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .cw-sheet__tot{text-align:right;font-size:15px}
+  .cw-sheet__vs{font-size:13px;color:var(--ink-2)}
+  .cw-sheet__vs--off{color:var(--bad);font-weight:700}
+}
+
+/* Which store are you counting? Big targets: the one choice before counting. */
+.cw-pick{display:grid;gap:10px}
+.cw-pick__store{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 12px;align-items:center;min-height:84px;padding:16px;
+  border:1px solid var(--line-strong);border-radius:12px;background:var(--surface);color:var(--ink);text-decoration:none}
+.cw-pick__store:hover{border-color:var(--ink)}
+.cw-pick__store b{font-family:var(--display);font-size:24px;letter-spacing:-.02em;line-height:1.1}
+.cw-pick__store span{grid-column:1;font-size:14px;color:var(--ink-2)}
+.cw-pick__store span.cw-pick__open{color:var(--signal-ink);font-weight:600}
+.cw-pick__store i{grid-column:2;grid-row:1/span 2;font-style:normal;font-size:28px;color:var(--ink-3)}
+.cw-store{display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap}
+@media (min-width:1000px){.cw-pick{grid-template-columns:repeat(auto-fit,minmax(240px,1fr));max-width:900px}}

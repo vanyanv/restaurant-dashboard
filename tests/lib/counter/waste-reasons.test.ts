@@ -151,12 +151,13 @@ async function report() {
 describe("count report · rows add up to the totals", () => {
   it("splits each row's adjustments by class, and every row balances", async () => {
     const d = await report()
-    const beef = d.rows.find((r) => r.name === "beef")!
+    // Rows carry the plain name (plainName): unknown items keep their text, capitalized.
+    const beef = d.rows.find((r) => r.name === "Beef")!
     expect(beef.waste).toBe(2)
     expect(beef.theft).toBe(3)
     expect(beef.wasteDollars).toBe(10)
     expect(beef.theftDollars).toBe(15)
-    const buns = d.rows.find((r) => r.name === "buns")!
+    const buns = d.rows.find((r) => r.name === "Buns")!
     expect(buns.waste).toBe(4)
     expect(buns.returned).toBe(10)
     for (const r of d.rows) {

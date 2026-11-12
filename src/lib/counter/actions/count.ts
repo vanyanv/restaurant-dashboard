@@ -19,6 +19,8 @@ import {
   defaultLayers,
   describeShelf,
   guessArea,
+  normalizeArea,
+  storedAreasFor,
   layersFor,
   resolveLayers,
   shelfTotal,
@@ -271,7 +273,11 @@ export async function deleteWaste(id: string): Promise<ActionResult> {
 // Setup: what is on the count, where, and how it is counted
 // ---------------------------------------------------------------------------
 
-const AREA = z.enum(COUNT_AREAS.map((a) => a.id) as [string, ...string[]])
+// Old ids ("walk_in") still arrive from a page loaded before the sections changed.
+const AREA = z.preprocess(
+  (v) => (typeof v === "string" ? normalizeArea(v) : v),
+  z.enum(COUNT_AREAS.map((a) => a.id) as [string, ...string[]]),
+)
 
 async function nextSort(accountId: string, area: string): Promise<number> {
   const last = await prisma.countItem.findFirst({
@@ -360,7 +366,7 @@ export async function moveCountItem(input: { id: string; dir: "up" | "down" }): 
     })
     if (!item) return { ok: false, error: "That item isn't on your count list" }
     const list = await prisma.countItem.findMany({
-      where: { accountId: owner.accountId, area: item.area, active: true },
+      where: { accountId: owner.accountId, area: { in: storedAreasFor(item.area) }, active: true },
       orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
       select: { id: true },
     })

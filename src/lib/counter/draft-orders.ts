@@ -23,9 +23,18 @@ import { computeReorderRecommendation, type ReorderStatus } from "@/lib/inventor
  * to whole cases, because you cannot order 0.3 of a case.
  */
 
-/** How many days an order should last after it arrives. Chosen on the page. */
-export const COVER_DAY_CHOICES = [3, 7, 14] as const
-export const DEFAULT_COVER_DAYS = 7
+/**
+ * How many days an order should last after it arrives. Chosen on the page.
+ * The stores order twice a week, so the default carries a store to the next
+ * delivery: half a week, rounded up to 4 days.
+ */
+export const COVER_DAY_CHOICES = [4, 7, 14] as const
+export const DEFAULT_COVER_DAYS = 4
+export const COVER_LABELS: Record<(typeof COVER_DAY_CHOICES)[number], string> = {
+  4: "Until the next order",
+  7: "A week",
+  14: "Two weeks",
+}
 
 export function parseCoverDays(raw: string | undefined | null): number {
   const n = Number(raw)

@@ -62,7 +62,7 @@ function Setup({ data }: { data: SetupData }) {
   const { busy, outcome, run } = useAction()
   const [editing, setEditing] = useState<string | null>(null)
   const [addId, setAddId] = useState("")
-  const [addArea, setAddArea] = useState<string>("walk_in")
+  const [addArea, setAddArea] = useState<string>("fridge")
 
   return (
     <div style={{ display: "grid" }}>

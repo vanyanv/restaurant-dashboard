@@ -7,7 +7,7 @@ import { Section, useCounterTransition, usePageChrome, useSurfaceHref } from "@/
 import type { SectionSources } from "@/lib/counter/adapters/types"
 import type { DraftData, DraftSections, DraftVendor, StockRow, StoreSummary } from "@/lib/counter/adapters/draft-orders"
 import { setDraftSkipCount } from "@/lib/counter/actions/count"
-import { COVER_DAY_CHOICES } from "@/lib/counter/draft-orders"
+import { COVER_DAY_CHOICES, COVER_LABELS, DEFAULT_COVER_DAYS } from "@/lib/counter/draft-orders"
 import { CountHead, money, OutcomeLine, type Outcome } from "../count-ui"
 
 /**
@@ -18,12 +18,12 @@ import { CountHead, money, OutcomeLine, type Outcome } from "../count-ui"
  * estimate and says how it was reached. Nothing here places an order.
  */
 export function OrdersClient({ sections }: { sections: SectionSources<DraftSections> }) {
-  usePageChrome({ leaf: "Restock" })
+  usePageChrome({ leaf: "Order next" })
   const { pending } = useCounterTransition()
   return (
     <>
-      <CountHead sub="What each store has, and a draft of what to order. Estimates for testing; nothing is sent." />
-      <Section title="Restock" meta={(d) => d?.store.name ?? ""} data={sections.drafts} pending={pending} pad={false}>
+      <CountHead sub="What to put on the next order, store by store. You order twice a week, so it covers until the order after. Estimates; nothing is sent." />
+      <Section title="Order next" meta={(d) => d?.store.name ?? ""} data={sections.drafts} pending={pending} pad={false}>
         {(d) => (d ? <Restock data={d} /> : null)}
       </Section>
     </>
@@ -49,8 +49,8 @@ function Restock({ data }: { data: DraftData }) {
       <div className="cw-pad rs-lead">
         <p className="rs-lead__say">
           {lines === 0
-            ? `${data.store.name} has enough of everything counted for ${data.coverDays} days after the next delivery.`
-            : `${data.store.name} needs ${lines} ${lines === 1 ? "item" : "items"} from ${data.vendors.length} ${data.vendors.length === 1 ? "vendor" : "vendors"}${urgent > 0 ? `, ${urgent} to order today` : ""}.`}
+            ? `${data.store.name} has enough of everything counted to last ${data.coverDays === DEFAULT_COVER_DAYS ? "until the next order" : `${data.coverDays} days`} after it arrives.`
+            : `On the next order, ${data.store.name} needs ${lines} ${lines === 1 ? "item" : "items"} from ${data.vendors.length} ${data.vendors.length === 1 ? "vendor" : "vendors"}${urgent > 0 ? `. ${urgent} can't wait: order ${urgent === 1 ? "it" : "them"} today` : ""}.`}
         </p>
         {lines > 0 && (
           <div className="rs-lead__num">
@@ -174,7 +174,7 @@ function DraftPanel({ data }: { data: DraftData }) {
     <div className="rs-draft">
       <div className="cw-pad rs-draft__head">
         <div className="cw__chips" role="group" aria-label="Order enough to last">
-          <span className="cw__mono" style={{ alignSelf: "center" }}>Last after it arrives</span>
+          <span className="cw__mono" style={{ alignSelf: "center" }}>Enough to last</span>
           {COVER_DAY_CHOICES.map((n) => (
             <button
               key={n}
@@ -183,7 +183,7 @@ function DraftPanel({ data }: { data: DraftData }) {
               aria-pressed={data.coverDays === n}
               onClick={() => router.push(href(`${PATH}?${new URLSearchParams({ store: data.store.id, cover: String(n) }).toString()}`))}
             >
-              {n} days
+              {COVER_LABELS[n]}
             </button>
           ))}
         </div>

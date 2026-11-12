@@ -8,6 +8,7 @@ import { computeForecastShapedDepletion } from "@/lib/inventory/forecast-depleti
 import { normalizeVendorName } from "@/lib/vendor-normalize"
 import { daysUntilOut, draftLine, type DraftLine } from "@/lib/counter/draft-orders"
 import { fmtQty } from "@/lib/counter/count-layers"
+import { plainName } from "@/lib/counter/plain-names"
 import { classify, guardSection, type StreamedSections } from "./types"
 import type { SectionData } from "@/lib/counter/section-data"
 
@@ -263,9 +264,9 @@ async function buildDrafts(
 
     const oh = runningOnHandFromContext(ctx, ing)
     if (oh.baseAt === null) {
-      notCounted.push(ing.name)
+      notCounted.push(plainName(ing.name))
       stock.push({
-        id: ing.id, name: ing.name, onHand: "—", perDay: `${q(tailRate)} ${unit}`, daysLeft: null, orderAt: null,
+        id: ing.id, name: plainName(ing.name), onHand: "—", perDay: `${q(tailRate)} ${unit}`, daysLeft: null, orderAt: null,
         runsOut: "Not counted", status: "unknown", statusText: "Count it", counted: "Never counted", stale: false,
       })
       continue
@@ -273,9 +274,9 @@ async function buildDrafts(
     const counted = countedLabel(oh.baseAt, asOf)
     const stale = asOf.getTime() - oh.baseAt.getTime() > STALE_COUNT_DAYS * DAY_MS
     if (oh.onHand < 0) {
-      belowZero.push(ing.name)
+      belowZero.push(plainName(ing.name))
       stock.push({
-        id: ing.id, name: ing.name, onHand: `${q(oh.onHand)} ${unit}`, perDay: `${q(tailRate)} ${unit}`, daysLeft: null, orderAt: null,
+        id: ing.id, name: plainName(ing.name), onHand: `${q(oh.onHand)} ${unit}`, perDay: `${q(tailRate)} ${unit}`, daysLeft: null, orderAt: null,
         runsOut: "Reads below zero", status: "unknown", statusText: "Count again", counted, stale,
       })
       continue
@@ -298,7 +299,7 @@ async function buildDrafts(
     const ordering = line.orderQty > 0
     stock.push({
       id: ing.id,
-      name: ing.name,
+      name: plainName(ing.name),
       onHand: `${q(oh.onHand)} ${unit}`,
       perDay: `${q(line.perDay)} ${unit}`,
       daysLeft,
@@ -346,7 +347,7 @@ async function buildDrafts(
     }
     g.rows.push({
       id: ing.id,
-      name: ing.name,
+      name: plainName(ing.name),
       unit,
       onHand: `${q(oh.onHand)} ${unit}`,
       perDay: `${q(line.perDay)} ${unit}`,

@@ -11,8 +11,8 @@ export function PhoneCountClient({ sections }: { sections: SectionSources<WalkSe
   const { pending } = useCounterTransition()
   return (
     <>
-      <CountHead sub="The weekly count, one shelf at a time" />
-      <Section bare title="Weekly count" data={sections.walk} pending={pending}>
+      <CountHead sub="Count the shelves in your walk order. Each item saves as you go." />
+      <Section bare title="Count" data={sections.walk} pending={pending}>
         {(d) =>
           d ? (
             <div style={{ display: "grid", gap: 12 }}>

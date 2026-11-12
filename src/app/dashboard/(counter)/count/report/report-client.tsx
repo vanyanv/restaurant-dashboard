@@ -19,11 +19,11 @@ export function ReportClient({ sections }: { sections: SectionSources<ReportSect
   const { pending } = useCounterTransition()
   return (
     <>
-      <CountHead sub="Where the food went, and how often you order it" />
-      <Section title="Should have vs counted" meta={(d) => (d?.current ? `${d.store.name} · ${d.current.label}` : d?.store.name ?? "")} data={sections.report} pending={pending} pad={false}>
+      <CountHead sub="Between two counts: what should be on the shelf, what was, and where the difference went" />
+      <Section title="Where food went" meta={(d) => (d?.current ? `${d.store.name} · ${d.current.label}` : d?.store.name ?? "")} data={sections.report} pending={pending} pad={false}>
         {(d) => (d ? <Gap data={d} /> : null)}
       </Section>
-      <Section title="How often you order" meta={() => "Last 8 weeks, from invoices"} data={sections.report} pending={pending} pad={false}>
+      <Section title="How often each item is ordered" meta={() => "Last 8 weeks, from invoices"} data={sections.report} pending={pending} pad={false}>
         {(d) => (d ? <Orders data={d} /> : null)}
       </Section>
     </>
@@ -32,6 +32,18 @@ export function ReportClient({ sections }: { sections: SectionSources<ReportSect
 
 function q(n: number): string {
   return fmtQty(Math.round(n * 10) / 10)
+}
+
+/** The report in one sentence: how much went missing, and on what. */
+function summary(d: ReportData): string {
+  if (!d.previous || !d.current) return ""
+  const top = d.rows.filter((r) => (r.missingDollars ?? 0) > 0).slice(0, 3).map((r) => r.name)
+  const span = `Between ${d.previous.label} and ${d.current.label}`
+  const missing = d.missingDollars > 0
+    ? `${money(d.missingDollars)} of food went missing that nobody logged${top.length ? `, most of it ${top.join(", ")}` : ""}.`
+    : "nothing went missing that wasn't logged."
+  const waste = d.wasteDollars > 0 ? ` You logged ${money(d.wasteDollars)} of waste.` : ""
+  return `${span}, ${missing}${waste}`
 }
 
 function Gap({ data }: { data: ReportData }) {
@@ -72,6 +84,9 @@ function Gap({ data }: { data: ReportData }) {
         </div>
       ) : (
         <>
+          <div className="cw-pad" style={{ borderBottom: "1px solid var(--line)" }}>
+            <p className="cw__say">{summary(data)}</p>
+          </div>
           <div className="cw-figs">
             <div className="cw-fig">
               <span className="cw__mono">Missing, nobody logged it</span>
@@ -81,7 +96,7 @@ function Gap({ data }: { data: ReportData }) {
             <div className="cw-fig">
               <span className="cw__mono">Extra on the shelf</span>
               <b>{money(data.extraDollars)}</b>
-              <span>More counted than the numbers say — kept apart, not netted off the missing</span>
+              <span>More counted than the numbers say, often a delivery whose invoice hasn&apos;t come in</span>
             </div>
             <div className="cw-fig">
               <span className="cw__mono">Waste you logged</span>
@@ -92,11 +107,6 @@ function Gap({ data }: { data: ReportData }) {
               <span className="cw__mono">Theft · sent back · other</span>
               <b>{money(data.theftDollars + data.returnDollars + data.otherDollars)}</b>
               <span>Theft {money(data.theftDollars)} · sent back {money(data.returnDollars)} · other {money(data.otherDollars)}</span>
-            </div>
-            <div className="cw-fig">
-              <span className="cw__mono">Compared</span>
-              <b>{data.rows.length} items</b>
-              <span>Counted on {data.previous.label} and {data.current.label}</span>
             </div>
           </div>
           {data.rows.length === 0 ? (
@@ -147,9 +157,12 @@ function Gap({ data }: { data: ReportData }) {
               </table>
             </div>
           )}
-          <p className="cw__sub" style={{ padding: 14, borderTop: "1px solid var(--line)" }}>
+          <details className="rs-fold">
+          <summary>How this is worked out</summary>
+          <p className="cw__sub" style={{ padding: "0 14px 14px" }}>
             Every row adds across: last count + delivered − sales used − waste − theft, sent back and other = should have. The figures above are those rows summed{data.offReportEntries > 0 ? `; ${data.offReportEntries} more ${data.offReportEntries === 1 ? "entry" : "entries"} (${money(data.offReportDollars)}) were logged against items not counted both times, so they are on no row` : ""}. &quot;Sales used&quot; is every item sold times its recipe. Extras and &quot;no cheese&quot; changes aren&apos;t in it yet, so a small gap on cheese or sauce is expected. &quot;Extra&quot; means more on the shelf than the numbers say, usually a delivery whose invoice hasn&apos;t come in.
           </p>
+          </details>
         </>
       )}
     </div>
