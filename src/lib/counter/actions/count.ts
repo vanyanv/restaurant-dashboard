@@ -432,3 +432,16 @@ export async function addTopSpendItems(limit = 15): Promise<ActionResult> {
     return fail(err)
   }
 }
+
+/** "Skip this week's count" for one store's draft orders. On, the draft ignores counts from the last 7 days. */
+export async function setDraftSkipCount(storeId: string, skip: boolean): Promise<ActionResult> {
+  try {
+    const store = await requireOwnerStore(storeId)
+    await prisma.store.update({ where: { id: store.id }, data: { draftSkipCount: skip === true } })
+    revalidatePath("/dashboard/count/orders")
+    revalidatePath("/m/count/orders")
+    return { ok: true, message: skip ? `Skipping this week's count for ${store.name}` : `Using the latest count for ${store.name}` }
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "Could not change the count switch" }
+  }
+}
