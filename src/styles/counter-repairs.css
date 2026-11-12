@@ -1311,6 +1311,28 @@ button.wkd {
 }
 
 /*
+ * …but sticky + z-index makes `.mtop` a stacking context, and the store and
+ * date sheets are drawn INSIDE it, next to their triggers. Their 41/42 then
+ * only count within `.mtop`: against the tab bar they sit at 35, under its 40.
+ * The bar covered the bottom ~70px of "Pick a store" — the last store in the
+ * list — and the sheet was too short to scroll it out from under the bar, so
+ * Glendale could not be picked on a phone (owner, 2026-11-12). While one of
+ * its sheets is open, `.mtop` is lifted above the bar so the sheet and its
+ * shade cover it, as the band above intends.
+ */
+.m-shell__main > .ct-root.ct-phone > .mtop:has(.msheet.on) {
+  z-index: 43;
+}
+
+/* A sheet taller than the screen scrolls inside itself without dragging the
+   page behind it, and its last row clears the home indicator. */
+.ct-phone .msheet {
+  max-height: 82dvh;
+  overscroll-behavior: contain;
+  padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+}
+
+/*
  * ============================================================================
  * A `<select>` IN A ROWLINE FILLS ITS TRACK RATHER THAN DICTATING IT
  * ============================================================================
