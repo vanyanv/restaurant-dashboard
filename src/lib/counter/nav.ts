@@ -209,12 +209,15 @@ export const CHECKS_TABS: readonly SubNavItem[] = [
   { label: "Links & email", href: "/dashboard/checks/posters" },
 ] as const
 
-/** Count & waste — the weekly count, the waste log, the report and the setup. */
+/**
+ * Count & waste — in the order an owner uses it: count the shelves, see what
+ * goes on the next order, log waste, check where food went, then setup.
+ */
 export const COUNT_TABS: readonly SubNavItem[] = [
   { label: "Count", href: "/dashboard/count" },
+  { label: "Order next", href: "/dashboard/count/orders" },
   { label: "Waste", href: "/dashboard/count/waste" },
   { label: "Report", href: "/dashboard/count/report" },
-  { label: "Restock", href: "/dashboard/count/orders" },
   { label: "Setup", href: "/dashboard/count/setup" },
 ] as const
 

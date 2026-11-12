@@ -3,6 +3,8 @@ import {
   defaultLayers,
   describeShelf,
   guessArea,
+  normalizeArea,
+  areaLabel,
   layersFor,
   parseLayers,
   resolveLayers,
@@ -71,10 +73,12 @@ describe("parseLayers", () => {
 
 describe("guessArea", () => {
   it("places items by supplier category", () => {
-    expect(guessArea("Frozen Foods")).toBe("freezer")
-    expect(guessArea("Paper/Supplies")).toBe("dry")
-    expect(guessArea("Produce")).toBe("walk_in")
-    expect(guessArea(null)).toBe("walk_in")
+    expect(guessArea("Frozen Foods")).toBe("frozen")
+    expect(guessArea("Paper/Supplies")).toBe("packaging")
+    expect(guessArea("Chemicals")).toBe("cleaning")
+    expect(guessArea("Beverage")).toBe("drinks")
+    expect(guessArea("Produce")).toBe("fridge")
+    expect(guessArea(null)).toBe("fridge")
   })
 })
 
@@ -96,5 +100,15 @@ describe("layersFor and valuesFit", () => {
     expect(valuesFit(layers, [1, 2])).toBe(true)
     expect(valuesFit(layers, [3])).toBe(false)
     expect(valuesFit(layers, null)).toBe(false)
+  })
+})
+
+describe("normalizeArea", () => {
+  it("old sections map onto the sheet's six", () => {
+    expect(normalizeArea("walk_in")).toBe("fridge")
+    expect(normalizeArea("freezer")).toBe("frozen")
+    expect(normalizeArea("line")).toBe("fridge")
+    expect(normalizeArea("dry")).toBe("dry")
+    expect(areaLabel("walk_in")).toBe("Refrigeration")
   })
 })

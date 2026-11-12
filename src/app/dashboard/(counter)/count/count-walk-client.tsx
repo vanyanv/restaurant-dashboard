@@ -12,8 +12,8 @@ export function CountWalkClient({ sections }: { sections: SectionSources<WalkSec
   const { pending } = useCounterTransition()
   return (
     <>
-      <CountHead sub="Count what's on the shelves, the way it comes in" />
-      <Section title="Weekly count" meta={(d) => d?.store.name ?? ""} data={sections.walk} pending={pending}>
+      <CountHead sub="Count the shelves in your walk order. Each item saves as you go." />
+      <Section title="Count" meta={(d) => d?.store.name ?? ""} data={sections.walk} pending={pending}>
         {(d) => (d ? <CountWalk key={d.store.id} data={d} base="/dashboard/count" /> : null)}
       </Section>
     </>

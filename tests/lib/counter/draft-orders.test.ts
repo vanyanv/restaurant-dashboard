@@ -53,10 +53,10 @@ describe("draftLine", () => {
 })
 
 test("parseCoverDays only takes the offered choices", () => {
-  expect(parseCoverDays("3")).toBe(3)
+  expect(parseCoverDays("4")).toBe(4)
   expect(parseCoverDays("14")).toBe(14)
-  expect(parseCoverDays("5")).toBe(7)
-  expect(parseCoverDays(undefined)).toBe(7)
+  expect(parseCoverDays("5")).toBe(4)
+  expect(parseCoverDays(undefined)).toBe(4)
 })
 
 describe("daysUntilOut", () => {

@@ -6,6 +6,7 @@ import {
 import {
   COUNT_AREAS,
   areaLabel,
+  normalizeArea,
   WASTE_REASON_IDS,
   fmtQty,
   layersFor,
@@ -15,6 +16,7 @@ import {
   wasteReasonLabel,
   type Layer,
 } from "@/lib/counter/count-layers"
+import { plainName } from "@/lib/counter/plain-names"
 import { reasonClass, sumAdjustments, type ValuedAdjustment } from "@/lib/counter/waste-reasons"
 import { classify, guardSection, type StreamedSections } from "./types"
 import type { SectionData } from "@/lib/counter/section-data"
@@ -72,8 +74,10 @@ async function countItems(accountId: string): Promise<ItemRow[]> {
     const i = COUNT_AREAS.findIndex((x) => x.id === a)
     return i < 0 ? 99 : i
   }
+  // Rows saved under the first four sections ("walk_in") read as today's six.
+  const named = rows.map((r) => ({ ...r, area: normalizeArea(r.area) }))
   // Stable sort keeps sortOrder within an area; areas walk in COUNT_AREAS order.
-  return rows.sort((a, b) => areaIdx(a.area) - areaIdx(b.area))
+  return named.sort((a, b) => areaIdx(a.area) - areaIdx(b.area))
 }
 
 function weekAgo(): Date {
@@ -87,7 +91,10 @@ function weekAgo(): Date {
 export type WalkItem = {
   id: string
   ingredientId: string
+  /** What the owner calls it ("Fries"). */
   name: string
+  /** The invoice text it was named from, shown small under the name. */
+  fullName: string
   area: string
   areaLabel: string
   unit: string
@@ -95,6 +102,8 @@ export type WalkItem = {
   layers: Layer[]
   /** What was typed for this stop on the open count, or null if not yet. */
   values: number[] | null
+  /** The last finished count of this ingredient at this store. */
+  last: { qty: number; day: string; values: number[] | null } | null
 }
 
 export type WalkData = {
@@ -115,7 +124,7 @@ export function getCountWalkSectionPromises(opts: { accountId: string; storeId?:
         const store = pickStore(stores, opts.storeId)
         if (!store) return null
         const cutoff = new Date(Date.now() - 7 * DAY_MS)
-        const [items, open, last, waste] = await Promise.all([
+        const [items, open, last, waste, lastLines] = await Promise.all([
           countItems(opts.accountId),
           prisma.stockCount.findFirst({
             where: { storeId: store.id, store: { accountId: opts.accountId }, status: "IN_PROGRESS", startedAt: { gte: cutoff } },
@@ -131,7 +140,16 @@ export function getCountWalkSectionPromises(opts: { accountId: string; storeId?:
             where: { storeId: store.id, store: { accountId: opts.accountId }, occurredAt: { gte: weekAgo() }, reason: { in: WASTE_REASON_IDS } },
             select: { qty: true, canonicalIngredient: { select: { costPerRecipeUnit: true } } },
           }),
+          // The last finished count of each item, newest first: shown above the
+          // boxes so a slip (100 bags for 20) stands out while typing.
+          prisma.stockCountLine.findMany({
+            where: { stockCount: { storeId: store.id, store: { accountId: opts.accountId }, status: "COMPLETED", countedAt: { gte: new Date(Date.now() - 90 * DAY_MS) } } },
+            orderBy: { stockCount: { countedAt: "desc" } },
+            select: { canonicalIngredientId: true, qtyInRecipeUnit: true, breakdown: true, stockCount: { select: { countedAt: true } } },
+          }),
         ])
+        const lastBy = new Map<string, (typeof lastLines)[number]>()
+        for (const l of lastLines) if (!lastBy.has(l.canonicalIngredientId)) lastBy.set(l.canonicalIngredientId, l)
         const typed = new Map<string, number[]>()
         for (const line of open?.lines ?? []) {
           const b = line.breakdown
@@ -150,16 +168,25 @@ export function getCountWalkSectionPromises(opts: { accountId: string; storeId?:
             if (!unit) return []
             const layers = layersFor(it.layers, unit)
             const values = typed.get(it.id)
+            const prev = lastBy.get(it.canonicalIngredientId)
+            const prevB = prev?.breakdown && typeof prev.breakdown === "object" && !Array.isArray(prev.breakdown)
+              ? (prev.breakdown as Record<string, unknown>)[it.id]
+              : undefined
+            const prevVals = Array.isArray(prevB) ? prevB.map((n) => (typeof n === "number" ? n : 0)) : null
             return [{
               id: it.id,
               ingredientId: it.canonicalIngredientId,
-              name: it.canonicalIngredient.name,
+              name: plainName(it.canonicalIngredient.name),
+              fullName: it.canonicalIngredient.name,
               area: it.area,
               areaLabel: areaLabel(it.area),
               unit,
               cost: it.canonicalIngredient.costPerRecipeUnit,
               layers,
               values: valuesFit(layers, values) ? values : null,
+              last: prev
+                ? { qty: prev.qtyInRecipeUnit, day: dayLabel(prev.stockCount.countedAt), values: valuesFit(layers, prevVals) ? prevVals : null }
+                : null,
             }]
           }),
           waste: {
@@ -214,7 +241,7 @@ export function getCountWasteSectionPromises(opts: { accountId: string; storeId?
           if (!unit) continue
           const cur = byIng.get(it.canonicalIngredientId) ?? {
             ingredientId: it.canonicalIngredientId,
-            name: it.canonicalIngredient.name,
+            name: plainName(it.canonicalIngredient.name),
             unit,
             cost: it.canonicalIngredient.costPerRecipeUnit,
             layers: [],
@@ -236,7 +263,7 @@ export function getCountWasteSectionPromises(opts: { accountId: string; storeId?
           const cost = r.canonicalIngredient.costPerRecipeUnit
           return {
             id: r.id,
-            name: r.canonicalIngredient.name,
+            name: plainName(r.canonicalIngredient.name),
             amount: showQty(r.qty, r.canonicalIngredient.recipeUnit ?? "").trim(),
             reason: wasteReasonLabel(r.reason),
             when: r.occurredAt.toLocaleString("en-US", { weekday: "short", hour: "numeric", minute: "2-digit", timeZone: "America/Los_Angeles" }),
@@ -351,7 +378,7 @@ async function orderFrequency(accountId: string, storeId: string, ingredientIds:
     const id = l.canonicalIngredientId
     const d = l.invoice.invoiceDate
     if (!id || !d || !l.canonicalIngredient) continue
-    const a = acc.get(id) ?? { name: l.canonicalIngredient.name, vendors: new Map(), days: new Map(), qty: new Map(), spend: 0 }
+    const a = acc.get(id) ?? { name: plainName(l.canonicalIngredient.name), vendors: new Map(), days: new Map(), qty: new Map(), spend: 0 }
     const day = d.toISOString().slice(0, 10)
     a.days.set(day, (a.days.get(day) ?? 0) + l.quantity)
     a.vendors.set(l.invoice.vendorName, (a.vendors.get(l.invoice.vendorName) ?? 0) + 1)
@@ -461,7 +488,7 @@ export function getCountReportSectionPromises(opts: { accountId: string; storeId
           // Shown in lb when the recipes use oz; dollars are worked out first.
           const k = ing.recipeUnit.trim().toLowerCase() === "oz" ? 16 : 1
           rows.push({
-            name: ing.name,
+            name: plainName(ing.name),
             unit: k === 16 ? "lb" : ing.recipeUnit,
             last: r.baseQty / k,
             delivered: r.deliveriesQty / k,
@@ -567,7 +594,7 @@ export function getCountSetupSectionPromises(opts: { accountId: string }): Strea
             return [{
               id: it.id,
               ingredientId: it.canonicalIngredientId,
-              name: it.canonicalIngredient.name,
+              name: plainName(it.canonicalIngredient.name),
               area: it.area,
               unit,
               units: unitChoices(unit),

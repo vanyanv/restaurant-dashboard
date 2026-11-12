@@ -12,16 +12,31 @@ import { WASTE_LOG_REASONS, reasonLabel } from "@/lib/counter/waste-reasons"
  * saved StockCountLine cannot disagree about what "2 cases + 3 chubs" means.
  */
 
+/**
+ * The sections of the count, in the owner's walk order: the same six as the
+ * owner's Inventory sheet, so the phone and the sheet read alike.
+ */
 export const COUNT_AREAS = [
-  { id: "walk_in", label: "Walk-in" },
-  { id: "freezer", label: "Freezer" },
+  { id: "frozen", label: "Frozen" },
+  { id: "fridge", label: "Refrigeration" },
   { id: "dry", label: "Dry storage" },
-  { id: "line", label: "Line" },
+  { id: "drinks", label: "Drinks" },
+  { id: "packaging", label: "Packaging" },
+  { id: "cleaning", label: "Cleaning & paper" },
 ] as const
 export type CountArea = (typeof COUNT_AREAS)[number]["id"]
 
+/** The first four sections the count shipped with, and where each now lives. */
+const LEGACY_AREAS: Record<string, CountArea> = { freezer: "frozen", walk_in: "fridge", line: "fridge" }
+
+/** A stored area id as one of today's sections (old rows say "walk_in"). */
+export function normalizeArea(id: string): string {
+  return LEGACY_AREAS[id] ?? id
+}
+
 export function areaLabel(id: string): string {
-  return COUNT_AREAS.find((a) => a.id === id)?.label ?? id
+  const n = normalizeArea(id)
+  return COUNT_AREAS.find((a) => a.id === n)?.label ?? id
 }
 
 export function isCountArea(id: string): id is CountArea {
@@ -148,12 +163,15 @@ export function defaultLayers(recipeUnit: string): Layer[] {
   return [{ label: `Loose (${recipeUnit})`, qty: 1, of: recipeUnit, quarters: false, per: 1 }]
 }
 
-/** Area a new item lands in, from its supplier category. */
+/** Section a new item lands in, from its supplier category. */
 export function guessArea(category: string | null): CountArea {
   const c = (category ?? "").toLowerCase()
-  if (/frozen|freez/.test(c)) return "freezer"
-  if (/paper|suppl|dry|bev|disposable|packag|chemical|clean/.test(c)) return "dry"
-  return "walk_in"
+  if (/frozen|freez/.test(c)) return "frozen"
+  if (/chemical|clean|janitor/.test(c)) return "cleaning"
+  if (/paper|disposable|packag|suppl/.test(c)) return "packaging"
+  if (/bev|drink|soda/.test(c)) return "drinks"
+  if (/dry|grocery|canned/.test(c)) return "dry"
+  return "fridge"
 }
 
 export function fmtQty(n: number): string {
