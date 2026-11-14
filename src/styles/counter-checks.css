@@ -288,6 +288,15 @@ button.ck-gl:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
   background:var(--surface);color:var(--ink-2);font:inherit;font-size:var(--t-cap);cursor:pointer;min-height:30px}
 .ck-phototag[aria-pressed="true"]{background:var(--signal-wash);border-color:var(--signal-line);color:var(--signal-ink)}
 .ck-erow .ck-phototag{width:10.5em;justify-content:center}
+/* Section on/off: a switch, not a delete. Off dims the tasks but keeps them editable. */
+.ck-erow .ck-secswitch{width:auto;gap:6px}
+.ck-secswitch i{width:22px;height:12px;border-radius:6px;background:var(--line-strong);position:relative;flex:none}
+.ck-secswitch i::after{content:"";position:absolute;top:2px;left:2px;width:8px;height:8px;border-radius:50%;background:var(--surface)}
+.ck-secswitch[aria-checked="true"]{background:var(--good-wash);border-color:var(--good);color:var(--good)}
+.ck-secswitch[aria-checked="true"] i{background:var(--good)}
+.ck-secswitch[aria-checked="true"] i::after{left:12px}
+.ck-secoff{margin:0}
+.ck-esect--off > .ck-erow:not(:first-child){opacity:.55}
 
 /* ── crew page (phone) ───────────────────────────────────────────────── */
 .ckc{min-height:100dvh;background:var(--surface);color:var(--ink);display:flex;justify-content:center;font-size:15px;

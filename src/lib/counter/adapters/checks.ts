@@ -666,6 +666,8 @@ export type EditorSection = {
   id: string
   nameEn: string
   nameEs: string
+  /** Off: hidden from crew, tasks kept. */
+  enabled: boolean
   items: EditorItem[]
 }
 export type EditorTemplate = {
@@ -725,6 +727,7 @@ export function getChecksChecklistsSectionPromises(opts: {
                 id: s.id,
                 nameEn: s.nameEn,
                 nameEs: s.nameEs ?? "",
+                enabled: s.enabled,
                 items: s.items.map((i) => ({ id: i.id, en: i.textEn, es: i.textEs ?? "", photoRequired: i.photoRequired })),
               })),
             }]

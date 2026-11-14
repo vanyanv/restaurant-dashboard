@@ -102,6 +102,7 @@ function Editor({ data }: { data: ChecklistsData }) {
           id: isNew(s.id) ? undefined : s.id,
           nameEn: s.nameEn,
           nameEs: s.nameEs,
+          enabled: s.enabled,
           items: s.items.map((i) => ({ id: isNew(i.id) ? undefined : i.id, en: i.en, es: i.es, photoRequired: i.photoRequired })),
         })),
       })
@@ -146,7 +147,8 @@ function Editor({ data }: { data: ChecklistsData }) {
         <div className="sec ck-cklist" role="group" aria-label="Check">
           {data.templates.map((x) => {
             const d = drafts[x.kind]
-            const items = d.sections.reduce((n, s) => n + s.items.length, 0)
+            const items = d.sections.reduce((n, s) => n + (s.enabled ? s.items.length : 0), 0)
+            const off = d.sections.filter((s) => !s.enabled).length
             return (
               <button key={x.kind} type="button" aria-pressed={kind === x.kind} onClick={() => setKind(x.kind)}>
                 <b>
@@ -155,7 +157,7 @@ function Editor({ data }: { data: ChecklistsData }) {
                 </b>
                 <span className="ck-meta">
                   {d.enabled
-                    ? `Submit ${label12(d.submitFromMin)} – ${label12(d.dueAtMin)} · ${items} task${items === 1 ? "" : "s"} · ${photoCount(d)} photo${photoCount(d) === 1 ? "" : "s"}`
+                    ? `Submit ${label12(d.submitFromMin)} – ${label12(d.dueAtMin)} · ${items} task${items === 1 ? "" : "s"} · ${photoCount(d)} photo${photoCount(d) === 1 ? "" : "s"}${off ? ` · ${off} section${off === 1 ? "" : "s"} off` : ""}`
                     : "Switched off"}
                 </span>
               </button>
@@ -163,6 +165,29 @@ function Editor({ data }: { data: ChecklistsData }) {
           })}
         </div>
         <div className="sec">
+          <div className="ck-esect ck-checkswitch">
+            <div className="ck-row" style={{ gap: 10 }}>
+              <button
+                type="button"
+                role="switch"
+                className="ck-phototag ck-secswitch"
+                aria-checked={t.enabled}
+                aria-label={`${t.label} at ${data.store.name}: ${t.enabled ? "on" : "off"}`}
+                onClick={() => update((t) => void (t.enabled = !t.enabled))}
+              >
+                <i aria-hidden />
+                {t.enabled ? "On" : "Off"}
+              </button>
+              <b>
+                {t.label} at {data.store.name}
+              </b>
+            </div>
+            <p className="ck-meta ck-secoff">
+              {t.enabled
+                ? `Crew at ${data.store.name} do the ${t.label} check. Switch it off to stop it at this store only; other stores and the other check keep running.`
+                : `Off at ${data.store.name}. Crew can't start it and it never counts as missed or late. The list below stays saved: switch it on to bring it back as it is.`}
+            </p>
+          </div>
           <div className="ck-win">
             <label className="ck-field">
               <span className="ck-mono">Crew can see it from</span>
@@ -279,14 +304,8 @@ function Editor({ data }: { data: ChecklistsData }) {
               </div>
             )}
           </div>
-          <div className="ck-esect">
-            <label className="ck-check">
-              <input type="checkbox" checked={t.enabled} onChange={(e) => update((t) => void (t.enabled = e.target.checked))} />
-              This check is on. Turned off, crew can't start it and it never counts as missed.
-            </label>
-          </div>
           {t.sections.map((s, si) => (
-            <div className="ck-esect" key={`${kind}-${si}`}>
+            <div className={`ck-esect${s.enabled ? "" : " ck-esect--off"}`} key={`${kind}-${si}`}>
               <div className="ck-erow">
                 <span className="ck-mono">Section</span>
                 <input
@@ -302,15 +321,34 @@ function Editor({ data }: { data: ChecklistsData }) {
                   value={s.nameEs}
                   onChange={(e) => updateSection(si, (s) => void (s.nameEs = e.target.value))}
                 />
-                <button
-                  type="button"
-                  className="ck-link"
-                  disabled={t.sections.length === 1}
-                  onClick={() => update((t) => void t.sections.splice(si, 1))}
-                >
-                  Remove section
-                </button>
+                <span className="ck-row" style={{ gap: 10, flexWrap: "nowrap" }}>
+                  <button
+                    type="button"
+                    role="switch"
+                    className="ck-phototag ck-secswitch"
+                    aria-checked={s.enabled}
+                    aria-label={`${s.nameEn || "Section"}: ${s.enabled ? "on, crew see it" : "off, hidden from crew"}`}
+                    onClick={() => updateSection(si, (s) => void (s.enabled = !s.enabled))}
+                  >
+                    <i aria-hidden />
+                    {s.enabled ? "On" : "Off"}
+                  </button>
+                  <button
+                    type="button"
+                    className="ck-link"
+                    disabled={t.sections.length === 1}
+                    onClick={() => update((t) => void t.sections.splice(si, 1))}
+                  >
+                    Remove section
+                  </button>
+                </span>
               </div>
+              {!s.enabled && (
+                <p className="ck-meta ck-secoff">
+                  Off. Crew don&apos;t see this section or its {s.items.length} task{s.items.length === 1 ? "" : "s"}, and it
+                  doesn&apos;t count toward the check. Everything stays saved: switch it on to bring it back as it is.
+                </p>
+              )}
               <div className="ck-erow ck-erow--head">
                 <span />
                 <span>English</span>
@@ -399,6 +437,7 @@ function Editor({ data }: { data: ChecklistsData }) {
                       id: newId(),
                       nameEn: "",
                       nameEs: "",
+                      enabled: true,
                       items: [{ id: newId(), en: "", es: "", photoRequired: false }],
                     }),
                   )
@@ -415,6 +454,6 @@ function Editor({ data }: { data: ChecklistsData }) {
   )
 }
 
-function photoCount(t: { sections: Array<{ items: Array<{ photoRequired: boolean }> }> }): number {
-  return t.sections.reduce((n, s) => n + s.items.filter((i) => i.photoRequired).length, 0)
+function photoCount(t: { sections: Array<{ enabled: boolean; items: Array<{ photoRequired: boolean }> }> }): number {
+  return t.sections.reduce((n, s) => n + (s.enabled ? s.items.filter((i) => i.photoRequired).length : 0), 0)
 }

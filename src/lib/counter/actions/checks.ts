@@ -52,6 +52,8 @@ const ChecklistInput = z.object({
         id: rowId,
         nameEn: text(60).min(1, "Every section needs a name"),
         nameEs: text(60),
+        // Off hides the section from crew; its tasks stay saved.
+        enabled: z.boolean().default(true),
         items: z
           .array(z.object({ id: rowId, en: text(140).min(1, "A task is empty"), es: text(140), photoRequired: z.boolean() }))
           .max(40),
@@ -59,8 +61,13 @@ const ChecklistInput = z.object({
     )
     .min(1, "A check needs at least one section")
     .max(8)
-    .refine((ss) => ss.some((s) => s.items.length > 0), "A check needs at least one task"),
+    .refine((ss) => ss.some((s) => s.items.length > 0), "A check needs at least one task")
 })
+  // A check that is off may have every section off too; one that is on needs something to show.
+  .refine(
+    (c) => !c.enabled || c.sections.some((s) => s.enabled && s.items.length > 0),
+    "Every section is off, so crew would see nothing. Switch one on, or turn the whole check off.",
+  )
 
 function revalidateChecks() {
   revalidatePath("/dashboard/checks", "layout")
@@ -121,7 +128,7 @@ export async function saveChecklist(raw: z.input<typeof ChecklistInput>): Promis
       await tx.checkItem.deleteMany({ where: { section: { templateId: tpl.id }, id: { notIn: [...keptItems] } } })
       await tx.checkSection.deleteMany({ where: { templateId: tpl.id, id: { notIn: [...keptSections] } } })
       for (const [si, s] of input.sections.entries()) {
-        const sectionData = { position: si, nameEn: s.nameEn, nameEs: s.nameEs || null, photoRequired: false }
+        const sectionData = { position: si, nameEn: s.nameEn, nameEs: s.nameEs || null, photoRequired: false, enabled: s.enabled }
         const sectionId = s.id && keptSections.has(s.id)
           ? (await tx.checkSection.update({ where: { id: s.id }, data: sectionData, select: { id: true } })).id
           : (await tx.checkSection.create({ data: { ...sectionData, templateId: tpl.id }, select: { id: true } })).id
@@ -158,11 +165,12 @@ export async function copyChecklistToOtherStores(input: { storeId: string; kind:
       const sections = source.sections.map((s) => ({
         nameEn: s.nameEn,
         nameEs: s.nameEs ?? "",
+        enabled: s.enabled,
         items: s.items.map((i) => ({ en: i.textEn, es: i.textEs ?? "", photoRequired: i.photoRequired })),
       }))
       const existing = await prisma.checkTemplate.findUnique({
         where: { storeId_kind: { storeId: t.id, kind } },
-        select: { id: true },
+        select: { id: true, enabled: true },
       })
       if (!existing) {
         await prisma.checkTemplate.create({
@@ -177,7 +185,8 @@ export async function copyChecklistToOtherStores(input: { storeId: string; kind:
         dueAtMin: source.dueAtMin,
         dueByWeekday: source.dueByWeekday,
         graceMin: source.graceMin,
-        enabled: source.enabled,
+        // Copying a list never switches the check on or off at another store.
+        enabled: existing ? existing.enabled : source.enabled,
         sections,
       })
       if (!r.ok) return r
