@@ -207,6 +207,21 @@ export function visibleDay(w: CheckWindow, now: Date): string | null {
   return null
 }
 
+/**
+ * The business day the owner's Today tile shows for `w` at `now`: last
+ * night's check until its window has fully closed, then today's. Night runs
+ * past midnight (submit 12:30-2 am, later on weekends), so right after
+ * midnight the calendar day has already turned while the night that is
+ * still going belongs to yesterday. Without this, the Night tile jumped to
+ * tonight's "Opens 5:30 pm" at 12:00 am and the live check vanished from
+ * Today.
+ */
+export function tileDay(w: CheckWindow, now: Date): string {
+  const today = todayLA(now)
+  const yesterday = addDays(today, -1)
+  return now.getTime() <= windowBounds(yesterday, w).closes.getTime() ? yesterday : today
+}
+
 /** "9:41 am" in LA. */
 export function clockLabel(instant: Date): string {
   return instant
