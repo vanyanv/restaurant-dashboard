@@ -175,7 +175,7 @@ export async function loadCheckGrid(opts: {
       select: {
         id: true, storeId: true, kind: true, opensAtMin: true, submitFromMin: true, dueAtMin: true, dueByWeekday: true,
         graceMin: true, enabled: true, createdAt: true,
-        sections: { select: { _count: { select: { items: true } } } },
+        sections: { where: { enabled: true }, select: { _count: { select: { items: true } } } },
       },
     }),
     prisma.checkSubmission.findMany({

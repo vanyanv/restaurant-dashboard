@@ -2431,6 +2431,9 @@ model CheckSection {
   photoRequired Boolean @default(true)
   photoHintEn   String?
   photoHintEs   String?
+  /// Off hides the section and its tasks from crew (and from counts,
+  /// missed tasks and auto-close) while keeping them saved to switch back on.
+  enabled       Boolean @default(true)
 
   template CheckTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
   items    CheckItem[]

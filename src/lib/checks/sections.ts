@@ -2,12 +2,13 @@ import { prisma } from "@/lib/prisma"
 import type { CrewSection } from "./crew"
 import type { CheckKindName } from "./time"
 
-/** A check's list as it stands now: sections in order, each with its tasks, empty sections left out. */
+/** A check's list as it stands now: sections in order, each with its tasks, empty and switched-off sections left out. */
 export async function loadSections(storeId: string, kind: CheckKindName): Promise<CrewSection[]> {
   const tpl = await prisma.checkTemplate.findUnique({
     where: { storeId_kind: { storeId, kind } },
     select: {
       sections: {
+        where: { enabled: true },
         orderBy: { position: "asc" },
         select: {
           id: true, nameEn: true, nameEs: true,
