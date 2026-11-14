@@ -7,7 +7,7 @@ import type { SectionSources } from "@/lib/counter/adapters/types"
 import type { CellView, TodayData, TodaySections } from "@/lib/counter/adapters/checks"
 import { CheckDetail, PhoneView, PlainHead } from "@/app/dashboard/(counter)/checks/checks-plain-ui"
 import { ChecksHead, Glyph, Legend } from "@/app/dashboard/(counter)/checks/checks-ui"
-import { ClosedToggle, Missed, PauseLink, PausedNote, Tile } from "@/app/dashboard/(counter)/checks/checks-today-client"
+import { ClosedToggle, Missed, PauseLink, PausedNote, Tile, tileLabel } from "@/app/dashboard/(counter)/checks/checks-today-client"
 import { useUrlParam } from "@/components/counter/keep/use-url-param"
 
 /**
@@ -91,7 +91,7 @@ function Stores({ data }: { data: TodayData }) {
               <div className="ck-pair">
                 {s.cells.map((c, i) =>
                   c ? (
-                    <Tile key={c.kind} label={data.columns[i].label} cell={c} pressed={false} onClick={() => open(s.id, c)} />
+                    <Tile key={c.kind} label={tileLabel(data, s, c, data.columns[i].label)} cell={c} pressed={false} onClick={() => open(s.id, c)} />
                   ) : (
                     <span key={data.columns[i].kind} className="ck-meta">
                       Not set up

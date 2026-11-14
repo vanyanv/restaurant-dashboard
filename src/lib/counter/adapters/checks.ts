@@ -19,6 +19,7 @@ import {
   windowOverrides,
   windowRange,
   windowSummary,
+  tileDay,
   todayLA,
   weekdayOf,
   windowBounds,
@@ -403,8 +404,12 @@ export function getChecksTodaySectionPromises(opts: { accountId: string; now?: D
               }),
             })),
             rate7: onTimeRate(s.cells.filter((c) => c.day !== today || c.status !== "open").map((c) => c.status)),
+            // Each tile shows the check that is going now: last night's
+            // Night stays on its tile until its window closes after midnight.
             cells: CHECK_KINDS.map((kind) => {
-              const c = s.cells.find((x) => x.day === today && x.kind === kind)
+              const tpl = s.templates.find((t) => t.kind === kind)
+              const day = tpl ? tileDay(tpl, now) : today
+              const c = s.cells.find((x) => x.day === day && x.kind === kind)
               return c ? cellView(s, c, now) : null
             }),
           })),

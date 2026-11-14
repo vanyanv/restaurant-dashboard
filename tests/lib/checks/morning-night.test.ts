@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest"
 vi.mock("@/lib/prisma", () => ({ prisma: {} }))
 
 import { DEFAULT_TEMPLATES } from "@/lib/checks/defaults"
-import { acceptingDay, visibleDay, windowPhase, type CheckWindow } from "@/lib/checks/time"
+import { acceptingDay, tileDay, visibleDay, windowPhase, type CheckWindow } from "@/lib/checks/time"
 import { snapshotForm, type MarkRow } from "@/lib/checks/marks"
 import { checkReportContent } from "@/lib/checks/report"
 import { storeDayAlert } from "@/lib/checks/missed-alerts"
@@ -172,5 +172,20 @@ describe("missed check alert", () => {
     expect(a.severity).toBe("WATCH")
     expect(a.title).toMatch(/^Hollywood · Morning missed, Night late · /)
     expect(a.body).toContain("nobody submitted")
+  })
+})
+
+describe("Today tile day (owner page)", () => {
+  // 2026-11-14 is a Saturday in PST (UTC-8). The owner opened Today at
+  // 12:35 am and the Night tile had already jumped to Saturday's "Opens
+  // 5:30 pm", hiding Friday night's check that crew were still working.
+  it("keeps last night's Night check on its tile after midnight until it closes", () => {
+    const afterMidnight = utc("2026-11-14T08:35:00Z")
+    expect(tileDay(NIGHT, afterMidnight)).toBe("2026-11-13")
+    expect(tileDay(MORNING, afterMidnight)).toBe("2026-11-14")
+  })
+  it("moves to today once last night's window has closed", () => {
+    expect(tileDay(NIGHT, utc("2026-11-14T14:00:00Z"))).toBe("2026-11-14")
+    expect(tileDay(NIGHT, utc("2026-11-14T20:00:00Z"))).toBe("2026-11-14")
   })
 })

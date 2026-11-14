@@ -163,7 +163,7 @@ function Stores({ data }: { data: TodayData }) {
                       c ? (
                         <Tile
                           key={c.kind}
-                          label={data.columns[i].label}
+                          label={tileLabel(data, s, c, data.columns[i].label)}
                           cell={c}
                           pressed={isPicked(s.id, c)}
                           onClick={() => setPick({ storeId: s.id, day: c.day, kind: c.kind })}
@@ -221,6 +221,13 @@ function Stores({ data }: { data: TodayData }) {
       </div>
     </>
   )
+}
+
+/** "Night" for today's check, "Night · Fri" when the tile still shows last night's. */
+export function tileLabel(data: TodayData, s: TodayData["stores"][number], c: CellView, label: string): string {
+  if (c.day === data.day) return label
+  const top = s.week.find((w) => w.day === c.day)?.top
+  return top ? `${label} · ${top}` : label
 }
 
 export function Tile({ label, cell, pressed, onClick }: { label: string; cell: CellView; pressed: boolean; onClick: () => void }) {
