@@ -110,3 +110,10 @@ describe("copying a list to other stores", () => {
     expect(asMock(prisma.checkSection.create).mock.calls.map((c) => c[0].data.enabled)).toEqual([true, false])
   })
 })
+
+describe("a check switched off", () => {
+  it("can be saved with every section off", async () => {
+    const r = await saveChecklist({ ...base, enabled: false, sections: [{ ...kitchen, enabled: false }, sink] })
+    expect(r.ok).toBe(true)
+  })
+})

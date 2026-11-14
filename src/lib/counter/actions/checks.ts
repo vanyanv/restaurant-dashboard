@@ -62,11 +62,12 @@ const ChecklistInput = z.object({
     .min(1, "A check needs at least one section")
     .max(8)
     .refine((ss) => ss.some((s) => s.items.length > 0), "A check needs at least one task")
-    .refine(
-      (ss) => ss.some((s) => s.enabled && s.items.length > 0),
-      "Every section is off, so crew would see nothing. Switch one on, or turn the whole check off.",
-    ),
 })
+  // A check that is off may have every section off too; one that is on needs something to show.
+  .refine(
+    (c) => !c.enabled || c.sections.some((s) => s.enabled && s.items.length > 0),
+    "Every section is off, so crew would see nothing. Switch one on, or turn the whole check off.",
+  )
 
 function revalidateChecks() {
   revalidatePath("/dashboard/checks", "layout")
