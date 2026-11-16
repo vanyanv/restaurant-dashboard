@@ -36,7 +36,7 @@ export function CounterPhoneInventoryClient({
     return (
       <>
         <SubNav items={PHONE_INVENTORY_TABS} label="Stock on hand" />
-        <h2 className="mtitle">Inventory</h2>
+        <h2 className="mtitle">Stock on hand</h2>
         <Section title="Stock on hand" data={sections.headline} pending={pending}>
           {() => null}
         </Section>
@@ -63,7 +63,7 @@ export function CounterPhoneInventoryClient({
         {(n) => (
           <>
             <div>
-              <h2 className="mtitle">Inventory</h2>
+              <h2 className="mtitle">Stock on hand</h2>
               <p className="msub">{n.meta}</p>
             </div>
             {/* `.mhead` is the prototype's own second block here — its version
