@@ -248,6 +248,8 @@ export type HarriUser = {
   first_name?: string | null
   last_name?: string | null
   email?: string | null
+  /** Every user at all three stores had one in a 2026-11-16 check. */
+  phone?: string | number | null
   status?: string | null
 }
 
