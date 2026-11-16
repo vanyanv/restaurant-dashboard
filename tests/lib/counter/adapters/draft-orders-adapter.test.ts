@@ -10,7 +10,7 @@
 // 3. The Order tab drafts only the store it shows; the other stores' figures
 //    are the switcher's.
 
-import { describe, it, expect, vi, beforeEach } from "vitest"
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
 
 type Where = Record<string, unknown>
 type Call = { model: string; method: string; args: { where?: Where } }
@@ -45,12 +45,23 @@ import { getDraftOrderSectionPromises, loadStoreDraft } from "@/lib/counter/adap
 import { anchorLineWhere } from "@/lib/inventory/anchor-line"
 
 const DAY_MS = 86_400_000
-const NEWEST = new Date(Date.now() - 2 * DAY_MS)
-const BEFORE = new Date(Date.now() - 9 * DAY_MS)
+// A fixed clock, and one that crosses the 2026-11-01 end of daylight time: nine
+// Los Angeles calendar days are not nine 24-hour steps across that night.
+// 10:00 PST on Nov 6.
+const NOW = new Date("2026-11-06T18:00:00Z")
+const NEWEST = new Date(NOW.getTime() - 2 * DAY_MS)
+// 11:00 PDT on Oct 28: nine Los Angeles calendar days before NOW.
+const BEFORE = new Date("2026-10-28T18:00:00Z")
 
 type Base = Map<string, { qtyInRecipeUnit: number; countedAt: Date }>
 
+afterEach(() => {
+  vi.useRealTimers()
+})
+
 beforeEach(() => {
+  vi.useFakeTimers({ toFake: ["Date"] })
+  vi.setSystemTime(NOW)
   h.calls.length = 0
   h.answers.clear()
   vi.clearAllMocks()
