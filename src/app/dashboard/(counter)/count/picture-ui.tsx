@@ -125,8 +125,9 @@ export function VerdictPill({ verdict, missing, unit }: { verdict: GapVerdict; m
 export function Ledger({ rows }: { rows: Array<{ label: string; value: string; sum?: boolean }> }) {
   return (
     <dl className="iv-ledger">
-      {rows.map((r) => (
-        <div key={r.label} className={r.sum ? "sum" : undefined}>
+      {rows.map((r, i) => (
+        // By position: two steps can carry one label (both counts on the same day).
+        <div key={i} className={r.sum ? "sum" : undefined}>
           <dt>{r.label}</dt>
           <dd>{r.value}</dd>
         </div>
@@ -146,13 +147,15 @@ export function NotYetBox({ title, children }: { title: string; children?: React
 }
 
 /**
- * "$12.40 more than the 7 days before". Only ever two real figures: an empty
- * earlier window, or one nobody can value, is said in words.
+ * "$12.40 more than the 7 days before". Only ever two whole figures: an empty
+ * earlier window, or one with an entry nobody can value, is said in words.
  */
 export function changeSay(change: MoneyChange | null, before: string): ReactNode {
   if (!change) return null
   if (change.kind === "nothing_before") return `Nothing in ${before} to compare with.`
-  if (change.kind === "cant_tell") return `Can't be compared with ${before} yet: some of it has no price.`
+  if (change.kind === "cant_tell") {
+    return `Not compared with ${before}: ${change.unpriced === 1 ? "1 entry has" : `${change.unpriced} entries have`} no price, so the totals are not whole.`
+  }
   if (change.kind === "same") return <>The same as {before}.</>
   return <><b>{money(change.dollars)} {change.kind}</b> than {before}.</>
 }

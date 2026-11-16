@@ -50,6 +50,11 @@ export type ItemStoreBar = {
   stateText: string
   /** Why there is no amount: never counted here, or a box with no size. */
   why: "not_counted" | "no_size" | null
+  /**
+   * "Skip this week's count" is on at this store: counts from the last 7 days
+   * are left out, so "not counted" means "on no count the page reads", not never.
+   */
+  skip: boolean
 }
 
 export type ItemOne = {
@@ -58,6 +63,8 @@ export type ItemOne = {
   lines: ShelfLine[]
   /** The day of the count shown. Null when never counted here. */
   counted: string | null
+  /** "Skip this week's count" is on here: the page reads only counts from before the last 7 days. */
+  skip: boolean
   /** The saved count in one unit: "414 lb". Null when not counted or a box has no size. */
   amount: string | null
   /** Σ of the lines' dollars. Null when any of them has no value. */
@@ -105,6 +112,7 @@ function storeBar(store: { id: string; name: string }, read: StoreLines, ingredi
     state: lines[0]?.state ?? "not_counted",
     stateText: lines[0]?.stateText ?? "Not counted",
     why: !saved ? "not_counted" : partial ? "no_size" : null,
+    skip: read.skip,
   }
 }
 
@@ -159,6 +167,7 @@ export function getInventoryItemSectionPromises(opts: {
             store,
             lines,
             counted: byStore[i].day,
+            skip: reads[i].skip,
             amount: byStore[i].amount,
             worth: lines.length > 0 && lines.every((l) => l.dollars !== null) ? lines.reduce((t, l) => t + (l.dollars ?? 0), 0) : null,
             perDay: stock && lines.some((l) => l.daysLeft !== null) ? stock.perDay : null,

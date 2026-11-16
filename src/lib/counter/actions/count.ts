@@ -16,7 +16,6 @@ import { UNCONVERTED_UNIT } from "@/lib/inventory/anchor-line"
 import {
   COUNT_AREAS,
   WASTE_REASONS,
-  WASTE_REASON_IDS,
   packLayers,
   unconverted,
   describeShelf,
@@ -28,6 +27,7 @@ import {
   shelfTotal,
   valuesFit,
 } from "@/lib/counter/count-layers"
+import { THROWN_OUT_REASON_IDS } from "@/lib/counter/waste-reasons"
 
 /**
  * The owner's write path for the weekly count, the waste log and the count
@@ -260,12 +260,16 @@ export async function logWaste(input: z.input<typeof WasteInput>): Promise<Actio
   }
 }
 
-/** Takes back a waste entry logged by mistake (last 7 days only). */
+/**
+ * Takes back a waste entry logged by mistake (last 7 days only). Any entry the
+ * Waste tab lists can be taken back: the set is `THROWN_OUT_REASON_IDS`, the
+ * one its log is read with.
+ */
 export async function deleteWaste(id: string): Promise<ActionResult> {
   try {
     const owner = await requireOwner()
     const row = await prisma.inventoryAdjustment.findFirst({
-      where: { id, store: { accountId: owner.accountId }, reason: { in: WASTE_REASON_IDS }, occurredAt: { gte: new Date(Date.now() - 7 * DAY_MS) } },
+      where: { id, store: { accountId: owner.accountId }, reason: { in: THROWN_OUT_REASON_IDS }, occurredAt: { gte: new Date(Date.now() - 7 * DAY_MS) } },
       select: { id: true },
     })
     if (!row) return { ok: false, error: "That entry can't be removed any more" }

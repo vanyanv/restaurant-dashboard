@@ -3,7 +3,7 @@
 // by-store comparison and the one-item page.
 
 import { describe, it, expect } from "vitest"
-import { gapBars, gapCoverage, gapHeadline, gapMatches, gapVerdict } from "@/lib/counter/gap-picture"
+import { biggestShort, gapBars, gapChange, gapCoverage, gapHeadline, gapMatches, gapVerdict } from "@/lib/counter/gap-picture"
 
 describe("gapHeadline", () => {
   it("adds the shortages only: an extra is never netted against them", () => {
@@ -75,5 +75,64 @@ describe("gapCoverage", () => {
 
   it("counts nothing as compared when there is no row", () => {
     expect(cover([])).toEqual({ lines: 6, compared: 0, noSize: 1, notOnThis: 1, notOnLast: 4 })
+  })
+})
+
+describe("gapChange", () => {
+  const row = (ingredientId: string, missingDollars: number | null) => ({ ingredientId, missingDollars })
+
+  it("compares the two pairs outright when they compared the same items", () => {
+    const now = [row("a", 30), row("b", -5), row("c", 10)]
+    const before = [row("a", 10), row("b", 4), row("c", 10)]
+    // Shortages only: now 40, before 24.
+    expect(gapChange(now, before)).toEqual({ kind: "more", dollars: 16, items: 3, sameItems: true })
+    expect(gapChange(before, now)).toEqual({ kind: "less", dollars: 16, items: 3, sameItems: true })
+    expect(gapChange(now, now)).toEqual({ kind: "same", items: 3, sameItems: true })
+  })
+
+  it("after a partial recount, compares only the items in both and says so", () => {
+    // Full, full, then a 3-line recount: the pair before compared 6 items, this one 3.
+    const before = [row("a", 10), row("b", 20), row("c", 0), row("d", 100), row("e", 50), row("f", 5)]
+    const recount = [row("a", 12), row("b", 0), row("c", 8)]
+    // The headlines are $20 and $185: "$165 less" would be the size of the count, not of the gap.
+    expect(gapHeadline(recount).missingDollars).toBe(20)
+    expect(gapHeadline(before).missingDollars).toBe(185)
+    // On a, b and c alone: 20 now against 30 before.
+    expect(gapChange(recount, before)).toEqual({ kind: "less", dollars: 10, items: 3, sameItems: false })
+    // And the other way round: a full count after a recount.
+    expect(gapChange(before, recount)).toEqual({ kind: "more", dollars: 10, items: 3, sameItems: false })
+  })
+
+  it("has no comparison when no item was compared both times", () => {
+    expect(gapChange([row("a", 12)], [row("x", 50), row("y", 5)])).toEqual({ kind: "no_items_in_both" })
+    expect(gapChange([], [row("x", 50)])).toEqual({ kind: "no_items_in_both" })
+  })
+
+  it("leaves an item with no price out of both sides, and can't tell when none has one", () => {
+    expect(gapChange([row("a", 12), row("b", null)], [row("a", 2), row("b", null)])).toEqual({ kind: "more", dollars: 10, items: 1, sameItems: true })
+    expect(gapChange([row("b", null)], [row("b", null)])).toEqual({ kind: "cant_tell" })
+  })
+})
+
+describe("biggestShort", () => {
+  const row = (name: string, should: number, counted: number, cost: number) => ({ name, should, counted, missing: should - counted, missingDollars: (should - counted) * cost })
+
+  it("names only rows the list calls short, biggest first", () => {
+    const rows = [
+      row("Cups", 1000, 960, 1), // $40 gap, but within 5%: a match on the list
+      row("Fries", 100, 80, 1.5), // $30 short
+      row("Buns", 50, 10, 2), // $80 short
+      row("Oil", 10, 30, 5), // extra
+    ]
+    expect(biggestShort(rows).map((r) => r.name)).toEqual(["Buns", "Fries"])
+    expect(biggestShort(rows, 1).map((r) => r.name)).toEqual(["Buns"])
+  })
+
+  it("names nothing when the whole total is small gaps on rows that match", () => {
+    const rows = [row("Cups", 1000, 960, 1), row("Lids", 2000, 1950, 1)]
+    // $90 "went missing", and every row is a match: there is no item to point at.
+    expect(gapHeadline(rows).missingDollars).toBe(90)
+    expect(rows.every((r) => gapVerdict(r) === "match")).toBe(true)
+    expect(biggestShort(rows)).toEqual([])
   })
 })

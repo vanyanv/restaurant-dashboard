@@ -261,6 +261,34 @@ describe("one item at one store", () => {
     expect(d.one?.lines.map((l) => l.state)).toEqual(["not_counted", "not_counted"])
   })
 
+  it("says a store is skipping this week's count, not that it never counted the item", async () => {
+    // Hollywood's only count of fries is this week's, and Skip this week's count is on there.
+    h.loadStoreDraft.mockImplementation(async (_acct: string, storeId: string) =>
+      storeId === "store_b" ? emptyDraft({ skip: true, countsBefore: new Date("2026-11-05T00:00:00Z") }) : emptyDraft(),
+    )
+    const d = await item("fries", "store_b")
+    expect(d.byStore.map((b) => [b.name, b.why, b.skip])).toEqual([
+      ["Glendale", null, false],
+      ["Hollywood", "not_counted", true],
+      ["Van Nuys", "not_counted", false],
+    ])
+    expect(d.one).toMatchObject({ skip: true, counted: null, amount: null })
+    // The shelf's own words for it.
+    expect(d.one?.lines[0].note).toBe("Not on a count from before the last 7 days")
+    expect((await item("fries", "store_a")).one?.skip).toBe(false)
+  })
+
+  it("carries what was thrown out on the Report's row, for the working", async () => {
+    h.answers.set("inventoryAdjustment.findMany", () => [
+      { canonicalIngredientId: "fries", reason: "DROPPED", qty: 2, canonicalIngredient: { costPerRecipeUnit: 1.5 } },
+      { canonicalIngredientId: "fries", reason: "DAMAGE", qty: 1, canonicalIngredient: { costPerRecipeUnit: 1.5 } },
+      { canonicalIngredientId: "fries", reason: "OTHER", qty: 1, canonicalIngredient: { costPerRecipeUnit: 1.5 } },
+      { canonicalIngredientId: "fries", reason: "THEFT", qty: 5, canonicalIngredient: { costPerRecipeUnit: 1.5 } },
+    ])
+    const row = (await item("fries", "store_a")).one?.gap?.row
+    expect(row).toMatchObject({ thrown: 4, thrownDollars: 6, theft: 5, returned: 0 })
+  })
+
   it("reads how it is ordered from the store's invoices", async () => {
     const d = await item("fries", "store_a")
     expect(d.one?.ordering).toMatchObject({ ingredientId: "fries", vendor: "Sysco", orders: 3, usually: "Tue", amount: "4 CS", every: "7 days" })

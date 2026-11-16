@@ -125,7 +125,8 @@ function OneStore({ data, one }: { data: WasteView; one: WasteOne }) {
           </div>
           {w.reasons.length > 0 ? <Bars rows={reasonRows(w.reasons)} label="Thrown out, by reason" /> : <p className="iv-quiet iv-pad">Nothing logged, so no reasons yet.</p>}
           <p className="iv-note">
-            Theft and things sent back to a vendor are kept apart, never added to waste.
+            Thrown out is everything logged as dropped, went bad, burnt, remake, damaged or other, on this tab or on Stock on hand.
+            Theft and things sent back to a vendor are kept apart, never added in.
             {one.apart.length > 0 && (
               <>
                 {" "}In the last 7 days:{" "}
@@ -190,7 +191,7 @@ function AllStores({ data }: { data: WasteView }) {
             <span className="iv-mono">{plural(a.entries, "entry", "entries")}</span>
           </div>
           {a.reasons.length > 0 ? <Bars rows={reasonRows(a.reasons)} label="Thrown out, by reason" /> : <p className="iv-quiet iv-pad">Nothing logged, so no reasons yet.</p>}
-          <p className="iv-note">Theft and things sent back to a vendor are kept apart, never added to waste.</p>
+          <p className="iv-note">Thrown out is everything logged as dropped, went bad, burnt, remake, damaged or other. Theft and things sent back to a vendor are kept apart, never added in.</p>
         </section>
       </div>
     </div>

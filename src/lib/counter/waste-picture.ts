@@ -101,26 +101,29 @@ export function mergeWaste(parts: ReadonlyArray<WasteSummary>): WasteSummary {
 }
 
 /** The part of a summary a comparison needs. */
-export type MoneyFigure = Pick<WasteSummary, "entries" | "dollars">
+export type MoneyFigure = Pick<WasteSummary, "entries" | "unpriced" | "dollars">
 
 export type MoneyChange =
   | { kind: "more" | "less"; dollars: number }
   | { kind: "same" }
   /** Nothing in the earlier window to compare with. */
   | { kind: "nothing_before" }
-  /** One side has entries and none of them has a price. */
-  | { kind: "cant_tell" }
+  /** Entries with no price on either side: how many, in this window and the one before. */
+  | { kind: "cant_tell"; unpriced: number }
 
 /**
- * This window against the one before it, in dollars. Only two real figures
- * are compared: a window whose entries have no price is "can't tell", and an
- * empty earlier window is "nothing before", never a rise from $0.
+ * This window against the one before it, in dollars. Only two WHOLE figures
+ * are compared: with an unpriced entry on either side a total is only part of
+ * what was thrown out, and the difference of two parts says nothing, so it is
+ * "can't tell" and says how many entries have no price. An empty earlier
+ * window is "nothing before", never a rise from $0.
  */
 export function moneyChange(now: MoneyFigure, before: MoneyFigure): MoneyChange | null {
   if (now.entries === 0 && before.entries === 0) return null
   if (before.entries === 0) return { kind: "nothing_before" }
-  if (before.dollars === null || (now.entries > 0 && now.dollars === null)) return { kind: "cant_tell" }
-  const d = (now.dollars ?? 0) - before.dollars
+  if (now.unpriced > 0 || before.unpriced > 0) return { kind: "cant_tell", unpriced: now.unpriced + before.unpriced }
+  // Every entry on both sides has a price: an empty "now" is a real $0.
+  const d = (now.dollars ?? 0) - (before.dollars ?? 0)
   if (Math.abs(d) < 0.005) return { kind: "same" }
   return { kind: d > 0 ? "more" : "less", dollars: Math.abs(d) }
 }

@@ -31,7 +31,7 @@ export type WasteOne = WasteData & {
   before: StoreWaste["before"]
   /** This week against the week before. Null when neither has an entry. */
   change: MoneyChange | null
-  /** Theft, sent back and anything logged elsewhere: shown apart, never in the total. */
+  /** Theft and sent back: shown apart, never in the total. */
   apart: ApartFigure[]
 }
 

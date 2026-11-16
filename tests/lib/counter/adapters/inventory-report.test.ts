@@ -31,7 +31,8 @@ vi.mock("@/lib/counter/adapters/draft-orders", () => ({ STALE_COUNT_DAYS: 7, loa
 import { prisma } from "@/lib/prisma"
 import { loadStoreInventoryContext, runningOnHandFromContext } from "@/lib/inventory/store-inventory-context"
 import { getInventoryReportSectionPromises, type ReportView } from "@/lib/counter/adapters/inventory-report"
-import { loadLatestGap } from "@/lib/counter/adapters/count"
+import { loadLatestGap, loadStoreWaste } from "@/lib/counter/adapters/count"
+import { ADJUSTMENT_REASONS, THROWN_OUT_REASON_IDS } from "@/lib/counter/waste-reasons"
 import { ALL_STORES } from "@/lib/counter/shelf-state"
 
 const asMock = (fn: unknown) => fn as ReturnType<typeof vi.fn>
@@ -147,9 +148,42 @@ describe("the report for one store", () => {
     expect(c!.compared + c!.noSize + c!.notOnThis + c!.notOnLast).toBe(c!.lines)
   })
 
-  it("carries the same figure for the pair of counts before", async () => {
+  it("carries the same figure for the pair of counts before, compared only over the items in both", async () => {
     const { one } = await report({ storeId: "store_a" })
-    expect(one?.before).toEqual({ from: "Tue, Oct 13", to: "Tue, Oct 20", headline: { items: 1, unpriced: 0, missingDollars: 10 } })
+    expect(one?.before).toEqual({
+      from: "Tue, Oct 13",
+      to: "Tue, Oct 20",
+      headline: { items: 1, unpriced: 0, missingDollars: 10 },
+      // This pair compared buns and fries, the one before only buns: $5 against $10, on buns alone.
+      change: { kind: "less", dollars: 5, items: 1, sameItems: false },
+    })
+  })
+
+  it("compares the two pairs outright when both compared the same items", async () => {
+    lines.sc_prev.push({ canonicalIngredientId: "ci_fries", qtyInRecipeUnit: 30, nativeUnit: "lb" })
+    should["sc_prev:ci_fries"] = 40 // 10 lb short at $2
+    const { one } = await report({ storeId: "store_a" })
+    // Now: buns $5 short, fries extra. Before: buns $10 + fries $20.
+    expect(one?.before?.headline.missingDollars).toBe(30)
+    expect(one?.before?.change).toEqual({ kind: "less", dollars: 25, items: 2, sameItems: true })
+  })
+
+  it("does not set a partial recount's total against a full count's", async () => {
+    // Full on Oct 13 and Oct 20; on Oct 27 only buns was recounted.
+    lines.sc_prev.push({ canonicalIngredientId: "ci_fries", qtyInRecipeUnit: 30, nativeUnit: "lb" })
+    should["sc_prev:ci_fries"] = 40
+    lines.sc_cur = [{ canonicalIngredientId: "ci_buns", qtyInRecipeUnit: 40, nativeUnit: "each" }]
+    const { one } = await report({ storeId: "store_a" })
+    expect(one?.headline?.missingDollars).toBe(5) // one line
+    expect(one?.before?.headline.missingDollars).toBe(30) // two
+    // Not "$25 less": on buns, the one item in both, $5 against $10.
+    expect(one?.before?.change).toEqual({ kind: "less", dollars: 5, items: 1, sameItems: false })
+  })
+
+  it("has no comparison when the recount shares no item with the pair before", async () => {
+    lines.sc_cur = [{ canonicalIngredientId: "ci_fries", qtyInRecipeUnit: 25, nativeUnit: "lb" }]
+    const { one } = await report({ storeId: "store_a" })
+    expect(one?.before?.change).toEqual({ kind: "no_items_in_both" })
   })
 
   it("has no earlier pair to compare with when the store has only two counts", async () => {
@@ -198,8 +232,63 @@ describe("the report for one store", () => {
     adjustments.push({ canonicalIngredientId: "ci_buns", reason: "EXPIRY", qty: 2, occurredAt: new Date("2026-10-25T12:00:00Z"), canonicalIngredient: { costPerRecipeUnit: null } })
     adjustments.push({ canonicalIngredientId: "ci_fries", reason: "SUPPLIER_RETURN", qty: 1, occurredAt: new Date("2026-10-25T12:00:00Z"), canonicalIngredient: { costPerRecipeUnit: null } })
     const { one } = await report({ storeId: "store_a" })
-    // Waste: 4 buns at $0.50, and one entry nobody can value. Apart: theft $6, and an unpriced return.
-    expect(one).toMatchObject({ wasteEntries: 2, wasteUnpriced: 1, wasteDollars: 2, apartEntries: 2, apartUnpriced: 1, theftDollars: 6, returnDollars: 0 })
+    // Thrown out: 4 buns at $0.50, and one entry nobody can value.
+    expect(one).toMatchObject({ thrownEntries: 2, thrownUnpriced: 1, thrownDollars: 2 })
+    // Apart: theft $6; a return with no price is an unknown, never $0.
+    expect(one?.apart).toEqual([
+      { id: "shrink", label: "Theft", entries: 1, unpriced: 0, dollars: 6 },
+      { id: "return", label: "Sent back", entries: 1, unpriced: 1, dollars: null },
+    ])
+  })
+
+  it("values a class that is only partly priced at its priced entries, and says how many are not", async () => {
+    adjustments.push({ canonicalIngredientId: "ci_fries", reason: "THEFT", qty: 1, occurredAt: new Date("2026-10-25T12:00:00Z"), canonicalIngredient: { costPerRecipeUnit: null } })
+    const { one } = await report({ storeId: "store_a" })
+    expect(one?.apart).toEqual([
+      { id: "shrink", label: "Theft", entries: 2, unpriced: 1, dollars: 6 },
+      { id: "return", label: "Sent back", entries: 0, unpriced: 0, dollars: null },
+    ])
+  })
+})
+
+describe("thrown out, on the Report and on the Waste tab", () => {
+  it("is the same set of reasons in both loaders", async () => {
+    // One entry per reason the schema stores, each worth a different power of two,
+    // so a total names exactly the reasons that are in it.
+    const worth = new Map(ADJUSTMENT_REASONS.map((r, i) => [r.id as string, 2 ** i]))
+    const expected = THROWN_OUT_REASON_IDS.reduce((t, id) => t + worth.get(id)!, 0)
+    const apart = ADJUSTMENT_REASONS.filter((r) => !(THROWN_OUT_REASON_IDS as string[]).includes(r.id))
+    expect(apart.map((r) => r.id)).toEqual(["THEFT", "SUPPLIER_RETURN"])
+    asMock(prisma.inventoryAdjustment.findMany).mockImplementation(async (args: { where: { occurredAt: { gte?: Date } } }) =>
+      ADJUSTMENT_REASONS.map((r) => ({
+        id: `adj_${r.id}`,
+        storeId: "store_a",
+        canonicalIngredientId: "ci_buns",
+        reason: r.id,
+        qty: 1,
+        note: null,
+        // The waste log asks for a rolling window from now; the report for the days between the counts.
+        occurredAt: args.where.occurredAt.gte ? new Date(Date.now() - 86_400_000) : new Date("2026-10-24T12:00:00Z"),
+        canonicalIngredient: { name: "Buns", recipeUnit: "each", costPerRecipeUnit: worth.get(r.id)! },
+      })),
+    )
+    const waste = await loadStoreWaste("acct_ours", "store_a")
+    const { one } = await report({ storeId: "store_a" })
+    const buns = one!.rows.find((r) => r.ingredientId === "ci_buns")!
+
+    // The Waste tab's total and the Overview tile.
+    expect(waste.week.dollars).toBe(expected)
+    expect(waste.week.reasons.map((r) => r.id).sort()).toEqual([...THROWN_OUT_REASON_IDS].sort())
+    expect(waste.apart.map((r) => r.id).sort()).toEqual(["SUPPLIER_RETURN", "THEFT"])
+    // The Report's tile, and the row the one-item page's working prints.
+    expect(one?.thrownDollars).toBe(expected)
+    expect(one?.thrownEntries).toBe(THROWN_OUT_REASON_IDS.length)
+    expect(buns.thrownDollars).toBe(expected)
+    expect(buns.thrown).toBe(THROWN_OUT_REASON_IDS.length)
+    expect(one?.apart.map((a) => [a.label, a.dollars])).toEqual([["Theft", worth.get("THEFT")], ["Sent back", worth.get("SUPPLIER_RETURN")]])
+    // Thrown out, theft and sent back are everything logged: the row adds across.
+    expect(buns.thrown + buns.theft + buns.returned).toBe(ADJUSTMENT_REASONS.length)
+    expect(buns.thrownDollars + buns.theftDollars + buns.returnDollars).toBe(2 ** ADJUSTMENT_REASONS.length - 1)
   })
 })
 

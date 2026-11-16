@@ -130,7 +130,7 @@ describe("thrown out at one store", () => {
     logged([adj("store_a", "DROPPED", 1, 4, null), adj("store_a", "DROPPED", 9, 2, 2)])
     const { one, byStore, all } = await waste("store_a")
     expect(one?.week).toMatchObject({ entries: 1, valued: 0, unpriced: 1, dollars: null })
-    expect(one?.change).toEqual({ kind: "cant_tell" })
+    expect(one?.change).toEqual({ kind: "cant_tell", unpriced: 1 })
     expect(byStore[0].dollars).toBeNull()
     expect(all.dollars).toBeNull()
   })
@@ -159,6 +159,33 @@ describe("thrown out at one store", () => {
       ["Sent back", 2, 1, 10],
     ])
     expect(byStore[0]).toMatchObject({ entries: 1, dollars: 8 })
+  })
+
+  it("counts damaged, logged on Stock on hand, as thrown out: the Report's own set", async () => {
+    logged([
+      adj("store_a", "DROPPED", 1, 4, 2), // $8
+      adj("store_a", "DAMAGE", 2, 3, 2), // $6, from "Adjust on hand"
+      adj("store_a", "OTHER", 2, 1, 2), // $2
+      adj("store_a", "THEFT", 2, 10, 2), // never thrown out
+    ])
+    const { one, byStore } = await waste("store_a")
+    expect(one?.week).toMatchObject({ entries: 3, dollars: 16 })
+    expect(one?.week.reasons.map((r) => r.label)).toEqual(["Dropped", "Damaged", "Other"])
+    expect(one?.recent.map((e) => e.reason)).toEqual(["Dropped", "Damaged", "Other"])
+    expect(one?.apart.map((r) => r.label)).toEqual(["Theft"])
+    expect(byStore[0].dollars).toBe(16)
+  })
+
+  it("does not compare with the 7 days before while either week has an entry with no price", async () => {
+    logged([
+      adj("store_a", "DROPPED", 1, 10, 2), // $20
+      adj("store_a", "EXPIRY", 2, 1, null), // no price: $20 is the value of 1 of 2 entries
+      adj("store_a", "DROPPED", 9, 4, 2), // the week before: $8
+    ])
+    const { one } = await waste("store_a")
+    expect(one?.week).toMatchObject({ entries: 2, valued: 1, dollars: 20 })
+    // Not "$12 more": this week's total is not whole.
+    expect(one?.change).toEqual({ kind: "cant_tell", unpriced: 1 })
   })
 
   it("compares with the 7 days before, and reads nothing older than those", async () => {

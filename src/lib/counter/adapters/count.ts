@@ -9,7 +9,6 @@ import {
   COUNT_AREAS,
   areaLabel,
   normalizeArea,
-  WASTE_REASON_IDS,
   fmtQty,
   layersFor,
   shelfTotal,
@@ -20,9 +19,9 @@ import {
   type Layer,
 } from "@/lib/counter/count-layers"
 import { plainName } from "@/lib/counter/plain-names"
-import { reasonClass, sumAdjustments, type ValuedAdjustment } from "@/lib/counter/waste-reasons"
+import { REASON_CLASS_LABEL, isThrownOut, reasonClass, sumAdjustments, type ValuedAdjustment } from "@/lib/counter/waste-reasons"
 import { summarizeWaste, type WasteReasonBar, type WasteSummary } from "@/lib/counter/waste-picture"
-import { gapCoverage, gapHeadline, type GapCoverage, type GapHeadline } from "@/lib/counter/gap-picture"
+import { gapChange, gapCoverage, gapHeadline, type GapChange, type GapCoverage, type GapHeadline } from "@/lib/counter/gap-picture"
 import { classify, guardSection, type StreamedSections } from "./types"
 import type { SectionData } from "@/lib/counter/section-data"
 
@@ -265,7 +264,7 @@ export type WasteSections = { waste: SectionData<WasteData | null> }
 /** A store's waste log for the last 7 days: the entries, and what they add up to. */
 export type WeekWaste = WasteSummary & { list: WasteEntry[] }
 
-/** A reason kept apart from waste (theft, sent back), or logged on another screen (damaged). */
+/** A reason kept apart from waste: theft, sent back. */
 export type ApartFigure = Pick<WasteReasonBar, "id" | "label" | "entries" | "unpriced" | "dollars">
 
 export type StoreWaste = {
@@ -273,7 +272,7 @@ export type StoreWaste = {
   week: WeekWaste
   /** The 7 days before those, for "more or less than". */
   before: Pick<WasteSummary, "entries" | "valued" | "unpriced" | "dollars">
-  /** Logged in the last 7 days under a reason the waste log does not offer. Never in `week`. */
+  /** Logged in the last 7 days under a reason that is not thrown out (theft, sent back). Never in `week`. */
   apart: ApartFigure[]
 }
 
@@ -299,23 +298,23 @@ const loadAdjustmentLog = cache((accountId: string) =>
  * The one read of "thrown out". The Waste tab's headline, bars and log, its
  * by-store comparison and the Inventory overview's tile are all this.
  *
- * WHAT COUNTS. The reasons the waste log offers (`WASTE_REASON_IDS`), over a
- * rolling 7 days. Theft and "sent back" are never waste; they are returned
- * under `apart`, with anything logged as "damaged" on Stock on hand.
+ * WHAT COUNTS. `isThrownOut` (`waste-reasons.ts`), the set the Report's
+ * "Waste you logged" and the one-item page read too, over a rolling 7 days:
+ * everything the waste log writes, plus "damaged" from Stock on hand. Theft
+ * and "sent back" are never waste; they are returned under `apart`.
  */
 export async function loadStoreWaste(accountId: string, storeId: string): Promise<StoreWaste> {
   const log = (await loadAdjustmentLog(accountId)).filter((r) => r.storeId === storeId)
   const now = Date.now()
   const weekStart = now - WASTE_WINDOW_DAYS * DAY_MS
-  const inLog = new Set<string>(WASTE_REASON_IDS)
   const dollarsOf = (r: (typeof log)[number]) => {
     const cost = r.canonicalIngredient.costPerRecipeUnit
     return cost != null ? r.qty * cost : null
   }
   const thisWeek = log.filter((r) => r.occurredAt.getTime() >= weekStart)
-  const wasted = thisWeek.filter((r) => inLog.has(r.reason))
+  const wasted = thisWeek.filter((r) => isThrownOut(r.reason))
   const before = summarizeWaste(
-    log.filter((r) => r.occurredAt.getTime() < weekStart && inLog.has(r.reason)).map((r) => ({ reason: r.reason, dollars: dollarsOf(r) })),
+    log.filter((r) => r.occurredAt.getTime() < weekStart && isThrownOut(r.reason)).map((r) => ({ reason: r.reason, dollars: dollarsOf(r) })),
   )
   const list: WasteEntry[] = wasted.map((r) => ({
     id: r.id,
@@ -329,7 +328,7 @@ export async function loadStoreWaste(accountId: string, storeId: string): Promis
   return {
     week: { ...summarizeWaste(wasted.map((r) => ({ reason: r.reason, dollars: dollarsOf(r) }))), list },
     before: { entries: before.entries, valued: before.valued, unpriced: before.unpriced, dollars: before.dollars },
-    apart: summarizeWaste(thisWeek.filter((r) => !inLog.has(r.reason)).map((r) => ({ reason: r.reason, dollars: dollarsOf(r) }))).reasons,
+    apart: summarizeWaste(thisWeek.filter((r) => !isThrownOut(r.reason)).map((r) => ({ reason: r.reason, dollars: dollarsOf(r) }))).reasons,
   }
 }
 
@@ -408,6 +407,13 @@ export type GapRow = {
   missing: number
   /** Signed: positive is a shortage, negative an overage. */
   missingDollars: number | null
+  /**
+   * Thrown out and logged, in the row's display unit: `isThrownOut`, the Waste
+   * tab's own set (the waste class plus "other"). With `theft` and `returned`
+   * it is everything logged, so the row adds across.
+   */
+  thrown: number
+  thrownDollars: number
   /** Logged out by reason class, in the row's display unit (`waste` is the waste class only). */
   theft: number
   returned: number
@@ -449,11 +455,16 @@ export type ReportData = {
   returnDollars: number
   otherDollars: number
   wasteEntries: number
-  /** Of those, entries on an item with no price: counted, never in `wasteDollars`. */
-  wasteUnpriced: number
-  /** Theft, sent-back and "other" entries on the rows, and how many of them have no price. */
-  apartEntries: number
-  apartUnpriced: number
+  /**
+   * "Waste you logged" as the Report tab prints it: `isThrownOut`, the set the
+   * Waste tab totals. Σ of the rows' `thrownDollars`; `thrownUnpriced` of the
+   * `thrownEntries` are on an item with no price and are not in the dollars.
+   */
+  thrownDollars: number
+  thrownEntries: number
+  thrownUnpriced: number
+  /** Theft and sent back on the rows, each with its own entries, so one with no price is never $0. */
+  apart: GapApart[]
   /** Entries in the window on items not counted both times — not on any row. */
   offReportEntries: number
   offReportDollars: number
@@ -466,8 +477,22 @@ export type ReportData = {
   headline: GapHeadline | null
   /** "N of M lines compared", and why the rest were not. */
   coverage: GapCoverage | null
-  /** The same figure for the pair of counts before this one, where there is one. */
-  before: { from: string; to: string; headline: GapHeadline } | null
+  /**
+   * The pair of counts before this one, where there is one. `change` compares
+   * the two only over the items both pairs compared (`gapChange`).
+   */
+  before: { from: string; to: string; headline: GapHeadline; change: GapChange } | null
+}
+
+/** One class kept apart from waste on the Report: what was logged and what of it can be valued. */
+export type GapApart = {
+  id: "shrink" | "return"
+  /** "Theft", "Sent back". */
+  label: string
+  entries: number
+  unpriced: number
+  /** Σ of the priced entries. Null when none has a price: an unknown, never $0. */
+  dollars: number | null
 }
 export type ReportSections = { report: SectionData<ReportData | null> }
 
@@ -574,7 +599,7 @@ export async function loadReport(opts: {
     current: cur ? { id: cur.id, label: dayLabel(cur.countedAt) } : null,
     previous: prev ? { label: dayLabel(prev.countedAt) } : null,
     rows: [], missingDollars: 0, extraDollars: 0, wasteDollars: 0, theftDollars: 0,
-    returnDollars: 0, otherDollars: 0, wasteEntries: 0, wasteUnpriced: 0, apartEntries: 0, apartUnpriced: 0, offReportEntries: 0,
+    returnDollars: 0, otherDollars: 0, wasteEntries: 0, thrownDollars: 0, thrownEntries: 0, thrownUnpriced: 0, apart: [], offReportEntries: 0,
     offReportDollars: 0, orders, headline: null, coverage: null, before: null,
   }
   if (!cur || !prev) return base
@@ -601,7 +626,7 @@ export async function loadReport(opts: {
       compared: gap.rows.map((r) => r.ingredientId),
     }),
     before: beforeGap && older
-      ? { from: dayLabel(older.countedAt), to: dayLabel(prev.countedAt), headline: gapHeadline(beforeGap.rows) }
+      ? { from: dayLabel(older.countedAt), to: dayLabel(prev.countedAt), headline: gapHeadline(beforeGap.rows), change: gapChange(gap.rows, beforeGap.rows) }
       : null,
   }
 }
@@ -623,7 +648,7 @@ export function getCountReportSectionPromises(opts: { accountId: string; storeId
 type GapPart = Pick<
   ReportData,
   | "rows" | "missingDollars" | "extraDollars" | "wasteDollars" | "theftDollars" | "returnDollars" | "otherDollars"
-  | "wasteEntries" | "wasteUnpriced" | "apartEntries" | "apartUnpriced" | "offReportEntries" | "offReportDollars"
+  | "wasteEntries" | "thrownDollars" | "thrownEntries" | "thrownUnpriced" | "apart" | "offReportEntries" | "offReportDollars"
 >
 
 /**
@@ -681,7 +706,9 @@ export async function loadGap(
       if (got === undefined) continue
       onRows.add(ing.id)
       const missing = r.onHand - got
-      const adj = sumAdjustments(adjBy.get(ing.id) ?? [])
+      const logged = adjBy.get(ing.id) ?? []
+      const adj = sumAdjustments(logged)
+      const thrown = logged.filter((e) => isThrownOut(e.reason))
       // Shown in lb when the recipes use oz; dollars are worked out first.
       const k = ing.recipeUnit.trim().toLowerCase() === "oz" ? 16 : 1
       rows.push({
@@ -692,6 +719,8 @@ export async function loadGap(
         delivered: r.deliveriesQty / k,
         used: r.depletionQty / k,
         waste: adj.qty.waste / k,
+        thrown: thrown.reduce((t, e) => t + e.qty, 0) / k,
+        thrownDollars: thrown.reduce((t, e) => t + e.qty * (e.cost ?? 0), 0),
         theft: adj.qty.shrink / k,
         returned: adj.qty.return / k,
         other: adj.qty.other / k,
@@ -711,15 +740,25 @@ export async function loadGap(
       [...adjBy].filter(([id]) => !onRows.has(id)).flatMap(([, list]) => list),
     )
     const onEntries = [...adjBy].filter(([id]) => onRows.has(id)).flatMap(([, list]) => list)
-    const wasteOn = onEntries.filter((e) => reasonClass(e.reason) === "waste")
-    const apartOn = onEntries.filter((e) => reasonClass(e.reason) !== "waste")
+    const thrownOn = onEntries.filter((e) => isThrownOut(e.reason))
+    const apartOf = (id: GapApart["id"]): GapApart => {
+      const list = onEntries.filter((e) => !isThrownOut(e.reason) && reasonClass(e.reason) === id)
+      const priced = list.filter((e) => e.cost != null)
+      return {
+        id,
+        label: REASON_CLASS_LABEL[id],
+        entries: list.length,
+        unpriced: list.length - priced.length,
+        dollars: priced.length ? priced.reduce((t, e) => t + e.qty * (e.cost ?? 0), 0) : null,
+      }
+    }
     return {
       ...reportTotals(rows),
       rows,
-      wasteEntries: wasteOn.length,
-      wasteUnpriced: wasteOn.filter((e) => e.cost == null).length,
-      apartEntries: apartOn.length,
-      apartUnpriced: apartOn.filter((e) => e.cost == null).length,
+      wasteEntries: onEntries.filter((e) => reasonClass(e.reason) === "waste").length,
+      thrownEntries: thrownOn.length,
+      thrownUnpriced: thrownOn.filter((e) => e.cost == null).length,
+      apart: [apartOf("shrink"), apartOf("return")],
       offReportEntries: Object.values(off.entries).reduce((t, n) => t + n, 0),
       offReportDollars: Object.values(off.dollars).reduce((t, n) => t + n, 0),
     }
@@ -761,13 +800,14 @@ export async function loadLatestGap(accountId: string, storeId: string): Promise
  */
 export function reportTotals(rows: GapRow[]): Pick<
   ReportData,
-  "missingDollars" | "extraDollars" | "wasteDollars" | "theftDollars" | "returnDollars" | "otherDollars"
+  "missingDollars" | "extraDollars" | "wasteDollars" | "thrownDollars" | "theftDollars" | "returnDollars" | "otherDollars"
 > {
   const sum = (f: (r: GapRow) => number) => rows.reduce((t, r) => t + f(r), 0)
   return {
     missingDollars: sum((r) => Math.max(0, r.missingDollars ?? 0)),
     extraDollars: sum((r) => Math.max(0, -(r.missingDollars ?? 0))),
     wasteDollars: sum((r) => r.wasteDollars),
+    thrownDollars: sum((r) => r.thrownDollars),
     theftDollars: sum((r) => r.theftDollars),
     returnDollars: sum((r) => r.returnDollars),
     otherDollars: sum((r) => r.otherDollars),

@@ -37,6 +37,37 @@ export function gapHeadline(rows: ReadonlyArray<GapFigureRow>): GapHeadline {
   }
 }
 
+export type GapChangeRow = GapFigureRow & { ingredientId: string }
+
+export type GapChange =
+  /** `items`: the priced items the two figures are both of. `sameItems`: the two pairs compared the same list. */
+  | { kind: "more" | "less"; dollars: number; items: number; sameItems: boolean }
+  | { kind: "same"; items: number; sameItems: boolean }
+  /** No item was compared in both pairs (a recount of other lines): no fair comparison. */
+  | { kind: "no_items_in_both" }
+  /** Items in both, none with a price. */
+  | { kind: "cant_tell" }
+
+/**
+ * "Went missing" for this pair of counts against the pair before it. The two
+ * headlines are only comparable when they are sums over the SAME items: after
+ * a partial recount one is the shortage on 3 lines and the other on 60. So
+ * both sides are summed over the items compared in both pairs (and priced),
+ * and the result says how many that is and whether it is everything.
+ */
+export function gapChange(now: ReadonlyArray<GapChangeRow>, before: ReadonlyArray<GapChangeRow>): GapChange {
+  const was = new Map(before.map((r) => [r.ingredientId, r]))
+  const both = now.filter((r) => was.has(r.ingredientId))
+  if (both.length === 0) return { kind: "no_items_in_both" }
+  const priced = both.filter((r) => r.missingDollars !== null && was.get(r.ingredientId)!.missingDollars !== null)
+  if (priced.length === 0) return { kind: "cant_tell" }
+  const short = (r: GapFigureRow) => Math.max(0, r.missingDollars ?? 0)
+  const d = priced.reduce((t, r) => t + short(r) - short(was.get(r.ingredientId)!), 0)
+  const of = { items: priced.length, sameItems: both.length === now.length && both.length === before.length }
+  if (Math.abs(d) < 0.005) return { kind: "same", ...of }
+  return { kind: d > 0 ? "more" : "less", dollars: Math.abs(d), ...of }
+}
+
 export type GapAmounts = { should: number; counted: number; missing: number }
 
 /** Within 5% of the bigger of the two amounts: the count agrees with the numbers. */
@@ -48,6 +79,18 @@ export type GapVerdict = "match" | "short" | "extra"
 
 export function gapVerdict(r: GapAmounts): GapVerdict {
   return gapMatches(r) ? "match" : r.missing > 0 ? "short" : "extra"
+}
+
+/**
+ * The names the headline may point at: rows the list below it calls SHORT,
+ * biggest first. A row within 5% is a match on the list, so it is never named
+ * as where the money went, even though its small gap is in the total.
+ */
+export function biggestShort<T extends GapAmounts & GapFigureRow>(rows: ReadonlyArray<T>, n = 3): T[] {
+  return rows
+    .filter((r) => gapVerdict(r) === "short" && (r.missingDollars ?? 0) > 0)
+    .sort((a, b) => (b.missingDollars ?? 0) - (a.missingDollars ?? 0))
+    .slice(0, n)
 }
 
 /**

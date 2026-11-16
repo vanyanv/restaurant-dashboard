@@ -63,21 +63,26 @@ function storeRows(stores: ItemStoreBar[]): BarRow[] {
       none: s.qty === null,
       value,
       sub: s.why === "not_counted"
-        ? "Never on a finished count here. A blank, not a zero."
+        // The shelf's own words: with the skip on, this week's count is left out, not missing.
+        ? s.skip
+          ? "Skipping this week's count: not on a count from before the last 7 days. A blank, not a zero."
+          : "Never on a finished count here. A blank, not a zero."
         // The state, unless the figure beside the bar already says it.
-        : [s.stateText === value ? null : s.stateText, s.typed, s.day ? `counted ${s.day}` : null].filter(Boolean).join(" · "),
+        : [s.stateText === value ? null : s.stateText, s.typed, s.day ? `counted ${s.day}` : null, s.skip ? "skipping this week's count" : null].filter(Boolean).join(" · "),
     }
   })
 }
 
 function Stores({ data, item }: { data: ItemView; item: Item }) {
+  // No unit in the heading: each bar prints its own amount in the unit it is shown in
+  // (oz reads as lb), and the bar lengths are all from the item's one recipe unit.
   const n = data.byStore.length
   if (n < 2) return null
   return (
     <section className="iv-card" aria-label={`Same item, ${n} stores`}>
       <div className="iv-card__h">
         <b>Same item, {n} stores</b>
-        <span className="iv-mono">in {item.unit}</span>
+        <span className="iv-mono">latest count</span>
       </div>
       <Bars rows={storeRows(data.byStore)} label={`${item.name} at each store`} />
       <p className="iv-note">Each store&apos;s own latest count. The bars share one scale; a store with a box that has no size has no bar.</p>
@@ -128,8 +133,11 @@ function Counted({ data, one }: { data: ItemView; one: ItemOne }) {
 
   if (!first || first.state === "not_counted") {
     return (
-      <NotYetBox title={`Not counted at ${one.store.name} yet`}>
-        <p>{first?.note ? `${first.note}. ` : ""}A blank is not a zero, so there is no amount, no dollars and nothing to order from yet.</p>
+      <NotYetBox title={one.skip ? `Not on a count ${one.store.name} is reading` : `Not counted at ${one.store.name} yet`}>
+        <p>
+          {one.skip ? "Skip this week's count is on, so counts from the last 7 days are left out, here and on the draft order. " : ""}
+          {first?.note ? `${first.note}. ` : ""}A blank is not a zero, so there is no amount, no dollars and nothing to order from yet.
+        </p>
         <Link className="iv-btn iv-btn--sm iv-btn--ink" href={href(`/dashboard/count/walk?store=${one.store.id}`)}>Count {one.store.name}</Link>
       </NotYetBox>
     )
@@ -158,7 +166,10 @@ function Counted({ data, one }: { data: ItemView; one: ItemOne }) {
       {one.perDay ? <p className="iv-cover-t">At about {one.perDay} a day, from what sold.</p> : null}
     </>
   ) : null
-  const said = notes.map((n) => <p key={n} className="iv-cover-t">{n}.</p>)
+  const said = [
+    ...(one.skip ? [`Skip this week's count is on, so this is read from the ${one.counted} count`] : []),
+    ...notes,
+  ].map((n) => <p key={n} className="iv-cover-t">{n}.</p>)
 
   // A box with no size: no amount, no dollars. Say what was typed and what fixes it.
   if (unsized.length > 0 || recount) {
@@ -210,7 +221,7 @@ function Since({ one }: { one: ItemOne }) {
     )
   }
   const r = g.row
-  const apart = r.theft + r.returned + r.other
+  const apart = r.theft + r.returned
   return (
     <section className="iv-card" aria-label="Since the last count">
       <div className="iv-card__h">
@@ -236,8 +247,8 @@ function Since({ one }: { one: ItemOne }) {
             { label: `Counted ${g.from}`, value: `${q(r.last)} ${r.unit}` },
             { label: "+ Delivered", value: `${q(r.delivered)} ${r.unit}` },
             { label: "− Sold, by the recipes", value: `${q(r.used)} ${r.unit}` },
-            { label: "− Thrown out, logged", value: `${q(r.waste)} ${r.unit}` },
-            ...(apart !== 0 ? [{ label: "− Theft, sent back, other", value: `${q(apart)} ${r.unit}` }] : []),
+            { label: "− Thrown out, logged", value: `${q(r.thrown)} ${r.unit}` },
+            ...(apart !== 0 ? [{ label: "− Theft, sent back", value: `${q(apart)} ${r.unit}` }] : []),
             { label: "Should be there", value: `${q(r.should)} ${r.unit}`, sum: true },
             { label: `Counted ${g.to}`, value: `${q(r.counted)} ${r.unit}` },
           ]}
@@ -307,7 +318,9 @@ function AllStores({ data, item }: { data: ItemView; item: Item }) {
           <p className="iv-cover-t">
             {data.across
               ? data.across.stores < n ? "Stores that have not counted it, or have a box with no size, are not added in." : "Every store has a whole count of it."
-              : counted === 0 ? "No store has this item on a finished count yet." : "Counted, but a box has no size yet, so there is no amount to add up."}
+              : counted === 0
+                ? data.byStore.some((s) => s.skip) ? "No store has this item on a count the page is reading: Skip this week's count is on." : "No store has this item on a finished count yet."
+                : "Counted, but a box has no size yet, so there is no amount to add up."}
             {" "}Pick a store above for days left, what went missing and how it is ordered.
           </p>
         </Hero>

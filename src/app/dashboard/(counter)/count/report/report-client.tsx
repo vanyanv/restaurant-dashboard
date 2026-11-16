@@ -1,5 +1,6 @@
 "use client"
 
+import type { ReactNode } from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { Section, useCounterTransition, usePageChrome, useSurfaceHref } from "@/components/counter"
@@ -7,10 +8,10 @@ import type { SectionSources } from "@/lib/counter/adapters/types"
 import type { GapRow, ReportData } from "@/lib/counter/adapters/count"
 import type { ReportPictureSections, ReportView } from "@/lib/counter/adapters/inventory-report"
 import type { SwitcherSections } from "@/lib/counter/adapters/inventory-shelf"
-import { gapVerdict, type GapCoverage, type GapHeadline } from "@/lib/counter/gap-picture"
-import { barShares, moneyChange } from "@/lib/counter/waste-picture"
+import { biggestShort, gapVerdict, type GapChange, type GapCoverage, type GapHeadline } from "@/lib/counter/gap-picture"
+import { barShares } from "@/lib/counter/waste-picture"
 import { CountHead, money } from "../count-ui"
-import { Bars, Hero, ItemLink, TwoBars, VerdictPill, changeSay, q, type BarRow } from "../picture-ui"
+import { Bars, Hero, ItemLink, TwoBars, VerdictPill, q, type BarRow } from "../picture-ui"
 
 /**
  * Inventory — Report. The picture first: what went missing between two
@@ -118,15 +119,39 @@ function offRows(rows: GapRow[]): GapRow[] {
     .sort((a, b) => rank(a) - rank(b) || Math.abs(b.missingDollars ?? 0) - Math.abs(a.missingDollars ?? 0))
 }
 
+/**
+ * "$12.40 more than the counts before", only ever over the items both pairs
+ * of counts compared. After a partial recount that is a few lines, and it
+ * says so; with no item in both there is no comparison, and it says why.
+ */
+function changeVsBefore(change: GapChange, before: string): ReactNode {
+  if (change.kind === "no_items_in_both") {
+    return `Not compared with ${before}: no item was compared both times (a partial recount, or the list changed), so there is no fair comparison.`
+  }
+  if (change.kind === "cant_tell") return `Not compared with ${before}: the items compared both times have no price on file.`
+  const on = change.sameItems
+    ? ""
+    : ` on the ${plural(change.items, "item")} compared both times. The two did not cover the same items (a partial recount, or the list changed), so the totals themselves are not compared`
+  if (change.kind === "same") return <>The same as {before}{on}.</>
+  return <><b>{money(change.dollars)} {change.kind}</b> than {before}{on}.</>
+}
+
+/** One class kept apart, in words: never $0 for entries nobody can value. */
+function apartSay(a: ReportData["apart"][number]): string {
+  if (a.dollars === null) return `${a.label} not valued yet (${plural(a.entries, "entry", "entries")})`
+  return `${a.label} ${money(a.dollars)}${a.unpriced > 0 ? `, ${a.unpriced} not valued` : ""}`
+}
+
 function Compared({ data, from, to }: { data: ReportData; from: string; to: string }) {
   const h = data.headline
   const { figure, words } = missingFigure(h)
-  const top = data.rows.filter((r) => (r.missingDollars ?? 0) > 0).slice(0, 3).map((r) => r.name)
-  const change = h && data.before ? moneyChange({ entries: h.items, dollars: h.missingDollars }, { entries: data.before.headline.items, dollars: data.before.headline.missingDollars }) : null
+  // Named from the rows the list calls short: a row within 5% is a match there, never "where it went".
+  const top = biggestShort(data.rows).map((r) => r.name)
   const off = offRows(data.rows)
   const matching = data.rows.length - off.length
   const c = data.coverage
-  const apart = data.theftDollars + data.returnDollars + data.otherDollars
+  const apart = data.apart.filter((a) => a.entries > 0)
+  const apartPriced = apart.filter((a) => a.dollars !== null)
   return (
     <>
       <div className="iv-rep">
@@ -135,7 +160,7 @@ function Compared({ data, from, to }: { data: ReportData; from: string; to: stri
           label={`Went missing · ${from} → ${to}`}
           figure={figure}
           words={words}
-          aside={data.before ? changeSay(change, `the counts before (${data.before.from} → ${data.before.to})`) : undefined}
+          aside={h && h.items > 0 && data.before ? changeVsBefore(data.before.change, `the counts before (${data.before.from} → ${data.before.to})`) : undefined}
         >
           <p className="iv-cover-t">
             {!h || h.items === 0
@@ -143,7 +168,7 @@ function Compared({ data, from, to }: { data: ReportData; from: string; to: stri
               : h.missingDollars === null
                 ? `${plural(h.items, "item")} compared, and none has a price on file yet, so the gap has no dollar figure.`
                 : h.missingDollars > 0
-                  ? `Food that should have been on the shelf and was not, and that nobody logged.${top.length ? ` Most of it is ${top.join(", ")}.` : ""}`
+                  ? `Food that should have been on the shelf and was not, and that nobody logged. ${top.length ? `The biggest: ${top.join(", ")}.` : "It is all small gaps: every item was counted within 5% of what the numbers say, so no single item is short."}`
                   : "Nothing went missing that wasn't logged."}
             {h && h.missingDollars !== null && h.unpriced > 0 ? ` ${plural(h.unpriced, "compared item")} with no price ${h.unpriced === 1 ? "is" : "are"} not in the figure.` : ""}
           </p>
@@ -211,28 +236,24 @@ function Compared({ data, from, to }: { data: ReportData; from: string; to: stri
         </div>
         <div className="iv-card iv-tile">
           <span className="iv-mono">Waste you logged</span>
-          {data.wasteEntries === 0
+          {data.thrownEntries === 0
             ? <strong className="txt">Nothing logged</strong>
-            : data.wasteUnpriced === data.wasteEntries
+            : data.thrownUnpriced === data.thrownEntries
               ? <strong className="txt">Not valued yet</strong>
-              : <strong>{money(data.wasteDollars)}</strong>}
+              : <strong>{money(data.thrownDollars)}</strong>}
           <span>
-            {plural(data.wasteEntries, "entry", "entries")} between the counts, on the items compared.
-            {data.wasteUnpriced > 0 && data.wasteUnpriced < data.wasteEntries ? ` ${data.wasteUnpriced} without a price not added in.` : ""}
+            {plural(data.thrownEntries, "entry", "entries")} between the counts, on the items compared: everything the Waste tab counts as thrown out.
+            {data.thrownUnpriced > 0 && data.thrownUnpriced < data.thrownEntries ? ` ${data.thrownUnpriced} without a price not added in.` : ""}
           </span>
         </div>
         <div className="iv-card iv-tile">
-          <span className="iv-mono">Theft · sent back · other</span>
-          {data.apartEntries === 0
+          <span className="iv-mono">Theft · sent back</span>
+          {apart.length === 0
             ? <strong className="txt">Nothing logged</strong>
-            : data.apartUnpriced === data.apartEntries
+            : apartPriced.length === 0
               ? <strong className="txt">Not valued yet</strong>
-              : <strong>{money(apart)}</strong>}
-          <span>
-            {data.apartEntries === 0
-              ? "Kept apart from waste."
-              : `Theft ${money(data.theftDollars)} · sent back ${money(data.returnDollars)} · other ${money(data.otherDollars)}.${data.apartUnpriced > 0 && data.apartUnpriced < data.apartEntries ? ` ${data.apartUnpriced} without a price not added in.` : ""}`}
-          </span>
+              : <strong>{money(apartPriced.reduce((t, a) => t + (a.dollars ?? 0), 0))}</strong>}
+          <span>{apart.length === 0 ? "Kept apart from waste." : `${apart.map(apartSay).join(" · ")}.`}</span>
         </div>
       </div>
       </div>
@@ -242,7 +263,7 @@ function Compared({ data, from, to }: { data: ReportData; from: string; to: stri
           <summary>Show the working <span>One row per item: last count, delivered, sold, logged</span></summary>
           <Working data={data} />
           <p>
-            Every row adds across: last count + delivered − sales used − waste − theft, sent back and other = should have. The figures above are those rows summed{data.offReportEntries > 0 ? `; ${plural(data.offReportEntries, "more entry", "more entries")} (${money(data.offReportDollars)}) ${data.offReportEntries === 1 ? "was" : "were"} logged against items not compared, so ${data.offReportEntries === 1 ? "it is" : "they are"} on no row` : ""}. &quot;Sales used&quot; is every item sold times its recipe. Extras and &quot;no cheese&quot; changes aren&apos;t in it yet, so a small gap on cheese or sauce is expected. Shortages and extras are never netted against each other.
+            Every row adds across: last count + delivered − sales used − thrown out − theft and sent back = should have. The figures above are those rows summed{data.offReportEntries > 0 ? `; ${plural(data.offReportEntries, "more entry", "more entries")} (${money(data.offReportDollars)}) ${data.offReportEntries === 1 ? "was" : "were"} logged against items not compared, so ${data.offReportEntries === 1 ? "it is" : "they are"} on no row` : ""}. &quot;Sales used&quot; is every item sold times its recipe. Extras and &quot;no cheese&quot; changes aren&apos;t in it yet, so a small gap on cheese or sauce is expected. Shortages and extras are never netted against each other.
           </p>
         </details>
       )}
@@ -260,8 +281,8 @@ function Working({ data }: { data: ReportData }) {
             <th>Last count</th>
             <th>+ Delivered</th>
             <th>− Sales used</th>
-            <th>− Waste</th>
-            <th>− Theft, sent back, other</th>
+            <th>− Thrown out</th>
+            <th>− Theft, sent back</th>
             <th>= Should have</th>
             <th>You counted</th>
             <th>Missing</th>
@@ -279,8 +300,8 @@ function Working({ data }: { data: ReportData }) {
                 <td data-label="Last count">{q(r.last)} {r.unit}</td>
                 <td data-label="+ Delivered">{q(r.delivered)}</td>
                 <td data-label="− Sales used">{q(r.used)}</td>
-                <td data-label="− Waste">{q(r.waste)}</td>
-                <td data-label="− Theft, sent back, other">{q(r.theft + r.returned + r.other)}</td>
+                <td data-label="− Thrown out">{q(r.thrown)}</td>
+                <td data-label="− Theft, sent back">{q(r.theft + r.returned)}</td>
                 <td data-label="= Should have">{q(r.should)}</td>
                 <td data-label="You counted">{q(r.counted)}</td>
                 <td data-label="Missing" className={v === "match" ? "ok" : v === "short" ? "miss" : ""}>

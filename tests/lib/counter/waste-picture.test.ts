@@ -62,9 +62,10 @@ describe("mergeWaste", () => {
 })
 
 describe("moneyChange", () => {
-  const fig = (entries: number, dollars: number | null) => ({ entries, dollars })
+  /** A window whose entries all have a price, unless `unpriced` says otherwise. */
+  const fig = (entries: number, dollars: number | null, unpriced = dollars === null ? entries : 0) => ({ entries, dollars, unpriced })
 
-  it("compares two real figures", () => {
+  it("compares two whole figures", () => {
     expect(moneyChange(fig(3, 30), fig(2, 18))).toEqual({ kind: "more", dollars: 12 })
     expect(moneyChange(fig(1, 5), fig(2, 18))).toEqual({ kind: "less", dollars: 13 })
     expect(moneyChange(fig(1, 18), fig(4, 18))).toEqual({ kind: "same" })
@@ -79,8 +80,17 @@ describe("moneyChange", () => {
   })
 
   it("can't tell when one side has entries and no prices", () => {
-    expect(moneyChange(fig(3, null), fig(2, 18))).toEqual({ kind: "cant_tell" })
-    expect(moneyChange(fig(3, 30), fig(2, null))).toEqual({ kind: "cant_tell" })
+    expect(moneyChange(fig(3, null), fig(2, 18))).toEqual({ kind: "cant_tell", unpriced: 3 })
+    expect(moneyChange(fig(3, 30), fig(2, null))).toEqual({ kind: "cant_tell", unpriced: 2 })
+  })
+
+  it("can't tell when either total is only partly priced, and says how many entries that is", () => {
+    // $30 is the value of 3 of 5 entries this week: "$12 more" would compare a part with a whole.
+    expect(moneyChange(fig(5, 30, 2), fig(2, 18))).toEqual({ kind: "cant_tell", unpriced: 2 })
+    expect(moneyChange(fig(3, 30), fig(4, 18, 1))).toEqual({ kind: "cant_tell", unpriced: 1 })
+    expect(moneyChange(fig(5, 30, 2), fig(4, 18, 1))).toEqual({ kind: "cant_tell", unpriced: 3 })
+    // Nothing this week, but last week is only partly priced: still no fair "less".
+    expect(moneyChange(fig(0, null), fig(4, 18, 1))).toEqual({ kind: "cant_tell", unpriced: 1 })
   })
 
   it("says nothing when neither week has an entry", () => {

@@ -32,7 +32,9 @@ import { InventoryAdjustmentReason } from "@/generated/prisma/enums"
 import {
   ADJUSTMENT_REASONS,
   ADJUST_FORM_REASONS,
+  THROWN_OUT_REASON_IDS,
   WASTE_LOG_REASONS,
+  isThrownOut,
   reasonClass,
   reasonLabel,
   sumAdjustments,
@@ -43,6 +45,28 @@ import { getCountReportSectionPromises, type GapRow } from "@/lib/counter/adapte
 import { hasData } from "@/lib/counter/section-data"
 
 const asMock = (fn: unknown) => fn as ReturnType<typeof vi.fn>
+
+describe("thrown out", () => {
+  it("is one set: the waste log's five reasons plus damaged", () => {
+    expect([...THROWN_OUT_REASON_IDS].sort()).toEqual(["BURNT", "DAMAGE", "DROPPED", "EXPIRY", "OTHER", "REMAKE"])
+    for (const id of THROWN_OUT_REASON_IDS) expect(isThrownOut(id)).toBe(true)
+    // Everything the waste log's form writes is thrown out.
+    for (const r of WASTE_LOG_REASONS) expect(isThrownOut(r.id)).toBe(true)
+  })
+
+  it("never takes in theft or what was sent back, or a reason it does not know", () => {
+    expect(isThrownOut("THEFT")).toBe(false)
+    expect(isThrownOut("SUPPLIER_RETURN")).toBe(false)
+    expect(isThrownOut("SOMETHING_NEW")).toBe(false)
+  })
+
+  it("leaves every reason the schema stores either thrown out, theft or sent back, so a row adds across", () => {
+    for (const id of Object.values(InventoryAdjustmentReason)) {
+      const apart = reasonClass(id) === "shrink" || reasonClass(id) === "return"
+      expect(isThrownOut(id), id).toBe(!apart)
+    }
+  })
+})
 
 describe("the reason taxonomy", () => {
   it("covers every reason the schema stores, once", () => {
