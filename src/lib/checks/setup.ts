@@ -129,6 +129,8 @@ export type CrewSyncResult = { added: number; reactivated: number; deactivated: 
  *     their PIN freed
  *   - someone who comes back gets a new PIN
  *   - names and email follow Harri; an owner's PIN is never touched
+ *   - Harri's mobile number fills an empty Mobile field, and never replaces
+ *     one already there (the owner's typing wins)
  *
  * Crew the owner added by hand are left alone.
  */
@@ -136,13 +138,13 @@ export async function syncCrewFromHarri(storeId: string): Promise<CrewSyncResult
   const [employees, crew] = await Promise.all([
     prisma.harriEmployee.findMany({
       where: { storeId },
-      select: { userId: true, firstName: true, lastName: true, email: true, status: true },
+      select: { userId: true, firstName: true, lastName: true, email: true, phone: true, status: true },
     }),
     prisma.crewMember.findMany({
       where: { storeId },
       select: {
         id: true, source: true, harriUserId: true, pin: true, active: true,
-        firstName: true, lastName: true, email: true, inactiveReason: true,
+        firstName: true, lastName: true, email: true, phone: true, inactiveReason: true,
       },
     }),
   ])
@@ -169,13 +171,14 @@ export async function syncCrewFromHarri(storeId: string): Promise<CrewSyncResult
     const existing = byHarri.get(e.userId)
     const lastName = e.lastName?.trim() || null
     const email = e.email?.trim() || null
+    const phone = e.phone || null
 
     if (!existing) {
       if (!active) return
       const pin = pickPin(taken)
       taken.add(pin)
       await prisma.crewMember.create({
-        data: { storeId, source: "HARRI", harriUserId: e.userId, firstName: name, lastName, email, pin },
+        data: { storeId, source: "HARRI", harriUserId: e.userId, firstName: name, lastName, email, phone, pin },
       })
       result.added += 1
       return
@@ -183,13 +186,15 @@ export async function syncCrewFromHarri(storeId: string): Promise<CrewSyncResult
 
     // Harri with no email never erases one the owner typed in.
     const keptEmail = email ?? existing.email
+    // A number already on the crew row (typed, or from an earlier sync) stays.
+    const keptPhone = existing.phone ?? phone
 
     if (active && !existing.active && existing.inactiveReason !== OWNER_OFF) {
       const pin = pickPin(taken)
       taken.add(pin)
       await prisma.crewMember.update({
         where: { id: existing.id },
-        data: { active: true, inactiveReason: null, pin, firstName: name, lastName, email: keptEmail },
+        data: { active: true, inactiveReason: null, pin, firstName: name, lastName, email: keptEmail, phone: keptPhone },
       })
       result.reactivated += 1
       return
@@ -201,10 +206,15 @@ export async function syncCrewFromHarri(storeId: string): Promise<CrewSyncResult
       result.deactivated += 1
       return
     }
-    if (existing.firstName !== name || existing.lastName !== lastName || existing.email !== keptEmail) {
+    if (
+      existing.firstName !== name ||
+      existing.lastName !== lastName ||
+      existing.email !== keptEmail ||
+      existing.phone !== keptPhone
+    ) {
       await prisma.crewMember.update({
         where: { id: existing.id },
-        data: { firstName: name, lastName, email: keptEmail },
+        data: { firstName: name, lastName, email: keptEmail, phone: keptPhone },
       })
       result.updated += 1
     }

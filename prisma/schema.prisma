@@ -2361,6 +2361,8 @@ model HarriEmployee {
   firstName  String?
   lastName   String?
   email      String?
+  /// Harri's mobile number, normalised to +1XXXXXXXXXX (null when not a US number).
+  phone      String?
   status     String?
   syncedAt   DateTime @default(now())
 

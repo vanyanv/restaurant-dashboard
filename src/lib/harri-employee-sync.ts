@@ -14,6 +14,7 @@ import { prisma } from "@/lib/prisma"
 import { withJobRun } from "@/lib/monitoring/job-run"
 import { buildTeamUsersUrl, harriFetch, type HarriUser } from "@/lib/harri"
 import { syncCrewFromHarri } from "@/lib/checks/setup"
+import { normalizeUsPhone } from "@/lib/checks/text"
 
 const CHUNK_SIZE = 10
 
@@ -91,6 +92,8 @@ export async function refreshHarriEmployees(
 
         for (const u of users) {
           if (!u.id || !Number.isFinite(u.id)) continue
+          const phone =
+            typeof u.phone === "string" || typeof u.phone === "number" ? normalizeUsPhone(String(u.phone)) : null
           await prisma.harriEmployee.upsert({
             where: { storeId_userId: { storeId, userId: u.id } },
             create: {
@@ -101,6 +104,7 @@ export async function refreshHarriEmployees(
               firstName: u.first_name ?? null,
               lastName: u.last_name ?? null,
               email: u.email ?? null,
+              phone,
               status: u.status ?? null,
             },
             update: {
@@ -109,6 +113,7 @@ export async function refreshHarriEmployees(
               firstName: u.first_name ?? null,
               lastName: u.last_name ?? null,
               email: u.email ?? null,
+              phone,
               status: u.status ?? null,
               syncedAt: new Date(),
             },
