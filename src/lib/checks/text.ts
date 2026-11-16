@@ -7,6 +7,9 @@
 
 /** A US mobile number as +1XXXXXXXXXX, or null when it isn't one. */
 export function normalizeUsPhone(raw: string): string | null {
+  // An explicit country code other than +1 is someone else's number, not a US one with punctuation.
+  const plus = /^\s*(\+|00)\s*(\d)/.exec(raw)
+  if (plus && plus[2] !== "1") return null
   const digits = raw.replace(/\D/g, "")
   const ten = digits.length === 11 && digits.startsWith("1") ? digits.slice(1) : digits
   if (ten.length !== 10) return null

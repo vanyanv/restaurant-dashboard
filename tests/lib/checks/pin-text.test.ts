@@ -8,7 +8,7 @@ describe("normalizeUsPhone", () => {
     }
   })
   it("refuses numbers that can't be US mobiles", () => {
-    for (const raw of ["555-0123", "81855501234", "018-555-0123", "818-155-0123", "+44 20 7946 0958", "abc"]) {
+    for (const raw of ["555-0123", "81855501234", "018-555-0123", "818-155-0123", "+44 20 7946 0958", "+65 6555 0123", "0065 6555 0123", "abc"]) {
       expect(normalizeUsPhone(raw)).toBeNull()
     }
   })
