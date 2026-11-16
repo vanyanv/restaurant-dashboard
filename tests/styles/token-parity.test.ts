@@ -224,6 +224,9 @@ const COUNTER_ROOT_EXCEPTIONS: Array<{ file: string; token: string }> = [
   // "this QR code isn't in use" refusal.
   { file: "app/checks/[code]/crew-check-client.tsx", token: "ct-root" },
   { file: "app/checks/[code]/page.tsx", token: "ct-root" },
+  // The how-to guide texted to new crew (`Text how-to` on Crew & PINs): a
+  // bare public page beside the check page, wearing the same brand root.
+  { file: "app/checks/[code]/how/page.tsx", token: "ct-root" },
   // ...and the phone's own type scale, `.pframe`'s, worn WITH `ct-root` on
   // the same element. Listed separately because a file that emitted
   // `ct-phone` WITHOUT `ct-root` would be redeclaring the scale over the
@@ -327,9 +330,12 @@ describe("the Counter/editorial token-name collision stays harmless", () => {
     //
     // The fourteenth is the phone 404, a sibling root like the bottom bar.
     //
-    // Twenty-four entries, fourteen files.
-    expect(COUNTER_ROOT_EXCEPTIONS).toHaveLength(24)
-    expect(new Set(COUNTER_ROOT_EXCEPTIONS.map((x) => x.file)).size).toBe(14)
+    // The fifteenth is the crew how-to guide beside the check page, public
+    // for the same reason and texted from Crew & PINs.
+    //
+    // Twenty-five entries, fifteen files.
+    expect(COUNTER_ROOT_EXCEPTIONS).toHaveLength(25)
+    expect(new Set(COUNTER_ROOT_EXCEPTIONS.map((x) => x.file)).size).toBe(15)
     // `ct-phone` is only ever worn with `ct-root`; a file carrying it alone
     // would be redeclaring the type scale over the wrong ink and ground.
     const phone = COUNTER_ROOT_EXCEPTIONS.filter((x) => x.token === "ct-phone")

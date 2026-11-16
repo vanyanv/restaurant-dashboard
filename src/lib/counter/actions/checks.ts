@@ -8,6 +8,7 @@ import { authOptions, hasOwnerAccess } from "@/lib/auth"
 import { requireOwnerStore } from "@/lib/auth-scope"
 import { checkLink } from "@/lib/checks/crew"
 import { sendPinEmail } from "@/lib/checks/email"
+import { normalizeUsPhone } from "@/lib/checks/text"
 import {
   isUniqueViolation,
   newCheckCode,
@@ -266,6 +267,14 @@ const CrewInput = z.object({
   firstName: text(40).min(1, "First name is required"),
   lastName: text(40),
   email: z.union([z.literal(""), z.string().trim().email("That email doesn't look right").max(120)]),
+  phone: z
+    .string()
+    .trim()
+    .max(30)
+    .refine((p) => p === "" || normalizeUsPhone(p) !== null, "That doesn't look like a US mobile number")
+    .transform((p) => (p === "" ? null : normalizeUsPhone(p)))
+    // Left out means "don't touch", so a caller that predates the field never clears it.
+    .optional(),
   pin: z.union([
     z.literal(""),
     z
@@ -307,6 +316,7 @@ export async function addCrewMember(raw: { storeId: string } & z.input<typeof Cr
         firstName: input.firstName,
         lastName: input.lastName || null,
         email: input.email || null,
+        phone: input.phone,
         pin,
       },
     })
@@ -333,6 +343,7 @@ export async function updateCrewMember(raw: { crewId: string } & z.input<typeof 
         firstName: input.firstName,
         lastName: input.lastName || null,
         email: input.email || null,
+        phone: input.phone,
         ...(input.pin && crew.active ? { pin: input.pin } : {}),
       },
     })

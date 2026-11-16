@@ -2467,6 +2467,9 @@ model CrewMember {
   firstName      String
   lastName       String?
   email          String?
+  /// Mobile number as +1XXXXXXXXXX, typed in by the owner (Harri sync never
+  /// touches it). Used for the "Text" button that opens the owner's own phone.
+  phone          String?
   /// Four digits, unique within the store. Null while inactive ("PIN off").
   pin            String?
   active         Boolean    @default(true)

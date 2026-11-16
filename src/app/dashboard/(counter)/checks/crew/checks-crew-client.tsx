@@ -13,12 +13,15 @@ import {
 } from "@/lib/counter/actions/checks"
 import type { SectionSources } from "@/lib/counter/adapters/types"
 import type { CrewData, CrewRow, CrewSections } from "@/lib/counter/adapters/checks"
+import { formatUsPhone, howToTextBody, pinTextBody, smsHref } from "@/lib/checks/text"
 import { ChecksHead, OutcomeLine, StorePicker, type Outcome } from "../checks-ui"
 
 /**
  * Store checks — Crew & PINs. Crew come in from Harri with a PIN already
  * assigned; an owner can change a PIN, add someone by hand, switch someone
- * off, and email a PIN. PINs are hidden until asked for, one row at a time.
+ * off, and email or text a PIN. PINs are hidden until asked for, one row at a
+ * time. "Text" opens Messages on the owner's own phone with the PIN message
+ * filled in; nothing is sent until they press send there.
  */
 export function ChecksCrewClient({ sections }: { sections: SectionSources<CrewSections> }) {
   usePageChrome({ leaf: "Crew & PINs" })
@@ -91,7 +94,7 @@ function Crew({ data }: { data: CrewData }) {
       </div>
       {!data.emailReady && (
         <p className="ck-meta" style={{ padding: "10px 14px", margin: 0, borderBottom: "1px solid var(--line)" }}>
-          PIN emails are off until the dashboard has an email sender set up. Until then, read a PIN here and hand it over.
+          PIN emails are off until the dashboard has an email sender set up. Until then, use Text to send a PIN from your phone, or read it here and hand it over.
         </p>
       )}
       {adding && <AddForm storeId={data.store.id} onDone={() => setAdding(false)} />}
@@ -116,7 +119,14 @@ function Crew({ data }: { data: CrewData }) {
               </tr>
             )}
             {data.crew.map((c) => (
-              <CrewLine key={c.id} c={c} showAll={showAll} emailReady={data.emailReady} />
+              <CrewLine
+                key={c.id}
+                c={c}
+                showAll={showAll}
+                emailReady={data.emailReady}
+                storeName={data.store.name}
+                checkLink={data.checkLink}
+              />
             ))}
           </tbody>
         </table>
@@ -125,7 +135,19 @@ function Crew({ data }: { data: CrewData }) {
   )
 }
 
-function CrewLine({ c, showAll, emailReady }: { c: CrewRow; showAll: boolean; emailReady: boolean }) {
+function CrewLine({
+  c,
+  showAll,
+  emailReady,
+  storeName,
+  checkLink,
+}: {
+  c: CrewRow
+  showAll: boolean
+  emailReady: boolean
+  storeName: string
+  checkLink: string
+}) {
   const [show, setShow] = useState(false)
   const [editing, setEditing] = useState(false)
   const { busy, outcome, run } = useAction()
@@ -136,7 +158,7 @@ function CrewLine({ c, showAll, emailReady }: { c: CrewRow; showAll: boolean; em
       <tr>
         <td colSpan={6} style={{ padding: 0 }}>
           <CrewForm
-            initial={c}
+            initial={{ ...c, phone: c.phone ? formatUsPhone(c.phone) : "" }}
             submitLabel="Save"
             onCancel={() => setEditing(false)}
             onSubmit={(v) => updateCrewMember({ crewId: c.id, ...v })}
@@ -152,6 +174,7 @@ function CrewLine({ c, showAll, emailReady }: { c: CrewRow; showAll: boolean; em
       <td>
         <b>{c.name}</b>
         {c.email && <div className="ck-meta">{c.email}</div>}
+        {c.phone && <div className="ck-meta">{formatUsPhone(c.phone)}</div>}
       </td>
       <td>
         {c.active && c.pin ? (
@@ -182,6 +205,24 @@ function CrewLine({ c, showAll, emailReady }: { c: CrewRow; showAll: boolean; em
               {c.pinEmailedAt ? "Resend" : "Send"}
             </button>
           )}
+          {c.active && c.pin && c.phone && (
+            <a
+              className="ck-link"
+              href={smsHref(c.phone, pinTextBody({ firstName: c.firstName, storeName, pin: c.pin, link: checkLink }))}
+              title="Opens Messages with the PIN and link filled in. You press send."
+            >
+              Text PIN
+            </a>
+          )}
+          {c.active && c.phone && checkLink && (
+            <a
+              className="ck-link"
+              href={smsHref(c.phone, howToTextBody({ firstName: c.firstName, storeName, link: checkLink }))}
+              title="Opens Messages with a link to the how-to guide (it saves as a PDF) and the check link. No PIN in it."
+            >
+              Text how-to
+            </a>
+          )}
           <button type="button" className="ck-link" onClick={() => setEditing(true)}>
             Edit
           </button>
@@ -199,12 +240,12 @@ function CrewLine({ c, showAll, emailReady }: { c: CrewRow; showAll: boolean; em
   )
 }
 
-type CrewValues = { firstName: string; lastName: string; email: string; pin: string }
+type CrewValues = { firstName: string; lastName: string; email: string; phone: string; pin: string }
 
 function AddForm({ storeId, onDone }: { storeId: string; onDone: () => void }) {
   return (
     <CrewForm
-      initial={{ firstName: "", lastName: "", email: "", pin: "" }}
+      initial={{ firstName: "", lastName: "", email: "", phone: "", pin: "" }}
       submitLabel="Add"
       pinHint="Leave empty to pick one"
       onCancel={onDone}
@@ -222,14 +263,20 @@ function CrewForm({
   onCancel,
   onDone,
 }: {
-  initial: { firstName: string; lastName: string; email: string; pin: string | null }
+  initial: { firstName: string; lastName: string; email: string; phone: string; pin: string | null }
   submitLabel: string
   pinHint?: string
   onSubmit: (v: CrewValues) => Promise<ActionResult>
   onCancel: () => void
   onDone: () => void
 }) {
-  const [v, setV] = useState<CrewValues>({ ...initial, pin: initial.pin ?? "" })
+  const [v, setV] = useState<CrewValues>({
+    firstName: initial.firstName,
+    lastName: initial.lastName,
+    email: initial.email,
+    phone: initial.phone,
+    pin: initial.pin ?? "",
+  })
   const { busy, outcome, run } = useAction()
   const set = (k: keyof CrewValues) => (e: React.ChangeEvent<HTMLInputElement>) =>
     setV((x) => ({ ...x, [k]: k === "pin" ? e.target.value.replace(/\D/g, "").slice(0, 4) : e.target.value }))
@@ -252,6 +299,10 @@ function CrewForm({
       <label className="ck-field">
         <span className="ck-mono">Email</span>
         <input className="ck-input" type="email" value={v.email} onChange={set("email")} />
+      </label>
+      <label className="ck-field">
+        <span className="ck-mono">Mobile</span>
+        <input className="ck-input" type="tel" inputMode="tel" autoComplete="off" value={v.phone} onChange={set("phone")} />
       </label>
       <label className="ck-field">
         <span className="ck-mono">PIN{pinHint ? ` · ${pinHint}` : ""}</span>

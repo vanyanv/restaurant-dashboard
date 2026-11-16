@@ -749,6 +749,8 @@ export type CrewRow = {
   firstName: string
   lastName: string
   email: string
+  /** +1XXXXXXXXXX, or "" when none is on file. */
+  phone: string
   pin: string | null
   source: "HARRI" | "MANUAL"
   active: boolean
@@ -763,6 +765,8 @@ export type CrewData = {
   harriSyncedAt: string | null
   harriLinked: boolean
   emailReady: boolean
+  /** The store's crew check link, for the PIN text. "" until the store has a check code. */
+  checkLink: string
 }
 export type CrewSections = { crew: SectionData<CrewData> }
 
@@ -773,7 +777,7 @@ export function getChecksCrewSectionPromises(opts: { accountId: string; storeId?
         const stores = await accountStores(opts.accountId)
         const store = pickStore(stores, opts.storeId)
         if (!store) return null
-        const [crew, synced, brand] = await Promise.all([
+        const [crew, synced, brand, code] = await Promise.all([
           prisma.crewMember.findMany({
             where: { storeId: store.id, store: { accountId: opts.accountId } },
             orderBy: [{ active: "desc" }, { firstName: "asc" }],
@@ -787,10 +791,12 @@ export function getChecksCrewSectionPromises(opts: { accountId: string; storeId?
             select: { syncedAt: true },
           }),
           prisma.harriBrand.findFirst({ where: { storeId: store.id }, select: { id: true } }),
+          prisma.store.findFirst({ where: { id: store.id, accountId: opts.accountId }, select: { checkCode: true } }),
         ])
         return {
           stores,
           store,
+          checkLink: code?.checkCode ? checkLink(code.checkCode) : "",
           harriSyncedAt: synced ? synced.syncedAt.toISOString() : null,
           harriLinked: Boolean(brand),
           emailReady: emailConfigured(),
@@ -802,6 +808,7 @@ export function getChecksCrewSectionPromises(opts: { accountId: string; storeId?
               firstName: c.firstName,
               lastName: c.lastName ?? "",
               email: c.email ?? "",
+              phone: c.phone ?? "",
               pin: c.pin,
               source: c.source,
               active: c.active,
