@@ -56,7 +56,7 @@ export function CounterPhoneNewCountClient({
           tab of it — `VIEWS.inventory` is `['hand','On hand'], ['counts','Counts'],
           ['start','Start a count']` — and On hand and Counts both drew it while
           this page, the tab you are standing on, drew nothing. */}
-      <SubNav items={PHONE_INVENTORY_TABS} label="Inventory" />
+      <SubNav items={PHONE_INVENTORY_TABS} label="Stock on hand" />
 
       {/* The page's own NAME is a constant, so it is drawn in every state.
           Inside the section it was not: a failed headline left this phone

@@ -35,9 +35,9 @@ export function CounterPhoneInventoryClient({
   if (storeId === null) {
     return (
       <>
-        <SubNav items={PHONE_INVENTORY_TABS} label="Inventory" />
+        <SubNav items={PHONE_INVENTORY_TABS} label="Stock on hand" />
         <h2 className="mtitle">Inventory</h2>
-        <Section title="Inventory" data={sections.headline} pending={pending}>
+        <Section title="Stock on hand" data={sections.headline} pending={pending}>
           {() => null}
         </Section>
       </>
@@ -49,7 +49,7 @@ export function CounterPhoneInventoryClient({
       {/* The design's `VIEWS` bar, first inside `.mscroll` — which is exactly
           where `phoneFor()` puts a `.seg`. Same destinations as the desk's,
           on `/m` paths. */}
-      <SubNav items={PHONE_INVENTORY_TABS} label="Inventory" />
+      <SubNav items={PHONE_INVENTORY_TABS} label="Stock on hand" />
 
       {/* THE TITLE IS STILL GATED HERE, deliberately, unlike the 21 other
           phone pages this was hoisted out of. Its sub-line is `{n.meta}` —
@@ -59,7 +59,7 @@ export function CounterPhoneInventoryClient({
           11px gap on this page alone; split the msub and the `MHead` into two
           Sections over one promise and a failure paints two cards instead of
           one. Left as it is until the head earns a shape of its own. */}
-      <Section bare title="Inventory" data={sections.nextCount} pending={pending}>
+      <Section bare title="Stock on hand" data={sections.nextCount} pending={pending}>
         {(n) => (
           <>
             <div>

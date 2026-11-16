@@ -7,7 +7,7 @@ import { loading } from "@/lib/counter/section-data"
 export default function MobileInventoryLoading() {
   return (
     <>
-      <Section bare title="Inventory" data={loading()}>
+      <Section bare title="Stock on hand" data={loading()}>
         {() => null}
       </Section>
       <Section bare title="The figures" data={loading()}>

@@ -262,7 +262,7 @@ async function loadOperations(input: OperationsInput): Promise<OperationsData> {
     },
     {
       key: "inventory",
-      name: "Inventory",
+      name: "Stock on hand",
       href: "/dashboard/operations/inventory",
       open: countLines,
       openUnit: "lines counted, ever",

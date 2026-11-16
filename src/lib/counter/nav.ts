@@ -112,8 +112,8 @@ export const NAV_GROUPS: readonly NavGroup[] = [
     caption: "Stock and suppliers",
     items: [
       { id: "invoices", label: "Invoices", href: "/dashboard/invoices", icon: "FileText" },
-      { id: "count", label: "Count & waste", href: "/dashboard/count", icon: "ClipboardList" },
-      { id: "inventory", label: "Inventory", href: "/dashboard/operations/inventory", icon: "Package" },
+      { id: "count", label: "Inventory", href: "/dashboard/count", icon: "ClipboardList" },
+      { id: "inventory", label: "Stock on hand", href: "/dashboard/operations/inventory", icon: "Package" },
       { id: "ingredients", label: "Ingredients", href: "/dashboard/ingredients", icon: "Carrot" },
       { id: "vendors", label: "Vendors", href: "/dashboard/operations/vendors", icon: "Truck" },
     ],

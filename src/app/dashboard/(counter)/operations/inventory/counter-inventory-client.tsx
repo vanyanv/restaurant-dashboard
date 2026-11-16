@@ -237,7 +237,7 @@ export function CounterInventoryClient({
 
   // `leaf` explicitly: this route runs deeper than its rail entry, and
   // `Topbar` would otherwise repeat the owning destination's own label.
-  usePageChrome({ leaf: "Inventory", askSuggestions: ASK_SUGGESTIONS })
+  usePageChrome({ leaf: "Stock on hand", askSuggestions: ASK_SUGGESTIONS })
 
   const { pending, startTransition } = useCounterTransition()
 
@@ -258,9 +258,9 @@ export function CounterInventoryClient({
   if (counterParams.storeId === null) {
     return (
       <>
-        <PageHead title="Inventory" sub="Choose a store" />
-        <SubNav items={INVENTORY_TABS} label="Inventory" />
-        <Section title="Inventory" data={sections.headline} pending={pending}>
+        <PageHead title="Stock on hand" sub="Choose a store" />
+        <SubNav items={INVENTORY_TABS} label="Stock on hand" />
+        <Section title="Stock on hand" data={sections.headline} pending={pending}>
           {() => null}
         </Section>
       </>
@@ -269,7 +269,7 @@ export function CounterInventoryClient({
 
   return (
     <>
-      <PageHead title="Inventory" sub={`${storeName} · the state of the count`}>
+      <PageHead title="Stock on hand" sub={`${storeName} · the state of the count`}>
         <DateControl
           presetId={presetId}
           comparisonId={comparisonId}
@@ -283,7 +283,7 @@ export function CounterInventoryClient({
       {/* The design's `VIEWS` bar for this family — see `INVENTORY_TABS` in
           `@/lib/counter/nav`. Without it these siblings are pages nothing
           links to; `.seg` is not a fidelity landmark, so it changes no count. */}
-      <SubNav items={INVENTORY_TABS} label="Inventory" />
+      <SubNav items={INVENTORY_TABS} label="Stock on hand" />
 
       <Section bare title="The figures" data={sections.headline} pending={pending}>
         {(h) => <Strip cells={h.cells} />}

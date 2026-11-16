@@ -97,7 +97,7 @@ export function CounterNewCountClient({
       {/* The design's `VIEWS` bar for this family — see `INVENTORY_TABS` in
           `nav.ts`. On hand and Counts both draw it; the tab you are standing
           on drew nothing. */}
-      <SubNav items={INVENTORY_TABS} label="Inventory" />
+      <SubNav items={INVENTORY_TABS} label="Stock on hand" />
 
       <Section
         title="What to count"

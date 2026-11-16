@@ -236,10 +236,10 @@
   .cw--start .cw-phone>.cw__mono{display:none}
 }
 /* Count's five tabs fit in one row on a phone; the caption is dropped there. */
-.ct-phone .pagehead:has(.seg[aria-label="Count & waste"]) .sub{display:none}
-.ct-phone .pagehead .phactions:has(>.seg[aria-label="Count & waste"]){width:100%;margin-left:0}
-.ct-phone .pagehead .seg[aria-label="Count & waste"]{grid-template-columns:repeat(5,auto);width:100%}
-.ct-phone .pagehead .seg[aria-label="Count & waste"]>*{white-space:nowrap;padding-left:4px;padding-right:4px}
+.ct-phone .pagehead:has(.seg[aria-label="Inventory sections"]) .sub{display:none}
+.ct-phone .pagehead .phactions:has(>.seg[aria-label="Inventory sections"]){width:100%;margin-left:0}
+.ct-phone .pagehead .seg[aria-label="Inventory sections"]{grid-template-columns:repeat(5,auto);width:100%}
+.ct-phone .pagehead .seg[aria-label="Inventory sections"]>*{white-space:nowrap;padding-left:4px;padding-right:4px}
 
 /* Desk sheet */
 .cw-sheet{display:none}

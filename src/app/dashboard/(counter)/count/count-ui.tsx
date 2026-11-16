@@ -14,8 +14,8 @@ export function CountHead({ sub, children }: { sub: string; children?: ReactNode
   const store = useSearchParams().get("store")
   const q = store ? `?${new URLSearchParams({ store })}` : ""
   return (
-    <PageHead title="Count & waste" sub={sub}>
-      <SubNav items={COUNT_TABS.map((t) => ({ ...t, href: href(t.href + q) }))} label="Count & waste" />
+    <PageHead title="Inventory" sub={sub}>
+      <SubNav items={COUNT_TABS.map((t) => ({ ...t, href: href(t.href + q) }))} label="Inventory sections" />
       {children}
     </PageHead>
   )
