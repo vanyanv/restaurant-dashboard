@@ -29,7 +29,7 @@ export function CounterPhoneCountsClient({
       {/* The design's `VIEWS` bar, first inside `.mscroll` — which is exactly
           where `phoneFor()` puts a `.seg`. Same destinations as the desk's,
           on `/m` paths. */}
-      <SubNav items={PHONE_INVENTORY_TABS} label="Inventory" />
+      <SubNav items={PHONE_INVENTORY_TABS} label="Stock on hand" />
 
       {/* The page's own NAME is a constant, so it is drawn in every state.
           Inside the section it was not: a failed headline left this phone

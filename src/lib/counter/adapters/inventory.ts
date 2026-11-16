@@ -166,7 +166,7 @@ function adjustOf(d: InventoryData): InventoryAdjust {
       `An unexplained variance goes to food cost and makes the plate look expensive; an ` +
       `explained one is counted as waste, theft or a return and makes the loss visible, which ` +
       `is the number you can actually do something about. Damaged and gone-bad stock counts as ` +
-      `waste here and in the Count & waste log alike; theft and stock sent back are kept apart ` +
+      `waste here and in the Inventory waste log alike; theft and stock sent back are kept apart ` +
       `from it.`,
   }
 }
