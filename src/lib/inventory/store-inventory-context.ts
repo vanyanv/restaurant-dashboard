@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma"
+import { anchorLineWhere } from "./anchor-line"
 import {
   loadRecipeGraph,
   walkRecipeForIngredientSync,
@@ -72,6 +73,7 @@ export async function loadStoreInventoryContext(input: {
       }),
       prisma.stockCountLine.findMany({
         where: {
+          ...anchorLineWhere,
           stockCount: {
             storeId: input.storeId,
             status: "COMPLETED",

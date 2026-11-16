@@ -12,11 +12,13 @@ import {
   loadStoreInventoryContext,
   runningOnHandFromContext,
 } from "@/lib/inventory/store-inventory-context"
+import { UNCONVERTED_UNIT } from "@/lib/inventory/anchor-line"
 import {
   COUNT_AREAS,
   WASTE_REASONS,
   WASTE_REASON_IDS,
-  defaultLayers,
+  packLayers,
+  unconverted,
   describeShelf,
   guessArea,
   normalizeArea,
@@ -146,20 +148,25 @@ export async function saveCountItem(input: z.input<typeof SaveItemInput>): Promi
     const kept: Record<string, number[]> = {}
     let total = 0
     const notes: string[] = []
+    let partial = false
     for (const s of stops) {
       const layers = layersFor(s.layers, ing.recipeUnit)
       const vals = breakdown[s.id]
       if (!valuesFit(layers, vals)) continue
       kept[s.id] = vals
       total += shelfTotal(layers, vals)
-      notes.push(describeShelf(layers, vals))
+      const left = unconverted(layers, vals)
+      if (left) partial = true
+      notes.push(describeShelf(layers, vals) + (left ? ` (${left} not in the total: no size set)` : ""))
     }
     if (!kept[item.id]) return { ok: false, error: "This item's setup changed. Reload and count it again" }
 
     // The model's expectation, only once a finished count anchors it — before
     // that it integrates from the first invoice and teaches the model nothing.
-    let estimate: number | null = existing?.estimatedQtyAtCount ?? null
-    if (estimate === null) {
+    // A total missing its trays or chubs would teach the model a false
+    // shortfall, so a partly converted count never anchors it.
+    let estimate: number | null = partial ? null : (existing?.estimatedQtyAtCount ?? null)
+    if (estimate === null && !partial) {
       const ctx = await loadStoreInventoryContext({ storeId: count.storeId, accountId: owner.accountId, asOf: count.startedAt })
       const r = runningOnHandFromContext(ctx, { id: item.canonicalIngredientId, name: ing.name, recipeUnit: ing.recipeUnit, caseUnit: ing.caseUnit, recipeUnitsPerCase: ing.recipeUnitsPerCase, innerPackUnit: ing.innerPackUnit, innerPacksPerCase: ing.innerPacksPerCase })
       if (r.baseAt && Number.isFinite(r.onHand)) estimate = r.onHand
@@ -168,14 +175,15 @@ export async function saveCountItem(input: z.input<typeof SaveItemInput>): Promi
     const data = {
       qtyInRecipeUnit: total,
       nativeQty: total,
-      nativeUnit: ing.recipeUnit,
+      // A partly converted line is kept for the record but never anchors on-hand.
+      nativeUnit: partial ? UNCONVERTED_UNIT : ing.recipeUnit,
       note: notes.join("; ").slice(0, 500),
       breakdown: kept as Prisma.InputJsonValue,
     }
     await prisma.stockCountLine.upsert({
       where: { stockCountId_canonicalIngredientId: { stockCountId: count.id, canonicalIngredientId: item.canonicalIngredientId } },
       create: { stockCountId: count.id, canonicalIngredientId: item.canonicalIngredientId, ...data, estimatedQtyAtCount: estimate },
-      update: { ...data, ...(existing?.estimatedQtyAtCount == null && estimate !== null ? { estimatedQtyAtCount: estimate } : {}) },
+      update: { ...data, ...(partial ? { estimatedQtyAtCount: null } : existing?.estimatedQtyAtCount == null && estimate !== null ? { estimatedQtyAtCount: estimate } : {}) },
     })
     return { ok: true }
   } catch (err) {
@@ -294,14 +302,14 @@ export async function addCountItem(input: { ingredientId: string; area: string }
     const area = AREA.parse(input.area)
     const ing = await prisma.canonicalIngredient.findFirst({
       where: { id: input.ingredientId, accountId: owner.accountId },
-      select: { id: true, name: true, recipeUnit: true },
+      select: { id: true, name: true, recipeUnit: true, recipeUnitsPerCase: true, innerPacksPerCase: true },
     })
     if (!ing) return { ok: false, error: "That ingredient isn't on your account" }
     if (!ing.recipeUnit) return { ok: false, error: `${ing.name} needs a recipe unit first (Ingredients page)` }
     const sortOrder = await nextSort(owner.accountId, area)
     const row = await prisma.countItem.upsert({
       where: { accountId_canonicalIngredientId_area: { accountId: owner.accountId, canonicalIngredientId: ing.id, area } },
-      create: { accountId: owner.accountId, canonicalIngredientId: ing.id, area, sortOrder, layers: defaultLayers(ing.recipeUnit) as unknown as Prisma.InputJsonValue },
+      create: { accountId: owner.accountId, canonicalIngredientId: ing.id, area, sortOrder, layers: packLayers({ recipeUnit: ing.recipeUnit, recipeUnitsPerCase: ing.recipeUnitsPerCase, innerPacksPerCase: ing.innerPacksPerCase }) as unknown as Prisma.InputJsonValue },
       update: { active: true, sortOrder },
       select: { id: true },
     })
@@ -316,7 +324,7 @@ const LayersInput = z.object({
   id: z.string().min(1),
   area: AREA,
   layers: z
-    .array(z.object({ label: z.string().trim().min(1, "Every layer needs a name").max(40), qty: z.number(), of: z.string().trim().min(1).max(40), quarters: z.boolean().optional() }))
+    .array(z.object({ label: z.string().trim().min(1, "Every layer needs a name").max(40), qty: z.number(), of: z.string().trim().min(1).max(40), quarters: z.boolean().optional(), unsized: z.boolean().optional() }))
     .min(1)
     .max(4),
 })
@@ -414,7 +422,7 @@ export async function addTopSpendItems(limit = 15): Promise<ActionResult> {
     const [ings, have] = await Promise.all([
       prisma.canonicalIngredient.findMany({
         where: { id: { in: ids }, accountId: owner.accountId, recipeUnit: { not: null }, recipeIngredients: { some: {} } },
-        select: { id: true, recipeUnit: true, category: true },
+        select: { id: true, recipeUnit: true, category: true, recipeUnitsPerCase: true, innerPacksPerCase: true },
       }),
       prisma.countItem.findMany({ where: { accountId: owner.accountId, active: true }, select: { canonicalIngredientId: true } }),
     ])
@@ -427,7 +435,7 @@ export async function addTopSpendItems(limit = 15): Promise<ActionResult> {
       const area = guessArea(ing.category)
       await prisma.countItem.upsert({
         where: { accountId_canonicalIngredientId_area: { accountId: owner.accountId, canonicalIngredientId: ing.id, area } },
-        create: { accountId: owner.accountId, canonicalIngredientId: ing.id, area, sortOrder: order, layers: defaultLayers(ing.recipeUnit!) as unknown as Prisma.InputJsonValue },
+        create: { accountId: owner.accountId, canonicalIngredientId: ing.id, area, sortOrder: order, layers: packLayers({ recipeUnit: ing.recipeUnit!, recipeUnitsPerCase: ing.recipeUnitsPerCase, innerPacksPerCase: ing.innerPacksPerCase }) as unknown as Prisma.InputJsonValue },
         update: { active: true },
       })
       order += 10

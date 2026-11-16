@@ -57,10 +57,16 @@ export interface LayerInput {
   of: string
   /** − / + step by ¼ — an open tub, pail or case judged by how full it is. */
   quarters?: boolean
+  /**
+   * Counted the way the owner's sheet counts it (a tray, a chub, a bucket),
+   * but how much one holds isn't known yet. It is typed and kept as typed,
+   * and left out of the converted total until a size is set — never guessed.
+   */
+  unsized?: boolean
 }
 
 export interface Layer extends LayerInput {
-  /** Recipe units in one of this layer. */
+  /** Recipe units in one of this layer. 0 while it is unsized. */
   per: number
 }
 
@@ -79,8 +85,12 @@ export function resolveLayers(input: LayerInput[], recipeUnit: string): ResolveR
     const l = input[i]
     const label = l.label.trim()
     if (!label) return { ok: false, error: "Every layer needs a name" }
-    if (!(l.qty > 0) || !Number.isFinite(l.qty)) return { ok: false, error: `"${label}" needs a number above 0` }
     const lowerIdx = input.findIndex((o, j) => j > i && o.label.trim().toLowerCase() === l.of.trim().toLowerCase())
+    if (l.unsized || (lowerIdx > i && out[lowerIdx].unsized)) {
+      out[i] = { label, qty: 0, of: l.of.trim(), quarters: Boolean(l.quarters), unsized: true, per: 0 }
+      continue
+    }
+    if (!(l.qty > 0) || !Number.isFinite(l.qty)) return { ok: false, error: `"${label}" needs a number above 0` }
     let per: number | null
     if (lowerIdx > i) {
       per = l.qty * out[lowerIdx].per
@@ -104,12 +114,14 @@ export function parseLayers(raw: unknown): Layer[] {
   return raw.flatMap((l) => {
     if (!l || typeof l !== "object") return []
     const o = l as Record<string, unknown>
-    if (typeof o.label !== "string" || typeof o.per !== "number" || !(o.per > 0)) return []
+    const unsized = o.unsized === true
+    if (typeof o.label !== "string" || typeof o.per !== "number" || !(unsized ? o.per === 0 : o.per > 0)) return []
     return [{
       label: o.label,
-      qty: typeof o.qty === "number" ? o.qty : 1,
+      qty: unsized ? 0 : typeof o.qty === "number" ? o.qty : 1,
       of: typeof o.of === "string" ? o.of : "",
       quarters: o.quarters === true,
+      ...(unsized ? { unsized: true } : {}),
       per: o.per,
     }]
   })
@@ -147,6 +159,15 @@ export function shelfTotal(layers: Layer[], values: ReadonlyArray<number | null 
   return t
 }
 
+/** Layers with a number typed but no size to convert it: "3 Trays". */
+export function unconverted(layers: Layer[], values: ReadonlyArray<number | null | undefined>): string | null {
+  const parts = layers.flatMap((l, i) => {
+    const v = values[i]
+    return l.unsized && typeof v === "number" && Number.isFinite(v) && v > 0 ? [`${fmtQty(v)} ${l.label}`] : []
+  })
+  return parts.length ? parts.join(" + ") : null
+}
+
 export function hasAnyValue(values: ReadonlyArray<number | null | undefined>): boolean {
   return values.some((v) => typeof v === "number" && Number.isFinite(v) && v > 0)
 }
@@ -162,6 +183,35 @@ export function unitChoices(recipeUnit: string): string[] {
  * The single layer an item starts with: loose, in the recipe unit — except
  * ounces of a solid, which nobody weighs a shelf in, so those start in lb.
  */
+/**
+ * A new item's boxes, from how its invoices say it ships: "CS 6 × 4.5 LB"
+ * is Cases of 6 Bags plus Bags of 4.5 lb, the way the count sheet counts
+ * fries. No case size on file: the recipe unit alone, as before.
+ */
+export function packLayers(ing: {
+  recipeUnit: string
+  recipeUnitsPerCase: number | null
+  innerPacksPerCase: number | null
+}): Layer[] {
+  const perCase = ing.recipeUnitsPerCase
+  if (!(perCase != null && perCase > 0)) return defaultLayers(ing.recipeUnit)
+  const unit = ing.recipeUnit.trim()
+  const inner = ing.innerPacksPerCase
+  if (inner != null && inner > 1) {
+    const perPack = perCase / inner
+    const r = resolveLayers(
+      [
+        { label: "Cases", qty: inner, of: "Packs" },
+        { label: "Packs", qty: perPack, of: unit },
+      ],
+      unit,
+    )
+    if (r.ok) return r.layers
+  }
+  const r = resolveLayers([{ label: "Cases", qty: perCase, of: unit }, ...defaultLayers(unit)], unit)
+  return r.ok ? r.layers : defaultLayers(unit)
+}
+
 export function defaultLayers(recipeUnit: string): Layer[] {
   if (recipeUnit.trim().toLowerCase() === "oz") {
     return [{ label: "Loose (lb)", qty: 1, of: "lb", quarters: false, per: 16 }]
