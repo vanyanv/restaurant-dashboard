@@ -14,15 +14,18 @@ import type { SwitcherData } from "@/lib/counter/adapters/inventory-shelf"
 export function CountHead({
   sub,
   switcher,
+  allView = false,
   children,
 }: {
   sub: string
   /**
-   * The store switcher's figures, on a tab that shows one store at a time
-   * (Order, Waste, Report). The Overview and the Shelf tab draw the switcher
-   * themselves, from the shelf they already hold.
+   * The store switcher's figures, on a tab that loads them apart from its own
+   * data (Order, Waste, Report). The Overview, the Shelf tab and the one-item
+   * page draw the switcher themselves, from the shelves they already hold.
    */
   switcher?: SectionSource<SwitcherData | null>
+  /** The tab can show every store at once (Waste, Report), so "All" stays on it. */
+  allView?: boolean
   children?: ReactNode
 }) {
   const href = useSurfaceHref()
@@ -40,7 +43,7 @@ export function CountHead({
         // No panel when it is empty or failed: the switcher is a way around,
         // and every tab under it still says which store it is showing.
         <Section bare title="Stores" data={switcher} quietWhenEmpty quietWhenFailed>
-          {(d) => (d ? <StoreSwitch data={d} /> : null)}
+          {(d) => (d ? <StoreSwitch data={d} allView={allView} /> : null)}
         </Section>
       )}
     </>
@@ -50,8 +53,9 @@ export function CountHead({
 /**
  * The store switcher: every store with its own "N to order" (or "not
  * counted"), and all of them added up. Links, so the picked store is in the
- * URL and rides between the tabs. `allView` is true on the two tabs that can
- * show every store at once; on the others "All" opens the Overview.
+ * URL and rides between the tabs. `allView` is true where the page can show
+ * every store at once (all but Order, which drafts one store); there "All"
+ * stays on the page, and on Order it opens the Overview.
  */
 export function StoreSwitch({ data, allView = false }: { data: SwitcherData; allView?: boolean }) {
   const pathname = usePathname() ?? ""
@@ -78,6 +82,8 @@ export function StoreSwitch({ data, allView = false }: { data: SwitcherData; all
     // Order's "how long should it last" is the reader's pick, not the store's.
     const cover = params.get("cover")
     if (cover) q.set("cover", cover)
+    // Logging waste: switching store keeps the form open, for the new store.
+    if (params.get("log") === "1") q.set("log", "1")
     return `${pathname}?${q}`
   }
   const say = (n: number | null) =>

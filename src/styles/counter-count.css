@@ -158,9 +158,20 @@
   .rs-seg{display:none}
   .rs-pane[data-on="false"]{display:block}
   .rs-split{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(340px,1fr);align-items:start}
+  .rs-pane{min-width:0}
   .rs-pane--stock{border-right:1px solid var(--line)}
   .rs-pane--order{position:sticky;top:12px;max-height:calc(100vh - 24px);overflow-y:auto}
-  .rs-srow{grid-template-columns:minmax(140px,1.4fr) 90px 80px minmax(120px,1.2fr) minmax(120px,1fr) 120px;padding:10px 14px}
+}
+/* The stock rows become a six-column table only when the STOCK PANE has room
+   for six columns (about 810px), not when the window does: beside the rail
+   and the draft panel the pane is half that until the window is about 1640px
+   wide, and the row's fixed columns used to run on under the draft. Narrower
+   than that it keeps the card layout, which fits any width. The last column
+   holds the longest pill ("Order by Mon, Nov 16") on one line: at 120px it
+   ran back over the run-out date beside it. */
+.rs-pane--stock{container:rs-stock / inline-size}
+@container rs-stock (min-width:51rem){
+  .rs-srow{grid-template-columns:minmax(140px,1.4fr) 90px 80px minmax(120px,1.2fr) minmax(120px,1fr) 172px;padding:10px 14px}
   .rs-srow--head{display:grid;font-family:var(--mono);font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3);border-bottom:1px solid var(--line-strong)}
   .rs-srow__fig{text-align:right;font-size:14px;color:var(--ink);justify-self:end}
   .rs-srow__fig::before{content:none}

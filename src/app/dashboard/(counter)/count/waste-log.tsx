@@ -5,7 +5,7 @@ import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { useSurfaceHref } from "@/components/counter"
 import { deleteWaste, logWaste } from "@/lib/counter/actions/count"
-import type { WasteData } from "@/lib/counter/adapters/count"
+import type { WasteData, WasteEntry } from "@/lib/counter/adapters/count"
 import { WASTE_REASONS, fmtQty, showQty, type WasteReason } from "@/lib/counter/count-layers"
 import { money, OutcomeLine, type Outcome } from "./count-ui"
 import { clearDraft, readDraft, writeDraft } from "@/components/counter/keep/use-draft"
@@ -14,7 +14,8 @@ import { clearDraft, readDraft, writeDraft } from "@/components/counter/keep/use
  * The waste log: what, how much, why. Ten seconds, any time of day. The
  * amount can be in any layer the item is counted in (a chub, a lb, a slice);
  * it is saved in the recipe unit, which is what the report subtracts before
- * it works out what went missing without a reason.
+ * it works out what went missing without a reason. What was logged is
+ * `WasteEntries`, below the form and on the Waste tab's picture.
  */
 export function WasteLog({ data, base }: { data: WasteData; base: "/dashboard/count" | "/m/count" }) {
   const router = useRouter()
@@ -83,13 +84,6 @@ export function WasteLog({ data, base }: { data: WasteData; base: "/dashboard/co
       }
     })
   }
-
-  const undo = (id: string) =>
-    start(async () => {
-      const r = await deleteWaste(id)
-      setOutcome(r.ok ? { ok: true, text: "Removed" } : { ok: false, text: r.error })
-      if (r.ok) router.refresh()
-    })
 
   if (data.items.length === 0) {
     return (
@@ -174,33 +168,49 @@ export function WasteLog({ data, base }: { data: WasteData; base: "/dashboard/co
         </button>
       </div>
 
-      <div className="cw__area">
-        <span className="cw__mono">
-          Last 7 days · {data.recent.length} {data.recent.length === 1 ? "entry" : "entries"} · {money(data.weekDollars)}
-        </span>
-        {data.recent.length === 0 ? (
-          <p className="cw__sub">Nothing logged this week.</p>
-        ) : (
-          <div className="cw__card">
-            {data.recent.map((w) => (
-              <div className="cw__row" key={w.id} style={{ cursor: "default" }}>
-                <b>
-                  {w.name}
-                  <br />
-                  <small style={{ fontWeight: 400, color: "var(--ink-2)" }}>
-                    {w.amount} · {w.reason} · {w.when}
-                    {w.note ? ` · ${w.note}` : ""}
-                  </small>
-                </b>
-                <span>{w.dollars != null ? money(w.dollars) : ""}</span>
-                <button type="button" className="cw__link" disabled={busy} onClick={() => undo(w.id)} aria-label={`Remove ${w.name} waste entry`}>
-                  Undo
-                </button>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
     </div>
+  )
+}
+
+/**
+ * What was logged, newest first: one card an entry, each with its Undo. An
+ * entry on an item with no price says "Not valued yet"; it is never $0.
+ */
+export function WasteEntries({ entries }: { entries: WasteEntry[] }) {
+  const router = useRouter()
+  const [busy, start] = useTransition()
+  const [outcome, setOutcome] = useState<Outcome>(null)
+  const undo = (id: string) =>
+    start(async () => {
+      const r = await deleteWaste(id)
+      setOutcome(r.ok ? { ok: true, text: "Removed" } : { ok: false, text: r.error })
+      if (r.ok) router.refresh()
+    })
+  if (entries.length === 0) return <p className="iv-quiet iv-pad">Nothing logged in the last 7 days.</p>
+  return (
+    <>
+      <ul className="iv-list">
+        {entries.map((w) => (
+          <li className="iv-it" key={w.id}>
+            <div className="iv-it__h">
+              <b>{w.name}</b>
+              {w.dollars != null
+                ? <span className="v">{money(w.dollars)}</span>
+                : <span className="iv-pill iv-pill--notyet">Not valued yet</span>}
+            </div>
+            <div className="iv-it__c">
+              <span>
+                <em>{w.amount}</em> · {w.reason} · {w.when}
+                {w.note ? ` · ${w.note}` : ""}
+              </span>
+              <button type="button" className="iv-btn iv-btn--sm" disabled={busy} onClick={() => undo(w.id)} aria-label={`Remove ${w.name} waste entry`}>
+                Undo
+              </button>
+            </div>
+          </li>
+        ))}
+      </ul>
+      {outcome ? <div className="iv-pad"><OutcomeLine outcome={outcome} /></div> : null}
+    </>
   )
 }

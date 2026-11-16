@@ -7,6 +7,7 @@ import type { SectionSources } from "@/lib/counter/adapters/types"
 import type { ShelfData, ShelfLine, ShelfSections, StoreShelf } from "@/lib/counter/adapters/inventory-shelf"
 import { ALL_STORES, needsOrderNow, type ShelfState } from "@/lib/counter/shelf-state"
 import { CountHead, StoreSwitch, money } from "./count-ui"
+import { ItemLink } from "./picture-ui"
 import { Block, DaysBar, Fresh, Legend, MiniMap, PinnedActions, ShelfMap, Tiles, coverageSay } from "./shelf-ui"
 
 /**
@@ -73,9 +74,9 @@ function OneStore({ data, shelf }: { data: ShelfData; shelf: StoreShelf }) {
 
       {(g.out.length > 0 || g.now.length > 0 || g.soon.length > 0) && (
         <div className="iv-a-buckets iv-buckets">
-          {g.out.length > 0 && <Bucket state="out" title="Out now" rows={g.out} barDays={data.barDays} />}
-          {g.now.length > 0 && <Bucket state="order_now" title="Order today" rows={g.now} barDays={data.barDays} />}
-          {g.soon.length > 0 && <Bucket state="order_soon" title={shelf.soonTitle} rows={g.soon} barDays={data.barDays} fold />}
+          {g.out.length > 0 && <Bucket state="out" title="Out now" rows={g.out} store={shelf.id} barDays={data.barDays} />}
+          {g.now.length > 0 && <Bucket state="order_now" title="Order today" rows={g.now} store={shelf.id} barDays={data.barDays} />}
+          {g.soon.length > 0 && <Bucket state="order_soon" title={shelf.soonTitle} rows={g.soon} store={shelf.id} barDays={data.barDays} fold />}
         </div>
       )}
 
@@ -170,12 +171,15 @@ function Bucket({
   state,
   title,
   rows,
+  store,
   barDays,
   fold = false,
 }: {
   state: ShelfState
   title: string
   rows: ShelfLine[]
+  /** The store shown: a row opens the item's page for it. */
+  store: string
   barDays: number
   fold?: boolean
 }) {
@@ -198,7 +202,7 @@ function Bucket({
       {rows.map((r) => (
         <li key={r.id} className="iv-o">
           <div className="iv-o__l">
-            <b>{r.name}</b>
+            <b><ItemLink id={r.ingredientId} store={store} className="iv-open">{r.name}</ItemLink></b>
             {(r.typed || r.amount) && (
               <span>
                 {r.typed ? <em>{r.typed}</em> : null}
@@ -414,7 +418,7 @@ function StoreCard({ shelf, areas }: { shelf: StoreShelf; areas: ShelfData["area
         {c.dollars !== null ? <><b>{money(c.dollars)}</b> on the shelf, </> : null}
         {coverageSay(shelf)}
         {shelf.missing && shelf.missing.missingDollars !== null ? <> <b>{money(shelf.missing.missingDollars)}</b> went missing.</> : null}
-        {shelf.waste.entries > 0 && shelf.waste.unpriced < shelf.waste.entries ? <> <b>{money(shelf.waste.dollars)}</b> thrown out.</> : null}
+        {shelf.waste.dollars !== null ? <> <b>{money(shelf.waste.dollars)}</b> thrown out.</> : null}
       </p>
       <div className="iv-store__btns">
         <Link className="iv-btn iv-btn--sm" href={open}>Open {shelf.name}</Link>

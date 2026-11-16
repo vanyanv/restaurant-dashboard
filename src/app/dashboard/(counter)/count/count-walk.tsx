@@ -270,7 +270,7 @@ export function CountWalk({ data, base }: { data: WalkData; base: "/dashboard/co
           <Link className="cw__btn cw__btn--primary" href={href(`/dashboard/count/orders?store=${data.store.id}`)}>See what to order next</Link>
           <div className="cw__foot">
             <Link className="cw__btn" href={href(`/dashboard/count/report?store=${data.store.id}`)}>Where food went</Link>
-            <Link className="cw__btn" href={`${base}/waste?store=${data.store.id}`}>Log waste</Link>
+            <Link className="cw__btn" href={`${base}/waste?store=${data.store.id}&log=1`}>Log waste</Link>
           </div>
         </div>
       </div>
@@ -434,7 +434,7 @@ export function CountWalk({ data, base }: { data: WalkData; base: "/dashboard/co
             {busy ? "Opening…" : countId && done > 0 ? `Resume at ${resumeName}` : "Start the count"}
           </button>
         ) : null}
-        <Link className="cw__btn cw-desk-only" href={`${base}/waste?store=${data.store.id}`}>
+        <Link className="cw__btn cw-desk-only" href={`${base}/waste?store=${data.store.id}&log=1`}>
           Log waste{data.waste.n ? ` · ${data.waste.n} this week` : ""}
         </Link>
         <button type="button" className={`cw__btn ${resumeIdx < 0 ? "cw__btn--primary" : ""}`} disabled={busy || !countId || done === 0} onClick={() => setScreen({ kind: "review" })}>

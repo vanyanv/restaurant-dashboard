@@ -51,6 +51,7 @@ import {
 import type { ItemRow } from "@/lib/counter/adapters/count"
 import type { DraftRead, DraftRow, StockRow, StoreDraft } from "@/lib/counter/adapters/draft-orders"
 import { DEFAULT_COVER_DAYS } from "@/lib/counter/draft-orders"
+import { UNCONVERTED_UNIT } from "@/lib/inventory/anchor-line"
 import { ALL_STORES, shelfCoverage, toOrderNow } from "@/lib/counter/shelf-state"
 
 const CASES = [{ label: "Cases", qty: 30, of: "lb", quarters: false, per: 30 }]
@@ -100,8 +101,20 @@ function draft(over: Partial<Draft> = {}): Draft {
   return { stock: [], vendors: [], reads: new Map(), ...over }
 }
 
-function build(items: ItemRow[], lines: Array<[string, CountLine]>, d: Draft = draft(), over: { lastCountAt?: Date | null; skip?: boolean } = {}) {
-  return buildShelfLines({ items, latest: new Map(lines), lastCountAt: over.lastCountAt === undefined ? LAST : over.lastCountAt, skip: over.skip, draft: d })
+function build(
+  items: ItemRow[],
+  lines: Array<[string, CountLine]>,
+  d: Draft = draft(),
+  over: { lastCountAt?: Date | null; skip?: boolean; previous?: Array<[string, CountLine]> } = {},
+) {
+  return buildShelfLines({
+    items,
+    latest: new Map(lines),
+    previous: over.previous ? new Map(over.previous) : undefined,
+    lastCountAt: over.lastCountAt === undefined ? LAST : over.lastCountAt,
+    skip: over.skip,
+    draft: d,
+  })
 }
 
 describe("buildShelfLines", () => {
@@ -330,6 +343,51 @@ describe("buildShelfLines", () => {
     expect(lines[0]).toMatchObject({ state: "in_stock", dollars: 90, note: null })
     expect(lines[1]).toMatchObject({ state: "in_stock", dollars: 0, typed: null, note: "Not on this count: added or changed since" })
   })
+
+  /* ── The count before: what was typed last time ──────────────────────── */
+
+  it("says what was typed on the count before, with its day, and never an amount worked out from it", () => {
+    const [line] = build([item("fries")], [counted("fries", 60, [2])], draft(), { previous: [counted("fries", 90, [3], { countedAt: OLDER })] })
+    expect(line.last).toEqual({ day: "Tue, Nov 3", typed: "3 Cases" })
+  })
+
+  it("has no last count for an item counted once, or never", () => {
+    expect(build([item("fries")], [counted("fries", 60, [2])])[0].last).toBeNull()
+    // Never counted: a previous line cannot stand in for the one that is missing.
+    expect(build([item("fries")], [], draft(), { previous: [counted("fries", 90, [3], { countedAt: OLDER })] })[0].last).toBeNull()
+  })
+
+  it("reads each stop's own boxes from the count before", () => {
+    const lines = build(
+      [item("fries", { id: "stop_a" }), item("fries", { id: "stop_b", area: "fridge" })],
+      [counted("fries", 90, { stop_a: [2], stop_b: [1] })],
+      draft(),
+      { previous: [counted("fries", 150, { stop_a: [4], stop_b: [1] }, { countedAt: OLDER })] },
+    )
+    expect(lines.map((l) => l.last?.typed)).toEqual(["4 Cases", "1 Cases"])
+  })
+
+  it("shows the saved total, once, when the count before was taken without boxes", () => {
+    const lines = build(
+      [item("fries", { id: "stop_a" }), item("fries", { id: "stop_b", area: "fridge" })],
+      [counted("fries", 90, { stop_a: [2], stop_b: [1] })],
+      draft(),
+      { previous: [counted("fries", 45, null, { countedAt: OLDER })] },
+    )
+    expect(lines[0].last?.typed).toContain("45")
+    expect(lines[1].last).toBeNull()
+  })
+
+  it("says nothing about a count before whose boxes no longer fit the stop, or that had a box with no size", () => {
+    const changed = build([item("fries", { layers: [...CASES, TRAYS_SIZED] })], [counted("fries", 60, [2, 0])], draft(), {
+      previous: [counted("fries", 90, [3], { countedAt: OLDER })],
+    })
+    expect(changed[0].last).toBeNull()
+    const unsized = build([item("fries")], [counted("fries", 60, [2])], draft(), {
+      previous: [counted("fries", 0, null, { countedAt: OLDER, nativeUnit: UNCONVERTED_UNIT })],
+    })
+    expect(unsized[0].last).toBeNull()
+  })
 })
 
 describe("pickShelfView", () => {
@@ -432,9 +490,11 @@ describe("the shelf loaders", () => {
     // 2 of 3 lines have been counted, not 1; buns is still one to order.
     expect(glendale.coverage).toMatchObject({ lines: 3, counted: 2, notCounted: 1 })
     expect(glendale.toOrder).toBe(1)
-    // Only each item's latest line is read in full.
+    // Only each item's latest line, and the one before it, are read in full.
     const full = h.calls.find((c) => c.model === "stockCountLine" && c.args.where?.id)
-    expect((full?.args.where?.id as { in: string[] }).in.sort()).toEqual(["l_new", "l_old_buns"])
+    expect((full?.args.where?.id as { in: string[] }).in.sort()).toEqual(["l_new", "l_old_buns", "l_old_fries"])
+    // Fries shows what was typed on Nov 3; buns has no count before its only one.
+    expect(glendale.lines.map((l) => l.last)).toEqual([{ day: "Tue, Nov 3", typed: "1 Cases" }, null, null])
   })
 
   it("reads only the counts the draft read while this week's count is skipped", async () => {

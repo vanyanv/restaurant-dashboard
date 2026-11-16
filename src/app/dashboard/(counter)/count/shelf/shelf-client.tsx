@@ -8,13 +8,15 @@ import type { SectionSources } from "@/lib/counter/adapters/types"
 import type { ShelfData, ShelfLine, ShelfSections, StoreShelf } from "@/lib/counter/adapters/inventory-shelf"
 import { ALL_STORES, needsOrderNow, shelfCoverage } from "@/lib/counter/shelf-state"
 import { CountHead, StoreSwitch, money } from "../count-ui"
+import { ItemLink } from "../picture-ui"
 import { DaysBar, Fresh, Legend, MiniMap, NotYet, PinnedActions, ShelfMap, StatePill, freshSay, linesIn } from "../shelf-ui"
 
 /**
  * Inventory — Shelf. The shelf map, then the last count line by line in the
  * sheet's own sections: what was typed, what that comes to where the sizes
- * are known, and how long it lasts where something uses it. A line the app
- * cannot value says "Not valued yet" and why. With every store picked it is
+ * are known, how long it lasts where something uses it, and what was typed
+ * on the count before. A line the app cannot value says "Not valued yet" and
+ * why. A row opens the item's own page. With every store picked it is
  * the three maps side by side.
  */
 export function ShelfClient({ sections }: { sections: SectionSources<ShelfSections> }) {
@@ -147,7 +149,7 @@ function OneShelf({ data, shelf }: { data: ShelfData; shelf: StoreShelf }) {
                 <small>{sub}</small>
               </summary>
               <ul className="iv-rows">
-                {rows.map((l) => <Row key={l.id} line={l} barDays={data.barDays} />)}
+                {rows.map((l) => <Row key={l.id} line={l} store={shelf.id} barDays={data.barDays} />)}
               </ul>
             </details>
           )
@@ -165,12 +167,13 @@ function OneShelf({ data, shelf }: { data: ShelfData; shelf: StoreShelf }) {
   )
 }
 
-function Row({ line: l, barDays }: { line: ShelfLine; barDays: number }) {
+/** One line of the sheet. The whole row opens the item's own page. */
+function Row({ line: l, store, barDays }: { line: ShelfLine; store: string; barDays: number }) {
   const href = useSurfaceHref()
   return (
     <li className="iv-it">
       <div className="iv-it__h">
-        <b>{l.name}</b>
+        <b><ItemLink id={l.ingredientId} store={store} className="iv-open">{l.name}</ItemLink></b>
         <StatePill state={l.state}>{l.stateText}</StatePill>
       </div>
       {l.state !== "not_counted" && (l.typed || l.amount || l.dollars !== null || l.notValued) && (
@@ -196,6 +199,7 @@ function Row({ line: l, barDays }: { line: ShelfLine; barDays: number }) {
       )}
       {l.note && <p className="iv-it__x">{l.note}.</p>}
       {l.from && <p className="iv-it__x">From the {l.from} count.</p>}
+      {l.last && <p className="iv-it__x">Last count, {l.last.day}: {l.last.typed}.</p>}
     </li>
   )
 }

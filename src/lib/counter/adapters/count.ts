@@ -1,3 +1,4 @@
+import { cache } from "react"
 import { prisma } from "@/lib/prisma"
 import { anchorLineWhere } from "@/lib/inventory/anchor-line"
 import {
@@ -20,6 +21,8 @@ import {
 } from "@/lib/counter/count-layers"
 import { plainName } from "@/lib/counter/plain-names"
 import { reasonClass, sumAdjustments, type ValuedAdjustment } from "@/lib/counter/waste-reasons"
+import { summarizeWaste, type WasteReasonBar, type WasteSummary } from "@/lib/counter/waste-picture"
+import { gapCoverage, gapHeadline, type GapCoverage, type GapHeadline } from "@/lib/counter/gap-picture"
 import { classify, guardSection, type StreamedSections } from "./types"
 import type { SectionData } from "@/lib/counter/section-data"
 
@@ -80,10 +83,6 @@ export async function countItems(accountId: string): Promise<ItemRow[]> {
   const named = rows.map((r) => ({ ...r, area: normalizeArea(r.area) }))
   // Stable sort keeps sortOrder within an area; areas walk in COUNT_AREAS order.
   return named.sort((a, b) => areaIdx(a.area) - areaIdx(b.area))
-}
-
-function weekAgo(): Date {
-  return new Date(Date.now() - 7 * DAY_MS)
 }
 
 // ---------------------------------------------------------------------------
@@ -150,10 +149,7 @@ export function getCountWalkSectionPromises(opts: { accountId: string; storeId?:
             orderBy: { countedAt: "desc" },
             select: { countedAt: true },
           }),
-          prisma.inventoryAdjustment.findMany({
-            where: { storeId: store.id, store: { accountId: opts.accountId }, occurredAt: { gte: weekAgo() }, reason: { in: WASTE_REASON_IDS } },
-            select: { qty: true, canonicalIngredient: { select: { costPerRecipeUnit: true } } },
-          }),
+          loadWeekWaste(opts.accountId, store.id),
           // The last finished count of each item, newest first: shown above the
           // boxes so a slip (100 bags for 20) stands out while typing.
           prisma.stockCountLine.findMany({
@@ -231,10 +227,8 @@ export function getCountWalkSectionPromises(opts: { accountId: string; storeId?:
               })(),
             }]
           }),
-          waste: {
-            n: waste.length,
-            dollars: waste.reduce((t, w) => t + w.qty * (w.canonicalIngredient.costPerRecipeUnit ?? 0), 0),
-          },
+          // The Waste tab's own figure: the priced entries of the last 7 days.
+          waste: { n: waste.entries, dollars: waste.dollars ?? 0 },
         }
       }, { retryAction: "count.walk", isEmpty: (d) => d === null, emptyReason: "no_stores" }),
       "count.walk",
@@ -247,54 +241,138 @@ export function getCountWalkSectionPromises(opts: { accountId: string; storeId?:
 // ---------------------------------------------------------------------------
 
 export type WasteItem = { ingredientId: string; name: string; unit: string; cost: number | null; layers: Layer[] }
-export type WasteEntry = { id: string; name: string; amount: string; reason: string; when: string; dollars: number | null; note: string | null }
+export type WasteEntry = {
+  id: string
+  name: string
+  amount: string
+  /** The reason in words ("Went bad"). */
+  reason: string
+  when: string
+  /** Null when the item has no price on file: listed, never added in as $0. */
+  dollars: number | null
+  note: string | null
+}
 export type WasteData = {
   stores: StoreOption[]
   store: StoreOption
   items: WasteItem[]
   recent: WasteEntry[]
-  weekDollars: number
+  /** The last 7 days added up: what the total is, and how many entries it is the value of. */
+  week: WasteSummary
 }
 export type WasteSections = { waste: SectionData<WasteData | null> }
 
 /** A store's waste log for the last 7 days: the entries, and what they add up to. */
-export type WeekWaste = {
-  entries: WasteEntry[]
-  /** Σ of the entries that have a price. */
-  dollars: number
-  /** Entries on an item with no price on file: not in `dollars`, never counted as $0. */
-  unpriced: number
+export type WeekWaste = WasteSummary & { list: WasteEntry[] }
+
+/** A reason kept apart from waste (theft, sent back), or logged on another screen (damaged). */
+export type ApartFigure = Pick<WasteReasonBar, "id" | "label" | "entries" | "unpriced" | "dollars">
+
+export type StoreWaste = {
+  /** Thrown out, last 7 days. */
+  week: WeekWaste
+  /** The 7 days before those, for "more or less than". */
+  before: Pick<WasteSummary, "entries" | "valued" | "unpriced" | "dollars">
+  /** Logged in the last 7 days under a reason the waste log does not offer. Never in `week`. */
+  apart: ApartFigure[]
 }
 
+const WASTE_WINDOW_DAYS = 7
+
 /**
- * The one read of "thrown out, last 7 days". The Waste tab lists these entries
- * and prints their total; the Inventory overview prints the same total.
+ * Every adjustment logged in the account over the last two windows, once per
+ * request: this week's waste, the week before it and the reasons kept apart
+ * are all cut from it, for one store or for all of them.
  */
-export async function loadWeekWaste(accountId: string, storeId: string): Promise<WeekWaste> {
-  const recent = await prisma.inventoryAdjustment.findMany({
-    where: { storeId, store: { accountId }, occurredAt: { gte: weekAgo() }, reason: { in: WASTE_REASON_IDS } },
+const loadAdjustmentLog = cache((accountId: string) =>
+  prisma.inventoryAdjustment.findMany({
+    where: { store: { accountId }, occurredAt: { gte: new Date(Date.now() - 2 * WASTE_WINDOW_DAYS * DAY_MS) } },
     orderBy: { occurredAt: "desc" },
     select: {
-      id: true, qty: true, reason: true, note: true, occurredAt: true,
+      id: true, storeId: true, qty: true, reason: true, note: true, occurredAt: true,
       canonicalIngredient: { select: { name: true, recipeUnit: true, costPerRecipeUnit: true } },
     },
-  })
-  const entries: WasteEntry[] = recent.map((r) => {
+  }),
+)
+
+/**
+ * The one read of "thrown out". The Waste tab's headline, bars and log, its
+ * by-store comparison and the Inventory overview's tile are all this.
+ *
+ * WHAT COUNTS. The reasons the waste log offers (`WASTE_REASON_IDS`), over a
+ * rolling 7 days. Theft and "sent back" are never waste; they are returned
+ * under `apart`, with anything logged as "damaged" on Stock on hand.
+ */
+export async function loadStoreWaste(accountId: string, storeId: string): Promise<StoreWaste> {
+  const log = (await loadAdjustmentLog(accountId)).filter((r) => r.storeId === storeId)
+  const now = Date.now()
+  const weekStart = now - WASTE_WINDOW_DAYS * DAY_MS
+  const inLog = new Set<string>(WASTE_REASON_IDS)
+  const dollarsOf = (r: (typeof log)[number]) => {
     const cost = r.canonicalIngredient.costPerRecipeUnit
-    return {
-      id: r.id,
-      name: plainName(r.canonicalIngredient.name),
-      amount: showQty(r.qty, r.canonicalIngredient.recipeUnit ?? "").trim(),
-      reason: wasteReasonLabel(r.reason),
-      when: r.occurredAt.toLocaleString("en-US", { weekday: "short", hour: "numeric", minute: "2-digit", timeZone: "America/Los_Angeles" }),
-      dollars: cost != null ? r.qty * cost : null,
-      note: r.note,
-    }
-  })
+    return cost != null ? r.qty * cost : null
+  }
+  const thisWeek = log.filter((r) => r.occurredAt.getTime() >= weekStart)
+  const wasted = thisWeek.filter((r) => inLog.has(r.reason))
+  const before = summarizeWaste(
+    log.filter((r) => r.occurredAt.getTime() < weekStart && inLog.has(r.reason)).map((r) => ({ reason: r.reason, dollars: dollarsOf(r) })),
+  )
+  const list: WasteEntry[] = wasted.map((r) => ({
+    id: r.id,
+    name: plainName(r.canonicalIngredient.name),
+    amount: showQty(r.qty, r.canonicalIngredient.recipeUnit ?? "").trim(),
+    reason: wasteReasonLabel(r.reason),
+    when: r.occurredAt.toLocaleString("en-US", { weekday: "short", hour: "numeric", minute: "2-digit", timeZone: "America/Los_Angeles" }),
+    dollars: dollarsOf(r),
+    note: r.note,
+  }))
   return {
-    entries,
-    dollars: entries.reduce((t, e) => t + (e.dollars ?? 0), 0),
-    unpriced: entries.filter((e) => e.dollars === null).length,
+    week: { ...summarizeWaste(wasted.map((r) => ({ reason: r.reason, dollars: dollarsOf(r) }))), list },
+    before: { entries: before.entries, valued: before.valued, unpriced: before.unpriced, dollars: before.dollars },
+    apart: summarizeWaste(thisWeek.filter((r) => !inLog.has(r.reason)).map((r) => ({ reason: r.reason, dollars: dollarsOf(r) }))).reasons,
+  }
+}
+
+/** Thrown out at one store, last 7 days. */
+export async function loadWeekWaste(accountId: string, storeId: string): Promise<WeekWaste> {
+  return (await loadStoreWaste(accountId, storeId)).week
+}
+
+/** The waste form's data for one store (what can be thrown out, in which units) and its last 7 days. */
+export async function loadWasteData(accountId: string, stores: StoreOption[], store: StoreOption): Promise<WasteData> {
+  const [items, week] = await Promise.all([countItems(accountId), loadWeekWaste(accountId, store.id)])
+  // One choice per ingredient. Its units are every layer it is counted
+  // in anywhere, so beef can be thrown out by the chub or by the lb.
+  const byIng = new Map<string, WasteItem>()
+  for (const it of items) {
+    const unit = it.canonicalIngredient.recipeUnit
+    if (!unit) continue
+    const cur = byIng.get(it.canonicalIngredientId) ?? {
+      ingredientId: it.canonicalIngredientId,
+      name: plainName(it.canonicalIngredient.name),
+      unit,
+      cost: it.canonicalIngredient.costPerRecipeUnit,
+      layers: [],
+    }
+    // Two areas can both say "Case" and mean different cases; keep both.
+    for (const l of layersFor(it.layers, unit)) {
+      if (cur.layers.some((x) => x.label === l.label && x.per === l.per)) continue
+      const clash = cur.layers.some((x) => x.label === l.label)
+      cur.layers.push(clash ? { ...l, label: `${l.label} (${areaLabel(it.area)})` } : l)
+    }
+    byIng.set(it.canonicalIngredientId, cur)
+  }
+  for (const w of byIng.values()) {
+    if (!w.layers.some((l) => l.per === 1)) w.layers.push({ label: w.unit, qty: 1, of: w.unit, per: 1, quarters: false })
+    // Smallest first: waste is usually a little, not a case.
+    w.layers.sort((a, b) => a.per - b.per)
+  }
+  return {
+    stores,
+    store,
+    items: [...byIng.values()],
+    recent: week.list,
+    week: { entries: week.entries, valued: week.valued, unpriced: week.unpriced, dollars: week.dollars, reasons: week.reasons },
   }
 }
 
@@ -305,40 +383,7 @@ export function getCountWasteSectionPromises(opts: { accountId: string; storeId?
         const stores = await accountStores(opts.accountId)
         const store = pickStore(stores, opts.storeId)
         if (!store) return null
-        const [items, week] = await Promise.all([countItems(opts.accountId), loadWeekWaste(opts.accountId, store.id)])
-        // One choice per ingredient. Its units are every layer it is counted
-        // in anywhere, so beef can be thrown out by the chub or by the lb.
-        const byIng = new Map<string, WasteItem>()
-        for (const it of items) {
-          const unit = it.canonicalIngredient.recipeUnit
-          if (!unit) continue
-          const cur = byIng.get(it.canonicalIngredientId) ?? {
-            ingredientId: it.canonicalIngredientId,
-            name: plainName(it.canonicalIngredient.name),
-            unit,
-            cost: it.canonicalIngredient.costPerRecipeUnit,
-            layers: [],
-          }
-          // Two areas can both say "Case" and mean different cases; keep both.
-          for (const l of layersFor(it.layers, unit)) {
-            if (cur.layers.some((x) => x.label === l.label && x.per === l.per)) continue
-            const clash = cur.layers.some((x) => x.label === l.label)
-            cur.layers.push(clash ? { ...l, label: `${l.label} (${areaLabel(it.area)})` } : l)
-          }
-          byIng.set(it.canonicalIngredientId, cur)
-        }
-        for (const w of byIng.values()) {
-          if (!w.layers.some((l) => l.per === 1)) w.layers.push({ label: w.unit, qty: 1, of: w.unit, per: 1, quarters: false })
-          // Smallest first: waste is usually a little, not a case.
-          w.layers.sort((a, b) => a.per - b.per)
-        }
-        return {
-          stores,
-          store,
-          items: [...byIng.values()],
-          recent: week.entries,
-          weekDollars: week.dollars,
-        }
+        return loadWasteData(opts.accountId, stores, store)
       }, { retryAction: "count.waste", isEmpty: (d) => d === null, emptyReason: "no_stores" }),
       "count.waste",
     ),
@@ -350,6 +395,7 @@ export function getCountWasteSectionPromises(opts: { accountId: string; storeId?
 // ---------------------------------------------------------------------------
 
 export type GapRow = {
+  ingredientId: string
   name: string
   unit: string
   last: number
@@ -376,6 +422,7 @@ export type GapRow = {
 }
 
 export type OrderRow = {
+  ingredientId: string
   name: string
   vendor: string
   orders: number
@@ -402,10 +449,25 @@ export type ReportData = {
   returnDollars: number
   otherDollars: number
   wasteEntries: number
+  /** Of those, entries on an item with no price: counted, never in `wasteDollars`. */
+  wasteUnpriced: number
+  /** Theft, sent-back and "other" entries on the rows, and how many of them have no price. */
+  apartEntries: number
+  apartUnpriced: number
   /** Entries in the window on items not counted both times — not on any row. */
   offReportEntries: number
   offReportDollars: number
   orders: OrderRow[]
+  /**
+   * The picture the Report tab leads with. All three are null unless the
+   * report was loaded with `picture` and there are two counts to compare.
+   */
+  /** "Went missing" as a figure that can be unknown: null when nothing compared has a price. */
+  headline: GapHeadline | null
+  /** "N of M lines compared", and why the rest were not. */
+  coverage: GapCoverage | null
+  /** The same figure for the pair of counts before this one, where there is one. */
+  before: { from: string; to: string; headline: GapHeadline } | null
 }
 export type ReportSections = { report: SectionData<ReportData | null> }
 
@@ -417,7 +479,8 @@ function median(xs: number[]): number {
   return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2
 }
 
-async function orderFrequency(accountId: string, storeId: string, ingredientIds: string[]): Promise<OrderRow[]> {
+/** How often each item is ordered at a store, from 8 weeks of invoices: biggest spend first, 25 at most. */
+export async function orderFrequency(accountId: string, storeId: string, ingredientIds: string[]): Promise<OrderRow[]> {
   const since = new Date(Date.now() - 56 * DAY_MS)
   const lines = await prisma.invoiceLineItem.findMany({
     where: {
@@ -433,13 +496,13 @@ async function orderFrequency(accountId: string, storeId: string, ingredientIds:
       invoice: { select: { invoiceDate: true, vendorName: true } },
     },
   })
-  type Acc = { name: string; vendors: Map<string, number>; days: Map<string, number>; qty: Map<string, number[]>; spend: number }
+  type Acc = { id: string; name: string; vendors: Map<string, number>; days: Map<string, number>; qty: Map<string, number[]>; spend: number }
   const acc = new Map<string, Acc>()
   for (const l of lines) {
     const id = l.canonicalIngredientId
     const d = l.invoice.invoiceDate
     if (!id || !d || !l.canonicalIngredient) continue
-    const a = acc.get(id) ?? { name: plainName(l.canonicalIngredient.name), vendors: new Map(), days: new Map(), qty: new Map(), spend: 0 }
+    const a = acc.get(id) ?? { id, name: plainName(l.canonicalIngredient.name), vendors: new Map(), days: new Map(), qty: new Map(), spend: 0 }
     const day = d.toISOString().slice(0, 10)
     a.days.set(day, (a.days.get(day) ?? 0) + l.quantity)
     a.vendors.set(l.invoice.vendorName, (a.vendors.get(l.invoice.vendorName) ?? 0) + 1)
@@ -463,6 +526,7 @@ async function orderFrequency(accountId: string, storeId: string, ingredientIds:
     const avgGap = days.length > 1 ? gap / (days.length - 1) : null
     const vendor = [...a.vendors.entries()].sort((x, y) => y[1] - x[1])[0]?.[0] ?? ""
     return {
+      ingredientId: a.id,
       name: a.name,
       vendor,
       orders: days.length,
@@ -474,6 +538,74 @@ async function orderFrequency(accountId: string, storeId: string, ingredientIds:
   })
 }
 
+/**
+ * One store's report: the gap between a finished count and the one before it,
+ * and how often things are ordered. `picture` adds what the Report tab leads
+ * with (coverage, and the pair of counts before, for "more or less than"),
+ * which costs a second walk of the store's history; the chat tool reads the
+ * rows and totals only and leaves it off.
+ */
+export async function loadReport(opts: {
+  accountId: string
+  stores: StoreOption[]
+  store: StoreOption
+  countId?: string
+  picture?: boolean
+}): Promise<ReportData> {
+  const { accountId, stores, store } = opts
+  const [completed, items] = await Promise.all([
+    prisma.stockCount.findMany({
+      where: { storeId: store.id, store: { accountId }, status: "COMPLETED" },
+      orderBy: { countedAt: "desc" },
+      take: 12,
+      select: { id: true, countedAt: true },
+    }),
+    countItems(accountId),
+  ])
+  const ingredientIds = [...new Set(items.map((i) => i.canonicalIngredientId))]
+  const orders = await orderFrequency(accountId, store.id, ingredientIds)
+  const counts = completed.map((c) => ({ id: c.id, label: dayLabel(c.countedAt) }))
+  const curIdx = Math.max(0, completed.findIndex((c) => c.id === opts.countId))
+  const cur = completed[curIdx] ?? null
+  const prev = completed[curIdx + 1] ?? null
+  const older = completed[curIdx + 2] ?? null
+  const base: ReportData = {
+    stores, store, counts,
+    current: cur ? { id: cur.id, label: dayLabel(cur.countedAt) } : null,
+    previous: prev ? { label: dayLabel(prev.countedAt) } : null,
+    rows: [], missingDollars: 0, extraDollars: 0, wasteDollars: 0, theftDollars: 0,
+    returnDollars: 0, otherDollars: 0, wasteEntries: 0, wasteUnpriced: 0, apartEntries: 0, apartUnpriced: 0, offReportEntries: 0,
+    offReportDollars: 0, orders, headline: null, coverage: null, before: null,
+  }
+  if (!cur || !prev) return base
+  if (!opts.picture) return { ...base, ...(await loadGap(accountId, store.id, cur, prev)) }
+
+  const [gap, countLines, beforeGap] = await Promise.all([
+    loadGap(accountId, store.id, cur, prev),
+    // Every line on this count, the ones with an unsized box included: the
+    // coverage line says how many lines that kept out of the comparison.
+    prisma.stockCountLine.findMany({
+      where: { stockCountId: cur.id, stockCount: { storeId: store.id, store: { accountId } } },
+      select: { canonicalIngredientId: true, nativeUnit: true },
+    }),
+    older ? loadGap(accountId, store.id, prev, older) : null,
+  ])
+  return {
+    ...base,
+    ...gap,
+    headline: gapHeadline(gap.rows),
+    coverage: gapCoverage({
+      // The walk leaves out an item with no recipe unit, so it is not a line here either.
+      lineItems: items.filter((i) => i.canonicalIngredient.recipeUnit).map((i) => i.canonicalIngredientId),
+      countLines,
+      compared: gap.rows.map((r) => r.ingredientId),
+    }),
+    before: beforeGap && older
+      ? { from: dayLabel(older.countedAt), to: dayLabel(prev.countedAt), headline: gapHeadline(beforeGap.rows) }
+      : null,
+  }
+}
+
 export function getCountReportSectionPromises(opts: { accountId: string; storeId?: string; countId?: string }): StreamedSections<ReportSections> {
   return {
     report: guardSection(
@@ -481,32 +613,7 @@ export function getCountReportSectionPromises(opts: { accountId: string; storeId
         const stores = await accountStores(opts.accountId)
         const store = pickStore(stores, opts.storeId)
         if (!store) return null
-        const [completed, items] = await Promise.all([
-          prisma.stockCount.findMany({
-            where: { storeId: store.id, store: { accountId: opts.accountId }, status: "COMPLETED" },
-            orderBy: { countedAt: "desc" },
-            take: 12,
-            select: { id: true, countedAt: true },
-          }),
-          countItems(opts.accountId),
-        ])
-        const ingredientIds = [...new Set(items.map((i) => i.canonicalIngredientId))]
-        const orders = await orderFrequency(opts.accountId, store.id, ingredientIds)
-        const counts = completed.map((c) => ({ id: c.id, label: dayLabel(c.countedAt) }))
-        const curIdx = Math.max(0, completed.findIndex((c) => c.id === opts.countId))
-        const cur = completed[curIdx] ?? null
-        const prev = completed[curIdx + 1] ?? null
-        const base: ReportData = {
-          stores, store, counts,
-          current: cur ? { id: cur.id, label: dayLabel(cur.countedAt) } : null,
-          previous: prev ? { label: dayLabel(prev.countedAt) } : null,
-          rows: [], missingDollars: 0, extraDollars: 0, wasteDollars: 0, theftDollars: 0,
-          returnDollars: 0, otherDollars: 0, wasteEntries: 0, offReportEntries: 0,
-          offReportDollars: 0, orders,
-        }
-        if (!cur || !prev) return base
-
-        return { ...base, ...(await loadGap(opts.accountId, store.id, cur, prev)) }
+        return loadReport({ accountId: opts.accountId, stores, store, countId: opts.countId })
       }, { retryAction: "count.report", isEmpty: (d) => d === null, emptyReason: "no_stores" }),
       "count.report",
     ),
@@ -516,7 +623,7 @@ export function getCountReportSectionPromises(opts: { accountId: string; storeId
 type GapPart = Pick<
   ReportData,
   | "rows" | "missingDollars" | "extraDollars" | "wasteDollars" | "theftDollars" | "returnDollars" | "otherDollars"
-  | "wasteEntries" | "offReportEntries" | "offReportDollars"
+  | "wasteEntries" | "wasteUnpriced" | "apartEntries" | "apartUnpriced" | "offReportEntries" | "offReportDollars"
 >
 
 /**
@@ -524,7 +631,7 @@ type GapPart = Pick<
  * both times, and the totals those rows add up to. The Report tab and the
  * Inventory overview's "Went missing" both read this, so they print one figure.
  */
-async function loadGap(
+export async function loadGap(
   accountId: string,
   storeId: string,
   cur: { id: string; countedAt: Date },
@@ -578,6 +685,7 @@ async function loadGap(
       // Shown in lb when the recipes use oz; dollars are worked out first.
       const k = ing.recipeUnit.trim().toLowerCase() === "oz" ? 16 : 1
       rows.push({
+        ingredientId: ing.id,
         name: plainName(ing.name),
         unit: k === 16 ? "lb" : ing.recipeUnit,
         last: r.baseQty / k,
@@ -603,32 +711,32 @@ async function loadGap(
       [...adjBy].filter(([id]) => !onRows.has(id)).flatMap(([, list]) => list),
     )
     const onEntries = [...adjBy].filter(([id]) => onRows.has(id)).flatMap(([, list]) => list)
+    const wasteOn = onEntries.filter((e) => reasonClass(e.reason) === "waste")
+    const apartOn = onEntries.filter((e) => reasonClass(e.reason) !== "waste")
     return {
       ...reportTotals(rows),
       rows,
-      wasteEntries: onEntries.filter((e) => reasonClass(e.reason) === "waste").length,
+      wasteEntries: wasteOn.length,
+      wasteUnpriced: wasteOn.filter((e) => e.cost == null).length,
+      apartEntries: apartOn.length,
+      apartUnpriced: apartOn.filter((e) => e.cost == null).length,
       offReportEntries: Object.values(off.entries).reduce((t, n) => t + n, 0),
       offReportDollars: Object.values(off.dollars).reduce((t, n) => t + n, 0),
     }
 }
 
 /** "Went missing" between a store's two most recent finished counts. Null until there are two. */
-export type LatestGap = {
+export type LatestGap = GapHeadline & {
   from: string
   to: string
-  /** Items counted both times: what the figure covers. */
-  items: number
-  /**
-   * Σ of the shortages on the compared items that have a price. Null when none
-   * of them could be valued (nothing counted both times, or no prices): an
-   * unknown, never $0.
-   */
-  missingDollars: number | null
-  /** Compared items with no price on file: not in `missingDollars`. */
-  unpriced: number
 }
 
-export async function loadLatestGap(accountId: string, storeId: string): Promise<LatestGap | null> {
+/**
+ * A store's two most recent finished counts and the gap between them, once
+ * per request: the Overview tile, the Report tab's by-store comparison and
+ * the one-item page all start here.
+ */
+export const loadLatestPair = cache(async (accountId: string, storeId: string): Promise<(LatestGap & { rows: GapRow[] }) | null> => {
   const [cur, prev] = await prisma.stockCount.findMany({
     where: { storeId, store: { accountId }, status: "COMPLETED" },
     orderBy: { countedAt: "desc" },
@@ -637,14 +745,13 @@ export async function loadLatestGap(accountId: string, storeId: string): Promise
   })
   if (!cur || !prev) return null
   const gap = await loadGap(accountId, storeId, cur, prev)
-  const unpriced = gap.rows.filter((r) => r.missingDollars === null).length
-  return {
-    from: dayLabel(prev.countedAt),
-    to: dayLabel(cur.countedAt),
-    items: gap.rows.length,
-    missingDollars: unpriced < gap.rows.length ? gap.missingDollars : null,
-    unpriced,
-  }
+  return { from: dayLabel(prev.countedAt), to: dayLabel(cur.countedAt), ...gapHeadline(gap.rows), rows: gap.rows }
+})
+
+export async function loadLatestGap(accountId: string, storeId: string): Promise<LatestGap | null> {
+  const pair = await loadLatestPair(accountId, storeId)
+  if (!pair) return null
+  return { from: pair.from, to: pair.to, items: pair.items, unpriced: pair.unpriced, missingDollars: pair.missingDollars }
 }
 
 /**

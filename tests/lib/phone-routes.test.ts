@@ -56,4 +56,12 @@ describe("phone routes", () => {
     expect(phoneHref("/dashboard/menu/items")).toBe("/m/menu/items")
     expect(phoneHref("/dashboard/menu")).toBe("/m/menu")
   })
+
+  it("carries the one-item page to its phone page, and leaves the bare base alone", () => {
+    expect(mobilePathFor("/dashboard/count/item/ing_1")).toBe("/m/count/item/ing_1")
+    expect(existsSync("src/app/(mobile)/m/(counter)/count/item/[id]/page.tsx")).toBe(true)
+    expect(existsSync("src/app/(mobile)/m/(counter)/count/item/[id]/loading.tsx")).toBe(true)
+    // There is no page at /count/item itself on either surface.
+    expect(mobilePathFor("/dashboard/count/item")).toBeNull()
+  })
 })
