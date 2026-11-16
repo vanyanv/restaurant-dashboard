@@ -11,11 +11,16 @@ export const dynamic = "force-dynamic"
  * what to order now, the shelf as a picture, the three money figures. The
  * count walk that used to be this page is `/m/count/walk`.
  */
-export default async function Page({ searchParams }: { searchParams: Promise<{ store?: string }> }) {
+export default async function Page({ searchParams }: { searchParams: Promise<{ store?: string; walk?: string }> }) {
   const session = await getServerSession(authOptions)
   if (!session) redirect("/login")
   if (!hasOwnerAccess(session.user.role)) redirect("/m/forbidden")
   const sp = await searchParams
+  // The count used to live here, and `?walk=1` was how the store picker opened
+  // it on the next item: a link saved from then goes to where the count is now.
+  if (sp.walk === "1") {
+    redirect(`/m/count/walk?${new URLSearchParams({ ...(sp.store ? { store: sp.store } : {}), walk: "1" })}`)
+  }
 
   const sections = getInventoryShelfSectionPromises({ accountId: session.user.accountId, storeId: sp.store })
 

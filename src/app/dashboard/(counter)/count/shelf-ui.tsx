@@ -154,14 +154,31 @@ export function DaysBar({ line, barDays }: { line: ShelfLine; barDays: number })
   )
 }
 
-/** "FRESH · Counted Sun, Nov 8, 2 days ago · 71 of 72 lines". */
-export function Fresh({ shelf }: { shelf: StoreShelf }) {
+/**
+ * "Counted Sun, Nov 8, 2 days ago · 71 of 72 lines, 3 from older counts". An
+ * item skipped on the last count keeps its older number, and this says how
+ * many lines that is.
+ */
+export function freshSay(shelf: StoreShelf): string {
   const c = shelf.coverage
+  const last = shelf.lastCount
+  if (!last) return shelf.skip ? "No finished count from before the last 7 days." : "No finished count yet."
+  const older = last.older > 0 ? `, ${last.older} from older counts` : ""
+  return `Counted ${last.day}, ${last.ago} · ${c.counted} of ${c.lines} lines${older}`
+}
+
+/** The freshness line: how old the count is, and whether this week's is being skipped. */
+export function Fresh({ shelf }: { shelf: StoreShelf }) {
+  const skip = shelf.skip ? <span className="iv-pill iv-pill--warn">Skipping this week&apos;s count</span> : null
+  // The skip is a switch on the Order tab; said here because it changes every figure on the page.
+  const skipSay = shelf.skip ? <span>Counts from the last 7 days are left out, here and on the draft order.</span> : null
   if (!shelf.lastCount) {
     return (
       <p className="iv-fresh">
         <span className="iv-pill iv-pill--mute">Not counted</span>
-        <span>{shelf.name} has no finished count yet.</span>
+        {skip}
+        <span>{shelf.skip ? `${shelf.name} has no finished count from before the last 7 days.` : `${shelf.name} has no finished count yet.`}</span>
+        {skipSay}
       </p>
     )
   }
@@ -170,9 +187,9 @@ export function Fresh({ shelf }: { shelf: StoreShelf }) {
       {shelf.lastCount.stale
         ? <span className="iv-pill iv-pill--warn">Old count</span>
         : <span className="iv-pill iv-pill--good">Fresh</span>}
-      <span>
-        Counted {shelf.lastCount.day}, {shelf.lastCount.ago} · {c.counted} of {c.lines} lines
-      </span>
+      {skip}
+      <span>{freshSay(shelf)}</span>
+      {skipSay}
     </p>
   )
 }
@@ -211,15 +228,33 @@ export function Tiles({ shelf }: { shelf: StoreShelf }) {
         <span className="iv-mono">On the shelf</span>
         {c.dollars !== null ? <strong>{money(c.dollars)}</strong> : <strong className="txt">{c.counted === 0 ? "Not counted yet" : "Not valued yet"}</strong>}
         <CoverBar shelf={shelf} />
-        <span>{coverageSay(shelf)}{shelf.lastCount && c.dollars !== null ? ` As counted ${shelf.lastCount.day}.` : ""}</span>
+        <span>
+          {coverageSay(shelf)}
+          {shelf.lastCount && c.dollars !== null
+            ? shelf.lastCount.older > 0
+              ? ` Last counted ${shelf.lastCount.day}; ${shelf.lastCount.older} ${shelf.lastCount.older === 1 ? "line is" : "lines are"} from older counts.`
+              : ` As counted ${shelf.lastCount.day}.`
+            : ""}
+        </span>
       </div>
       <div className="iv-card iv-tile">
         <span className="iv-mono">Went missing</span>
-        {g ? <strong>{money(g.missingDollars)}</strong> : <strong className="txt">Needs two counts</strong>}
+        {/* A figure only when something was compared and priced; otherwise words, never $0. */}
+        {!g
+          ? <strong className="txt">Needs two counts</strong>
+          : g.items === 0
+            ? <strong className="txt">Nothing to compare</strong>
+            : g.missingDollars === null
+              ? <strong className="txt">Not valued yet</strong>
+              : <strong>{money(g.missingDollars)}</strong>}
         <span>
-          {g
-            ? `${g.items} ${g.items === 1 ? "item" : "items"} compared, ${g.from} to ${g.to}.${g.unpriced > 0 ? ` ${g.unpriced} without a price not included.` : ""}`
-            : "Nothing to compare until this store is counted twice."}
+          {!g
+            ? "Nothing to compare until this store is counted twice."
+            : g.items === 0
+              ? `No item was counted on both ${g.from} and ${g.to}.`
+              : `${g.items} ${g.items === 1 ? "item" : "items"} compared, ${g.from} to ${g.to}.${
+                  g.missingDollars === null ? " None has a price yet." : g.unpriced > 0 ? ` ${g.unpriced} without a price not included.` : ""
+                }`}
         </span>
       </div>
       <div className="iv-card iv-tile">

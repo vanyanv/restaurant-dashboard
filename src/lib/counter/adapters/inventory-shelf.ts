@@ -11,6 +11,7 @@ import {
   unconverted,
   valuesFit,
 } from "@/lib/counter/count-layers"
+import { countedAgo } from "@/lib/counter/counted-ago"
 import { DEFAULT_COVER_DAYS } from "@/lib/counter/draft-orders"
 import { plainName } from "@/lib/counter/plain-names"
 import {
@@ -39,12 +40,22 @@ import type { SectionData } from "@/lib/counter/section-data"
 /**
  * Inventory — the Overview, the Shelf tab and the store switcher.
  *
- * One read per request (`loadShelves`, cached) builds every store's shelf: a
- * state for each line of the count list. The "N to order now" on the switcher,
- * on the Overview headline and on the store cards is `toOrderNow` over those
- * lines; the blocks of the shelf map and the rows of the Shelf tab are the same
- * lines; "X of Y lines valued" is `shelfCoverage` over them. Nothing is worked
- * out twice. The state rules are `shelfState` in `shelf-state.ts`.
+ * One read per store and request (`loadStoreLines`, cached) builds the shelf:
+ * a state for each line of the count list. The "N to order now" on the
+ * switcher, on the Overview headline and on the store cards is `toOrderNow`
+ * over those lines; the blocks of the shelf map and the rows of the Shelf tab
+ * are the same lines; "X of Y lines valued" is `shelfCoverage` over them.
+ * Nothing is worked out twice. The state rules are `shelfState` in
+ * `shelf-state.ts`.
+ *
+ * WHICH COUNT. Each item is read from its LATEST finished count line, not
+ * from the store's last count alone. Finishing a count with a few lines is
+ * allowed ("anything you skipped keeps its older number"), and the draft
+ * order rolls each item forward from its own latest line; the shelf does the
+ * same, so a three-line recount does not turn the other lines into "Not
+ * counted" and the Overview keeps agreeing with the Order tab. A line carried
+ * from an older count says which. With "Skip this week's count" on, both read
+ * only the counts the draft read (`StoreDraft.countsBefore`).
  *
  * It gathers and never invents. The draft amount, vendor, run-out day and
  * "order by" day are the Order tab's own (`loadStoreDraft`); "thrown out" is
@@ -80,10 +91,12 @@ export type ShelfLine = {
   dollars: number | null
   /** Why a counted line has no value: "3 Trays: no size set yet", "No price on file yet". */
   notValued: string | null
-  /** The same reason as a kind, for grouping: a box with no size, or no price on file. */
-  notValuedWhy: "size" | "price" | null
+  /** The same reason as a kind, for grouping: a box with no size, no price on file, or a size or box changed since the count. */
+  notValuedWhy: "size" | "price" | "boxes" | null
   /** On hand rolled forward from the count reads below zero. */
   belowZero: boolean
+  /** The day of the count these numbers are from, when it is older than the store's last one: "Tue, Nov 3". */
+  from: string | null
   /** Days until it runs out, for the bar. Null when nothing uses it or it can't be read. */
   daysLeft: number | null
   /** Where on the bar an order has to be placed to arrive in time. */
@@ -95,15 +108,28 @@ export type ShelfLine = {
   /** The draft's "Order today" / "Order by Thu, Nov 12". */
   when: string | null
   vendor: string | null
-  /** One plain line on why the row reads the way it does. */
+  /** Plain sentences on why the row reads the way it does, joined with ". ". */
   note: string | null
+}
+
+export type LastCount = {
+  day: string
+  ago: string
+  stale: boolean
+  /** Lines whose numbers are carried from a count before this one. */
+  older: number
 }
 
 export type StoreShelf = {
   id: string
   name: string
-  /** The store's last finished count. Null: never counted. */
-  lastCount: { day: string; ago: string; stale: boolean } | null
+  /** The newest finished count the shelf reads. Null: none. */
+  lastCount: LastCount | null
+  /**
+   * "Skip this week's count" is on: the shelf, like the draft order, is read
+   * from the counts taken before the last 7 days.
+   */
+  skip: boolean
   /** Lines saved on a count that is still open, or null when none is. */
   openCount: number | null
   lines: ShelfLine[]
@@ -139,19 +165,14 @@ export type ShelfData = SwitcherData & {
 export type ShelfSections = { shelf: SectionData<ShelfData | null> }
 export type SwitcherSections = { switcher: SectionData<SwitcherData | null> }
 
-/** Calendar days between two moments on the stores' own (LA) clock: 11pm to 1am is "yesterday". */
-function laDay(d: Date): number {
-  return Date.parse(`${d.toLocaleDateString("en-CA", { timeZone: "America/Los_Angeles" })}T00:00:00Z`)
+export type CountLine = {
+  canonicalIngredientId: string
+  qtyInRecipeUnit: number
+  nativeUnit: string | null
+  breakdown: unknown
+  /** When the count this line is on was taken. */
+  countedAt: Date
 }
-
-function agoLabel(at: Date, now: Date): string {
-  const days = Math.round((laDay(now) - laDay(at)) / DAY_MS)
-  if (days <= 0) return "today"
-  if (days === 1) return "yesterday"
-  return `${days} days ago`
-}
-
-type CountLine = { canonicalIngredientId: string; qtyInRecipeUnit: number; nativeUnit: string | null; breakdown: unknown }
 
 function stopValues(line: CountLine, itemId: string): number[] | null {
   const b = line.breakdown
@@ -163,91 +184,163 @@ function stopValues(line: CountLine, itemId: string): number[] | null {
 /** One store's lines, in the sheet's order. Pure: everything it reads is passed in. */
 export function buildShelfLines(input: {
   items: ItemRow[]
-  /** The last finished count's lines by ingredient, or null when there is no finished count. */
-  lastLines: Map<string, CountLine> | null
-  lastDay: string | null
+  /** Each item's latest finished count line, among the counts the draft read. */
+  latest: Map<string, CountLine>
+  /** When the newest of those counts was taken. Null when there is none. */
+  lastCountAt: Date | null
+  /** "Skip this week's count" is on: says why a line counted only this week reads not counted. */
+  skip?: boolean
   draft: Pick<StoreDraft, "stock" | "vendors" | "reads">
 }): ShelfLine[] {
-  const { items, lastLines, lastDay, draft } = input
+  const { latest, lastCountAt, draft } = input
+  // No recipe unit: it cannot be counted at all, and the walk leaves it out too.
+  const items = input.items.filter((it) => it.canonicalIngredient.recipeUnit)
   const stockBy = new Map(draft.stock.map((r) => [r.id, r]))
   const draftBy = new Map(draft.vendors.flatMap((v) => v.rows.map((r) => [r.id, { row: r, vendor: v.vendor }] as const)))
-  // An item counted without boxes (the older count screens) has one total and
-  // no stop to hang it on: its first stop on the list carries it.
-  const firstStop = new Map<string, string>()
-  for (const it of items) if (!firstStop.has(it.canonicalIngredientId)) firstStop.set(it.canonicalIngredientId, it.id)
-  const firstArea = new Map(items.map((it) => [it.id, it.area]))
+  const layersOf = (it: ItemRow) => layersFor(it.layers, it.canonicalIngredient.recipeUnit ?? "")
 
-  return items.flatMap((it): ShelfLine[] => {
+  const firstStop = new Map<string, ItemRow>()
+  // Per counted item: the stops whose saved boxes still fit the boxes they
+  // have today, what those boxes add up to at TODAY's sizes, and whether any
+  // of them holds a box that has no size today.
+  const reading = new Map<string, { fits: Set<string>; sum: number; unsizedNow: boolean }>()
+  for (const it of items) {
+    const id = it.canonicalIngredientId
+    if (!firstStop.has(id)) firstStop.set(id, it)
+    const line = latest.get(id)
+    if (!line) continue
+    const r = reading.get(id) ?? { fits: new Set<string>(), sum: 0, unsizedNow: false }
+    reading.set(id, r)
+    const layers = layersOf(it)
+    const vals = stopValues(line, it.id)
+    if (!valuesFit(layers, vals)) continue
+    r.fits.add(it.id)
+    r.sum += shelfTotal(layers, vals)
+    if (unconverted(layers, vals)) r.unsizedNow = true
+  }
+  /**
+   * The boxes, at today's sizes, still add up to the quantity the count saved.
+   * They stop doing so when a size or a box is edited in Sizes & list after
+   * the count (2 cases of 30 lb saved as 60; the case is now 60 lb), when a
+   * stop is taken off the list, or when a box that had no size is given one.
+   * The saved line is what the draft order rolls forward from, so the shelf
+   * never shows an amount that disagrees with it.
+   */
+  const addsUp = (line: CountLine, r: { fits: Set<string>; sum: number }) =>
+    r.fits.size > 0 && Math.abs(r.sum - line.qtyInRecipeUnit) <= Math.max(0.01, Math.abs(line.qtyInRecipeUnit) * 0.001)
+
+  return items.map((it): ShelfLine => {
     const ing = it.canonicalIngredient
-    const unit = ing.recipeUnit
-    // No recipe unit: it cannot be counted at all, and the walk leaves it out too.
-    if (!unit) return []
-    const layers = layersFor(it.layers, unit)
-    const line = lastLines?.get(it.canonicalIngredientId) ?? null
-    const stock = stockBy.get(it.canonicalIngredientId) ?? null
-    const drafted = draftBy.get(it.canonicalIngredientId) ?? null
-    const read = draft.reads.get(it.canonicalIngredientId) ?? null
+    const ingId = it.canonicalIngredientId
+    const unit = ing.recipeUnit ?? ""
+    const layers = layersOf(it)
+    const line = latest.get(ingId) ?? null
+    const r = reading.get(ingId)
+    const stock = stockBy.get(ingId) ?? null
+    const drafted = draftBy.get(ingId) ?? null
+    const read = draft.reads.get(ingId) ?? null
     const vendor = drafted?.vendor ?? read?.vendor ?? null
+    // Saved with a box that had no size: the saved total is only a floor, and
+    // the draft order starts from the count before this one.
+    const partial = line?.nativeUnit === UNCONVERTED_UNIT
 
-    // What this stop itself holds on the last count.
+    // What this stop itself holds on that count.
     let stop: { qty: number; typed: string | null; unsized: string | null } | null = null
-    let sharedWith: string | null = null
-    if (line) {
-      const vals = stopValues(line, it.id)
-      if (valuesFit(layers, vals)) {
-        const qty = shelfTotal(layers, vals)
-        const unsized = unconverted(layers, vals)
-        // An empty shelf reads as its boxes at zero ("0 Cases + 0 Trays"), the way the sheet has it.
-        const typed = qty > 0 || unsized ? describeShelf(layers, vals) : layers.map((l) => `0 ${l.label}`).join(" + ")
-        stop = { qty, typed, unsized }
-      } else if (line.breakdown == null) {
-        const first = firstStop.get(it.canonicalIngredientId)
-        if (first === it.id) stop = { qty: line.qtyInRecipeUnit, typed: null, unsized: null }
-        else {
-          stop = { qty: 0, typed: null, unsized: null }
-          sharedWith = areaLabel(firstArea.get(first ?? "") ?? "")
-        }
+    // "first" / "other": the boxes no longer add up to the saved line (or it
+    // was counted without boxes), so the saved total is shown once, on the
+    // item's first stop.
+    let carried: "first" | "other" | null = null
+    // The saved line is a floor AND the boxes no longer add up to it: nothing whole to show.
+    let recount = false
+    // The item reads, but this stop has no numbers on that count.
+    let absent = false
+    if (line && r) {
+      const vals = r.fits.has(it.id) ? stopValues(line, it.id) ?? [] : null
+      const today = vals ? shelfTotal(layers, vals) : 0
+      const unsized = vals ? unconverted(layers, vals) : null
+      // An empty shelf reads as its boxes at zero ("0 Cases + 0 Trays"), the way the sheet has it.
+      const typed = !vals ? null : today > 0 || unsized ? describeShelf(layers, vals) : layers.map((l) => `0 ${l.label}`).join(" + ")
+      if (addsUp(line, r)) {
+        stop = { qty: today, typed, unsized }
+        absent = !vals
+      } else if (partial) {
+        stop = { qty: 0, typed, unsized }
+        recount = true
+      } else {
+        carried = firstStop.get(ingId)?.id === it.id ? "first" : "other"
+        stop = { qty: carried === "first" ? line.qtyInRecipeUnit : 0, typed, unsized: null }
       }
     }
+    const firstArea = areaLabel(firstStop.get(ingId)?.area ?? "")
+    // Counted on the older count screens: one total and no boxes at all.
+    const noBoxes = carried !== null && r?.fits.size === 0
 
     const state = shelfState({
-      counted: line && stop ? { qty: line.qtyInRecipeUnit, unsized: line.nativeUnit === UNCONVERTED_UNIT } : null,
+      counted: line ? { qty: line.qtyInRecipeUnit, unsized: partial } : null,
       onHandNow: read?.onHand ?? null,
       flow: stock?.status ?? null,
     })
+    // The draft read it from the count before the one with the unsized box.
+    const fromOlder = partial && (state === "order_now" || state === "order_soon" || state === "ok")
+    // Less than nothing on hand: an empty shelf with sales since, a count that
+    // was short, or more logged off than was there.
+    const belowZero = (state === "out" || (state === "cant_tell" && !partial)) && read?.onHand != null && read.onHand < 0
 
     const cost = ing.costPerRecipeUnit
-    const dollars = stop && !stop.unsized && !sharedWith && cost != null ? stop.qty * cost : sharedWith ? 0 : null
-    const notValuedWhy = !stop || dollars !== null ? null : stop.unsized ? ("size" as const) : ("price" as const)
-    const notValued = notValuedWhy === "size" ? `${stop?.unsized}: no size set yet` : notValuedWhy === "price" ? "No price on file yet" : null
-    // The draft's own "reads below zero": a use rate, a count to start from, and less than nothing left.
-    const belowZero = state === "cant_tell" && stock?.status === "unknown" && read?.onHand != null && read.onHand < 0
+    let dollars: number | null = null
+    let notValuedWhy: ShelfLine["notValuedWhy"] = null
+    let notValued: string | null = null
+    if (stop?.unsized) {
+      notValuedWhy = "size"
+      notValued = `${stop.unsized}: no size set yet`
+    } else if (recount) {
+      notValuedWhy = "boxes"
+      notValued = "A size or a box was changed after this count"
+    } else if (stop && cost == null) {
+      notValuedWhy = "price"
+      notValued = "No price on file yet"
+    } else if (stop) {
+      // A stop whose amount is carried on another line is $0 of a known total, not an unknown.
+      dollars = stop.qty * cost!
+    }
 
     const order = drafted ? drafted.row.order : null
     const from = vendor ? ` from ${vendor}` : ""
-    let note: string | null = null
-    if (state === "not_counted") note = lastDay ? `Not on the ${lastDay} count` : "No finished count yet"
-    else if (sharedWith) note = `Counted with ${sharedWith}`
-    else if (state === "out") {
-      note = order
-        ? `Draft order: ${order}${from}`
-        : stock
-          ? "No draft yet"
-          : `No draft yet: nothing on the menu uses it, so the app can't size an order${vendor ? `. Last${from}` : ""}`
-    } else if (state === "order_now" || state === "order_soon") note = order ? `Draft order: ${order}${from}` : null
-    else if (state === "cant_tell" && !stop?.unsized) {
-      // A box with no size on this very stop is already said by `notValued`.
-      note = line?.nativeUnit === UNCONVERTED_UNIT
-          ? "Another shelf of this item has a box with no size yet"
-          : belowZero
-            ? "On hand reads below zero. Count it again"
-            : "No count the draft order can start from"
+    const notes: string[] = []
+    if (!line) {
+      notes.push(input.skip ? "Not on a count from before the last 7 days" : lastCountAt ? "Never on a finished count" : "No finished count yet")
+    } else {
+      if (carried === "other") notes.push(noBoxes ? `Counted with ${firstArea}` : `A size or a box was changed after this count: its amount is with ${firstArea}`)
+      else if (carried === "first" && !noBoxes) notes.push("A size or a box was changed after this count, so this is the total saved then")
+      else if (absent) notes.push("Not on this count: added or changed since")
+      if (state === "out") {
+        if (belowZero) notes.push("On hand reads below zero since the count. A delivery may not be invoiced yet. Count it again")
+        else if (order) notes.push(`Draft order: ${order}${from}`)
+        else if (stock) notes.push("No draft yet")
+        else {
+          const why = `nothing on the menu uses it, so the app can't size an order${vendor ? `. Last${from}` : ""}`
+          notes.push(line.qtyInRecipeUnit > 0 ? `Everything counted has been logged off since. No draft: ${why}` : `No draft yet: ${why}`)
+        }
+      } else if ((state === "order_now" || state === "order_soon") && order) {
+        notes.push(`Draft order: ${order}${from}`)
+      }
+      if (partial) {
+        // A box with no size on this very stop is already said by `notValued`.
+        if (stop?.unsized) {
+          if (fromOlder) notes.push("The latest count has a box with no size yet")
+        } else if (r?.unsizedNow) notes.push("Another shelf of this item has a box with no size yet")
+        // Every box of the item has a size today, so the count can be redone whole.
+        else notes.push(recount ? "Sized after this count. Count it again" : "This count had a box with no size. Count it again")
+        if (fromOlder) notes.push(read?.countedAt ? `Read from the ${dayLabel(read.countedAt)} count` : "Read from the count before")
+      } else if (state === "cant_tell") {
+        notes.push(belowZero ? "On hand reads below zero. Count it again" : "No count the draft order can start from")
+      }
     }
 
     const readable = state === "order_now" || state === "order_soon" || state === "ok"
-    return [{
+    return {
       id: it.id,
-      ingredientId: it.canonicalIngredientId,
+      ingredientId: ingId,
       name: plainName(ing.name),
       area: it.area,
       state,
@@ -259,42 +352,110 @@ export function buildShelfLines(input: {
       typed: stop?.typed ?? null,
       // Only where it says more than the boxes do: not for an empty shelf, nor
       // for one box that is already the unit ("3 Rolls" is 3 roll).
-      amount: stop && !sharedWith && stop.qty > 0 && !(layers.length === 1 && layers[0].per === 1) ? showQty(stop.qty, unit).trim() : null,
-      dollars: state === "not_counted" ? null : dollars,
-      notValued: state === "not_counted" ? null : notValued,
-      notValuedWhy: state === "not_counted" ? null : notValuedWhy,
+      // The saved total where that is what the line shows.
+      amount: stop && stop.qty > 0 && (carried === "first" || !(layers.length === 1 && layers[0].per === 1)) ? showQty(stop.qty, unit).trim() : null,
+      dollars,
+      notValued,
+      notValuedWhy,
       belowZero,
+      from: line && lastCountAt && line.countedAt.getTime() < lastCountAt.getTime() ? dayLabel(line.countedAt) : null,
       daysLeft: readable ? (stock?.daysLeft ?? null) : null,
       orderAt: readable ? (stock?.orderAt ?? null) : null,
       runsOut: readable ? (stock?.runsOut ?? null) : null,
       order,
       when: drafted?.row.when ?? null,
       vendor,
-      note,
-    }]
+      note: notes.length ? notes.join(". ") : null,
+    }
   })
 }
 
-type StoreRow = { id: string; name: string; draftSkipCount: boolean }
+/** The account's active stores, once per request. */
+const loadStores = cache((accountId: string) =>
+  prisma.store.findMany({
+    where: { accountId, isActive: true },
+    select: { id: true, name: true },
+    orderBy: { name: "asc" },
+  }),
+)
 
-async function loadStoreShelf(accountId: string, store: StoreRow, items: ItemRow[], now: Date): Promise<StoreShelf> {
-  const [draft, last, open, waste, missing] = await Promise.all([
-    // The Order tab's own draft at its default cover, so the two pages agree.
-    loadStoreDraft(accountId, store.id, DEFAULT_COVER_DAYS, store.draftSkipCount),
-    prisma.stockCount.findFirst({
-      where: { storeId: store.id, store: { accountId }, status: "COMPLETED" },
-      orderBy: { countedAt: "desc" },
-      select: {
-        countedAt: true,
-        lines: { select: { canonicalIngredientId: true, qtyInRecipeUnit: true, nativeUnit: true, breakdown: true } },
-      },
+const loadItems = cache((accountId: string) => countItems(accountId))
+
+type StoreLines = Pick<StoreShelf, "lines" | "lastCount" | "skip" | "toOrder" | "draftVendors">
+
+/**
+ * One store's lines and its "N to order now", once per request: all the store
+ * switcher needs, and the part of the full shelf everything else hangs on.
+ * Three reads: the draft order (the Order tab's own, for the same "how long
+ * should it last"), a light pass over the store's finished count lines to
+ * find each item's latest, and those lines themselves.
+ *
+ * `coverDays` is the Order tab's pick. Everywhere else it is the default; on
+ * the Order tab the switcher is given the reader's own, so its "N to order"
+ * is counted from the draft the page under it shows.
+ */
+const loadStoreLines = cache(async (accountId: string, storeId: string, coverDays: number): Promise<StoreLines> => {
+  const now = new Date()
+  const finished = { storeId, store: { accountId }, status: "COMPLETED" as const }
+  const [draft, items, scan] = await Promise.all([
+    loadStoreDraft(accountId, storeId, coverDays),
+    loadItems(accountId),
+    prisma.stockCountLine.findMany({
+      where: { stockCount: finished },
+      orderBy: { stockCount: { countedAt: "desc" } },
+      select: { id: true, canonicalIngredientId: true, stockCount: { select: { countedAt: true } } },
     }),
+  ])
+  // Newest first, so the first line per item wins: the draft's rule. With the
+  // skip on, the counts the draft left out are left out here too.
+  const latestId = new Map<string, string>()
+  let lastCountAt: Date | null = null
+  for (const l of scan) {
+    const at = l.stockCount.countedAt
+    if (draft.countsBefore && at.getTime() >= draft.countsBefore.getTime()) continue
+    lastCountAt ??= at
+    if (!latestId.has(l.canonicalIngredientId)) latestId.set(l.canonicalIngredientId, l.id)
+  }
+  const rows = latestId.size
+    ? await prisma.stockCountLine.findMany({
+        where: { id: { in: [...latestId.values()] }, stockCount: finished },
+        select: {
+          canonicalIngredientId: true, qtyInRecipeUnit: true, nativeUnit: true, breakdown: true,
+          stockCount: { select: { countedAt: true } },
+        },
+      })
+    : []
+  const latest = new Map(rows.map((l): [string, CountLine] => [
+    l.canonicalIngredientId,
+    { canonicalIngredientId: l.canonicalIngredientId, qtyInRecipeUnit: l.qtyInRecipeUnit, nativeUnit: l.nativeUnit, breakdown: l.breakdown, countedAt: l.stockCount.countedAt },
+  ]))
+  const lines = buildShelfLines({ items, latest, lastCountAt, skip: draft.skip, draft })
+  return {
+    lines,
+    lastCount: lastCountAt
+      ? {
+          day: dayLabel(lastCountAt),
+          ago: countedAgo(lastCountAt, now),
+          stale: now.getTime() - lastCountAt.getTime() > STALE_COUNT_DAYS * DAY_MS,
+          older: lines.filter((l) => l.from !== null).length,
+        }
+      : null,
+    skip: draft.skip,
+    toOrder: lastCountAt ? toOrderNow(lines) : null,
+    draftVendors: draft.vendors.length,
+  }
+})
+
+/** The full shelf of one store: its lines, plus the open count and the two money figures borrowed from Waste and Report. */
+async function loadStoreShelf(accountId: string, store: { id: string; name: string }): Promise<StoreShelf> {
+  const [base, open, waste, missing] = await Promise.all([
+    loadStoreLines(accountId, store.id, DEFAULT_COVER_DAYS),
     prisma.stockCount.findFirst({
       where: {
         storeId: store.id,
         store: { accountId },
         status: "IN_PROGRESS",
-        startedAt: { gte: new Date(now.getTime() - OPEN_COUNT_DAYS * DAY_MS) },
+        startedAt: { gte: new Date(Date.now() - OPEN_COUNT_DAYS * DAY_MS) },
       },
       orderBy: { startedAt: "desc" },
       select: { _count: { select: { lines: true } } },
@@ -302,53 +463,29 @@ async function loadStoreShelf(accountId: string, store: StoreRow, items: ItemRow
     loadWeekWaste(accountId, store.id),
     loadLatestGap(accountId, store.id),
   ])
-  const lastDay = last ? dayLabel(last.countedAt) : null
-  const lines = buildShelfLines({
-    items,
-    lastLines: last ? new Map(last.lines.map((l) => [l.canonicalIngredientId, l])) : null,
-    lastDay,
-    draft,
-  })
   return {
     id: store.id,
     name: store.name,
-    lastCount: last
-      ? {
-          day: lastDay!,
-          ago: agoLabel(last.countedAt, now),
-          stale: now.getTime() - last.countedAt.getTime() > STALE_COUNT_DAYS * DAY_MS,
-        }
-      : null,
+    ...base,
     openCount: open ? open._count.lines : null,
-    lines,
-    toOrder: last ? toOrderNow(lines) : null,
-    counts: stateCounts(lines),
-    coverage: shelfCoverage(lines),
-    soonTitle: orderSoonTitle(lines.filter((l) => l.state === "order_soon").map((l) => l.when)),
-    draftVendors: draft.vendors.length,
+    counts: stateCounts(base.lines),
+    coverage: shelfCoverage(base.lines),
+    soonTitle: orderSoonTitle(base.lines.filter((l) => l.state === "order_soon").map((l) => l.when)),
     missing,
     waste: { dollars: waste.dollars, entries: waste.entries.length, unpriced: waste.unpriced },
   }
 }
 
-/** Every active store's shelf, once per request. */
+/** Every active store's full shelf, once per request. */
 const loadShelves = cache(async (accountId: string): Promise<StoreShelf[]> => {
-  const [stores, items] = await Promise.all([
-    prisma.store.findMany({
-      where: { accountId, isActive: true },
-      select: { id: true, name: true, draftSkipCount: true },
-      orderBy: { name: "asc" },
-    }),
-    countItems(accountId),
-  ])
-  const now = new Date()
-  return Promise.all(stores.map((s) => loadStoreShelf(accountId, s, items, now)))
+  const stores = await loadStores(accountId)
+  return Promise.all(stores.map((s) => loadStoreShelf(accountId, s)))
 })
 
-function switcherOf(shelves: StoreShelf[]): SwitcherData {
-  const counted = shelves.filter((s) => s.toOrder !== null)
+function switcherOf(stores: SwitchStore[]): SwitcherData {
+  const counted = stores.filter((s) => s.toOrder !== null)
   return {
-    stores: shelves.map((s) => ({ id: s.id, name: s.name, toOrder: s.toOrder })),
+    stores,
     // Σ of the same per-store figure, so "All 3" is the three cells added up.
     total: counted.length ? counted.reduce((t, s) => t + (s.toOrder ?? 0), 0) : null,
   }
@@ -370,7 +507,7 @@ export function getInventoryShelfSectionPromises(opts: { accountId: string; stor
         const view = pickShelfView(shelves, opts.storeId)
         if (view === null) return null
         return {
-          ...switcherOf(shelves),
+          ...switcherOf(shelves.map((s) => ({ id: s.id, name: s.name, toOrder: s.toOrder }))),
           view,
           shelves: view === ALL_STORES ? shelves : shelves.filter((s) => s.id === view),
           areas: COUNT_AREAS.map((a) => ({ id: a.id, label: a.label })),
@@ -382,13 +519,21 @@ export function getInventoryShelfSectionPromises(opts: { accountId: string; stor
   }
 }
 
-/** The store switcher on the Order, Waste and Report tabs: each store's "N to order". */
-export function getInventorySwitcherSectionPromises(opts: { accountId: string }): StreamedSections<SwitcherSections> {
+/**
+ * The store switcher on the Order, Waste and Report tabs: each store's "N to
+ * order". It reads the lines and nothing else: not the open count, the week's
+ * waste or the two-count gap the Overview also shows. The Order tab passes
+ * the cover it is showing, so the cell for a store and the draft under it are
+ * one build of one draft.
+ */
+export function getInventorySwitcherSectionPromises(opts: { accountId: string; coverDays?: number }): StreamedSections<SwitcherSections> {
   return {
     switcher: guardSection(
       classify(async (): Promise<SwitcherData | null> => {
-        const shelves = await loadShelves(opts.accountId)
-        return shelves.length ? switcherOf(shelves) : null
+        const stores = await loadStores(opts.accountId)
+        if (stores.length === 0) return null
+        const lines = await Promise.all(stores.map((s) => loadStoreLines(opts.accountId, s.id, opts.coverDays ?? DEFAULT_COVER_DAYS)))
+        return switcherOf(stores.map((s, i) => ({ id: s.id, name: s.name, toOrder: lines[i].toOrder })))
       }, { retryAction: "count.switcher", isEmpty: (d) => d === null, emptyReason: "no_stores" }),
       "count.switcher",
     ),

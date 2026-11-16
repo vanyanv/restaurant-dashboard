@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma"
+import { anchorLineWhere } from "@/lib/inventory/anchor-line"
 import {
   loadStoreInventoryContext,
   runningOnHandFromContext,
@@ -535,12 +536,15 @@ async function loadGap(
     const asOf = new Date(cur.countedAt.getTime() - 1)
     const [ctx, lines, ings, waste] = await Promise.all([
       loadStoreInventoryContext({ storeId: storeId, accountId: accountId, asOf }),
+      // Only lines that are the whole shelf. A line saved with a box that has
+      // no size (`partial`) holds just the part that could be converted: read
+      // as the count, the unsized boxes would be reported as missing.
       prisma.stockCountLine.findMany({
-        where: { stockCountId: cur.id },
+        where: { stockCountId: cur.id, stockCount: { storeId, store: { accountId } }, ...anchorLineWhere },
         select: { canonicalIngredientId: true, qtyInRecipeUnit: true },
       }),
       prisma.canonicalIngredient.findMany({
-        where: { accountId: accountId, stockCountLines: { some: { stockCountId: cur.id } } },
+        where: { accountId: accountId, stockCountLines: { some: { stockCountId: cur.id, ...anchorLineWhere } } },
         select: { id: true, name: true, recipeUnit: true, costPerRecipeUnit: true, caseUnit: true, recipeUnitsPerCase: true, innerPackUnit: true, innerPacksPerCase: true },
       }),
       // EVERY reason, over the window the "should have" walk subtracts —
@@ -565,8 +569,10 @@ async function loadGap(
       const r = runningOnHandFromContext(ctx, ing)
       // Only items counted both times have a starting point.
       if (!r.baseAt || r.baseAt.getTime() !== prev.countedAt.getTime()) continue
+      // No whole line on this count (a box with no size): nothing to compare.
+      const got = counted.get(ing.id)
+      if (got === undefined) continue
       onRows.add(ing.id)
-      const got = counted.get(ing.id) ?? 0
       const missing = r.onHand - got
       const adj = sumAdjustments(adjBy.get(ing.id) ?? [])
       // Shown in lb when the recipes use oz; dollars are worked out first.
@@ -612,7 +618,12 @@ export type LatestGap = {
   to: string
   /** Items counted both times: what the figure covers. */
   items: number
-  missingDollars: number
+  /**
+   * Σ of the shortages on the compared items that have a price. Null when none
+   * of them could be valued (nothing counted both times, or no prices): an
+   * unknown, never $0.
+   */
+  missingDollars: number | null
   /** Compared items with no price on file: not in `missingDollars`. */
   unpriced: number
 }
@@ -626,12 +637,13 @@ export async function loadLatestGap(accountId: string, storeId: string): Promise
   })
   if (!cur || !prev) return null
   const gap = await loadGap(accountId, storeId, cur, prev)
+  const unpriced = gap.rows.filter((r) => r.missingDollars === null).length
   return {
     from: dayLabel(prev.countedAt),
     to: dayLabel(cur.countedAt),
     items: gap.rows.length,
-    missingDollars: gap.missingDollars,
-    unpriced: gap.rows.filter((r) => r.missingDollars === null).length,
+    missingDollars: unpriced < gap.rows.length ? gap.missingDollars : null,
+    unpriced,
   }
 }
 

@@ -15,9 +15,12 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ s
   if (!hasOwnerAccess(session.user.role)) redirect("/dashboard/forbidden")
   const sp = await searchParams
 
+  // The switcher counts "N to order" from the draft at the cover shown here,
+  // so the cell for this store and the draft under it are the same build.
+  const coverDays = parseCoverDays(sp.cover)
   const sections = {
-    ...getDraftOrderSectionPromises({ accountId: session.user.accountId, storeId: sp.store, coverDays: parseCoverDays(sp.cover) }),
-    ...getInventorySwitcherSectionPromises({ accountId: session.user.accountId }),
+    ...getDraftOrderSectionPromises({ accountId: session.user.accountId, storeId: sp.store, coverDays }),
+    ...getInventorySwitcherSectionPromises({ accountId: session.user.accountId, coverDays }),
   }
 
   return (

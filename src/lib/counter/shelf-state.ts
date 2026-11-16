@@ -9,21 +9,34 @@
  *
  * The rule table, first match wins:
  *
- *   | The line                                              | State         |
- *   | ----------------------------------------------------- | ------------- |
- *   | no line on the store's last finished count            | `not_counted` |
- *   | a box with something in it and no size, or a partial  | `cant_tell`   |
- *   |   line (another stop of the same item has such a box) |               |
- *   | counted zero, and nothing has come in since           | `out`         |
- *   | has a use rate: the draft order's own reading         | `order_now` / |
- *   |                                                       | `order_soon` /|
- *   |                                                       | `ok`          |
- *   | has a use rate the draft cannot read (below zero, or  | `cant_tell`   |
- *   |   no count it may start from)                         |               |
- *   | counted, nothing on the menu uses it                  | `in_stock`    |
+ *   | The item                                               | State         |
+ *   | ------------------------------------------------------ | ------------- |
+ *   | never on a finished count                              | `not_counted` |
+ *   | counted at zero, and nothing on hand now (a delivery   | `out`         |
+ *   |   since puts it back in the rows below)                |               |
+ *   | has a use rate the draft order can read                | `order_now` / |
+ *   |                                                        | `order_soon` /|
+ *   |                                                        | `ok`          |
+ *   | its latest count has a box with no size, and the draft | `cant_tell`   |
+ *   |   has no older count to read it from                   |               |
+ *   | has a use rate the draft cannot read (on hand reads    | `cant_tell`   |
+ *   |   below zero)                                          |               |
+ *   | nothing on the menu uses it, and what was counted has  | `out`         |
+ *   |   since been logged off (waste, theft, sent back)      |               |
+ *   | counted, nothing on the menu uses it                   | `in_stock`    |
  *
- * It never guesses. A line the app cannot read is `cant_tell`, never "fine",
- * and a line nobody counted is `not_counted`, never zero.
+ * "Counted" is the item's LATEST finished count line, the same line the draft
+ * order rolls forward from: an item skipped on a recount keeps its older
+ * number, on the shelf as on the order.
+ *
+ * The draft order's reading comes before the box with no size on purpose.
+ * When the latest count has such a box the draft starts from the count before
+ * it, and where it can do that the shelf says what the Order tab says: the
+ * two never disagree about an item the draft has a line for. The only items
+ * in "to order now" that the draft has no line for are the `out` ones.
+ *
+ * It never guesses. An item the app cannot read is `cant_tell`, never "fine",
+ * and an item nobody counted is `not_counted`, never zero.
  */
 
 /**
@@ -41,14 +54,16 @@ export type ShelfFlow = "now" | "soon" | "ok" | "unknown"
 
 export interface ShelfStateInput {
   /**
-   * This item on the store's last finished count: the total counted, in recipe
-   * units, and whether any box with something in it had no size (the saved
-   * line is then only a floor). Null when the count has no line for it.
+   * The item's latest finished count line: the total counted, in recipe units,
+   * and whether a box with something in it had no size (the saved line is then
+   * only a floor, and the draft order starts from the count before). Null when
+   * the item has never been on a finished count.
    */
   counted: { qty: number; unsized: boolean } | null
   /**
-   * On hand now: the count rolled forward by deliveries, use and waste. Null
-   * when there is no count it may roll forward from.
+   * On hand now: the count the draft starts from, rolled forward by
+   * deliveries, use and what was logged off. Null when there is no count it
+   * may roll forward from.
    */
   onHandNow: number | null
   /** Null when nothing on the menu uses the item, so it has no run-out date. */
@@ -58,14 +73,18 @@ export interface ShelfStateInput {
 export function shelfState(input: ShelfStateInput): ShelfState {
   const { counted, onHandNow, flow } = input
   if (counted === null) return "not_counted"
-  if (counted.unsized) return "cant_tell"
-  // A delivery since the count puts something back on the shelf: the line is
-  // then read like any other, not left at "Out".
-  if (!(counted.qty > 0) && !(onHandNow !== null && onHandNow > 0)) return "out"
+  const onHand = onHandNow !== null && onHandNow > 0
+  // Counted at zero stays Out until something comes in, including when sales
+  // posted since make on hand read below zero: the shelf was empty.
+  if (!counted.unsized && !(counted.qty > 0) && !onHand) return "out"
   if (flow === "now") return "order_now"
   if (flow === "soon") return "order_soon"
   if (flow === "ok") return "ok"
+  if (counted.unsized) return "cant_tell"
   if (flow === "unknown") return "cant_tell"
+  // Nothing on the menu uses it, so only the log can empty it: counted, then
+  // all of it thrown out or taken off since.
+  if (onHandNow !== null && !onHand) return "out"
   return "in_stock"
 }
 
@@ -102,7 +121,7 @@ export function stateCounts(lines: ReadonlyArray<{ state: ShelfState }>): Record
 export interface ShelfCoverage {
   /** Lines on the count list. */
   lines: number
-  /** Lines on the last finished count. */
+  /** Lines that have been on a finished count, the last one or an older one. */
   counted: number
   /** Counted lines with a dollar value: every box sized and a price on file. */
   valued: number

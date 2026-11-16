@@ -16,10 +16,8 @@ const counted = (qty: number, unsized = false) => ({ qty, unsized })
 describe("shelfState: the rule table", () => {
   // [what the line is, input, state]
   const table: Array<[string, Parameters<typeof shelfState>[0], ShelfState]> = [
-    ["no line on the last finished count", { counted: null, onHandNow: null, flow: null }, "not_counted"],
-    ["no line on the last count, even with a draft reading from an older one", { counted: null, onHandNow: 40, flow: "now" }, "not_counted"],
-    ["a box with something in it and no size", { counted: counted(12, true), onHandNow: null, flow: null }, "cant_tell"],
-    ["a partial line that also reads zero", { counted: counted(0, true), onHandNow: null, flow: "unknown" }, "cant_tell"],
+    ["never on a finished count", { counted: null, onHandNow: null, flow: null }, "not_counted"],
+    ["never on a finished count, whatever else is passed", { counted: null, onHandNow: 40, flow: "now" }, "not_counted"],
     ["counted zero, nothing uses it", { counted: counted(0), onHandNow: 0, flow: null }, "out"],
     ["counted zero, with a use rate", { counted: counted(0), onHandNow: 0, flow: "now" }, "out"],
     ["counted zero, sales since push it below zero", { counted: counted(0), onHandNow: -3, flow: "unknown" }, "out"],
@@ -29,8 +27,19 @@ describe("shelfState: the rule table", () => {
     ["has a use rate, order by a later day", { counted: counted(70), onHandNow: 60, flow: "soon" }, "order_soon"],
     ["has a use rate, enough on hand", { counted: counted(70), onHandNow: 65, flow: "ok" }, "ok"],
     ["has a use rate, on hand reads below zero", { counted: counted(5), onHandNow: -2, flow: "unknown" }, "cant_tell"],
+    // A box with no size on the latest count: the draft starts from the count
+    // before, and the shelf says what the Order tab says.
+    ["a box with no size, the draft says order today from the count before", { counted: counted(12, true), onHandNow: 3, flow: "now" }, "order_now"],
+    ["a box with no size, the draft says order soon", { counted: counted(12, true), onHandNow: 20, flow: "soon" }, "order_soon"],
+    ["a box with no size, the draft says enough", { counted: counted(12, true), onHandNow: 90, flow: "ok" }, "ok"],
+    ["a box with no size and no count before it", { counted: counted(12, true), onHandNow: null, flow: "unknown" }, "cant_tell"],
+    ["a box with no size, nothing uses it", { counted: counted(12, true), onHandNow: null, flow: null }, "cant_tell"],
+    ["a box with no size is never out, even when its sized boxes are empty", { counted: counted(0, true), onHandNow: null, flow: null }, "cant_tell"],
     ["counted, no use rate", { counted: counted(8), onHandNow: 8, flow: null }, "in_stock"],
     ["counted, no use rate, nothing to roll forward from", { counted: counted(8), onHandNow: null, flow: null }, "in_stock"],
+    // Nothing sells it, so only the log can empty it.
+    ["counted, no use rate, all of it logged as waste since", { counted: counted(8), onHandNow: 0, flow: null }, "out"],
+    ["counted, no use rate, more logged off than was counted", { counted: counted(8), onHandNow: -2, flow: null }, "out"],
   ]
 
   test.each(table)("%s", (_name, input, state) => {

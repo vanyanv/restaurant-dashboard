@@ -6,9 +6,11 @@ import {
   runningOnHandFromContext,
   dailyDepletionRateFromContext,
 } from "@/lib/inventory/store-inventory-context"
+import type { RunningOnHandResult } from "@/lib/inventory/running-on-hand"
 import { computeForecastShapedDepletion } from "@/lib/inventory/forecast-depletion"
 import { normalizeVendorName } from "@/lib/vendor-normalize"
 import { daysUntilOut, draftLine, type DraftLine } from "@/lib/counter/draft-orders"
+import { countedAgo } from "@/lib/counter/counted-ago"
 import { fmtQty } from "@/lib/counter/count-layers"
 import { plainName } from "@/lib/counter/plain-names"
 import { classify, guardSection, type StreamedSections } from "./types"
@@ -21,8 +23,11 @@ import type { SectionData } from "@/lib/counter/section-data"
  * never happened, rolling on hand forward from the count before. The arithmetic is
  * `draftLine` in `draft-orders.ts`; this file only gathers its inputs.
  *
- * Tenancy: the store is matched on `accountId`, ingredients and lead times are
- * filtered by it, and invoice lines go through `invoice.store.accountId`.
+ * Tenancy: `loadStoreDraft` is the one way in, and it reads the store by
+ * `id` AND `accountId` before anything else: the inventory context it then
+ * loads filters by `storeId` alone, so a store from another account stops
+ * here. Ingredients and lead times are filtered by the account, and invoice
+ * lines go through `invoice.store.accountId`.
  */
 
 const DAY_MS = 86_400_000
@@ -89,18 +94,6 @@ export type StockRow = {
   stale: boolean
 }
 
-/** One card per store: how big its draft is right now. */
-export type StoreSummary = {
-  id: string
-  name: string
-  skip: boolean
-  lines: number
-  urgent: number
-  dollars: number
-  unpriced: number
-  notCounted: number
-}
-
 export type DraftData = {
   stores: DraftStore[]
   store: DraftStore
@@ -110,15 +103,16 @@ export type DraftData = {
   notCounted: string[]
   belowZero: string[]
   stock: StockRow[]
-  summaries: StoreSummary[]
 }
 
 export type DraftSections = { drafts: SectionData<DraftData | null> }
 
 /** What the draft worked out for one ingredient, whether or not anything uses it. */
 export type DraftRead = {
-  /** The last count rolled forward to now, in recipe units. Null with no count to start from. */
+  /** The count it starts from, rolled forward to now, in recipe units. Null with no count to start from. */
   onHand: number | null
+  /** When that count was taken. Null with no count to start from. */
+  countedAt: Date | null
   /** The vendor on its most recent invoice at this store. */
   vendor: string | null
 }
@@ -126,16 +120,29 @@ export type DraftRead = {
 /** One store's draft, plus the per-ingredient reading the shelf views are built on. */
 export type StoreDraft = Pick<DraftData, "vendors" | "covered" | "notCounted" | "belowZero" | "stock"> & {
   reads: Map<string, DraftRead>
+  /** "Skip this week's count" is on for this store. */
+  skip: boolean
+  /**
+   * With the skip on, only counts finished before this moment are read. Null:
+   * every finished count. The shelf views read the same counts the draft did.
+   */
+  countsBefore: Date | null
 }
 
 /**
  * One store's draft, once per request. Order next, the Inventory overview, the
  * Shelf tab and the store switcher all read THIS, so "order today" on one of
  * them is the same line as on the others.
+ *
+ * Everything that does not depend on how long the order should last (the
+ * queries, on hand, the use rate) is `loadDraftInputs`, also once per request:
+ * Order next at "two weeks" beside a switcher at the default does that work
+ * once and only the last step twice. Throws when the store is not in the
+ * account.
  */
 export const loadStoreDraft = cache(
-  (accountId: string, storeId: string, coverDays: number, skipCount: boolean): Promise<StoreDraft> =>
-    buildDrafts(accountId, storeId, coverDays, new Date(), skipCount),
+  async (accountId: string, storeId: string, coverDays: number): Promise<StoreDraft> =>
+    draftFor(await loadDraftInputs(accountId, storeId), coverDays),
 )
 
 function q(n: number): string {
@@ -147,10 +154,7 @@ function dayLabel(d: Date): string {
 }
 
 function countedLabel(at: Date, asOf: Date): string {
-  const days = Math.floor((asOf.getTime() - at.getTime()) / DAY_MS)
-  if (days <= 0) return "Counted today"
-  if (days === 1) return "Counted yesterday"
-  return `Counted ${days} days ago`
+  return `Counted ${countedAgo(at, asOf)}`
 }
 
 function whenLabel(line: DraftLine, asOf: Date): { when: string; urgent: boolean } {
@@ -174,36 +178,62 @@ export function getDraftOrderSectionPromises(opts: { accountId: string; storeId?
         ).map((s) => ({ id: s.id, name: s.name, skip: s.draftSkipCount }))
         const store = stores.find((s) => s.id === opts.storeId) ?? stores[0]
         if (!store) return null
-        // Every store is drafted so the store cards can compare them; the
-        // picked one is shown in full.
-        const built = await Promise.all(stores.map((s) => loadStoreDraft(opts.accountId, s.id, opts.coverDays, s.skip)))
-        const summaries: StoreSummary[] = stores.map((s, i) => {
-          const b = built[i]
-          const rows = b.vendors.flatMap((v) => v.rows)
-          return {
-            ...s,
-            lines: rows.length,
-            urgent: rows.filter((r) => r.urgent).length,
-            dollars: b.vendors.reduce((t, v) => t + v.dollars, 0),
-            unpriced: b.vendors.reduce((t, v) => t + v.unpriced, 0),
-            notCounted: b.notCounted.length,
-          }
-        })
-        const { vendors, covered, notCounted, belowZero, stock } = built[stores.indexOf(store)]
-        return { stores, store, coverDays: opts.coverDays, summaries, vendors, covered, notCounted, belowZero, stock }
+        // Only the store shown is drafted here. The other stores' figures are
+        // the store switcher's, from its own section.
+        const { vendors, covered, notCounted, belowZero, stock, skip } = await loadStoreDraft(opts.accountId, store.id, opts.coverDays)
+        return { stores, store: { ...store, skip }, coverDays: opts.coverDays, vendors, covered, notCounted, belowZero, stock }
       }, { retryAction: "count.orders", isEmpty: (d) => d === null, emptyReason: "no_stores" }),
       "count.orders",
     ),
   }
 }
 
-async function buildDrafts(
-  accountId: string,
-  storeId: string,
-  coverDays: number,
-  asOf: Date,
-  skipCount: boolean,
-): Promise<StoreDraft> {
+type DraftIngredient = {
+  id: string
+  name: string
+  recipeUnit: string | null
+  costPerRecipeUnit: number | null
+  caseUnit: string | null
+  recipeUnitsPerCase: number | null
+  innerPackUnit: string | null
+  innerPacksPerCase: number | null
+}
+
+/** One ingredient, as far as it can be read without knowing how long the order should last. */
+type IngredientRead = {
+  ing: DraftIngredient
+  useForecast: boolean
+  series: number[]
+  tailRate: number
+  vendorRaw: string | null
+  /** The vendor's measured delivery time; undefined when there are too few invoices. */
+  measured: number | undefined
+  /** The count rolled forward. Null only when nothing uses the item and it has no count. */
+  oh: RunningOnHandResult | null
+}
+
+type DraftInputs = {
+  asOf: Date
+  skip: boolean
+  countsBefore: Date | null
+  /** The first day of the forecast window, and whether today's sales are already in. */
+  from: Date
+  soldToday: boolean
+  rows: IngredientRead[]
+  reads: Map<string, DraftRead>
+}
+
+const loadDraftInputs = cache(async (accountId: string, storeId: string): Promise<DraftInputs> => {
+  const asOf = new Date()
+  // The account boundary, before any store-scoped read below.
+  const store = await prisma.store.findFirst({
+    where: { id: storeId, accountId },
+    select: { draftSkipCount: true },
+  })
+  if (!store) throw new Error("This store is not in your account")
+  const skip = store.draftSkipCount
+  const countsBefore = skip ? new Date(asOf.getTime() - SKIP_WINDOW_DAYS * DAY_MS) : null
+
   const [ingredients, leadRows, liveCtx, vendorLines, olderCounts] = await Promise.all([
     prisma.canonicalIngredient.findMany({
       where: { accountId },
@@ -224,7 +254,7 @@ async function buildDrafts(
       select: { canonicalIngredientId: true, invoice: { select: { vendorName: true } } },
     }),
     // Only for "Skip this week's count": the counts from before the last 7 days.
-    skipCount
+    countsBefore
       ? prisma.stockCountLine.findMany({
           where: {
             ...anchorLineWhere,
@@ -232,7 +262,7 @@ async function buildDrafts(
               storeId,
               store: { accountId },
               status: "COMPLETED",
-              countedAt: { lt: new Date(asOf.getTime() - SKIP_WINDOW_DAYS * DAY_MS) },
+              countedAt: { lt: countsBefore },
             },
           },
           orderBy: { stockCount: { countedAt: "desc" } },
@@ -270,35 +300,51 @@ async function buildDrafts(
     if (l.canonicalIngredientId && !vendorOf.has(l.canonicalIngredientId)) vendorOf.set(l.canonicalIngredientId, l.invoice.vendorName)
   }
 
-  const groups = new Map<string, DraftVendor>()
-  const notCounted: string[] = []
-  const belowZero: string[] = []
-  const stock: StockRow[] = []
+  const rows: IngredientRead[] = []
   const reads = new Map<string, DraftRead>()
-  let covered = 0
-
   for (const ing of ingredients) {
-    const unit = ing.recipeUnit ?? ""
     const shaped = forecast.get(ing.id)
     const flat = dailyDepletionRateFromContext(ctx, ing)
     const useForecast = shaped != null && shaped.totalQty > 0
     const series = useForecast ? shaped.days.map((d) => d.qty) : []
     const tailRate = useForecast ? shaped.meanPerDay : flat.ratePerDay
-    const vendorName = vendorOf.get(ing.id) ?? null
+    const vendorRaw = vendorOf.get(ing.id) ?? null
     // Nothing on the menu uses it, by forecast or by recent sales: there is no
     // sales-based reason to order it, so it is left to the owner. The shelf
     // views still read what is on hand (a delivery since a counted zero means
     // it is no longer out); only a counted item is worth that walk.
-    if (!(tailRate > 0)) {
-      reads.set(ing.id, {
-        onHand: ctx.lastCountByIngredient.has(ing.id) ? runningOnHandFromContext(ctx, ing).onHand : null,
-        vendor: vendorName,
-      })
-      continue
-    }
+    const oh = tailRate > 0 || ctx.lastCountByIngredient.has(ing.id) ? runningOnHandFromContext(ctx, ing) : null
+    reads.set(ing.id, {
+      onHand: oh && oh.baseAt !== null ? oh.onHand : null,
+      countedAt: oh?.baseAt ?? null,
+      vendor: vendorRaw,
+    })
+    rows.push({
+      ing,
+      useForecast,
+      series,
+      tailRate,
+      vendorRaw,
+      measured: vendorRaw ? leadByVendor.get(normalizeVendorName(vendorRaw)) : undefined,
+      oh,
+    })
+  }
+  return { asOf, skip, countsBefore, from, soldToday, rows, reads }
+})
 
-    const oh = runningOnHandFromContext(ctx, ing)
-    reads.set(ing.id, { onHand: oh.baseAt === null ? null : oh.onHand, vendor: vendorName })
+/** The draft itself, for one "how long should it last". Arithmetic only: no query. */
+function draftFor(inputs: DraftInputs, coverDays: number): StoreDraft {
+  const { asOf, from, soldToday } = inputs
+  const groups = new Map<string, DraftVendor>()
+  const notCounted: string[] = []
+  const belowZero: string[] = []
+  const stock: StockRow[] = []
+  let covered = 0
+
+  for (const { ing, useForecast, series, tailRate, vendorRaw, measured, oh } of inputs.rows) {
+    // No use rate: nothing to draft. Its on-hand reading is in `reads`.
+    if (!(tailRate > 0) || !oh) continue
+    const unit = ing.recipeUnit ?? ""
 
     if (oh.baseAt === null) {
       notCounted.push(plainName(ing.name))
@@ -319,8 +365,6 @@ async function buildDrafts(
       continue
     }
 
-    const vendorRaw = vendorOf.get(ing.id) ?? null
-    const measured = vendorRaw ? leadByVendor.get(normalizeVendorName(vendorRaw)) : undefined
     const leadDays = measured ?? FALLBACK_LEAD_DAYS
     const line = draftLine({
       onHand: oh.onHand,
@@ -411,5 +455,5 @@ async function buildDrafts(
   // because they need a hand before anything else can be trusted.
   const rank = (r: StockRow) => (r.status === "unknown" ? -1 : r.daysLeft ?? 999)
   stock.sort((a, b) => rank(a) - rank(b) || a.name.localeCompare(b.name))
-  return { vendors, covered, notCounted, belowZero, stock, reads }
+  return { vendors, covered, notCounted, belowZero, stock, reads: inputs.reads, skip: inputs.skip, countsBefore: inputs.countsBefore }
 }

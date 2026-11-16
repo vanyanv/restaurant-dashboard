@@ -119,7 +119,7 @@ function Lead({ shelf, out, now, soon }: { shelf: StoreShelf; out: number; now: 
       <section className="iv-card iv-lead iv-a-lead" aria-label="What to order">
         <div className="iv-lead__n iv-lead__n--text"><strong>Not counted yet</strong></div>
         <p className="iv-say">
-          {shelf.name} has no finished count, so there is nothing to order from yet.
+          {shelf.name} has no finished count{shelf.skip ? " from before the last 7 days" : ""}, so there is nothing to order from yet.
           <small>{shelf.openCount !== null ? `A count is open with ${plural(shelf.openCount, "line")} saved. Finish it and the order appears here.` : "Count the shelves once and this page fills in."}</small>
         </p>
         <Link className="iv-btn iv-btn--ink" href={href(`/dashboard/count/walk?store=${shelf.id}`)}>
@@ -139,7 +139,8 @@ function Lead({ shelf, out, now, soon }: { shelf: StoreShelf; out: number; now: 
   if (soon > 0) more.push(`${soon} more: ${shelf.soonTitle.replace(/^Order/, "order")}.`)
   if (c.cant_tell > 0) more.push(`${plural(c.cant_tell, "line")} can't be read yet.`)
   if (c.not_counted > 0) more.push(`${plural(c.not_counted, "line")} not counted.`)
-  if (shelf.lastCount?.stale) more.push(`The count is from ${shelf.lastCount.ago}, so this has drifted.`)
+  if (shelf.skip) more.push(`Skip this week's count is on, so this is read from the ${shelf.lastCount?.day ?? "older"} count.`)
+  else if (shelf.lastCount?.stale) more.push(`The count is from ${shelf.lastCount.ago}, so this has drifted.`)
 
   return (
     <section className="iv-card iv-lead iv-a-lead" aria-label="What to order">
@@ -206,10 +207,13 @@ function Bucket({
               </span>
             )}
             <DaysBar line={r} barDays={barDays} />
+            {r.from ? <span>From the {r.from} count</span> : null}
           </div>
           <div className="iv-o__r">
             {r.order ? <b>Order {r.order}</b> : <b className="soft">No draft yet</b>}
-            {r.vendor ? <small>{r.order ? "from" : "last from"} {r.vendor}</small> : null}
+            {r.belowZero
+              ? <small>Reads below zero: count it again</small>
+              : r.vendor ? <small>{r.order ? "from" : "last from"} {r.vendor}</small> : null}
             {fold && needsOrderNow(r.state) === false && r.when && r.when !== title ? <small>{r.when}</small> : null}
           </div>
         </li>
@@ -246,8 +250,9 @@ function Needs({ shelf }: { shelf: StoreShelf }) {
   const counted = shelf.lines.filter((l) => l.state !== "not_counted")
   const unsized = counted.filter((l) => l.notValuedWhy === "size")
   const unpriced = counted.filter((l) => l.notValuedWhy === "price")
+  const changed = counted.filter((l) => l.notValuedWhy === "boxes")
   const below = shelf.lines.filter((l) => l.belowZero)
-  const missed = shelf.lastCount ? shelf.lines.filter((l) => l.state === "not_counted") : []
+  const never = shelf.lastCount ? shelf.lines.filter((l) => l.state === "not_counted") : []
   const walk = href(`/dashboard/count/walk?store=${shelf.id}`)
   const groups = [
     unsized.length > 0 && {
@@ -269,16 +274,26 @@ function Needs({ shelf }: { shelf: StoreShelf }) {
     below.length > 0 && {
       n: below.length,
       title: `${below.length === 1 ? "count looks" : "counts look"} off`,
-      body: "Sales since the count used more than was counted, so on hand reads below zero. Count again and the order can be trusted.",
+      body: "More was used or logged off since the count than was counted, so on hand reads below zero and the draft order leaves these out. A delivery may not be invoiced yet. Count again and the order can be trusted.",
       names: below,
       btn: `Count ${shelf.name}`,
       to: walk,
     },
-    missed.length > 0 && {
-      n: missed.length,
-      title: `${missed.length === 1 ? "line" : "lines"} not on the last count`,
-      body: `Left blank on the ${shelf.lastCount?.day ?? "last"} count. A blank is not a zero, so nothing is ordered from it.`,
-      names: missed,
+    changed.length > 0 && {
+      n: changed.length,
+      title: `${changed.length === 1 ? "line" : "lines"} to count again`,
+      body: "A size or a box was changed in Sizes & list after the count, so what was typed then can't be turned into an amount. Count again and they are valued.",
+      names: changed,
+      btn: `Count ${shelf.name}`,
+      to: walk,
+    },
+    never.length > 0 && {
+      n: never.length,
+      title: `${never.length === 1 ? "line" : "lines"} never counted`,
+      body: shelf.skip
+        ? "Not on any count from before the last 7 days, which is all the page reads while this week's count is skipped. A blank is not a zero, so nothing is ordered from it."
+        : `Not on any finished count at ${shelf.name} yet. A blank is not a zero, so nothing is ordered from it.`,
+      names: never,
       btn: `Count ${shelf.name}`,
       to: walk,
     },
@@ -393,11 +408,12 @@ function StoreCard({ shelf, areas }: { shelf: StoreShelf; areas: ShelfData["area
         </p>
       )}
       <p className="iv-store__m">
-        {shelf.lastCount ? `Counted ${shelf.lastCount.day}, ${shelf.lastCount.ago}. ` : ""}
+        {shelf.skip ? "Skipping this week's count. " : ""}
+        {shelf.lastCount ? `Counted ${shelf.lastCount.day}, ${shelf.lastCount.ago}${shelf.lastCount.older > 0 ? `, ${plural(shelf.lastCount.older, "line")} from older counts` : ""}. ` : ""}
         {!shelf.lastCount && shelf.openCount !== null ? `A count is open with ${plural(shelf.openCount, "line")} saved. ` : ""}
         {c.dollars !== null ? <><b>{money(c.dollars)}</b> on the shelf, </> : null}
         {coverageSay(shelf)}
-        {shelf.missing ? <> <b>{money(shelf.missing.missingDollars)}</b> went missing.</> : null}
+        {shelf.missing && shelf.missing.missingDollars !== null ? <> <b>{money(shelf.missing.missingDollars)}</b> went missing.</> : null}
         {shelf.waste.entries > 0 && shelf.waste.unpriced < shelf.waste.entries ? <> <b>{money(shelf.waste.dollars)}</b> thrown out.</> : null}
       </p>
       <div className="iv-store__btns">

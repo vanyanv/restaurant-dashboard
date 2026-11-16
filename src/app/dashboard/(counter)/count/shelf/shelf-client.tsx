@@ -8,7 +8,7 @@ import type { SectionSources } from "@/lib/counter/adapters/types"
 import type { ShelfData, ShelfLine, ShelfSections, StoreShelf } from "@/lib/counter/adapters/inventory-shelf"
 import { ALL_STORES, needsOrderNow, shelfCoverage } from "@/lib/counter/shelf-state"
 import { CountHead, StoreSwitch, money } from "../count-ui"
-import { DaysBar, Fresh, Legend, MiniMap, NotYet, PinnedActions, ShelfMap, StatePill, linesIn } from "../shelf-ui"
+import { DaysBar, Fresh, Legend, MiniMap, NotYet, PinnedActions, ShelfMap, StatePill, freshSay, linesIn } from "../shelf-ui"
 
 /**
  * Inventory — Shelf. The shelf map, then the last count line by line in the
@@ -184,7 +184,7 @@ function Row({ line: l, barDays }: { line: ShelfLine; barDays: number }) {
           {l.dollars !== null
             ? <span className="v">{money(l.dollars)}</span>
             // One "Not valued yet" a row: the state pill says it for a box with no size.
-            : l.notValuedWhy === "price" ? <NotYet>Not valued yet</NotYet> : null}
+            : l.notValuedWhy === "price" || l.notValuedWhy === "boxes" ? <NotYet>Not valued yet</NotYet> : null}
         </div>
       )}
       <DaysBar line={l} barDays={barDays} />
@@ -195,6 +195,7 @@ function Row({ line: l, barDays }: { line: ShelfLine; barDays: number }) {
         </p>
       )}
       {l.note && <p className="iv-it__x">{l.note}.</p>}
+      {l.from && <p className="iv-it__x">From the {l.from} count.</p>}
     </li>
   )
 }
@@ -232,9 +233,8 @@ function AllShelves({ data }: { data: ShelfData }) {
             </div>
             {s.lines.length > 0 ? <MiniMap shelf={s} areas={data.areas} /> : <p className="iv-quiet">No count list yet.</p>}
             <p className="iv-store__m">
-              {s.lastCount
-                ? `Counted ${s.lastCount.day}, ${s.lastCount.ago}. ${s.coverage.counted} of ${s.coverage.lines} lines.`
-                : "No finished count yet."}
+              {s.skip ? "Skipping this week's count. " : ""}
+              {freshSay(s)}{s.lastCount ? "." : ""}
             </p>
             <div className="iv-store__btns">
               <Link className="iv-btn iv-btn--sm" href={href(`/dashboard/count/shelf?store=${s.id}`)}>Open {s.name} shelf</Link>

@@ -6,7 +6,7 @@ import type { WalkSections } from "@/lib/counter/adapters/count"
 import { CountHead } from "@/app/dashboard/(counter)/count/count-ui"
 import { CountWalk } from "@/app/dashboard/(counter)/count/count-walk"
 
-/** The weekly count on a phone: the same walk as the desk, with the same four tabs. */
+/** The weekly count on a phone, at /m/count/walk: the same walk as the desk, under the same Inventory tabs. */
 export function PhoneCountClient({ sections }: { sections: SectionSources<WalkSections> }) {
   const { pending } = useCounterTransition()
   return (
