@@ -54,7 +54,7 @@ function useAction() {
 
 function summary(it: SetupItem): string {
   return it.layers
-    .map((l, i) => (i === it.layers.length - 1 && l.per === 1 && l.of === it.unit ? l.label : `${l.label} = ${fmtQty(l.qty)} ${l.of}`))
+    .map((l, i) => (l.unsized ? `${l.label} (size not set)` : i === it.layers.length - 1 && l.per === 1 && l.of === it.unit ? l.label : `${l.label} = ${fmtQty(l.qty)} ${l.of}`))
     .join(" · ")
 }
 
@@ -129,8 +129,8 @@ type Draft = { label: string; qty: string; of: string; quarters: boolean }
 
 function Editor({ item, busy, onSave }: { item: SetupItem; busy: boolean; onSave: (area: string, layers: LayerInput[]) => void }) {
   const [area, setArea] = useState(item.area)
-  const [rows, setRows] = useState<Draft[]>(() => item.layers.map((l) => ({ label: l.label, qty: fmtQty(l.qty).replace(/,/g, ""), of: l.of, quarters: Boolean(l.quarters) })))
-  const layers: LayerInput[] = rows.map((r) => ({ label: r.label, qty: Number(r.qty), of: r.of, quarters: r.quarters }))
+  const [rows, setRows] = useState<Draft[]>(() => item.layers.map((l) => ({ label: l.label, qty: l.unsized ? "" : fmtQty(l.qty).replace(/,/g, ""), of: l.of, quarters: Boolean(l.quarters) })))
+  const layers: LayerInput[] = rows.map((r) => ({ label: r.label, qty: Number(r.qty), of: r.of, quarters: r.quarters, ...(r.qty.trim() === "" ? { unsized: true } : {}) }))
   const check = resolveLayers(layers, item.unit)
   const set = (i: number, patch: Partial<Draft>) => setRows((rs) => rs.map((r, j) => (j === i ? { ...r, ...patch } : r)))
 
@@ -145,7 +145,7 @@ function Editor({ item, busy, onSave }: { item: SetupItem; busy: boolean; onSave
             ))}
           </select>
         </label>
-        <span className="cw__sub">Recipes use {item.unit}. Biggest first: how it comes in, then what&apos;s inside, then loose.</span>
+        <span className="cw__sub">Recipes use {item.unit}. Biggest first: how it comes in, then what&apos;s inside, then loose. Don&apos;t know a size yet? Leave it blank: the count is kept as typed and left out of the total.</span>
       </div>
       {rows.map((r, i) => {
         const lower = rows.slice(i + 1).map((x) => x.label.trim()).filter(Boolean)
@@ -155,7 +155,7 @@ function Editor({ item, busy, onSave }: { item: SetupItem; busy: boolean; onSave
             <span className="cw__mono" style={{ width: 92 }}>{i === 0 ? "How it comes" : i === rows.length - 1 ? "Loose" : "Inside it"}</span>
             <input className="cw__input" style={{ width: 170 }} value={r.label} aria-label="Layer name" placeholder="Case" onChange={(e) => set(i, { label: e.target.value })} />
             <span>holds</span>
-            <input className="cw__input" style={{ width: 80 }} inputMode="decimal" value={r.qty} aria-label={`How many in one ${r.label}`} onChange={(e) => set(i, { qty: e.target.value })} />
+            <input className="cw__input" style={{ width: 80 }} inputMode="decimal" value={r.qty} placeholder="size?" aria-label={`How many in one ${r.label}`} onChange={(e) => set(i, { qty: e.target.value })} />
             <select className="cw__input" value={choices.includes(r.of) ? r.of : ""} aria-label="Of what" onChange={(e) => set(i, { of: e.target.value })}>
               {!choices.includes(r.of) && <option value="">Pick…</option>}
               {choices.map((c) => (
@@ -180,7 +180,7 @@ function Editor({ item, busy, onSave }: { item: SetupItem; busy: boolean; onSave
         )}
         <span className={`cw__msg ${check.ok ? "cw__msg--ok" : "cw__msg--bad"}`}>
           {check.ok
-            ? check.layers.map((l) => `1 ${l.label} = ${fmtQty(l.per)} ${item.unit}`).join(" · ")
+            ? check.layers.map((l) => (l.unsized ? `${l.label}: no size yet, kept as typed` : `1 ${l.label} = ${fmtQty(l.per)} ${item.unit}`)).join(" · ")
             : check.error}
         </span>
       </div>

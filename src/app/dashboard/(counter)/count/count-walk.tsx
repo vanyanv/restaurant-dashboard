@@ -6,7 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation"
 import { useSurfaceHref } from "@/components/counter"
 import { finishCount, saveCountItem, startCount } from "@/lib/counter/actions/count"
 import type { WalkData, WalkItem } from "@/lib/counter/adapters/count"
-import { COUNT_AREAS, describeShelf, fmtQty, hasAnyValue, shelfTotal, showQty } from "@/lib/counter/count-layers"
+import { COUNT_AREAS, describeShelf, fmtQty, hasAnyValue, shelfTotal, showQty, unconverted, type Layer } from "@/lib/counter/count-layers"
 import { money, OutcomeLine, type Outcome } from "./count-ui"
 import { clearDraft, readDraft, writeDraft } from "@/components/counter/keep/use-draft"
 
@@ -39,8 +39,27 @@ function cleanOf(raw: string[]): number[] {
   return raw.map(parse).map((v) => (v == null || Number.isNaN(v) ? 0 : v))
 }
 
+/**
+ * What is on the shelf, in words: "360 lb", or "360 lb + 3 Trays" when some
+ * boxes have no size yet, or just "14 Chubs" when none of them do. The
+ * unsized part is shown as typed, never converted by a guess.
+ */
+function onHandText(layers: Layer[], unit: string, values: ReadonlyArray<number>): string {
+  const left = unconverted(layers, values)
+  if (!left) return showQty(shelfTotal(layers, values), unit)
+  const sized = layers.map((l, i) => (l.unsized ? 0 : (values[i] ?? 0)))
+  return hasAnyValue(sized) ? `${showQty(shelfTotal(layers, values), unit)} + ${left}` : left
+}
+
+/** Typed now or last time, some of it can't be compared: no "vs last", no warning. */
+function comparable(it: WalkItem, values: ReadonlyArray<number>): boolean {
+  if (unconverted(it.layers, values)) return false
+  return !(it.last?.values && unconverted(it.layers, it.last.values))
+}
+
 function lastText(it: WalkItem): string | null {
   if (!it.last) return null
+  if (it.last.values && unconverted(it.layers, it.last.values)) return onHandText(it.layers, it.unit, it.last.values)
   const shelf = it.last.values && hasAnyValue(it.last.values) ? `${describeShelf(it.layers, it.last.values)} · ` : ""
   return `${shelf}${showQty(it.last.qty, it.unit)}`
 }
@@ -169,7 +188,7 @@ export function CountWalk({ data, base }: { data: WalkData; base: "/dashboard/co
     const r = resumeId ? items.findIndex((i) => i.id === resumeId) : -1
     return r >= 0 ? r : firstOpen()
   })()
-  const offItems = items.filter((it) => savedIds.has(it.id) && !okIds.has(it.id) && offNote(it, totalOf(it)) != null)
+  const offItems = items.filter((it) => savedIds.has(it.id) && !okIds.has(it.id) && comparable(it, cleanOf(rawOf(it))) && offNote(it, totalOf(it)) != null)
   const skipped = items.filter((it) => !savedIds.has(it.id))
 
   // On the desk sheet two rows can save before the count exists; they share
@@ -461,7 +480,8 @@ function ItemScreen({
   const total = shelfTotal(it.layers, clean)
   const empty = !hasAnyValue(clean)
   const pos = section.idxs.indexOf(idx)
-  const off = offNote(it, total)
+  const canCompare = comparable(it, clean)
+  const off = canCompare ? offNote(it, total) : null
   const last = lastText(it)
   const set = (i: number, s: string) => onType(it.layers.map((_, j) => (j === i ? s : (raw[j] ?? ""))))
   const bump = (i: number, dir: 1 | -1) => {
@@ -476,7 +496,7 @@ function ItemScreen({
     if (next) next.focus()
     else save()
   }
-  const caseNote = it.layers.length > 1 ? `1 ${oneOf(it.layers[0].label)} = ${showQty(it.layers[0].per, it.unit)}` : null
+  const caseNote = it.layers.length > 1 && !it.layers[0].unsized ? `1 ${oneOf(it.layers[0].label)} = ${showQty(it.layers[0].per, it.unit)}` : null
 
   return (
     <div className="cw cw--focus">
@@ -504,7 +524,7 @@ function ItemScreen({
           <div className="cw__fld" key={i}>
             <label className="cw__lb" htmlFor={`cw-${it.id}-${i}`}>
               {l.label}
-              <small>{l.per === 1 ? it.unit : it.unit === "each" ? `${l.per.toLocaleString()} per ${oneOf(l.label)}` : `${showQty(l.per, it.unit)} each`}{l.quarters ? " · in quarters" : ""}</small>
+              <small>{l.unsized ? "size not set yet" : l.per === 1 ? it.unit : it.unit === "each" ? `${l.per.toLocaleString()} per ${oneOf(l.label)}` : `${showQty(l.per, it.unit)} each`}{l.quarters ? " · in quarters" : ""}</small>
             </label>
             <button type="button" className="cw__step" aria-label={`One less ${l.label}`} onClick={() => bump(i, -1)}>−</button>
             <input
@@ -527,10 +547,11 @@ function ItemScreen({
       </div>
       <div className="cw__hero" aria-live="polite">
         <span className="cw__mono">On hand now</span>
-        <b>{showQty(total, it.unit)}</b>
+        <b>{onHandText(it.layers, it.unit, clean)}</b>
         <span>
           {empty ? "Nothing entered yet" : describeShelf(it.layers, clean)}
-          {!empty && vsLast(it, total) ? ` · ${vsLast(it, total)}` : ""}
+          {!empty && canCompare && vsLast(it, total) ? ` · ${vsLast(it, total)}` : ""}
+          {!empty && unconverted(it.layers, clean) ? " · boxes with no size stay out of the total" : ""}
           {it.cost != null && !empty ? ` · ${money(total * it.cost)}` : ""}
         </span>
       </div>
@@ -626,7 +647,8 @@ function Sheet({
             const clean = cleanOf(raw)
             const total = shelfTotal(it.layers, clean)
             const has = hasAnyValue(clean) || savedIds.has(it.id)
-            const off = offNote(it, total)
+            const canCompare = comparable(it, clean)
+            const off = canCompare ? offNote(it, total) : null
             return (
               <div className={`cw-sheet__row ${off ? "cw-sheet__row--off" : ""}`} role="row" key={it.id}>
                 <span className="cw-sheet__name" role="cell">
@@ -658,9 +680,9 @@ function Sheet({
                     </label>
                   ))}
                 </span>
-                <b className="cw-sheet__tot" role="cell">{has ? showQty(total, it.unit) : "—"}</b>
+                <b className="cw-sheet__tot" role="cell">{has ? onHandText(it.layers, it.unit, clean) : "—"}</b>
                 <span className={`cw-sheet__vs ${off ? "cw-sheet__vs--off" : ""}`} role="cell">
-                  {off ? `${off}. Check` : has ? (vsLast(it, total) ?? "") : ""}
+                  {off ? `${off}. Check` : has && canCompare ? (vsLast(it, total) ?? "") : has && unconverted(it.layers, clean) ? "no size yet" : ""}
                 </span>
               </div>
             )

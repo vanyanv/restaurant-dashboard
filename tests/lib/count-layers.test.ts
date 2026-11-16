@@ -4,6 +4,8 @@ import {
   describeShelf,
   guessArea,
   normalizeArea,
+  packLayers,
+  unconverted,
   storedAreasFor,
   areaLabel,
   layersFor,
@@ -119,5 +121,67 @@ describe("storedAreasFor", () => {
     expect(storedAreasFor("fridge").sort()).toEqual(["fridge", "line", "walk_in"])
     expect(storedAreasFor("walk_in").sort()).toEqual(["fridge", "line", "walk_in"])
     expect(storedAreasFor("dry")).toEqual(["dry"])
+  })
+})
+
+describe("boxes with no size yet (count like the sheet)", () => {
+  it("keeps an unsized tray out of the total and names it", () => {
+    const r = resolveLayers(
+      [
+        { label: "Cases", qty: 25, of: "lb" },
+        { label: "Trays", qty: 0, of: "lb", unsized: true },
+      ],
+      "lb",
+    )
+    expect(r.ok).toBe(true)
+    if (!r.ok) return
+    expect(r.layers[1]).toMatchObject({ unsized: true, per: 0 })
+    expect(shelfTotal(r.layers, [3, 2])).toBe(75)
+    expect(unconverted(r.layers, [3, 2])).toBe("2 Trays")
+    expect(unconverted(r.layers, [3, 0])).toBeNull()
+  })
+
+  it("a layer made of unsized ones is unsized too, and all-unsized is allowed", () => {
+    const r = resolveLayers(
+      [
+        { label: "Cases", qty: 4, of: "Chubs" },
+        { label: "Chubs", qty: 0, of: "lb", unsized: true },
+      ],
+      "lb",
+    )
+    expect(r.ok).toBe(true)
+    if (!r.ok) return
+    expect(r.layers.every((l) => l.unsized)).toBe(true)
+    expect(shelfTotal(r.layers, [0, 14])).toBe(0)
+    expect(unconverted(r.layers, [0, 14])).toBe("14 Chubs")
+  })
+
+  it("survives a save and reload", () => {
+    const r = resolveLayers([{ label: "Trays", qty: 0, of: "lb", unsized: true }, { label: "Loose (lb)", qty: 1, of: "lb" }], "lb")
+    if (!r.ok) throw new Error(r.error)
+    const back = parseLayers(JSON.parse(JSON.stringify(r.layers)))
+    expect(back).toHaveLength(2)
+    expect(back[0].unsized).toBe(true)
+    expect(layersFor(back, "lb")[0].unsized).toBe(true)
+  })
+})
+
+describe("packLayers", () => {
+  it("fries: cases of 6 bags of 4.5 lb, entered as cases and bags", () => {
+    const l = packLayers({ recipeUnit: "lb", recipeUnitsPerCase: 27, innerPacksPerCase: 6 })
+    expect(l.map((x) => x.label)).toEqual(["Cases", "Packs"])
+    expect(l[0].per).toBe(27)
+    expect(l[1].per).toBe(4.5)
+    expect(shelfTotal(l, [5, 6])).toBe(162)
+  })
+
+  it("no inner packs: cases plus loose", () => {
+    const l = packLayers({ recipeUnit: "each", recipeUnitsPerCase: 1000, innerPacksPerCase: null })
+    expect(l[0]).toMatchObject({ label: "Cases", per: 1000 })
+    expect(l).toHaveLength(2)
+  })
+
+  it("no case size on file: the plain default", () => {
+    expect(packLayers({ recipeUnit: "lb", recipeUnitsPerCase: null, innerPacksPerCase: null })).toEqual(defaultLayers("lb"))
   })
 })

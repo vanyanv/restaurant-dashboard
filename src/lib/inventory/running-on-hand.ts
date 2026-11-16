@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma"
+import { anchorLineWhere } from "./anchor-line"
 import { walkRecipeForIngredient } from "./recipe-walk"
 import { sumDeliveries, unitsSold } from "./usage-math"
 
@@ -50,6 +51,7 @@ export async function computeRunningOnHand(input: {
 
   const lastCount = await prisma.stockCountLine.findFirst({
     where: {
+      ...anchorLineWhere,
       canonicalIngredientId: input.ingredientId,
       stockCount: {
         storeId: input.storeId,

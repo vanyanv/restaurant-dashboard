@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma"
+import { anchorLineWhere } from "@/lib/inventory/anchor-line"
 import {
   loadStoreInventoryContext,
   runningOnHandFromContext,
@@ -203,6 +204,7 @@ async function buildDrafts(
     skipCount
       ? prisma.stockCountLine.findMany({
           where: {
+            ...anchorLineWhere,
             stockCount: {
               storeId,
               store: { accountId },
