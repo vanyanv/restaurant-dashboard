@@ -13,7 +13,7 @@ import {
 } from "@/lib/counter/actions/checks"
 import type { SectionSources } from "@/lib/counter/adapters/types"
 import type { CrewData, CrewRow, CrewSections } from "@/lib/counter/adapters/checks"
-import { formatUsPhone, pinTextBody, smsHref } from "@/lib/checks/text"
+import { formatUsPhone, howToTextBody, pinTextBody, smsHref } from "@/lib/checks/text"
 import { ChecksHead, OutcomeLine, StorePicker, type Outcome } from "../checks-ui"
 
 /**
@@ -211,7 +211,16 @@ function CrewLine({
               href={smsHref(c.phone, pinTextBody({ firstName: c.firstName, storeName, pin: c.pin, link: checkLink }))}
               title="Opens Messages with the PIN and link filled in. You press send."
             >
-              Text
+              Text PIN
+            </a>
+          )}
+          {c.active && c.phone && checkLink && (
+            <a
+              className="ck-link"
+              href={smsHref(c.phone, howToTextBody({ firstName: c.firstName, storeName, link: checkLink }))}
+              title="Opens Messages with a link to the how-to guide (it saves as a PDF) and the check link. No PIN in it."
+            >
+              Text how-to
             </a>
           )}
           <button type="button" className="ck-link" onClick={() => setEditing(true)}>

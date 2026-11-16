@@ -117,3 +117,20 @@
 .ckb__more:active { background: var(--chrome) }
 .ckb .ckc__row.is-redo { border-color: var(--bad); background: var(--bad-wash) }
 .ckb__redo { color: var(--bad) !important; font-weight: 700 !important }
+
+/* How-to guide at /checks/<code>/how: texted to new crew, saved as a PDF from the print sheet. */
+.ckb__how section { display: grid; gap: 8px }
+.ckb__how h1 { font-family: var(--display); font-size: 26px }
+.ckb__how h2 { font-family: var(--display); font-size: 19px }
+.ckb__how ol { margin: 0; padding-left: 22px; display: grid; gap: 6px; font-size: 16px; line-height: 1.4 }
+.ckb__how p { margin: 0; line-height: 1.45 }
+.ckb__how hr { border: none; border-top: 1px solid var(--line) }
+.ckb__how a.ckc__btn { display: flex; align-items: center; justify-content: center; text-decoration: none }
+.ckb__howlist { margin: 0; padding-left: 18px; display: grid; gap: 4px }
+.ckb__printlink { display: none; font-family: var(--mono); font-size: 12px; word-break: break-all }
+@media print {
+  .ckb__noprint { display: none !important }
+  .ckb__printlink { display: block }
+  .ckb, .ckb .ckc__col { min-height: 0 }
+  .ckb__band { print-color-adjust: exact; -webkit-print-color-adjust: exact }
+}

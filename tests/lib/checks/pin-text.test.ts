@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { formatUsPhone, normalizeUsPhone, pinTextBody, smsHref } from "@/lib/checks/text"
+import { formatUsPhone, howToLink, howToTextBody, normalizeUsPhone, pinTextBody, smsHref } from "@/lib/checks/text"
 
 describe("normalizeUsPhone", () => {
   it("accepts the ways an owner types a number", () => {
@@ -37,5 +37,19 @@ describe("pin text", () => {
     const href = smsHref("+18185550123", body)
     expect(href.startsWith("sms:+18185550123?&body=")).toBe(true)
     expect(decodeURIComponent(href.split("body=")[1])).toBe(body)
+  })
+})
+
+describe("how-to text", () => {
+  it("links the guide and the check page, never the PIN", () => {
+    const body = howToTextBody({ firstName: "Ana", storeName: "Glendale", link: "https://checks.example.com/abc" })
+    expect(body).toContain("https://checks.example.com/abc/how")
+    expect(body).toContain("Open the checks here: https://checks.example.com/abc")
+    expect(body).toContain("Abre las revisiones aquí")
+    expect(body).not.toMatch(/\bPIN\b/)
+  })
+  it("has no guide link while the store has no check link", () => {
+    expect(howToLink("")).toBe("")
+    expect(howToLink("https://x.test/abc/")).toBe("https://x.test/abc/how")
   })
 })

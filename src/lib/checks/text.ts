@@ -43,6 +43,22 @@ export function pinTextBody(t: PinText): string {
   ].join("\n")
 }
 
+/** The how-to guide's address, beside the store's check link. */
+export function howToLink(checkLink: string): string {
+  return checkLink ? `${checkLink.replace(/\/$/, "")}/how` : ""
+}
+
+/** The "Text how-to" message: no PIN (that goes in its own text), just the guide and the check link. */
+export function howToTextBody(t: { firstName: string; storeName: string; link: string }): string {
+  return [
+    `Hi ${t.firstName}, here's how to do store checks at ${t.storeName}: ${howToLink(t.link)}`,
+    `Open the checks here: ${t.link}`,
+    "",
+    `Hola ${t.firstName}, así se hacen las revisiones en ${t.storeName}: ${howToLink(t.link)}`,
+    `Abre las revisiones aquí: ${t.link}`,
+  ].join("\n")
+}
+
 /**
  * Opens Messages addressed to `phone` with `body` filled in. `?&body=` is the
  * form both iOS (which wants `&`) and Android (which wants `?`) accept.
