@@ -16,8 +16,11 @@ export const DESKTOP_TO_MOBILE: Record<string, string> = {
   // page file for the measurement that retired it.
   "/dashboard/chat": "/m/ask",
   "/dashboard/cogs": "/m/cogs",
-  // Count & waste: all five tabs, the desk clients drawn in the phone shell.
+  // Inventory: the five tabs, the count walk and "Sizes & list", the desk
+  // clients drawn in the phone shell.
   "/dashboard/count": "/m/count",
+  "/dashboard/count/shelf": "/m/count/shelf",
+  "/dashboard/count/walk": "/m/count/walk",
   "/dashboard/count/waste": "/m/count/waste",
   "/dashboard/count/report": "/m/count/report",
   "/dashboard/count/orders": "/m/count/orders",

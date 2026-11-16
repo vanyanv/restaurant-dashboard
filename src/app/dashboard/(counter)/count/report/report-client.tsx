@@ -5,8 +5,9 @@ import { useRouter } from "next/navigation"
 import { Section, useCounterTransition, usePageChrome, useSurfaceHref } from "@/components/counter"
 import type { SectionSources } from "@/lib/counter/adapters/types"
 import type { ReportData, ReportSections } from "@/lib/counter/adapters/count"
+import type { SwitcherSections } from "@/lib/counter/adapters/inventory-shelf"
 import { fmtQty } from "@/lib/counter/count-layers"
-import { CountHead, money, StoreChips } from "../count-ui"
+import { CountHead, money } from "../count-ui"
 
 /**
  * Count & waste — Report. For each item counted this time and last time:
@@ -14,12 +15,12 @@ import { CountHead, money, StoreChips } from "../count-ui"
  * the shelf. The gap to what was counted is food that went somewhere nobody
  * wrote down. Below it, how often each item is ordered, from invoices.
  */
-export function ReportClient({ sections }: { sections: SectionSources<ReportSections> }) {
+export function ReportClient({ sections }: { sections: SectionSources<ReportSections & SwitcherSections> }) {
   usePageChrome({ leaf: "Report" })
   const { pending } = useCounterTransition()
   return (
     <>
-      <CountHead sub="Between two counts: what should be on the shelf, what was, and where the difference went" />
+      <CountHead sub="Between two counts: what should be on the shelf, what was, and where the difference went" switcher={sections.switcher} />
       <Section title="Where food went" meta={(d) => (d?.current ? `${d.store.name} · ${d.current.label}` : d?.store.name ?? "")} data={sections.report} pending={pending} pad={false}>
         {(d) => (d ? <Gap data={d} /> : null)}
       </Section>
@@ -51,9 +52,8 @@ function Gap({ data }: { data: ReportData }) {
   const href = useSurfaceHref()
   return (
     <div style={{ display: "grid" }}>
-      <div className="cw-pad" style={{ borderBottom: "1px solid var(--line)" }}>
-        <StoreChips stores={data.stores} current={data.store.id} path="/dashboard/count/report" />
-        {data.counts.length > 1 && (
+      {data.counts.length > 1 && (
+        <div className="cw-pad" style={{ borderBottom: "1px solid var(--line)" }}>
           <div className="cw__chips" role="group" aria-label="Count">
             {data.counts.slice(0, 8).map((c) => (
               <button
@@ -67,13 +67,13 @@ function Gap({ data }: { data: ReportData }) {
               </button>
             ))}
           </div>
-        )}
-      </div>
+        </div>
+      )}
       {!data.current ? (
         <div className="cw-pad">
           <p className="cw__sub">No finished count for {data.store.name} yet. Finish one and it becomes the starting point; the second count makes the first report.</p>
           <div className="cw__foot" style={{ maxWidth: 360 }}>
-            <Link className="cw__btn cw__btn--primary" href={href(`/dashboard/count?store=${data.store.id}`)}>Start the count</Link>
+            <Link className="cw__btn cw__btn--primary" href={href(`/dashboard/count/walk?store=${data.store.id}`)}>Start the count</Link>
           </div>
         </div>
       ) : !data.previous ? (

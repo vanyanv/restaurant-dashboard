@@ -210,15 +210,18 @@ export const CHECKS_TABS: readonly SubNavItem[] = [
 ] as const
 
 /**
- * Count & waste — in the order an owner uses it: count the shelves, see what
- * goes on the next order, log waste, check where food went, then setup.
+ * Inventory — what to order first, then the shelf line by line, the draft
+ * order, waste, and where food went. Two pages hang off these and are not
+ * tabs: the count itself (`/dashboard/count/walk`, opened by the pinned
+ * "Count <store>" button) and "Sizes & list" (`/dashboard/count/setup`,
+ * reached from Shelf and from every "Set sizes" button).
  */
 export const COUNT_TABS: readonly SubNavItem[] = [
-  { label: "Count", href: "/dashboard/count" },
-  { label: "Order next", href: "/dashboard/count/orders" },
+  { label: "Overview", href: "/dashboard/count" },
+  { label: "Shelf", href: "/dashboard/count/shelf" },
+  { label: "Order", href: "/dashboard/count/orders" },
   { label: "Waste", href: "/dashboard/count/waste" },
   { label: "Report", href: "/dashboard/count/report" },
-  { label: "Setup", href: "/dashboard/count/setup" },
 ] as const
 
 /** Invoices — the worklist, the full list, and what the prices did. */

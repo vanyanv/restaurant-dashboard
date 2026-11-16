@@ -247,7 +247,7 @@ const MORE_GROUPS: ReadonlyArray<{ title: string; rows: MListRow[] }> = [
   {
     title: "Stock and suppliers",
     rows: [
-      r("count", "/dashboard/count", "Inventory", "The weekly count, waste, report, setup"),
+      r("count", "/dashboard/count", "Inventory", "What to order, the shelf, the count, waste, report"),
       r("inventory", "/dashboard/operations/inventory", "Stock on hand", "Stock on hand and past counts"),
       r("ingredients", "/dashboard/ingredients", "Ingredients", "The catalogue and its prices"),
       r("vendors", "/dashboard/operations/vendors", "Vendors", "Who sells it, and for how much"),

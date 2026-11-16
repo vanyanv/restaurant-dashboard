@@ -4,12 +4,12 @@ import { Section } from "@/components/counter"
 import { loading } from "@/lib/counter/section-data"
 import { CountHead } from "./count-ui"
 
-/** Count & waste's loading boundary: the tabs stay put while the panel loads. */
+/** Inventory's loading boundary: the tabs stay put while the overview loads. */
 export default function Loading() {
   return (
     <>
       <CountHead sub="Loading" />
-      <Section title="Weekly count" data={loading()}>
+      <Section title="Inventory" data={loading()}>
         {() => null}
       </Section>
     </>

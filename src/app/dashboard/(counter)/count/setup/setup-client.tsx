@@ -24,12 +24,12 @@ import { CountHead, money, OutcomeLine, type Outcome } from "../count-ui"
  * two areas — beef in the walk-in by the case, and pressed patties on the line.
  */
 export function SetupClient({ sections }: { sections: SectionSources<SetupSections> }) {
-  usePageChrome({ leaf: "Setup" })
+  usePageChrome({ leaf: "Sizes & list" })
   const { pending } = useCounterTransition()
   return (
     <>
       <CountHead sub="What you count, where it lives, and how it comes in" />
-      <Section title="Count list" meta={(d) => `${d.items.length} stops`} data={sections.setup} pending={pending} pad={false}>
+      <Section title="Sizes & list" meta={(d) => `${d.items.length} stops`} data={sections.setup} pending={pending} pad={false}>
         {(d) => <Setup data={d} />}
       </Section>
     </>

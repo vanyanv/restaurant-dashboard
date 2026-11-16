@@ -1,0 +1,294 @@
+/* src/styles/counter-inventory.css
+ *
+ * Inventory — the store switcher, the Overview and the Shelf tab. Every colour
+ * is a Counter token; nothing here declares one. Sizes are in rem so the page follows the
+ * reader's text size, and every grid child may shrink (`min-width:0`) and
+ * wrap, so nothing is clipped or pushes the page sideways from 320px up.
+ *
+ * The layout follows the WIDTH THE PAGE IS GIVEN (`@container iv`), not the
+ * route: the desk with its rail at 1024px and a tablet at 768px get the same
+ * two-column arrangement because they have the same room.
+ */
+
+/* ---------- the store switcher ---------- */
+.iv-sw{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(4.25rem,100%),1fr));gap:6px;min-width:0}
+.iv-sw__c{display:grid;gap:1px;align-content:center;justify-items:center;text-align:center;min-height:3.375rem;min-width:0;padding:6px 4px;
+  border:1px solid var(--line-strong);border-radius:var(--r);background:var(--surface);color:var(--ink);text-decoration:none}
+.iv-sw__c:hover{border-color:var(--ink-3)}
+.iv-sw__c b{font-size:.75rem;font-weight:700;line-height:1.2;max-width:100%;overflow-wrap:anywhere}
+.iv-sw__c span{font-size:.6875rem;color:var(--ink-2);line-height:1.25;max-width:100%;overflow-wrap:anywhere}
+.iv-sw__c strong{font-size:.9375rem;font-weight:700;color:var(--ink);margin-right:2px;font-variant-numeric:tabular-nums}
+.iv-sw__c[aria-current="true"]{background:var(--ink);border-color:var(--ink);color:var(--surface)}
+.iv-sw__c[aria-current="true"] span,.iv-sw__c[aria-current="true"] strong{color:var(--surface)}
+@media (min-width:761px){
+  .iv-sw{grid-template-columns:repeat(auto-fit,minmax(min(6rem,100%),1fr));gap:10px}
+  .iv-sw__c{justify-items:start;text-align:left;min-height:4rem;padding:10px 14px}
+  .iv-sw__c b{font-size:.9375rem}
+  .iv-sw__c span{font-size:.8125rem}
+  .iv-sw__c strong{font-size:1.375rem;letter-spacing:-.02em;margin-right:4px}
+}
+/* On a phone the switcher stays under the top bar while the page scrolls.
+   `.mscroll` is `overflow-y:auto` without ever scrolling (the document
+   scrolls), which is what stops `sticky` from following the page; on these
+   pages it is let go. Not on a short screen (a phone on its side), where two
+   pinned bands and the tab bar would leave no room for the page. `--iv-top`
+   is the top bar's height, measured by `StoreSwitch`. */
+@media (min-height:600px){
+  .ct-phone .mscroll:has(> .iv-sw){overflow:visible}
+  .ct-phone .mscroll > .iv-sw{position:sticky;top:var(--iv-top,0px);z-index:20;margin:-4px -12px 0;padding:8px 12px;background:var(--paper);border-bottom:1px solid var(--line)}
+}
+
+/* The desk on a narrow window (a phone browser on the desk URL, a split
+   screen): the page head may be narrower than its five tabs, which then share
+   one row the way they do in the phone shell, and scroll inside their own box
+   before they would push the page sideways. */
+@media (max-width:760px){
+  .screen > .pagehead:has(.seg[aria-label="Inventory sections"]){min-width:0}
+  .screen > .pagehead .phactions:has(> .seg[aria-label="Inventory sections"]){width:100%;margin-left:0}
+  .screen > .pagehead .seg[aria-label="Inventory sections"]{display:grid;grid-template-columns:repeat(5,auto);width:100%;box-sizing:border-box}
+  .screen > .pagehead .seg[aria-label="Inventory sections"] > *{padding-left:4px;padding-right:4px;text-align:center;justify-content:center}
+}
+
+/* ---------- shared pieces ---------- */
+.iv-c{container:iv / inline-size;min-width:0}
+.iv{display:grid;gap:14px;grid-template-columns:minmax(0,1fr);min-width:0;align-items:start}
+.iv>*{min-width:0}
+.iv-card{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);min-width:0}
+.iv-card__h{display:flex;justify-content:space-between;align-items:baseline;gap:6px 10px;flex-wrap:wrap;padding:11px 12px 9px;border-bottom:1px solid var(--line)}
+.iv-card__h b{font-size:.875rem;font-weight:700}
+.iv-pad{padding:12px}
+.iv-mono{font-family:var(--mono);font-size:.65625rem;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3)}
+.iv-link{font-size:.8125rem;font-weight:600;color:var(--accent);text-decoration:none}
+.iv-link:hover{text-decoration:underline}
+.iv-quiet{margin:0;font-size:.8125rem;color:var(--ink-2)}
+.iv-note{margin:0;font-size:.78125rem;color:var(--ink-2);padding:9px 12px;border-top:1px solid var(--line)}
+.iv-say{margin:0;font-size:1.0625rem;line-height:1.3;font-weight:600;letter-spacing:-.01em;text-wrap:pretty}
+.iv-say small{display:block;font-size:.8125rem;font-weight:400;color:var(--ink-2);letter-spacing:0;margin-top:5px;line-height:1.45}
+.iv-fresh{margin:0;display:flex;flex-wrap:wrap;gap:6px 8px;align-items:center;font-size:.78125rem;color:var(--ink-2)}
+.iv-btn{display:inline-flex;align-items:center;justify-content:center;min-height:2.875rem;padding:6px 14px;border-radius:var(--r);
+  border:1px solid var(--line-strong);background:var(--surface);color:var(--ink);font:inherit;font-weight:700;font-size:.90625rem;line-height:1.2;
+  cursor:pointer;text-align:center;text-decoration:none;min-width:0}
+.iv-btn:hover{background:var(--paper)}
+.iv-btn--primary{background:var(--accent);border-color:var(--accent);color:var(--surface)}
+.iv-btn--primary:hover{background:var(--accent-hi)}
+.iv-btn--ink{background:var(--ink);border-color:var(--ink);color:var(--surface)}
+.iv-btn--ink:hover{background:var(--ink-2)}
+.iv-btn--sm{min-height:2.75rem;font-size:.8125rem;padding:6px 12px}
+.iv-pill{display:inline-flex;align-items:center;font-family:var(--mono);font-size:.59375rem;letter-spacing:.07em;text-transform:uppercase;
+  padding:3px 7px;border-radius:var(--r-sm);font-weight:500;line-height:1.3;border:1px solid transparent;flex:none;max-width:100%}
+.iv-pill--good{background:var(--good-wash);color:var(--good)}
+.iv-pill--warn{background:var(--warn-wash);color:var(--warn)}
+.iv-pill--bad{background:var(--bad-wash);color:var(--bad)}
+.iv-pill--mute{background:var(--chrome);color:var(--ink-2)}
+.iv-pill--notyet{background:none;color:var(--ink-2);border:1px dashed var(--line-strong)}
+
+/* ---------- the block: one line of the count list. Shape as well as colour. ---------- */
+.iv-bk{box-sizing:border-box;width:1.375rem;height:1.375rem;border-radius:var(--r-sm);display:inline-grid;place-items:center;flex:none;
+  font:700 .9375rem/1 var(--sans);font-style:normal;color:var(--surface);border:1.5px solid transparent}
+.iv-bk--out{background:var(--bad)}
+.iv-bk--out::after{content:"\00d7"}
+.iv-bk--order_now{background:var(--bad)}
+.iv-bk--order_now::after{content:"!";font-size:.8125rem}
+.iv-bk--order_soon{border-color:var(--warn);background:linear-gradient(to top,var(--warn) 50%,transparent 50%)}
+/* "Fine" is the good green let down toward the card behind it: the token at
+   part strength, since a softer green is not a token of its own. The block
+   holds nothing else, so the opacity touches only its fill. */
+.iv-bk--ok{background:var(--good);opacity:.42}
+.iv-bk--in_stock{border-color:var(--line-strong)}
+.iv-bk--in_stock::after{content:"";width:.375rem;height:.375rem;border-radius:50%;background:var(--ink-3)}
+.iv-bk--cant_tell{border-color:var(--line-strong);background:repeating-linear-gradient(135deg,var(--ink-3) 0 1.5px,transparent 1.5px 5px)}
+.iv-bk--not_counted{border:1.5px dashed var(--line-strong)}
+.iv-bk--key{width:1rem;height:1rem;font-size:.6875rem;border-radius:4px}
+.iv-bk--key.iv-bk--order_now::after{font-size:.625rem}
+.iv-bk--key.iv-bk--in_stock::after{width:.25rem;height:.25rem}
+.iv-bk--sm{width:.8125rem;height:.8125rem;border-radius:3px;font-size:.625rem;border-width:1px}
+.iv-bk--sm.iv-bk--order_now::after{font-size:.5625rem}
+.iv-bk--sm.iv-bk--in_stock::after{width:.25rem;height:.25rem}
+.iv-bk--sm.iv-bk--cant_tell{background:repeating-linear-gradient(135deg,var(--ink-3) 0 1px,transparent 1px 3.5px)}
+.iv-blocks{display:flex;flex-wrap:wrap;gap:3px;min-width:0}
+.iv-blocks--sm{gap:2px}
+.iv-blocks--sm .iv-bk--gap:not(:first-child){margin-left:.4375rem}
+
+/* ---------- the shelf map ---------- */
+.iv-map{display:grid}
+.iv-map__s{display:grid;gap:5px;grid-template-columns:minmax(0,1fr);width:100%;min-height:2.75rem;padding:9px 12px;border:0;border-bottom:1px solid var(--line);
+  background:none;font:inherit;color:inherit;text-align:left;text-decoration:none;cursor:pointer}
+.iv-map__s:hover{background:var(--paper)}
+.iv-map__l{display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;font-size:.8125rem;font-weight:600}
+.iv-map__l i{font-style:normal;font-weight:400;color:var(--ink-2);font-size:.78125rem}
+.iv-key{list-style:none;margin:0;display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,9.5rem),1fr));gap:6px 14px;padding:10px 12px;font-size:.78125rem;color:var(--ink-2)}
+.iv-key li{display:grid;grid-template-columns:1rem minmax(0,1fr) auto;gap:7px;align-items:center;min-width:0}
+.iv-key b{color:var(--ink);font-weight:700;font-variant-numeric:tabular-nums}
+
+/* ---------- the order answer ---------- */
+.iv-lead{display:grid;gap:10px;padding:14px}
+.iv-lead__n{display:flex;align-items:baseline;gap:6px 10px;flex-wrap:wrap}
+.iv-lead__n strong{font-size:3.75rem;font-weight:600;letter-spacing:-.04em;line-height:.85;font-variant-numeric:tabular-nums}
+.iv-lead__n span{font-size:1.0625rem;font-weight:700}
+.iv-lead__n--text strong{font-size:1.875rem;letter-spacing:-.02em;line-height:1}
+.iv-lead .iv-btn{justify-self:stretch}
+
+/* ---------- the three order groups ---------- */
+.iv-buckets{display:grid;gap:14px;grid-template-columns:minmax(0,1fr);align-items:start}
+.iv-bucket{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);min-width:0;overflow:hidden}
+.iv-bucket__h{display:flex;flex-wrap:wrap;gap:4px 8px;align-items:center;padding:10px 12px;border-bottom:1px solid var(--line);list-style:none;min-height:2.75rem;box-sizing:border-box}
+.iv-bucket__h::-webkit-details-marker{display:none}
+.iv-bucket__h b{font-size:.90625rem;font-weight:700;min-width:0}
+.iv-bucket__h .n{margin-left:auto;font-size:.9375rem;font-weight:700;font-variant-numeric:tabular-nums}
+.iv-bucket__h small{flex-basis:100%;font-size:.78125rem;color:var(--ink-2)}
+details.iv-bucket>.iv-bucket__h{cursor:pointer}
+details.iv-bucket:not([open])>.iv-bucket__h{border-bottom:0}
+details.iv-bucket>.iv-bucket__h .n::after{content:"";display:inline-block;width:7px;height:7px;border-right:2px solid var(--ink-3);border-bottom:2px solid var(--ink-3);transform:rotate(45deg);margin:0 2px 3px 9px}
+details.iv-bucket[open]>.iv-bucket__h .n::after{transform:rotate(-135deg);margin-bottom:-1px}
+.iv-olist{list-style:none;margin:0;padding:0;display:grid}
+.iv-o{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,auto);gap:4px 12px;padding:10px 12px;border-bottom:1px solid var(--line)}
+.iv-o:last-child{border-bottom:0}
+.iv-o__l{display:grid;gap:3px;min-width:0;font-size:.8125rem;color:var(--ink-2)}
+.iv-o__l>b{font-size:.9375rem;font-weight:600;color:var(--ink);overflow-wrap:anywhere}
+.iv-o__l em{font-style:normal;font-weight:600;color:var(--ink)}
+.iv-o__r{display:grid;gap:1px;align-content:start;justify-items:end;text-align:right;max-width:9rem;min-width:0}
+.iv-o__r b{font-size:.875rem;font-weight:700}
+.iv-o__r b.soft{font-weight:600;color:var(--ink-2)}
+.iv-o__r small{font-size:.71875rem;color:var(--ink-2);line-height:1.3;overflow-wrap:anywhere}
+
+/* days left: the full width is `barDays`, the mark is the last day to order */
+/* The bar and its words share a row and the spare room in fixed shares, so
+   every bar in a list is the same length (they are one scale); with large
+   text on a narrow phone the words drop under the bar instead of being cut. */
+.iv-days{display:flex;flex-wrap:wrap;gap:4px 8px;align-items:center;font-size:.78125rem;color:var(--ink-2);min-width:0}
+.iv-days>span:last-child{flex:1 1 7rem;min-width:0}
+.iv-bar{position:relative;display:block;flex:3 1 3rem;max-width:5.5rem;height:.5rem;border-radius:var(--r-sm);background:var(--sunk)}
+.iv-bar i{position:absolute;inset:0 auto 0 0;border-radius:var(--r-sm);background:var(--good)}
+.iv-bar--warn i{background:var(--warn)}
+.iv-bar--bad i{background:var(--bad)}
+.iv-bar u{position:absolute;top:-3px;bottom:-3px;width:2px;margin-left:-1px;background:var(--ink-2);border-radius:1px;text-decoration:none}
+
+/* ---------- money tiles ---------- */
+.iv-tri{display:grid;grid-template-columns:minmax(0,1fr);gap:8px}
+.iv-tile{padding:12px;display:grid;gap:3px;align-content:start}
+.iv-tile strong{font-size:1.5rem;font-weight:600;letter-spacing:-.02em;line-height:1.1;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.iv-tile strong.txt{font-size:1rem;letter-spacing:0;line-height:1.25}
+.iv-tile>span:last-child{font-size:.78125rem;color:var(--ink-2);line-height:1.4}
+.iv-cover{display:flex;height:.375rem;border-radius:var(--r-sm);overflow:hidden;background:var(--chrome);gap:2px;margin:2px 0}
+.iv-cover i{display:block;flex:1 1 0;min-width:2px;background:var(--ink)}
+.iv-cover i.ny{background:repeating-linear-gradient(135deg,var(--ink-3) 0 1.5px,transparent 1.5px 5px)}
+.iv-cover i.nc{background:none}
+
+/* ---------- needs you ---------- */
+.iv-need{border-bottom:1px solid var(--line)}
+.iv-need:last-child{border-bottom:0}
+.iv-need summary{display:flex;gap:10px;align-items:center;min-height:2.75rem;padding:10px 12px;cursor:pointer;list-style:none;font-size:.875rem;font-weight:600;box-sizing:border-box}
+.iv-need summary::-webkit-details-marker{display:none}
+.iv-need summary .n{flex:none;min-width:1.625rem;height:1.625rem;padding:0 4px;box-sizing:border-box;border-radius:var(--r-sm);background:var(--chrome);display:grid;place-items:center;font-size:.8125rem;font-weight:700;font-variant-numeric:tabular-nums}
+.iv-need summary span:last-child{flex:1;min-width:0}
+.iv-need summary::after{content:"";flex:none;width:8px;height:8px;border-right:2px solid var(--ink-3);border-bottom:2px solid var(--ink-3);transform:rotate(45deg);margin-right:4px}
+.iv-need[open] summary::after{transform:rotate(-135deg)}
+.iv-need__b{padding:0 12px 12px;display:grid;gap:8px;font-size:.8125rem;color:var(--ink-2)}
+.iv-need__b p{margin:0}
+.iv-need__names{color:var(--ink);overflow-wrap:anywhere}
+.iv-need__b .iv-btn{justify-self:start}
+
+/* ---------- every store ---------- */
+.iv-stores{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,17rem),1fr));gap:14px;align-items:start}
+.iv-store{display:grid;gap:10px;padding:12px;align-content:start}
+.iv-store>*{min-width:0;margin:0}
+.iv-store__h{display:flex;justify-content:space-between;gap:8px;align-items:center;flex-wrap:wrap}
+.iv-store__h b{font-size:1.0625rem;font-weight:700}
+.iv-store__n{display:flex;align-items:baseline;gap:4px 8px;flex-wrap:wrap}
+.iv-store__n strong{font-size:2.5rem;font-weight:600;letter-spacing:-.04em;line-height:.9;font-variant-numeric:tabular-nums}
+.iv-store__n span{font-size:.875rem;font-weight:700}
+.iv-store__n--text strong{font-size:1.25rem;letter-spacing:-.01em;line-height:1.1}
+.iv-top3{list-style:none;padding:0;display:grid;gap:6px}
+.iv-top3 li{display:grid;grid-template-columns:1rem minmax(0,1fr) minmax(0,auto);gap:8px;align-items:center;font-size:.84375rem}
+.iv-top3 b{font-weight:600;min-width:0;overflow-wrap:anywhere}
+.iv-top3 em{font-style:normal;font-size:.78125rem;color:var(--ink-2);text-align:right}
+.iv-store__more{font-size:.8125rem;color:var(--ink-2)}
+.iv-store__m{font-size:.78125rem;color:var(--ink-2);border-top:1px solid var(--line);padding-top:9px}
+.iv-store__m b{color:var(--ink);font-weight:600}
+.iv-store__btns{display:flex;flex-wrap:wrap;gap:8px}
+
+/* ---------- Shelf tab ---------- */
+.iv-chips{display:flex;gap:6px;flex-wrap:wrap}
+.iv-chip{min-height:2.75rem;padding:4px 14px;border-radius:999px;border:1px solid var(--line-strong);background:var(--surface);
+  font:inherit;font-size:.8125rem;font-weight:600;color:var(--ink);cursor:pointer}
+.iv-chip[aria-pressed="true"]{background:var(--ink);border-color:var(--ink);color:var(--surface)}
+.iv-accs{display:grid;gap:10px;grid-template-columns:minmax(0,1fr)}
+.iv-acc{border:1px solid var(--line);border-radius:var(--r);background:var(--surface);overflow:hidden;min-width:0;scroll-margin-top:9rem}
+.iv-acc summary{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:2px 10px;align-items:center;min-height:2.75rem;padding:10px 12px;cursor:pointer;list-style:none;box-sizing:border-box}
+.iv-acc summary::-webkit-details-marker{display:none}
+.iv-acc summary b{font-size:.96875rem;font-weight:700}
+.iv-acc summary .v{font-size:.9375rem;font-weight:600;font-variant-numeric:tabular-nums}
+.iv-acc summary .v--none{font-size:.78125rem;font-weight:400;color:var(--ink-2)}
+.iv-acc summary small{grid-column:1/-1;font-size:.78125rem;color:var(--ink-2)}
+.iv-acc summary::after{content:"";grid-row:1;grid-column:3;width:8px;height:8px;border-right:2px solid var(--ink-3);border-bottom:2px solid var(--ink-3);transform:rotate(45deg);margin:0 4px 3px 2px}
+.iv-acc[open] summary::after{transform:rotate(-135deg);margin-bottom:-3px}
+.iv-acc[open] summary{border-bottom:1px solid var(--line)}
+.iv-rows{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:minmax(0,1fr)}
+.iv-it{display:grid;gap:5px;padding:11px 12px;border-bottom:1px solid var(--line);min-width:0}
+.iv-it:last-child{border-bottom:0}
+.iv-it__h{display:flex;justify-content:space-between;gap:6px 10px;align-items:baseline;flex-wrap:wrap}
+.iv-it__h b{font-size:.9375rem;font-weight:600;min-width:0;overflow-wrap:anywhere}
+.iv-it__c{display:flex;justify-content:space-between;gap:6px 10px;align-items:baseline;flex-wrap:wrap;font-size:.8125rem;color:var(--ink-2)}
+.iv-it__c em{font-style:normal;font-weight:600;color:var(--ink)}
+.iv-it__c .v{font-size:.9375rem;font-weight:600;color:var(--ink);font-variant-numeric:tabular-nums}
+.iv-it__x{margin:0;font-size:.78125rem;color:var(--ink-2)}
+.iv-it .iv-bar{flex-basis:4rem;max-width:12rem}
+.iv-it .iv-days>span:last-child{flex-basis:9rem}
+.iv-fold>summary{cursor:pointer;font-weight:600;font-size:.875rem;min-height:2.75rem;padding:10px 12px;display:flex;align-items:center;box-sizing:border-box}
+.iv-wide-only{display:none}
+.iv-sheetwrap{overflow-x:auto;border-top:1px solid var(--line)}
+.iv-sheet{width:100%;border-collapse:collapse;font-size:.8125rem;font-variant-numeric:tabular-nums;table-layout:fixed}
+.iv-sheet th,.iv-sheet td{padding:8px 12px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top;overflow-wrap:anywhere}
+.iv-sheet thead th{font-family:var(--mono);font-size:.65625rem;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3);font-weight:500;border-bottom-color:var(--line-strong)}
+.iv-sheet tbody th{font-weight:600}
+.iv-sheet__sec th{background:var(--paper);font-family:var(--mono);font-size:.65625rem;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3);font-weight:500}
+.iv-sheet td b{font-weight:600}
+.iv-sheet td small{display:block;color:var(--ink-2)}
+.iv-sheet td.dim{color:var(--ink-3)}
+
+/* ---------- the pinned actions ---------- */
+.iv-foot{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:8px;min-width:0}
+.iv-foot .iv-btn{flex:0 1 auto}
+/* A phone: fixed just above the tab bar, the way the count's own Save is, and
+   the page ends above it. Left in the flow on a short screen. */
+@media (min-height:600px){
+  .ct-phone .mscroll > .iv-foot{position:fixed;left:0;right:0;bottom:calc(var(--m-bar-h) + env(safe-area-inset-bottom,0px));z-index:30;
+    display:grid;grid-template-columns:minmax(0,1.5fr) minmax(0,1fr);padding:8px 12px;background:var(--paper);border-top:1px solid var(--line)}
+  .ct-phone .mscroll:has(> .iv-foot){padding-bottom:calc(12px + var(--m-bar-h) + env(safe-area-inset-bottom,0px) + 4.25rem)}
+}
+
+/* ---------- with room: two columns, then three ---------- */
+@container iv (min-width:26rem){
+  .iv-tri{grid-template-columns:repeat(3,minmax(0,1fr))}
+}
+@container iv (min-width:44rem){
+  /* The map is taller than the answer beside it: the spare height goes to the
+     row under the answer, not between them. */
+  .iv--one{grid-template-columns:minmax(0,5fr) minmax(0,8fr);grid-template-rows:auto auto 1fr auto auto;
+    grid-template-areas:"fresh fresh" "lead map" "needs map" "buckets buckets" "tiles tiles"}
+  .iv--one>.iv-a-fresh{grid-area:fresh}
+  .iv--one>.iv-a-lead{grid-area:lead}
+  .iv--one>.iv-a-map{grid-area:map}
+  .iv--one>.iv-a-needs{grid-area:needs}
+  .iv--one>.iv-a-buckets{grid-area:buckets}
+  .iv--one>.iv-a-tiles{grid-area:tiles}
+  .iv-map__s{grid-template-columns:minmax(6.5rem,9.5rem) minmax(0,1fr);align-items:center;gap:12px;padding:10px 14px}
+  .iv-map__l{display:grid;gap:0;font-size:.875rem}
+  .iv-map .iv-bk{width:1.625rem;height:1.625rem}
+  .iv-map .iv-blocks{gap:4px}
+  .iv-buckets{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .iv-blocks--sm{gap:3px}
+  .iv-blocks--sm .iv-bk--sm{width:1.125rem;height:1.125rem;border-radius:4px;font-size:.8125rem;border-width:1.5px}
+  .iv-blocks--sm .iv-bk--sm.iv-bk--order_now::after{font-size:.6875rem}
+  .iv-blocks--sm .iv-bk--gap:not(:first-child){margin-left:.625rem}
+  .iv-wide-only{display:block}
+  .iv-rows{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .iv-rows .iv-it{border-bottom:1px solid var(--line)}
+  .iv-rows .iv-it:nth-child(odd){border-right:1px solid var(--line)}
+}
+@container iv (min-width:62rem){
+  .iv-buckets{grid-template-columns:none;grid-auto-flow:column;grid-auto-columns:minmax(0,1fr)}
+  .iv-rows{grid-template-columns:repeat(3,minmax(0,1fr))}
+  .iv-rows .iv-it:nth-child(odd){border-right:0}
+  .iv-rows .iv-it:not(:nth-child(3n)){border-right:1px solid var(--line)}
+}

@@ -7,7 +7,7 @@ import { useSurfaceHref } from "@/components/counter"
 import { deleteWaste, logWaste } from "@/lib/counter/actions/count"
 import type { WasteData } from "@/lib/counter/adapters/count"
 import { WASTE_REASONS, fmtQty, showQty, type WasteReason } from "@/lib/counter/count-layers"
-import { money, OutcomeLine, StoreChips, type Outcome } from "./count-ui"
+import { money, OutcomeLine, type Outcome } from "./count-ui"
 import { clearDraft, readDraft, writeDraft } from "@/components/counter/keep/use-draft"
 
 /**
@@ -102,7 +102,6 @@ export function WasteLog({ data, base }: { data: WasteData; base: "/dashboard/co
 
   return (
     <div className="cw">
-      <StoreChips stores={data.stores} current={data.store.id} path={`${base}/waste`} />
       <div className="cw__area">
         <span className="cw__mono" id="cw-what">What</span>
         {data.items.length > 12 && (
@@ -169,7 +168,7 @@ export function WasteLog({ data, base }: { data: WasteData; base: "/dashboard/co
 
       <OutcomeLine outcome={outcome} />
       <div className="cw__foot cw__foot--stick cw-item-foot">
-        <Link className="cw__btn" href={`${base}?store=${data.store.id}`}>Back to the count</Link>
+        <Link className="cw__btn" href={`${base}/walk?store=${data.store.id}`}>Back to the count</Link>
         <button type="button" className="cw__btn cw__btn--primary" disabled={busy} onClick={save}>
           {busy ? "Saving…" : "Save waste"}
         </button>

@@ -2,6 +2,7 @@ import { getServerSession } from "next-auth"
 import { redirect } from "next/navigation"
 import { authOptions, hasOwnerAccess } from "@/lib/auth"
 import { getDraftOrderSectionPromises } from "@/lib/counter/adapters/draft-orders"
+import { getInventorySwitcherSectionPromises } from "@/lib/counter/adapters/inventory-shelf"
 import { parseCoverDays } from "@/lib/counter/draft-orders"
 import { OrdersClient } from "./orders-client"
 
@@ -14,7 +15,10 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ s
   if (!hasOwnerAccess(session.user.role)) redirect("/dashboard/forbidden")
   const sp = await searchParams
 
-  const sections = getDraftOrderSectionPromises({ accountId: session.user.accountId, storeId: sp.store, coverDays: parseCoverDays(sp.cover) })
+  const sections = {
+    ...getDraftOrderSectionPromises({ accountId: session.user.accountId, storeId: sp.store, coverDays: parseCoverDays(sp.cover) }),
+    ...getInventorySwitcherSectionPromises({ accountId: session.user.accountId }),
+  }
 
   return (
     <>

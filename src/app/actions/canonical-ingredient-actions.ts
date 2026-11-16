@@ -134,7 +134,7 @@ export async function setCanonicalPackDefinition(input: {
     data: { caseUnit, recipeUnitsPerCase, innerPackUnit, innerPacksPerCase },
   })
 
-  revalidatePath("/m/count")
+  revalidatePath("/m/count", "layout")
   revalidatePath("/m/ingredients")
 }
 
