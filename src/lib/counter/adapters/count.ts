@@ -35,7 +35,7 @@ const DAY_MS = 86_400_000
 
 export type StoreOption = { id: string; name: string }
 
-async function accountStores(accountId: string): Promise<StoreOption[]> {
+export async function accountStores(accountId: string): Promise<StoreOption[]> {
   return prisma.store.findMany({
     where: { accountId, isActive: true },
     select: { id: true, name: true },
@@ -47,11 +47,11 @@ function pickStore(stores: StoreOption[], requested: string | undefined): StoreO
   return stores.find((s) => s.id === requested) ?? stores[0] ?? null
 }
 
-function dayLabel(d: Date): string {
+export function dayLabel(d: Date): string {
   return d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", timeZone: "America/Los_Angeles" })
 }
 
-type ItemRow = {
+export type ItemRow = {
   id: string
   area: string
   layers: unknown
@@ -59,7 +59,7 @@ type ItemRow = {
   canonicalIngredient: { name: string; recipeUnit: string | null; costPerRecipeUnit: number | null }
 }
 
-async function countItems(accountId: string): Promise<ItemRow[]> {
+export async function countItems(accountId: string): Promise<ItemRow[]> {
   const rows = await prisma.countItem.findMany({
     where: { accountId, active: true, canonicalIngredient: { accountId } },
     orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
@@ -256,6 +256,47 @@ export type WasteData = {
 }
 export type WasteSections = { waste: SectionData<WasteData | null> }
 
+/** A store's waste log for the last 7 days: the entries, and what they add up to. */
+export type WeekWaste = {
+  entries: WasteEntry[]
+  /** Σ of the entries that have a price. */
+  dollars: number
+  /** Entries on an item with no price on file: not in `dollars`, never counted as $0. */
+  unpriced: number
+}
+
+/**
+ * The one read of "thrown out, last 7 days". The Waste tab lists these entries
+ * and prints their total; the Inventory overview prints the same total.
+ */
+export async function loadWeekWaste(accountId: string, storeId: string): Promise<WeekWaste> {
+  const recent = await prisma.inventoryAdjustment.findMany({
+    where: { storeId, store: { accountId }, occurredAt: { gte: weekAgo() }, reason: { in: WASTE_REASON_IDS } },
+    orderBy: { occurredAt: "desc" },
+    select: {
+      id: true, qty: true, reason: true, note: true, occurredAt: true,
+      canonicalIngredient: { select: { name: true, recipeUnit: true, costPerRecipeUnit: true } },
+    },
+  })
+  const entries: WasteEntry[] = recent.map((r) => {
+    const cost = r.canonicalIngredient.costPerRecipeUnit
+    return {
+      id: r.id,
+      name: plainName(r.canonicalIngredient.name),
+      amount: showQty(r.qty, r.canonicalIngredient.recipeUnit ?? "").trim(),
+      reason: wasteReasonLabel(r.reason),
+      when: r.occurredAt.toLocaleString("en-US", { weekday: "short", hour: "numeric", minute: "2-digit", timeZone: "America/Los_Angeles" }),
+      dollars: cost != null ? r.qty * cost : null,
+      note: r.note,
+    }
+  })
+  return {
+    entries,
+    dollars: entries.reduce((t, e) => t + (e.dollars ?? 0), 0),
+    unpriced: entries.filter((e) => e.dollars === null).length,
+  }
+}
+
 export function getCountWasteSectionPromises(opts: { accountId: string; storeId?: string }): StreamedSections<WasteSections> {
   return {
     waste: guardSection(
@@ -263,17 +304,7 @@ export function getCountWasteSectionPromises(opts: { accountId: string; storeId?
         const stores = await accountStores(opts.accountId)
         const store = pickStore(stores, opts.storeId)
         if (!store) return null
-        const [items, recent] = await Promise.all([
-          countItems(opts.accountId),
-          prisma.inventoryAdjustment.findMany({
-            where: { storeId: store.id, store: { accountId: opts.accountId }, occurredAt: { gte: weekAgo() }, reason: { in: WASTE_REASON_IDS } },
-            orderBy: { occurredAt: "desc" },
-            select: {
-              id: true, qty: true, reason: true, note: true, occurredAt: true,
-              canonicalIngredient: { select: { name: true, recipeUnit: true, costPerRecipeUnit: true } },
-            },
-          }),
-        ])
+        const [items, week] = await Promise.all([countItems(opts.accountId), loadWeekWaste(opts.accountId, store.id)])
         // One choice per ingredient. Its units are every layer it is counted
         // in anywhere, so beef can be thrown out by the chub or by the lb.
         const byIng = new Map<string, WasteItem>()
@@ -300,24 +331,12 @@ export function getCountWasteSectionPromises(opts: { accountId: string; storeId?
           // Smallest first: waste is usually a little, not a case.
           w.layers.sort((a, b) => a.per - b.per)
         }
-        const entries: WasteEntry[] = recent.map((r) => {
-          const cost = r.canonicalIngredient.costPerRecipeUnit
-          return {
-            id: r.id,
-            name: plainName(r.canonicalIngredient.name),
-            amount: showQty(r.qty, r.canonicalIngredient.recipeUnit ?? "").trim(),
-            reason: wasteReasonLabel(r.reason),
-            when: r.occurredAt.toLocaleString("en-US", { weekday: "short", hour: "numeric", minute: "2-digit", timeZone: "America/Los_Angeles" }),
-            dollars: cost != null ? r.qty * cost : null,
-            note: r.note,
-          }
-        })
         return {
           stores,
           store,
           items: [...byIng.values()],
-          recent: entries,
-          weekDollars: entries.reduce((t, e) => t + (e.dollars ?? 0), 0),
+          recent: week.entries,
+          weekDollars: week.dollars,
         }
       }, { retryAction: "count.waste", isEmpty: (d) => d === null, emptyReason: "no_stores" }),
       "count.waste",
@@ -486,85 +505,133 @@ export function getCountReportSectionPromises(opts: { accountId: string; storeId
         }
         if (!cur || !prev) return base
 
-        // "Should have" at the moment of this count, anchored on the one
-        // before it: the context's latest COMPLETED count at or before
-        // `asOf` is `prev`, because `asOf` sits just before `cur`.
-        const asOf = new Date(cur.countedAt.getTime() - 1)
-        const [ctx, lines, ings, waste] = await Promise.all([
-          loadStoreInventoryContext({ storeId: store.id, accountId: opts.accountId, asOf }),
-          prisma.stockCountLine.findMany({
-            where: { stockCountId: cur.id },
-            select: { canonicalIngredientId: true, qtyInRecipeUnit: true },
-          }),
-          prisma.canonicalIngredient.findMany({
-            where: { accountId: opts.accountId, stockCountLines: { some: { stockCountId: cur.id } } },
-            select: { id: true, name: true, recipeUnit: true, costPerRecipeUnit: true, caseUnit: true, recipeUnitsPerCase: true, innerPackUnit: true, innerPacksPerCase: true },
-          }),
-          // EVERY reason, over the window the "should have" walk subtracts —
-          // after the previous count, up to `asOf`. The rows and the totals
-          // are both `sumAdjustments` over these, so they add up.
-          prisma.inventoryAdjustment.findMany({
-            where: { storeId: store.id, store: { accountId: opts.accountId }, occurredAt: { gt: prev.countedAt, lte: asOf } },
-            select: { canonicalIngredientId: true, reason: true, qty: true, canonicalIngredient: { select: { costPerRecipeUnit: true } } },
-          }),
-        ])
-        const adjBy = new Map<string, ValuedAdjustment[]>()
-        for (const a of waste) {
-          const list = adjBy.get(a.canonicalIngredientId) ?? []
-          list.push({ reason: a.reason, qty: a.qty, cost: a.canonicalIngredient.costPerRecipeUnit })
-          adjBy.set(a.canonicalIngredientId, list)
-        }
-        const onRows = new Set<string>()
-        const counted = new Map(lines.map((l) => [l.canonicalIngredientId, l.qtyInRecipeUnit]))
-        const rows: GapRow[] = []
-        for (const ing of ings) {
-          if (!ing.recipeUnit) continue
-          const r = runningOnHandFromContext(ctx, ing)
-          // Only items counted both times have a starting point.
-          if (!r.baseAt || r.baseAt.getTime() !== prev.countedAt.getTime()) continue
-          onRows.add(ing.id)
-          const got = counted.get(ing.id) ?? 0
-          const missing = r.onHand - got
-          const adj = sumAdjustments(adjBy.get(ing.id) ?? [])
-          // Shown in lb when the recipes use oz; dollars are worked out first.
-          const k = ing.recipeUnit.trim().toLowerCase() === "oz" ? 16 : 1
-          rows.push({
-            name: plainName(ing.name),
-            unit: k === 16 ? "lb" : ing.recipeUnit,
-            last: r.baseQty / k,
-            delivered: r.deliveriesQty / k,
-            used: r.depletionQty / k,
-            waste: adj.qty.waste / k,
-            theft: adj.qty.shrink / k,
-            returned: adj.qty.return / k,
-            other: adj.qty.other / k,
-            should: r.onHand / k,
-            counted: got / k,
-            missing: missing / k,
-            missingDollars: ing.costPerRecipeUnit != null ? missing * ing.costPerRecipeUnit : null,
-            wasteDollars: adj.dollars.waste,
-            theftDollars: adj.dollars.shrink,
-            returnDollars: adj.dollars.return,
-            otherDollars: adj.dollars.other,
-            partial: r.partial,
-          })
-        }
-        rows.sort((a, b) => (b.missingDollars ?? 0) - (a.missingDollars ?? 0))
-        const off = sumAdjustments(
-          [...adjBy].filter(([id]) => !onRows.has(id)).flatMap(([, list]) => list),
-        )
-        const onEntries = [...adjBy].filter(([id]) => onRows.has(id)).flatMap(([, list]) => list)
-        return {
-          ...base,
-          ...reportTotals(rows),
-          rows,
-          wasteEntries: onEntries.filter((e) => reasonClass(e.reason) === "waste").length,
-          offReportEntries: Object.values(off.entries).reduce((t, n) => t + n, 0),
-          offReportDollars: Object.values(off.dollars).reduce((t, n) => t + n, 0),
-        }
+        return { ...base, ...(await loadGap(opts.accountId, store.id, cur, prev)) }
       }, { retryAction: "count.report", isEmpty: (d) => d === null, emptyReason: "no_stores" }),
       "count.report",
     ),
+  }
+}
+
+type GapPart = Pick<
+  ReportData,
+  | "rows" | "missingDollars" | "extraDollars" | "wasteDollars" | "theftDollars" | "returnDollars" | "otherDollars"
+  | "wasteEntries" | "offReportEntries" | "offReportDollars"
+>
+
+/**
+ * The gap between two finished counts of one store: a row per item counted
+ * both times, and the totals those rows add up to. The Report tab and the
+ * Inventory overview's "Went missing" both read this, so they print one figure.
+ */
+async function loadGap(
+  accountId: string,
+  storeId: string,
+  cur: { id: string; countedAt: Date },
+  prev: { countedAt: Date },
+): Promise<GapPart> {
+    // "Should have" at the moment of this count, anchored on the one
+    // before it: the context's latest COMPLETED count at or before
+    // `asOf` is `prev`, because `asOf` sits just before `cur`.
+    const asOf = new Date(cur.countedAt.getTime() - 1)
+    const [ctx, lines, ings, waste] = await Promise.all([
+      loadStoreInventoryContext({ storeId: storeId, accountId: accountId, asOf }),
+      prisma.stockCountLine.findMany({
+        where: { stockCountId: cur.id },
+        select: { canonicalIngredientId: true, qtyInRecipeUnit: true },
+      }),
+      prisma.canonicalIngredient.findMany({
+        where: { accountId: accountId, stockCountLines: { some: { stockCountId: cur.id } } },
+        select: { id: true, name: true, recipeUnit: true, costPerRecipeUnit: true, caseUnit: true, recipeUnitsPerCase: true, innerPackUnit: true, innerPacksPerCase: true },
+      }),
+      // EVERY reason, over the window the "should have" walk subtracts —
+      // after the previous count, up to `asOf`. The rows and the totals
+      // are both `sumAdjustments` over these, so they add up.
+      prisma.inventoryAdjustment.findMany({
+        where: { storeId: storeId, store: { accountId: accountId }, occurredAt: { gt: prev.countedAt, lte: asOf } },
+        select: { canonicalIngredientId: true, reason: true, qty: true, canonicalIngredient: { select: { costPerRecipeUnit: true } } },
+      }),
+    ])
+    const adjBy = new Map<string, ValuedAdjustment[]>()
+    for (const a of waste) {
+      const list = adjBy.get(a.canonicalIngredientId) ?? []
+      list.push({ reason: a.reason, qty: a.qty, cost: a.canonicalIngredient.costPerRecipeUnit })
+      adjBy.set(a.canonicalIngredientId, list)
+    }
+    const onRows = new Set<string>()
+    const counted = new Map(lines.map((l) => [l.canonicalIngredientId, l.qtyInRecipeUnit]))
+    const rows: GapRow[] = []
+    for (const ing of ings) {
+      if (!ing.recipeUnit) continue
+      const r = runningOnHandFromContext(ctx, ing)
+      // Only items counted both times have a starting point.
+      if (!r.baseAt || r.baseAt.getTime() !== prev.countedAt.getTime()) continue
+      onRows.add(ing.id)
+      const got = counted.get(ing.id) ?? 0
+      const missing = r.onHand - got
+      const adj = sumAdjustments(adjBy.get(ing.id) ?? [])
+      // Shown in lb when the recipes use oz; dollars are worked out first.
+      const k = ing.recipeUnit.trim().toLowerCase() === "oz" ? 16 : 1
+      rows.push({
+        name: plainName(ing.name),
+        unit: k === 16 ? "lb" : ing.recipeUnit,
+        last: r.baseQty / k,
+        delivered: r.deliveriesQty / k,
+        used: r.depletionQty / k,
+        waste: adj.qty.waste / k,
+        theft: adj.qty.shrink / k,
+        returned: adj.qty.return / k,
+        other: adj.qty.other / k,
+        should: r.onHand / k,
+        counted: got / k,
+        missing: missing / k,
+        missingDollars: ing.costPerRecipeUnit != null ? missing * ing.costPerRecipeUnit : null,
+        wasteDollars: adj.dollars.waste,
+        theftDollars: adj.dollars.shrink,
+        returnDollars: adj.dollars.return,
+        otherDollars: adj.dollars.other,
+        partial: r.partial,
+      })
+    }
+    rows.sort((a, b) => (b.missingDollars ?? 0) - (a.missingDollars ?? 0))
+    const off = sumAdjustments(
+      [...adjBy].filter(([id]) => !onRows.has(id)).flatMap(([, list]) => list),
+    )
+    const onEntries = [...adjBy].filter(([id]) => onRows.has(id)).flatMap(([, list]) => list)
+    return {
+      ...reportTotals(rows),
+      rows,
+      wasteEntries: onEntries.filter((e) => reasonClass(e.reason) === "waste").length,
+      offReportEntries: Object.values(off.entries).reduce((t, n) => t + n, 0),
+      offReportDollars: Object.values(off.dollars).reduce((t, n) => t + n, 0),
+    }
+}
+
+/** "Went missing" between a store's two most recent finished counts. Null until there are two. */
+export type LatestGap = {
+  from: string
+  to: string
+  /** Items counted both times: what the figure covers. */
+  items: number
+  missingDollars: number
+  /** Compared items with no price on file: not in `missingDollars`. */
+  unpriced: number
+}
+
+export async function loadLatestGap(accountId: string, storeId: string): Promise<LatestGap | null> {
+  const [cur, prev] = await prisma.stockCount.findMany({
+    where: { storeId, store: { accountId }, status: "COMPLETED" },
+    orderBy: { countedAt: "desc" },
+    take: 2,
+    select: { id: true, countedAt: true },
+  })
+  if (!cur || !prev) return null
+  const gap = await loadGap(accountId, storeId, cur, prev)
+  return {
+    from: dayLabel(prev.countedAt),
+    to: dayLabel(cur.countedAt),
+    items: gap.rows.length,
+    missingDollars: gap.missingDollars,
+    unpriced: gap.rows.filter((r) => r.missingDollars === null).length,
   }
 }
 

@@ -1,3 +1,4 @@
+import { cache } from "react"
 import { prisma } from "@/lib/prisma"
 import { anchorLineWhere } from "@/lib/inventory/anchor-line"
 import {
@@ -29,7 +30,7 @@ const FORECAST_DAYS = 14
 /** Used when a vendor has too few invoices to measure. Said on the line. */
 const FALLBACK_LEAD_DAYS = 3
 /** Past this many days since the last count, a line says the count was skipped. */
-const STALE_COUNT_DAYS = 7
+export const STALE_COUNT_DAYS = 7
 /** "Skip this week's count" ignores counts newer than this. */
 const SKIP_WINDOW_DAYS = 7
 
@@ -114,6 +115,29 @@ export type DraftData = {
 
 export type DraftSections = { drafts: SectionData<DraftData | null> }
 
+/** What the draft worked out for one ingredient, whether or not anything uses it. */
+export type DraftRead = {
+  /** The last count rolled forward to now, in recipe units. Null with no count to start from. */
+  onHand: number | null
+  /** The vendor on its most recent invoice at this store. */
+  vendor: string | null
+}
+
+/** One store's draft, plus the per-ingredient reading the shelf views are built on. */
+export type StoreDraft = Pick<DraftData, "vendors" | "covered" | "notCounted" | "belowZero" | "stock"> & {
+  reads: Map<string, DraftRead>
+}
+
+/**
+ * One store's draft, once per request. Order next, the Inventory overview, the
+ * Shelf tab and the store switcher all read THIS, so "order today" on one of
+ * them is the same line as on the others.
+ */
+export const loadStoreDraft = cache(
+  (accountId: string, storeId: string, coverDays: number, skipCount: boolean): Promise<StoreDraft> =>
+    buildDrafts(accountId, storeId, coverDays, new Date(), skipCount),
+)
+
 function q(n: number): string {
   return fmtQty(Math.round(n * 10) / 10)
 }
@@ -150,10 +174,9 @@ export function getDraftOrderSectionPromises(opts: { accountId: string; storeId?
         ).map((s) => ({ id: s.id, name: s.name, skip: s.draftSkipCount }))
         const store = stores.find((s) => s.id === opts.storeId) ?? stores[0]
         if (!store) return null
-        const asOf = new Date()
         // Every store is drafted so the store cards can compare them; the
         // picked one is shown in full.
-        const built = await Promise.all(stores.map((s) => buildDrafts(opts.accountId, s.id, opts.coverDays, asOf, s.skip)))
+        const built = await Promise.all(stores.map((s) => loadStoreDraft(opts.accountId, s.id, opts.coverDays, s.skip)))
         const summaries: StoreSummary[] = stores.map((s, i) => {
           const b = built[i]
           const rows = b.vendors.flatMap((v) => v.rows)
@@ -166,8 +189,8 @@ export function getDraftOrderSectionPromises(opts: { accountId: string; storeId?
             notCounted: b.notCounted.length,
           }
         })
-        const mine = built[stores.indexOf(store)]
-        return { stores, store, coverDays: opts.coverDays, summaries, ...mine }
+        const { vendors, covered, notCounted, belowZero, stock } = built[stores.indexOf(store)]
+        return { stores, store, coverDays: opts.coverDays, summaries, vendors, covered, notCounted, belowZero, stock }
       }, { retryAction: "count.orders", isEmpty: (d) => d === null, emptyReason: "no_stores" }),
       "count.orders",
     ),
@@ -180,7 +203,7 @@ async function buildDrafts(
   coverDays: number,
   asOf: Date,
   skipCount: boolean,
-): Promise<Pick<DraftData, "vendors" | "covered" | "notCounted" | "belowZero" | "stock">> {
+): Promise<StoreDraft> {
   const [ingredients, leadRows, liveCtx, vendorLines, olderCounts] = await Promise.all([
     prisma.canonicalIngredient.findMany({
       where: { accountId },
@@ -251,6 +274,7 @@ async function buildDrafts(
   const notCounted: string[] = []
   const belowZero: string[] = []
   const stock: StockRow[] = []
+  const reads = new Map<string, DraftRead>()
   let covered = 0
 
   for (const ing of ingredients) {
@@ -260,11 +284,22 @@ async function buildDrafts(
     const useForecast = shaped != null && shaped.totalQty > 0
     const series = useForecast ? shaped.days.map((d) => d.qty) : []
     const tailRate = useForecast ? shaped.meanPerDay : flat.ratePerDay
+    const vendorName = vendorOf.get(ing.id) ?? null
     // Nothing on the menu uses it, by forecast or by recent sales: there is no
-    // sales-based reason to order it, so it is left to the owner.
-    if (!(tailRate > 0)) continue
+    // sales-based reason to order it, so it is left to the owner. The shelf
+    // views still read what is on hand (a delivery since a counted zero means
+    // it is no longer out); only a counted item is worth that walk.
+    if (!(tailRate > 0)) {
+      reads.set(ing.id, {
+        onHand: ctx.lastCountByIngredient.has(ing.id) ? runningOnHandFromContext(ctx, ing).onHand : null,
+        vendor: vendorName,
+      })
+      continue
+    }
 
     const oh = runningOnHandFromContext(ctx, ing)
+    reads.set(ing.id, { onHand: oh.baseAt === null ? null : oh.onHand, vendor: vendorName })
+
     if (oh.baseAt === null) {
       notCounted.push(plainName(ing.name))
       stock.push({
@@ -376,5 +411,5 @@ async function buildDrafts(
   // because they need a hand before anything else can be trusted.
   const rank = (r: StockRow) => (r.status === "unknown" ? -1 : r.daysLeft ?? 999)
   stock.sort((a, b) => rank(a) - rank(b) || a.name.localeCompare(b.name))
-  return { vendors, covered, notCounted, belowZero, stock }
+  return { vendors, covered, notCounted, belowZero, stock, reads }
 }
