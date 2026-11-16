@@ -130,7 +130,7 @@ button.ck-gl:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .ck-link{background:none;border:0;padding:0;color:var(--accent);font:inherit;font-weight:600;font-size:var(--t-cap);cursor:pointer}
 .ck-link:hover{color:var(--accent-hi);text-decoration:underline}
 .ck-link[disabled]{color:var(--ink-3);cursor:default;text-decoration:none}
-.ck-crewform{display:grid;grid-template-columns:repeat(4,minmax(0,1fr)) auto;gap:10px;align-items:end;padding:14px 16px;border-bottom:1px solid var(--line);background:var(--paper)}
+.ck-crewform{display:grid;grid-template-columns:repeat(5,minmax(0,1fr)) auto;gap:10px;align-items:end;padding:14px 16px;border-bottom:1px solid var(--line);background:var(--paper)}
 @media (max-width:900px){.ck-crewform{grid-template-columns:1fr 1fr}}
 
 /* ── posters ─────────────────────────────────────────────────────────── */
