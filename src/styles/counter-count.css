@@ -110,18 +110,10 @@
 @media (min-width:900px){.cd-list{grid-template-columns:repeat(2,minmax(0,1fr))}}
 .cd-item__stale{color:var(--bad)}
 
-/* Count & waste — Restock. Phone: store cards, one sentence, the big draft
+/* Count & waste — Restock. Phone: one sentence, the big draft
    number, then Order or Stock one tap apart. Desk (≥1000px): stock on the
    left, the draft order beside it and sticky, so both read at once. */
 .rs{display:grid}
-.rs-stores{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;padding:14px 14px 0}
-.rs-store{display:grid;gap:2px;justify-items:start;text-align:left;padding:10px 12px;border:1px solid var(--line-strong);border-radius:8px;
-  background:var(--surface);color:var(--ink);font:inherit;cursor:pointer;min-height:64px}
-.rs-store b{font-size:15px}
-.rs-store span{font-size:13px;color:var(--ink-2);font-variant-numeric:tabular-nums}
-.rs-store small{font-family:var(--mono);font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3)}
-.rs-store small.rs-store__now{color:var(--bad);font-weight:700}
-.rs-store[aria-pressed="true"]{border-color:var(--ink);box-shadow:inset 0 0 0 1px var(--ink)}
 .rs-lead{border-bottom:1px solid var(--line)}
 .rs-lead__say{margin:0;font-size:16px;line-height:1.4;font-weight:600}
 .rs-lead__num{display:grid;gap:4px}

@@ -2,6 +2,7 @@ import { getServerSession } from "next-auth"
 import { redirect } from "next/navigation"
 import { authOptions, hasOwnerAccess } from "@/lib/auth"
 import { getCountWasteSectionPromises } from "@/lib/counter/adapters/count"
+import { getInventorySwitcherSectionPromises } from "@/lib/counter/adapters/inventory-shelf"
 import { WasteClient } from "./waste-client"
 
 export const dynamic = "force-dynamic"
@@ -13,7 +14,10 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ s
   if (!hasOwnerAccess(session.user.role)) redirect("/dashboard/forbidden")
   const sp = await searchParams
 
-  const sections = getCountWasteSectionPromises({ accountId: session.user.accountId, storeId: sp.store })
+  const sections = {
+    ...getCountWasteSectionPromises({ accountId: session.user.accountId, storeId: sp.store }),
+    ...getInventorySwitcherSectionPromises({ accountId: session.user.accountId }),
+  }
 
   return (
     <>

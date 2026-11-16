@@ -37,6 +37,7 @@ const ROUTES = [
   "/m",
   "/m/chat",
   "/m/count",
+  "/m/count/walk",
   "/m/ingredients",
   "/m/invoices",
   "/m/labor",

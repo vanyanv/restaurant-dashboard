@@ -6,7 +6,7 @@ import type { WalkSections } from "@/lib/counter/adapters/count"
 import { CountHead } from "./count-ui"
 import { CountWalk } from "./count-walk"
 
-/** Count & waste — Count, on the desk. The phone renders the same walk at /m/count. */
+/** Inventory — the count, on the desk at /dashboard/count/walk. The phone renders the same walk at /m/count/walk. */
 export function CountWalkClient({ sections }: { sections: SectionSources<WalkSections> }) {
   usePageChrome({ leaf: "Count" })
   const { pending } = useCounterTransition()

@@ -20,8 +20,9 @@ import { clearDraft, readDraft, writeDraft } from "@/components/counter/keep/use
  * looks off before the count closes. A finished count is what "Order next"
  * and the report read.
  *
- * `base` is the page this sits on (`/dashboard/count` or `/m/count`), so the
- * store chips and links stay on the same surface.
+ * `base` is the Inventory section this sits in (`/dashboard/count` or
+ * `/m/count`), so its links stay on the same surface. The walk itself lives
+ * at `${base}/walk`; `base` alone is the Overview.
  */
 
 type Screen = { kind: "list" } | { kind: "item"; idx: number } | { kind: "review" } | { kind: "done"; n: number; value: number }
@@ -150,7 +151,7 @@ export function CountWalk({ data, base }: { data: WalkData; base: "/dashboard/co
   useEffect(() => {
     if (!restored || walked.current || params.get("walk") !== "1") return
     walked.current = true
-    router.replace(`${base}?${new URLSearchParams({ store: data.store.id }).toString()}`, { scroll: false })
+    router.replace(`${base}/walk?${new URLSearchParams({ store: data.store.id }).toString()}`, { scroll: false })
     if (window.matchMedia("(min-width: 1000px)").matches) return
     autoWalk.current?.()
   }, [restored, params, router, base, data.store.id])
@@ -382,7 +383,7 @@ export function CountWalk({ data, base }: { data: WalkData; base: "/dashboard/co
       <div className="cw__top">
         <div className="cw-store">
           <h2 className="cw__h">{data.store.name}</h2>
-          {data.stores.length > 1 && <Link className="cw__link" href={base}>Change store</Link>}
+          {data.stores.length > 1 && <Link className="cw__link" href={`${base}/walk`}>Change store</Link>}
         </div>
         <p className="cw__say">
           {countId
@@ -704,7 +705,7 @@ function StorePick({ cards, base }: { cards: WalkData["storeCards"]; base: "/das
       </div>
       <div className="cw-pick">
         {cards.map((c) => (
-          <Link key={c.id} className="cw-pick__store" href={`${base}?${new URLSearchParams({ store: c.id, walk: "1" }).toString()}`}>
+          <Link key={c.id} className="cw-pick__store" href={`${base}/walk?${new URLSearchParams({ store: c.id, walk: "1" }).toString()}`}>
             <b>{c.name}</b>
             <span className={c.inProgress != null ? "cw-pick__open" : undefined}>
               {c.inProgress != null

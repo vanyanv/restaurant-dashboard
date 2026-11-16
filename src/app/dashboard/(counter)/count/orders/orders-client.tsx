@@ -5,7 +5,8 @@ import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { Section, useCounterTransition, usePageChrome, useSurfaceHref } from "@/components/counter"
 import type { SectionSources } from "@/lib/counter/adapters/types"
-import type { DraftData, DraftSections, DraftVendor, StockRow, StoreSummary } from "@/lib/counter/adapters/draft-orders"
+import type { DraftData, DraftSections, DraftVendor, StockRow } from "@/lib/counter/adapters/draft-orders"
+import type { SwitcherSections } from "@/lib/counter/adapters/inventory-shelf"
 import { setDraftSkipCount } from "@/lib/counter/actions/count"
 import { COVER_DAY_CHOICES, COVER_LABELS, DEFAULT_COVER_DAYS } from "@/lib/counter/draft-orders"
 import { CountHead, money, OutcomeLine, type Outcome } from "../count-ui"
@@ -17,12 +18,12 @@ import { CountHead, money, OutcomeLine, type Outcome } from "../count-ui"
  * one tap apart; on the desk they sit side by side. Every figure is an
  * estimate and says how it was reached. Nothing here places an order.
  */
-export function OrdersClient({ sections }: { sections: SectionSources<DraftSections> }) {
-  usePageChrome({ leaf: "Order next" })
+export function OrdersClient({ sections }: { sections: SectionSources<DraftSections & SwitcherSections> }) {
+  usePageChrome({ leaf: "Order" })
   const { pending } = useCounterTransition()
   return (
     <>
-      <CountHead sub="What to put on the next order, store by store. You order twice a week, so it covers until the order after. Estimates; nothing is sent." />
+      <CountHead sub="What to put on the next order, store by store. You order twice a week, so it covers until the order after. Estimates; nothing is sent." switcher={sections.switcher} />
       <Section title="Order next" meta={(d) => d?.store.name ?? ""} data={sections.drafts} pending={pending} pad={false}>
         {(d) => (d ? <Restock data={d} /> : null)}
       </Section>
@@ -44,8 +45,6 @@ function Restock({ data }: { data: DraftData }) {
 
   return (
     <div className="rs">
-      <StoreCards data={data} />
-
       <div className="cw-pad rs-lead">
         <p className="rs-lead__say">
           {lines === 0
@@ -100,29 +99,7 @@ function Restock({ data }: { data: DraftData }) {
 
 function CountLink({ storeId }: { storeId: string }) {
   const href = useSurfaceHref()
-  return <Link href={href(`/dashboard/count?store=${storeId}`)}>Start a count</Link>
-}
-
-function StoreCards({ data }: { data: DraftData }) {
-  const router = useRouter()
-  const href = useSurfaceHref()
-  const go = (s: StoreSummary) =>
-    router.push(href(`${PATH}?${new URLSearchParams({ store: s.id, cover: String(data.coverDays) }).toString()}`))
-  return (
-    <div className="rs-stores" role="group" aria-label="Store">
-      {data.summaries.map((s) => (
-        <button key={s.id} type="button" className="rs-store" aria-pressed={s.id === data.store.id} onClick={() => go(s)}>
-          <b>{s.name}</b>
-          <span>
-            {s.lines === 0 ? "Nothing to order" : `${s.lines} to order${s.unpriced < s.lines ? ` · about ${money(s.dollars)}` : ""}`}
-          </span>
-          {s.urgent > 0 && <small className="rs-store__now">{s.urgent} today</small>}
-          {s.notCounted > 0 && <small>{s.notCounted} not counted</small>}
-          {s.skip && <small>Skipping this week&apos;s count</small>}
-        </button>
-      ))}
-    </div>
-  )
+  return <Link href={href(`/dashboard/count/walk?store=${storeId}`)}>Start a count</Link>
 }
 
 function StockList({ rows }: { rows: StockRow[] }) {

@@ -23,11 +23,14 @@ import { PAGES } from "./manifest"
  * Live routes the fidelity manifest does not name, because the DESIGN has no
  * page for them. They are still pages a reader opens.
  *
- * All three are phone-only and all three are pre-Counter surfaces that have
- * not been rebuilt: `/m/chat` is the editorial chat, which `src/proxy.ts`
+ * All are phone-only: `/m/chat` is the editorial chat, which `src/proxy.ts`
  * still maps `/dashboard/chat` onto for phones because the Counter Ask has no
- * thread history and this does; `/m/count` is the stock-count surface behind
- * the third tab; `/m/pnl/<id>` is the per-store statement the desk retired.
+ * thread history and this does; `/m/count` is Inventory behind the third tab
+ * (its Overview since the count walk moved) and `/m/count/walk` is the count
+ * walk itself, opened here with no store, so on its store picker; `/m/pnl/<id>`
+ * is the per-store statement the desk retired. None has a manifest row, so
+ * none has a fidelity budget: they are swept for console errors, overflow,
+ * section states and controls only.
  *
  * The desk needs no equivalent list — every desk route outside the manifest is
  * a legacy path that redirects, and those are asserted by their own spec.
@@ -35,6 +38,7 @@ import { PAGES } from "./manifest"
 export const EXTRA_PHONE_ROUTES = [
   "/m/chat",
   "/m/count",
+  "/m/count/walk",
   "/m/pnl/cmexd4zia0001jr04ljkdt9na",
 ] as const
 
