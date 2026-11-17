@@ -36,6 +36,7 @@
 @import "../styles/counter-count.css";
 @import "../styles/counter-inventory.css";
 @import "../styles/counter-people.css";
+@import "../styles/counter-ui.css";
 
 @theme {
   --color-background: var(--ct-paper);

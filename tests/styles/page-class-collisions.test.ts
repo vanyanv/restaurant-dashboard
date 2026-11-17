@@ -30,6 +30,7 @@ const PAGE_SHEETS = [
   "counter-count.css",
   "counter-inventory.css",
   "counter-people.css",
+  "counter-ui.css",
 ]
 
 /** class -> the sheets allowed to start a rule with it, and why. */
