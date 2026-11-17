@@ -26,9 +26,11 @@ const PUBLIC_ON_PURPOSE: Record<string, string> = {}
 type Fn = { file: string; name: string; exported: boolean; body: string }
 
 /** Source with comments removed, so a comment naming getSession( cannot pass for a call. */
+/** In-memory files the fixture tests below add; checked before the disk. */
+const VIRTUAL = new Map<string, string>()
+
 function read(file: string): string {
-  return fs
-    .readFileSync(path.join(ROOT, file), "utf8")
+  return (VIRTUAL.get(file) ?? fs.readFileSync(path.join(ROOT, file), "utf8"))
     .replace(/\/\*[\s\S]*?\*\//g, "")
     .replace(/(^|[^:"'`])\/\/.*$/gm, "$1")
 }
@@ -77,7 +79,14 @@ function importsOf(file: string): Map<string, [string, string]> {
   return out
 }
 
-const actionFiles = execSync(`grep -rlE '^"use server"' src`, { cwd: ROOT, encoding: "utf8" })
+/** Blank out string and template literals, so `"getSession("` cannot pass for a call. */
+const code = (body: string) =>
+  body.replace(/"(?:\\.|[^"\\\n])*"|'(?:\\.|[^'\\\n])*'|`(?:\\.|[^`\\])*`/g, '""')
+
+/** Either quote style: `'use server'` is as much an endpoint as `"use server"`. */
+const USE_SERVER = /^['"]use server['"];?\s*$/m
+
+const actionFiles = execSync(`grep -rlE "^['\\"]use server['\\"]" src`, { cwd: ROOT, encoding: "utf8" })
   .split("\n")
   .filter(Boolean)
 
@@ -100,10 +109,11 @@ function reachesGuard(file: string, name: string, seen = new Set<string>()): boo
     }
     return false
   }
-  let ok = GUARD.test(fn.body)
+  const body = code(fn.body)
+  let ok = GUARD.test(body)
   if (!ok) {
     const imports = importsOf(file)
-    const called = new Set([...fn.body.matchAll(/\b(\w+)\(/g)].map((m) => m[1]))
+    const called = new Set([...body.matchAll(/\b(\w+)\(/g)].map((m) => m[1]))
     called.delete(name)
     for (const c of called) {
       if (fns.some((f) => f.name === c) && reachesGuard(file, c, seen)) ok = true
@@ -147,6 +157,23 @@ describe("server actions", () => {
       }
     }
     expect(missing, "These server actions never check who is signed in").toEqual([])
+  })
+
+  it("checks single-quoted directives and does not count a string as a guard call", () => {
+    VIRTUAL.set("fixture/single.ts", `'use server'\nexport async function open() { return 1 }\n`)
+    VIRTUAL.set(
+      "fixture/strings.ts",
+      `"use server"\nexport async function fake() { return "getSession(" }\nexport async function real() { await getSession(); return 1 }\n`,
+    )
+    try {
+      expect(USE_SERVER.test(read("fixture/single.ts"))).toBe(true)
+      expect(actionFiles.every((f) => USE_SERVER.test(read(f)))).toBe(true)
+      expect(reachesGuard("fixture/single.ts", "open")).toBe(false)
+      expect(reachesGuard("fixture/strings.ts", "fake")).toBe(false)
+      expect(reachesGuard("fixture/strings.ts", "real")).toBe(true)
+    } finally {
+      VIRTUAL.clear()
+    }
   })
 
   it("every server action reads the session through getSession, not next-auth directly", () => {

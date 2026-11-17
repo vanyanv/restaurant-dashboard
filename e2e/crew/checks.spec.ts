@@ -112,10 +112,15 @@ test("a photo taken with no signal survives a reload and is sent with its tick",
   await expect(page.getByText(/No signal\. 1 tick kept on this phone/)).toBeVisible()
   expect(photoPosts).toHaveLength(0)
 
-  // The phone drops the tab; crew open the link again once the signal is back.
+  // The phone drops the tab and crew open the link again. Uploads stay blocked
+  // until the new page is up, so the photo it sends can only have come from the
+  // phone's storage, not from the old page's memory.
   await context.setOffline(false)
-  signal = true
   await signIn(page)
+  await expect(page.getByText(/1 tick kept on this phone/)).toBeVisible()
+  expect(photoPosts).toHaveLength(0)
+  signal = true
+  await page.evaluate(() => window.dispatchEvent(new Event("online")))
 
   await expect.poll(() => photoPosts.length, { timeout: 15_000 }).toBe(1)
   expect(photoPosts[0]).toContain("image/jpeg")

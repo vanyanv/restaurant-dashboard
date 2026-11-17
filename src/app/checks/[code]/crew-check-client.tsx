@@ -669,6 +669,10 @@ function Checklist({
    * flush before then would send those ticks without their photos.
    */
   const photosBack = useRef(false)
+  /** Photo ticks whose photo is still being written to the phone. */
+  const saving = useRef(new Set<Queued>())
+  /** Write the queue, minus ticks whose photo is not stored yet: a tick noted as having a photo always has one to find. */
+  const persist = () => writeQueue(qKey, queue.current.filter((x) => !saving.current.has(x)))
   /** The task being flagged, with the note and mark it had when the sheet opened. */
   const [flagFor, setFlagFor] = useState<{ item: CrewItem; note: string; seen?: string } | null>(null)
   /** A done task someone tapped: shows who did it, and undo is a second, deliberate tap. */
@@ -752,10 +756,15 @@ function Checklist({
     // The newest tap on a task replaces any older one still waiting.
     queue.current = [...queue.current.filter((x) => x.itemId !== q.itemId), q]
     // Photo first, so a tick noted as having one always has one to find.
-    if (q.photo) void savePhoto(qKey, q.itemId, q.photo).then(() => writeQueue(qKey, queue.current))
-    else {
+    if (q.photo) {
+      saving.current.add(q)
+      void savePhoto(qKey, q.itemId, q.photo).then(() => {
+        saving.current.delete(q)
+        persist()
+      })
+    } else {
       void deletePhoto(qKey, q.itemId)
-      writeQueue(qKey, queue.current)
+      persist()
     }
     setQueued(queue.current.length)
   }
@@ -773,7 +782,7 @@ function Checklist({
           if (r === "offline") break
           // By identity: a tap while this was in flight may have reordered the queue.
           queue.current = queue.current.filter((x) => x !== q)
-          writeQueue(qKey, queue.current)
+          persist()
           if (q.photo && !queue.current.some((x) => x.itemId === q.itemId)) void deletePhoto(qKey, q.itemId)
           setQueued(queue.current.length)
           // A newer tap on the same task may be waiting behind this one.
@@ -800,7 +809,7 @@ function Checklist({
     })
     // A photo the phone could not keep: drop its tick so the task asks for the photo again.
     for (const id of lost) if (!queue.current.some((x) => x.itemId === id)) clearPending(id)
-    writeQueue(qKey, queue.current)
+    persist()
     setQueued(queue.current.length)
     photosBack.current = true
     void flush()
@@ -808,10 +817,12 @@ function Checklist({
   useEffect(() => {
     if (queue.current.some((q) => q.hasPhoto && !q.photo)) void restorePhotos()
     else {
+      // Nothing to put back, but still clear photos too old to send.
+      void loadPhotos(qKey)
       photosBack.current = true
       void flush()
     }
-  }, [flush])
+  }, [flush, qKey])
   useEffect(() => {
     if (queued === 0) return
     const id = window.setInterval(() => void flush(), FLUSH_MS)
