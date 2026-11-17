@@ -127,11 +127,11 @@ const PILL: Record<ShelfState, string> = {
 }
 
 export function StatePill({ state, children }: { state: ShelfState; children: ReactNode }) {
-  return <span className={`iv-pill iv-pill--${PILL[state]}`}>{children}</span>
+  return <span className={`inv-pill inv-pill--${PILL[state]}`}>{children}</span>
 }
 
 export function NotYet({ children }: { children: ReactNode }) {
-  return <span className="iv-pill iv-pill--notyet">{children}</span>
+  return <span className="inv-pill inv-pill--notyet">{children}</span>
 }
 
 /**
@@ -144,8 +144,8 @@ export function DaysBar({ line, barDays }: { line: ShelfLine; barDays: number })
   const pct = (d: number) => `${Math.max(0, Math.min(100, (d / barDays) * 100))}%`
   const tone = needsOrderNow(line.state) ? "bad" : line.state === "order_soon" ? "warn" : "good"
   return (
-    <span className="iv-days">
-      <span className={`iv-bar iv-bar--${tone}`} aria-hidden="true">
+    <span className="inv-days">
+      <span className={`inv-bar inv-bar--${tone}`} aria-hidden="true">
         <i style={{ width: pct(line.daysLeft) }} />
         {line.orderAt !== null && line.orderAt < barDays ? <u style={{ left: pct(line.orderAt) } as CSSProperties} /> : null}
       </span>
@@ -169,13 +169,13 @@ export function freshSay(shelf: StoreShelf): string {
 
 /** The freshness line: how old the count is, and whether this week's is being skipped. */
 export function Fresh({ shelf }: { shelf: StoreShelf }) {
-  const skip = shelf.skip ? <span className="iv-pill iv-pill--warn">Skipping this week&apos;s count</span> : null
+  const skip = shelf.skip ? <span className="inv-pill inv-pill--warn">Skipping this week&apos;s count</span> : null
   // The skip is a switch on the Order tab; said here because it changes every figure on the page.
   const skipSay = shelf.skip ? <span>Counts from the last 7 days are left out, here and on the draft order.</span> : null
   if (!shelf.lastCount) {
     return (
       <p className="iv-fresh">
-        <span className="iv-pill iv-pill--mute">Not counted</span>
+        <span className="inv-pill inv-pill--mute">Not counted</span>
         {skip}
         <span>{shelf.skip ? `${shelf.name} has no finished count from before the last 7 days.` : `${shelf.name} has no finished count yet.`}</span>
         {skipSay}
@@ -185,8 +185,8 @@ export function Fresh({ shelf }: { shelf: StoreShelf }) {
   return (
     <p className="iv-fresh">
       {shelf.lastCount.stale
-        ? <span className="iv-pill iv-pill--warn">Old count</span>
-        : <span className="iv-pill iv-pill--good">Fresh</span>}
+        ? <span className="inv-pill inv-pill--warn">Old count</span>
+        : <span className="inv-pill inv-pill--good">Fresh</span>}
       {skip}
       <span>{freshSay(shelf)}</span>
       {skipSay}
