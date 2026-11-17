@@ -9,6 +9,7 @@ import { ALL_STORES, needsOrderNow, type ShelfState } from "@/lib/counter/shelf-
 import { CountHead, StoreSwitch, money } from "./count-ui"
 import { ItemLink } from "./picture-ui"
 import { Block, DaysBar, Fresh, Legend, MiniMap, PinnedActions, ShelfMap, Tiles, coverageSay } from "./shelf-ui"
+import { Answer, Status } from "@/components/counter/ui"
 
 /**
  * Inventory — Overview. What to order, first: one number, one sentence, the
@@ -110,7 +111,7 @@ function Lead({ shelf, out, now, soon }: { shelf: StoreShelf; out: number; now: 
     return (
       <section className="iv-card iv-lead iv-a-lead" aria-label="What to order">
         <div className="iv-lead__n iv-lead__n--text"><strong>No count list yet</strong></div>
-        <p className="iv-say">Pick what you count and how it comes in, once, and it is here every week.</p>
+        <Answer>Pick what you count and how it comes in, once, and it is here every week.</Answer>
         <Link className="iv-btn iv-btn--primary" href={href("/dashboard/count/setup")}>Set up the count list</Link>
       </section>
     )
@@ -119,10 +120,10 @@ function Lead({ shelf, out, now, soon }: { shelf: StoreShelf; out: number; now: 
     return (
       <section className="iv-card iv-lead iv-a-lead" aria-label="What to order">
         <div className="iv-lead__n iv-lead__n--text"><strong>Not counted yet</strong></div>
-        <p className="iv-say">
+        <Answer>
           {shelf.name} has no finished count{shelf.skip ? " from before the last 7 days" : ""}, so there is nothing to order from yet.
           <small>{shelf.openCount !== null ? `A count is open with ${plural(shelf.openCount, "line")} saved. Finish it and the order appears here.` : "Count the shelves once and this page fills in."}</small>
-        </p>
+        </Answer>
         <Link className="iv-btn iv-btn--ink" href={href(`/dashboard/count/walk?store=${shelf.id}`)}>
           {shelf.openCount !== null ? `Resume count · ${shelf.name}` : `Count ${shelf.name}`}
         </Link>
@@ -149,10 +150,10 @@ function Lead({ shelf, out, now, soon }: { shelf: StoreShelf; out: number; now: 
         <strong>{n}</strong>
         <span>to order now</span>
       </div>
-      <p className="iv-say">
+      <Answer>
         {say}
         {more.length > 0 && <small>{more.join(" ")}</small>}
-      </p>
+      </Answer>
       {shelf.draftVendors > 0 ? (
         <Link className="iv-btn iv-btn--primary" href={orderHref}>
           Open draft order · {plural(shelf.draftVendors, "vendor")}
@@ -341,7 +342,7 @@ function AllStores({ data }: { data: ShelfData }) {
     <PinnedActions shelf={null} />
     <div className="iv-c">
     <div className="iv iv--all">
-      <p className="iv-say iv-a-say">
+      <Answer>
         {data.total === null
           ? `None of the ${n} stores has a finished count yet.`
           : data.total === 0
@@ -350,7 +351,7 @@ function AllStores({ data }: { data: ShelfData }) {
         {blank.length > 0 && data.total !== null && (
           <small>{blank.map((s) => s.name).join(" and ")} {blank.length === 1 ? "has" : "have"} no finished count, so {blank.length === 1 ? "it is" : "they are"} not in that number.</small>
         )}
-      </p>
+      </Answer>
       <div className="iv-card iv-a-key"><Legend /></div>
       <div className="iv-stores">
         {data.shelves.map((s) => <StoreCard key={s.id} shelf={s} areas={data.areas} />)}
@@ -383,10 +384,10 @@ function StoreCard({ shelf, areas }: { shelf: StoreShelf; areas: ShelfData["area
       <div className="iv-store__h">
         <b>{shelf.name}</b>
         {!shelf.lastCount
-          ? <span className="inv-pill inv-pill--mute">Not counted</span>
+          ? <Status tone="off">Not counted</Status>
           : shelf.lastCount.stale
-            ? <span className="inv-pill inv-pill--warn">Old count</span>
-            : <span className="inv-pill inv-pill--good">Fresh</span>}
+            ? <Status tone="warn">Old count</Status>
+            : <Status tone="good">Fresh</Status>}
       </div>
       {shelf.toOrder === null ? (
         <div className="iv-store__n iv-store__n--text"><strong>Not counted yet</strong></div>

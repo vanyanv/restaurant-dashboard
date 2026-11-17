@@ -8,6 +8,7 @@ import type { WasteData, WasteEntry } from "@/lib/counter/adapters/count"
 import { WASTE_REASONS, fmtQty, showQty, type WasteReason } from "@/lib/counter/count-layers"
 import { money, OutcomeLine, type Outcome } from "./count-ui"
 import { clearDraft, readDraft, writeDraft } from "@/components/counter/keep/use-draft"
+import { Status } from "@/components/counter/ui"
 
 /**
  * The waste log: what, how much, why. Ten seconds, any time of day. The
@@ -195,7 +196,7 @@ export function WasteEntries({ entries }: { entries: WasteEntry[] }) {
               <b>{w.name}</b>
               {w.dollars != null
                 ? <span className="v">{money(w.dollars)}</span>
-                : <span className="inv-pill inv-pill--notyet">Not valued yet</span>}
+                : <Status tone="wait">Not valued yet</Status>}
             </div>
             <div className="iv-it__c">
               <span>
