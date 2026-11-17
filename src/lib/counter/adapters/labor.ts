@@ -1482,6 +1482,9 @@ function loadEverything(input: LaborSectionsInput) {
   // Read below through `classify`; this only keeps an early rejection from
   // surfacing as unhandled while the statement is still loading.
   laborWeekLoad.catch(() => {})
+  // `statementP` feeds two promises `loadLaborWeek` may never await (no
+  // stores): give them a handler too. The section still reads `scopeP`.
+  statementP.catch(() => {})
 
   const laborP = scopeP.then((scopeSd) =>
     chainReady(scopeSd, async (statement) => {

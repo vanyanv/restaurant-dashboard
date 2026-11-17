@@ -149,9 +149,8 @@ export function monthTagsForRange(start: Date, end: Date): string[] {
  * React's `cache()` scopes this map to one request; outside a render (route
  * handlers, crons, scripts) it is a fresh map per call, i.e. no sharing.
  *
- * The first caller gets the loader's own value; every later caller in the same
- * request gets a `structuredClone`, so a caller that mutates its copy cannot
- * change what another section renders. Values are JSON-shaped already (Redis
+ * Every caller gets its own `structuredClone`, so a caller that mutates its
+ * copy cannot change what another section renders. Values are JSON-shaped already (Redis
  * stores them as JSON), so cloning is always possible.
  */
 const requestInflight = cache(() => new Map<string, Promise<unknown>>())
@@ -163,14 +162,17 @@ export async function cached<T>(
   loader: () => Promise<T>,
 ): Promise<T> {
   const inflight = requestInflight()
-  const pending = inflight.get(key) as Promise<T> | undefined
-  if (pending) return pending.then((v) => (v === null || v === undefined ? v : structuredClone(v)))
-  const run = cachedUncoalesced(key, ttlSeconds, tags, loader)
-  inflight.set(key, run)
-  // A failed load must not poison the rest of the render: drop it so the next
-  // caller retries.
-  run.catch(() => inflight.delete(key))
-  return run
+  let run = inflight.get(key) as Promise<T> | undefined
+  if (!run) {
+    run = cachedUncoalesced(key, ttlSeconds, tags, loader)
+    inflight.set(key, run)
+    // A failed load must not poison the rest of the render: drop it so the
+    // next caller retries.
+    run.catch(() => inflight.delete(key))
+  }
+  // EVERY caller gets its own copy, the first included, so a section that
+  // sorts or pushes into its result cannot change what a later one reads.
+  return run.then((v) => (v === null || v === undefined ? v : structuredClone(v)))
 }
 
 async function cachedUncoalesced<T>(

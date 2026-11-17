@@ -1367,6 +1367,7 @@ function loadEverything(input: CogsSectionsInput) {
   // Read below through `classify`; this only stops an early rejection from
   // being reported as unhandled while the statement is still loading.
   cogsLoad.catch(() => {})
+  salesByDayP.catch(() => {})
 
   const cogsP = scopeP.then((scopeSd) =>
     chainReady(scopeSd, async () => {

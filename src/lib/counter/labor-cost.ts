@@ -51,8 +51,17 @@ export async function loadLaborCost(
   // Only the app's own client is shared per request; a chat tool's `ctx.prisma`
   // keeps its own reads.
   if (db !== prisma) return loadLaborCostFor(accountId, storeIds, days, db)
-  const shared = await laborCostThisRequest(accountId, [...storeIds].sort().join(","), days[0], days[days.length - 1])
-  return structuredClone(shared)
+  const memo = laborCostThisRequest()
+  const key = `${accountId}|${[...storeIds].sort().join(",")}|${days[0]}|${days[days.length - 1]}`
+  let shared = memo.get(key)
+  if (!shared) {
+    shared = loadLaborCostFor(accountId, storeIds, days, prisma)
+    memo.set(key, shared)
+    // A failed read is dropped so the next caller in the render retries,
+    // as each did on its own before this was shared.
+    shared.catch(() => memo.delete(key))
+  }
+  return structuredClone(await shared)
 }
 
 /**
@@ -61,17 +70,10 @@ export async function loadLaborCost(
  * rollup, the comparison rollup, the SPLH series, the labor week), with end
  * times of 00:00 or 23:59:59 that name the same calendar day; keyed on the
  * days, three distinct reads remain. Callers get a clone, so none can change
- * another's figures.
+ * another's figures. Outside a render (crons, scripts) React's `cache` gives a
+ * fresh map per call, so nothing is shared there.
  */
-const laborCostThisRequest = cache(
-  (accountId: string, storeIdsKey: string, firstDay: string, lastDay: string): Promise<LaborCost> =>
-    loadLaborCostFor(
-      accountId,
-      storeIdsKey.split(","),
-      daysBetween(new Date(`${firstDay}T00:00:00.000Z`), new Date(`${lastDay}T00:00:00.000Z`)),
-      prisma,
-    ),
-)
+const laborCostThisRequest = cache(() => new Map<string, Promise<LaborCost>>())
 
 async function loadLaborCostFor(
   accountId: string,
