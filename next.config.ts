@@ -19,6 +19,11 @@ const nextConfig: NextConfig = {
     // entry naming a package that isn't a dependency has nothing to
     // optimize; removed rather than left as dead config.
     optimizePackageImports: ["lucide-react", "date-fns"],
+    // Keep a page the phone just showed for 30 s, so tapping back to the
+    // previous tab or day shows it at once instead of asking the server again.
+    // Next's default for dynamic pages is 0 s. A server action that calls
+    // revalidatePath/revalidateTag, or a router.refresh(), clears it early.
+    staleTimes: { dynamic: 30 },
   },
   images: {
     formats: ["image/webp", "image/avif"],

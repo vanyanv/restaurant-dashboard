@@ -3547,3 +3547,27 @@ button.setrow--pick.is-on { background: var(--accent-wash) }
   text-align: center;
   justify-content: center;
 }
+
+/* ─── Entry motion, cut for speed (2026-11-17) ───────────────────────────
+ * The prototype's entry motion (counter-components.css, generated, so it is
+ * overridden here rather than edited) staggers a screen's blocks up to 176 ms
+ * and fades each over 340 ms; the headline figure waits 90 ms and then fades
+ * for 500 ms. Measured against what the owner sees: a number that has ARRIVED
+ * took ~0.6 s to be fully legible, and it replayed on every tab, day and store
+ * change. Same motion, compressed so a screen settles within ~200 ms. */
+.screen > *,.mscroll > *{animation-duration:.18s}
+.screen > *:nth-child(2),.mscroll > *:nth-child(2){animation-delay:12ms}
+.screen > *:nth-child(3),.mscroll > *:nth-child(3){animation-delay:24ms}
+.screen > *:nth-child(4),.mscroll > *:nth-child(4),
+.screen > *:nth-child(5),.mscroll > *:nth-child(5),
+.screen > *:nth-child(6),.mscroll > *:nth-child(6),
+.screen > *:nth-child(n+7),.mscroll > *:nth-child(n+7){animation-delay:32ms}
+.headline .v,.mhead .v{animation-duration:.16s;animation-delay:0ms}
+.strip > div{animation-duration:.18s}
+.strip > div:nth-child(2){animation-delay:12ms}
+.strip > div:nth-child(3){animation-delay:24ms}
+.strip > div:nth-child(n+4){animation-delay:32ms}
+.tbl tbody tr{animation-duration:.16s}
+.qitem{animation-duration:.18s}
+.qitem:nth-child(2){animation-delay:12ms}
+.qitem:nth-child(3){animation-delay:24ms}

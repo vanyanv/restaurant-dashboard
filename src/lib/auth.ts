@@ -6,6 +6,24 @@ import { Role } from "@/generated/prisma/client"
 import { recordLoginEvent } from "@/lib/monitoring/login-audit"
 import { extractFirstName, markSignIn, markSignOut } from "@/lib/welcome"
 import { logger } from "@/lib/logger"
+import { cache } from "react"
+
+/**
+ * The jwt callback's "who is this still" read, once per request.
+ *
+ * Every `getServerSession` runs the jwt callback, and a phone page calls it from
+ * its layouts, its page and its loaders: measured on `/m`, ten identical
+ * primary-key reads of the same user for one page view. `cache()` memoizes for
+ * the length of one server render, so a removal or role change still applies
+ * on the very next page load. Outside a render (route handlers, actions) React
+ * does not memoize and this is a plain call, as before.
+ */
+const readSessionUser = cache((id: string) =>
+  prisma.user.findUnique({
+    where: { id },
+    select: { role: true, accountId: true, removedAt: true },
+  }),
+)
 
 declare module "next-auth" {
   interface Session {
@@ -192,10 +210,7 @@ export const authOptions: NextAuthOptions = {
         // ends it.
         let dbUser: { role: Role; accountId: string; removedAt: Date | null } | null | undefined
         try {
-          dbUser = await prisma.user.findUnique({
-            where: { id: token.id as string },
-            select: { role: true, accountId: true, removedAt: true },
-          })
+          dbUser = await readSessionUser(token.id as string)
         } catch (error) {
           logger.warn("[auth] session check skipped, database did not answer", {
             message: error instanceof Error ? error.message : String(error),
