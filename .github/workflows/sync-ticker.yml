@@ -1,0 +1,73 @@
+name: Sync Ticker
+# GitHub's own `schedule:` trigger is not reliable on this repo. Over
+# 2026-11-07..16 the every-30-minute checks cron fired about 4 times a day,
+# the hourly Otter sync about 3-4 times, and the 4-hourly Otter sync about 3,
+# so the dashboard's "synced" chip regularly read 6-9 hours old.
+#
+# workflow_dispatch is not throttled. This workflow stays running (~5h40m,
+# well inside the 6h job limit), dispatches the sales syncs on their intended
+# cadence, then dispatches itself to carry on. The repo is public, so the
+# runner minutes are free. The old `schedule:` lines stay on every workflow as
+# a backup: a late extra run only re-reads the same rolling window.
+#
+# If the chain ever breaks (a cancelled run, a GitHub outage), the backup
+# schedule below starts it again. `concurrency` keeps one ticker running and
+# at most one waiting, so a scheduled start while a chain is alive just
+# becomes the next link instead of a second chain.
+on:
+  schedule:
+    - cron: '23 */3 * * *'
+  workflow_dispatch:
+    inputs:
+      last:
+        description: 'UTC hour (YYYYMMDDHH) already dispatched by the previous link'
+        default: ''
+
+concurrency:
+  group: sync-ticker
+  cancel-in-progress: false
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  tick:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    steps:
+      - name: Dispatch syncs each hour, then hand off
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          LAST: ${{ github.event.inputs.last }}
+        run: |
+          set -u
+          end=$(( $(date +%s) + 340 * 60 ))
+          last="${LAST:-}"
+          dispatch() {
+            if gh workflow run "$1" --ref main; then
+              echo "$(date -u +%FT%TZ) dispatched $1"
+            else
+              echo "::warning::$(date -u +%FT%TZ) could not dispatch $1"
+            fi
+          }
+          while [ "$(date +%s)" -lt "$end" ]; do
+            key=$(date -u +%Y%m%d%H)
+            if [ "$key" != "$last" ]; then
+              last=$key
+              h=$((10#$(date -u +%H)))
+              # Same hours as otter-hourly-sync.yml's cron (trading hours, LA).
+              if [ "$h" -ge 17 ] || [ "$h" -le 10 ]; then
+                dispatch otter-hourly-sync.yml
+              fi
+              # Same cadence as otter-sync.yml and otter-orders-sync.yml.
+              if [ $((h % 4)) -eq 0 ]; then
+                dispatch otter-sync.yml
+                dispatch otter-orders-sync.yml
+              fi
+            fi
+            sleep 60
+          done
+          gh workflow run sync-ticker.yml --ref main -f last="$last"
+          echo "handed off (last=$last)"
