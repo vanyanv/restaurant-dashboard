@@ -1,25 +1,15 @@
 import type { Metadata, Viewport } from "next"
 import { Suspense } from "react"
-import { Fraunces } from "next/font/google"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { MTabs } from "@/components/counter"
 import { WelcomeMarquee } from "@/components/dashboard/welcome-marquee"
 import { consumePendingWelcome } from "@/lib/welcome"
 import { PageViewTracker } from "@/components/telemetry/page-view-tracker"
-import "@/styles/editorial-tokens.css"
-import "@/styles/editorial-mobile.css"
+import "@/styles/phone-frame.css"
 import "@/styles/welcome-marquee.css"
 import { BROWSER_CHROME_DARK, BROWSER_CHROME_LIGHT } from "@/lib/browser-chrome-colour"
 
-const fraunces = Fraunces({
-  subsets: ["latin"],
-  variable: "--font-fraunces",
-  display: "swap",
-  axes: ["SOFT", "WONK", "opsz"],
-  // See `src/app/not-found.tsx` for why the editorial serif is not preloaded.
-  preload: false,
-})
 
 export const metadata: Metadata = {
   title: "Chris Neddy's",
@@ -85,9 +75,7 @@ export default async function MobileLayout({
   const firstName = session?.user?.firstName ?? null
 
   return (
-    <div
-      className={`${fraunces.variable} editorial-surface editorial-surface--mobile`}
-    >
+    <div>
       <PageViewTracker enabled={trackViews} />
       <div className="m-shell">
         <main className="m-shell__main">
@@ -105,8 +93,8 @@ export default async function MobileLayout({
             welcome marquee, so this costs no query.
 
             The bar brings its OWN Counter token root (see `MTabs`) rather
-            than being wrapped in one here: this file is still the pre-Counter
-            shell and loads its stylesheets, and
+            than being wrapped in one here: this file is the bare frame (it
+            stopped loading the editorial sheets on 2026-11-17), and
             `tests/styles/token-parity.test.ts` requires that no file which can
             open a Counter root carries any of the old design.
 

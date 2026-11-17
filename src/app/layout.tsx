@@ -2,6 +2,7 @@ import type { Metadata } from "next"
 import { Bricolage_Grotesque, DM_Sans, JetBrains_Mono } from "next/font/google"
 import { CounterThemeProvider, themeNoFlashScript } from "@/components/counter/theme-provider"
 import { Toaster } from "sonner"
+import { SpeedInsights } from "@vercel/speed-insights/next"
 import "./globals.css"
 
 const dmSans = DM_Sans({ subsets: ["latin"], variable: "--font-dm-sans" })
@@ -69,6 +70,10 @@ export default function RootLayout({
           {children}
           <Toaster richColors position="top-right" />
         </CounterThemeProvider>
+        {/* Real load and tap timings from the owner's own phone (LCP, INP, TTFB
+            per route), reported to Vercel Speed Insights. Off until Speed
+            Insights is enabled on the Vercel project; a no-op in development. */}
+        <SpeedInsights />
       </body>
     </html>
   )

@@ -1,40 +1,23 @@
 "use client"
 
-import { useEffect } from "react"
-import { PageHead } from "@/components/mobile/page-head"
-import { Panel } from "@/components/mobile/panel"
+import { RouteFailed } from "@/components/counter"
 
-// Renders inside the (mobile) `/m` layout by placement, so the tab bar
-// stays visible while this view is up.
-export default function MobileError({
-  error,
-  reset,
-}: {
+/**
+ * The `/m` error view for routes outside the `(counter)` group (sign-in and
+ * the redirect shims). It renders under `(mobile)/m/layout.tsx`, outside
+ * `PhoneShell`, so — like `not-found.tsx` beside it — it opens its own Counter
+ * root around nothing but Counter markup. It used to draw the editorial
+ * `PageHead` + `Panel`, which was the last reason every phone page downloaded
+ * the editorial stylesheets.
+ */
+export default function MobileError(props: {
   error: Error & { digest?: string }
   reset: () => void
 }) {
-  useEffect(() => {
-    // Surface to the console/logs; Next.js also captures the digest server-side.
-    console.error(error)
-  }, [error])
-
   return (
-    <div data-perf-ready="/m/error">
-      <PageHead dept="Error" title="Couldn't load" />
-
-      <div className="dock-in dock-in-2">
-        <Panel flush>
-          <div className="m-empty m-empty--flush">
-            We couldn&rsquo;t load this view right now. Try refreshing in a
-            moment.
-          </div>
-        </Panel>
-      </div>
-
-      <div className="dock-in dock-in-3" style={{ marginTop: 14 }}>
-        <button type="button" className="m-toolbar-btn" onClick={reset}>
-          Retry
-        </button>
+    <div data-perf-ready="/m/error" className="ct-root ct-phone">
+      <div className="mscroll">
+        <RouteFailed {...props} title="This page" />
       </div>
     </div>
   )

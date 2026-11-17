@@ -251,6 +251,14 @@ const COUNTER_ROOT_EXCEPTIONS: Array<{ file: string; token: string }> = [
   // a sibling of the editorial surface, never an ancestor of editorial content.
   { file: "app/(mobile)/m/not-found.tsx", token: "ct-root" },
   { file: "app/(mobile)/m/not-found.tsx", token: "ct-phone" },
+  // The phone error view, for the same reason as the 404 above: it renders
+  // outside `PhoneShell` and opens its own alias layer around `RouteFailed`.
+  { file: "app/(mobile)/m/error.tsx", token: "ct-root" },
+  { file: "app/(mobile)/m/error.tsx", token: "ct-phone" },
+  // The ROOT 404, which Next bundles into every route's entry; it moved off
+  // the editorial sheets so they stop loading on every page. It renders
+  // outside both shells and wraps nothing but its own Counter markup.
+  { file: "app/not-found.tsx", token: "ct-root" },
 ]
 
 function tsxFiles(dir: string): string[] {
@@ -333,9 +341,12 @@ describe("the Counter/editorial token-name collision stays harmless", () => {
     // The fifteenth is the crew how-to guide beside the check page, public
     // for the same reason and texted from Crew & PINs.
     //
-    // Twenty-five entries, fifteen files.
-    expect(COUNTER_ROOT_EXCEPTIONS).toHaveLength(25)
-    expect(new Set(COUNTER_ROOT_EXCEPTIONS.map((x) => x.file)).size).toBe(15)
+    // The sixteenth is the phone error view and the seventeenth the root 404,
+    // both sibling roots like the phone 404.
+    //
+    // Twenty-eight entries, seventeen files.
+    expect(COUNTER_ROOT_EXCEPTIONS).toHaveLength(28)
+    expect(new Set(COUNTER_ROOT_EXCEPTIONS.map((x) => x.file)).size).toBe(17)
     // `ct-phone` is only ever worn with `ct-root`; a file carrying it alone
     // would be redeclaring the type scale over the wrong ink and ground.
     const phone = COUNTER_ROOT_EXCEPTIONS.filter((x) => x.token === "ct-phone")
