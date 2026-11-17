@@ -379,10 +379,10 @@ function StoreCard({ shelf, areas }: { shelf: StoreShelf; areas: ShelfData["area
       <div className="iv-store__h">
         <b>{shelf.name}</b>
         {!shelf.lastCount
-          ? <span className="iv-pill iv-pill--mute">Not counted</span>
+          ? <span className="inv-pill inv-pill--mute">Not counted</span>
           : shelf.lastCount.stale
-            ? <span className="iv-pill iv-pill--warn">Old count</span>
-            : <span className="iv-pill iv-pill--good">Fresh</span>}
+            ? <span className="inv-pill inv-pill--warn">Old count</span>
+            : <span className="inv-pill inv-pill--good">Fresh</span>}
       </div>
       {shelf.toOrder === null ? (
         <div className="iv-store__n iv-store__n--text"><strong>Not counted yet</strong></div>

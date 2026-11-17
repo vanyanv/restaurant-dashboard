@@ -226,10 +226,10 @@ function AllShelves({ data }: { data: ShelfData }) {
             <div className="iv-store__h">
               <b>{s.name}</b>
               {!s.lastCount
-                ? <span className="iv-pill iv-pill--mute">Not counted</span>
+                ? <span className="inv-pill inv-pill--mute">Not counted</span>
                 : s.lastCount.stale
-                  ? <span className="iv-pill iv-pill--warn">Old count</span>
-                  : <span className="iv-pill iv-pill--good">Fresh</span>}
+                  ? <span className="inv-pill inv-pill--warn">Old count</span>
+                  : <span className="inv-pill inv-pill--good">Fresh</span>}
             </div>
             {s.lines.length > 0 ? <MiniMap shelf={s} areas={data.areas} /> : <p className="iv-quiet">No count list yet.</p>}
             <p className="iv-store__m">
