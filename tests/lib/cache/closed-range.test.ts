@@ -78,6 +78,7 @@ import {
   isClosedRange,
   isFigureWrite,
   laDatesBetween,
+  laIsoWeeksSpanning,
   parseClosedMarker,
   rangeScopedTags,
   withScopedWrites,
@@ -215,6 +216,17 @@ describe("withScopedWrites", () => {
       async () => {},
     )
     expect(store.get("cache:closed-gen")).toBe(1)
+  })
+
+  it("laIsoWeeksSpanning widens to Monday..Sunday", () => {
+    // Thu 2026-11-12 .. Sat 2026-11-14 sits in the week of Mon the 9th.
+    expect(laIsoWeeksSpanning("2026-11-12", "2026-11-14")).toEqual(
+      laDatesBetween("2026-11-09", "2026-11-15"),
+    )
+    // A Sunday end stays in its own week; a Monday start stays put.
+    expect(laIsoWeeksSpanning("2026-11-09", "2026-11-16")).toEqual(
+      laDatesBetween("2026-11-09", "2026-11-22"),
+    )
   })
 
   it("laDatesBetween is inclusive and crosses months", () => {

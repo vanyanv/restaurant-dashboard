@@ -4,7 +4,7 @@ import { runHarriLaborSync } from "@/lib/harri-labor-sync"
 import { runHarriScheduleSync } from "@/lib/harri-schedule-sync"
 import { scheduleSyncWindow } from "@/lib/harri-schedule"
 import { bustTags, monthTagsForRange } from "@/lib/cache/cached"
-import { laDatesBetween, withScopedWrites } from "@/lib/cache/closed-range"
+import { laIsoWeeksSpanning, withScopedWrites } from "@/lib/cache/closed-range"
 
 // Raised from 60 when the schedule sync joined this route: it adds four
 // week-addressable gateway calls plus a transaction each, on top of the labor
@@ -44,12 +44,14 @@ export const POST = withCronAuth(
 
     try {
       const { startDate: schedStart, endDate: schedEnd } = scheduleSyncWindow()
-      // Scoped: afterwards it retires the saved figures of exactly the days it
-      // wrote (the labour window and the schedule ahead), and no others.
+      // Scoped: afterwards it retires the saved figures of the days it wrote
+      // (the weeks around the labour window and the schedule), and no others.
       const { result, schedule } = await withScopedWrites(
         () => [
-          ...laDatesBetween(startDate.toISOString(), endDate.toISOString()),
-          ...laDatesBetween(schedStart.toISOString(), schedEnd.toISOString()),
+          // Whole ISO weeks: positions are pulled per week and the schedule
+          // replaces whole weeks, so days outside the window are rewritten too.
+          ...laIsoWeeksSpanning(startDate.toISOString(), endDate.toISOString()),
+          ...laIsoWeeksSpanning(schedStart.toISOString(), schedEnd.toISOString()),
         ],
         async () => {
           const result = await runHarriLaborSync({

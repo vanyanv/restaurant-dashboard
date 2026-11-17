@@ -35,6 +35,15 @@ import { addDaysLA, todayInLA } from "@/lib/dashboard-utils"
  * under a version that the write's bump then retired. That ordering is the
  * whole correctness argument; keep it when changing anything here.
  *
+ * Known limits, each bounded:
+ * - Inside an interactive transaction the per-statement bump lands before
+ *   COMMIT; the extension bumps again when the request finishes (`after`), so
+ *   an old figure can be served only until the writing request ends.
+ * - A scoped sync killed at its time limit never reaches its `finally` bump.
+ *   The next run of the same cron rewrites and bumps the same days (hourly
+ *   for Otter, 4-hourly for Harri and the COGS sweep), inside the TTL.
+ * - A failed INCR is logged, not retried; the TTL caps it.
+ *
  * The TTL is the backstop for writes the app never sees: a script run without
  * Upstash credentials, or SQL typed into Neon by hand.
  */
@@ -59,6 +68,18 @@ const dayKey = (d: string) => `cache:dv:${d}`
 
 /** `YYYY-MM-DD` from a `toQueryBounds`-style date (LA calendar day as UTC). */
 const ymd = (d: Date) => d.toISOString().slice(0, 10)
+
+/**
+ * The Monday..Sunday span around `from`..`to`. The Harri syncs rewrite whole
+ * ISO weeks (positions are pulled per week; the schedule replaces whole weeks),
+ * so the days they retire must be the weeks, not just the window asked for.
+ */
+export function laIsoWeeksSpanning(from: string, to: string): string[] {
+  const dow = (d: string) => (new Date(`${d.slice(0, 10)}T12:00:00Z`).getUTCDay() + 6) % 7
+  const lo = addDaysLA(from.slice(0, 10), -dow(from))
+  const hi = addDaysLA(to.slice(0, 10), 6 - dow(to))
+  return laDatesBetween(lo, hi)
+}
 
 /** Every LA date from `from` to `to`, inclusive, as `YYYY-MM-DD`. */
 export function laDatesBetween(from: string, to: string): string[] {
