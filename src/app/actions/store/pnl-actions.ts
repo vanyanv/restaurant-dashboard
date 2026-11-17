@@ -25,6 +25,7 @@ import type { UnmappedMenuItem } from "@/types/cogs"
 import { recomputeDailyCogsForRange } from "@/lib/cogs-materializer"
 import { CogsStatus } from "@/generated/prisma/client"
 import { cached, monthTags, stableKey } from "@/lib/cache/cached"
+import { rangeScopedTags } from "@/lib/cache/closed-range"
 import {
   loadLaborCost,
   laborByPeriods,
@@ -640,7 +641,14 @@ export async function getAllStoresPnL(input: {
     // must remain reachable by them. The month tags are what let the hourly
     // sync stop evicting a statement from six weeks ago that it never wrote.
     // See `monthTags` in @/lib/cache/cached.
-    ["pnl", `account:${accountId}`, ...monthTags(input.startDate, input.endDate)],
+    // A range that ended before today is saved for hours instead, cleared only
+    // by a write to one of its own days or an undated figure write (a fixed
+    // expense, a store rate); see @/lib/cache/closed-range.
+    rangeScopedTags(input.startDate, input.endDate, [
+      "pnl",
+      `account:${accountId}`,
+      ...monthTags(input.startDate, input.endDate),
+    ]),
     async () => {
   try {
     const stores = await pnlStoresCached(session.user.accountId)
