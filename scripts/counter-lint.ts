@@ -638,18 +638,15 @@ const LEGACY_BASELINE_COMMIT = "6778c852f4213cdc5df52262e2f6613ce4907eeb"
  * is still load-bearing and this one stopped being. The phone tree is linted
  * for real from here, so a colour literal added anywhere under it fails.
  */
-export const LEGACY: Array<{ path: string; reason: string }> = [
-  {
-    path: "src/styles",
-    reason:
-      "src/styles/** entered ROOTS' no-colour-literal scope in this fix round (the linter-scope finding sibling to C2) — src/styles held only counter.css before that, so its pre-Counter stylesheets " +
-      "were never walked at all. Four at the time (editorial-tokens.css, editorial-dashboard.css, editorial-mobile.css, editorial-auth.css); editorial-dashboard.css is gone now, deleted with the rest " +
-      "of src/app/dashboard's editorial tree — dashboard and /login are Counter, not \"still-editorial,\" any more. The three left (editorial-tokens.css, editorial-mobile.css, editorial-auth.css) " +
-      "load from signup's layout and the root/mobile-shell not-found and error boundaries. " +
-      "counter.css itself needs no entry here: RULES already excludes it up front via COLOUR_ALLOWED, before LEGACY is ever consulted. Deleted file by file in the same final dead-CSS sweep " +
-      "(spec §6 Phase F) as the rest of the editorial tree — narrow this to the remaining un-rewritten files as each stylesheet's pages move to Counter.",
-  },
-]
+/*
+ * `src/styles` is GONE as well, 2026-11-17, by the same mechanism: its three
+ * editorial stylesheets (editorial-tokens.css, editorial-mobile.css,
+ * editorial-auth.css) had no importer left after PR #199 and were deleted,
+ * and the entry stopped suppressing anything. Every stylesheet under
+ * src/styles is linted for real now. The list is empty; keep it, so a future
+ * migration has somewhere honest to put a temporary exemption.
+ */
+export const LEGACY: Array<{ path: string; reason: string }> = []
 
 /**
  * Strips `//` line comments and block comments out of source

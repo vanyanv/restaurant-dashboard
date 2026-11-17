@@ -1,7 +1,6 @@
 "use client"
 
 import { useState, useTransition } from "react"
-import { useRouter } from "next/navigation"
 import { Section, useCounterTransition, usePageChrome } from "@/components/counter"
 import { copyChecklistToOtherStores, saveChecklist } from "@/lib/counter/actions/checks"
 import type { SectionSources } from "@/lib/counter/adapters/types"
@@ -62,7 +61,6 @@ let tmpId = 0
 const newId = () => `new-${++tmpId}`
 
 function Editor({ data }: { data: ChecklistsData }) {
-  const router = useRouter()
   const [kind, setKind] = useState(data.templates[0]?.kind ?? "MORNING")
   const [drafts, setDrafts] = useState<Record<string, EditorTemplate>>(() =>
     Object.fromEntries(data.templates.map((t) => [t.kind, structuredClone(t)])),
@@ -109,7 +107,7 @@ function Editor({ data }: { data: ChecklistsData }) {
       if (r.ok) {
         setDirty((d) => ({ ...d, [kind]: false }))
         setOutcome({ ok: true, text: r.message ?? "Saved." })
-        router.refresh()
+        // saveChecklist revalidates /checks; no router.refresh() needed.
       } else setOutcome({ ok: false, text: r.error })
     })
 

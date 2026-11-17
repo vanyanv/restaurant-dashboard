@@ -1,8 +1,7 @@
 "use client"
 
-import { useEffect, useState, useTransition } from "react"
+import { useEffect, useState, useTransition, useEffectEvent } from "react"
 import Link from "next/link"
-import { useRouter } from "next/navigation"
 import { useSurfaceHref } from "@/components/counter"
 import { deleteWaste, logWaste } from "@/lib/counter/actions/count"
 import type { WasteData } from "@/lib/counter/adapters/count"
@@ -17,7 +16,6 @@ import { clearDraft, readDraft, writeDraft } from "@/components/counter/keep/use
  * it works out what went missing without a reason.
  */
 export function WasteLog({ data, base }: { data: WasteData; base: "/dashboard/count" | "/m/count" }) {
-  const router = useRouter()
   const href = useSurfaceHref()
   const [busy, start] = useTransition()
   const [outcome, setOutcome] = useState<Outcome>(null)
@@ -33,8 +31,10 @@ export function WasteLog({ data, base }: { data: WasteData; base: "/dashboard/co
   type WasteDraft = { pick: string | null; layer: number; amount: string; reason: WasteReason | null; note: string }
   const draftKey = `waste-entry:${data.store.id}`
   const [restored, setRestored] = useState(false)
-  useEffect(() => {
-    const d = readDraft<WasteDraft>(draftKey)
+  // An effect event, so the restore reads the current item list without
+  // re-running every time the list changes: once per store, as before.
+  const restoreDraft = useEffectEvent((key: string) => {
+    const d = readDraft<WasteDraft>(key)
     if (d && d.pick && data.items.some((i) => i.ingredientId === d.pick)) {
       setPick(d.pick)
       setLayer(d.layer ?? 0)
@@ -43,8 +43,8 @@ export function WasteLog({ data, base }: { data: WasteData; base: "/dashboard/co
       setNote(d.note ?? "")
     }
     setRestored(true)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [draftKey])
+  })
+  useEffect(() => restoreDraft(draftKey), [draftKey])
   useEffect(() => {
     if (!restored) return
     if (!pick) clearDraft(draftKey)
@@ -79,7 +79,7 @@ export function WasteLog({ data, base }: { data: WasteData; base: "/dashboard/co
         setReason(null)
         setNote("")
         setLayer(0)
-        router.refresh()
+        // logWaste revalidates the count section; no router.refresh() needed.
       }
     })
   }
@@ -88,7 +88,6 @@ export function WasteLog({ data, base }: { data: WasteData; base: "/dashboard/co
     start(async () => {
       const r = await deleteWaste(id)
       setOutcome(r.ok ? { ok: true, text: "Removed" } : { ok: false, text: r.error })
-      if (r.ok) router.refresh()
     })
 
   if (data.items.length === 0) {

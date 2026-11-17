@@ -4,7 +4,6 @@ import {
   createContext,
   useContext,
   useEffect,
-  useRef,
   type Dispatch,
   type SetStateAction,
 } from "react"
@@ -80,11 +79,11 @@ export function usePageChrome(chrome: PageChrome): void {
   const publish = useContext(PageChromeContext)
   const { leaf, storeName, storeId, askSuggestions } = chrome
 
-  // The array is read through a ref and keyed by its content, so a page that
-  // writes its three questions as a literal does not republish every render.
+  // The array is keyed by its content and rebuilt from that key inside the
+  // effect, so a page that writes its three questions as a literal does not
+  // republish every render. (It used to be read through a ref written during
+  // render, which made React Compiler skip this hook.)
   const key = askSuggestions === undefined ? "" : JSON.stringify(askSuggestions)
-  const latest = useRef(askSuggestions)
-  latest.current = askSuggestions
 
   useEffect(() => {
     if (publish === null) return
@@ -92,7 +91,7 @@ export function usePageChrome(chrome: PageChrome): void {
       leaf,
       storeName,
       storeId,
-      askSuggestions: latest.current,
+      askSuggestions: key === "" ? undefined : (JSON.parse(key) as PageChrome["askSuggestions"]),
     })
     return () => publish(NONE)
   }, [publish, leaf, storeName, storeId, key])

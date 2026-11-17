@@ -1,6 +1,6 @@
 "use client"
 
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react"
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode, useLayoutEffect } from "react"
 import { createPortal } from "react-dom"
 import Link from "next/link"
 import { Calendar, Store as StoreGlyph } from "lucide-react"
@@ -333,12 +333,12 @@ export function AskSurface({
   // `open` read from listeners that are mounted once, for the life of the
   // component. State would be captured stale in those closures.
   const openRef = useRef(false)
-  openRef.current = open
+  useLayoutEffect(() => { openRef.current = open })
   // Same reason as `openRef`: the two listeners below are mounted once, and a
   // caller that passes an inline `onAskBack` would otherwise re-register both
   // on every render of the shell.
   const askBackRef = useRef(onAskBack)
-  askBackRef.current = onAskBack
+  useLayoutEffect(() => { askBackRef.current = onAskBack })
 
   const context = describeAskContext({ pathname, params, storeName, today })
 
@@ -346,7 +346,7 @@ export function AskSurface({
   const askStatus = askState?.status ?? "idle"
   const answering = askStatus !== "idle"
   const answeringRef = useRef(false)
-  answeringRef.current = answering
+  useLayoutEffect(() => { answeringRef.current = answering })
 
   /*
    * `onStop` through a ref for the same reason `onAskBack` is: the keydown and
@@ -354,7 +354,7 @@ export function AskSurface({
    * inline callback would otherwise pin the first render's copy forever.
    */
   const stopRef = useRef(onStop)
-  stopRef.current = onStop
+  useLayoutEffect(() => { stopRef.current = onStop })
 
   const close = useCallback(() => {
     // Closing ends the turn. A reader who dismisses the palette is done with
@@ -394,10 +394,10 @@ export function AskSurface({
   // from that first render forever — stale `context`/`onSubmit`/`askState`
   // included. Same fix as `askBackRef` above, for the same reason.
   const submitRef = useRef(submit)
-  submitRef.current = submit
+  useLayoutEffect(() => { submitRef.current = submit })
   // Same stale-closure reason as `submitRef`: the delegation is mounted once.
   const askStateRef = useRef(askState)
-  askStateRef.current = askState
+  useLayoutEffect(() => { askStateRef.current = askState })
 
   /* ---------------------------------------------------------------- rows */
 
@@ -483,7 +483,7 @@ export function AskSurface({
     }
 
     return out
-  }, [suggestions, context.page, stores, onSelectStore, presetId, onSelectPreset])
+  }, [suggestions, context.page, stores, onSelectStore, presetId, onSelectPreset, isDeveloper])
 
   /* ------------------------------------------------------------ filtering */
 

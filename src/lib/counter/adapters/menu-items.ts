@@ -214,7 +214,7 @@ export async function loadMenuItems(input: MenuItemsInput): Promise<MenuItemsDat
   // Ingredients a selling dish uses, directly or through one component recipe.
   const selling = dishes.filter((d) => (agg.get(d.id)?.sold ?? 0) > 0)
   const usedBy = new Map<string, Set<string>>()
-  const use = (ing: string | null, dishId: string) => {
+  const markUsed = (ing: string | null, dishId: string) => {
     if (!ing) return
     const set = usedBy.get(ing) ?? new Set<string>()
     set.add(dishId)
@@ -222,12 +222,12 @@ export async function loadMenuItems(input: MenuItemsInput): Promise<MenuItemsDat
   }
   for (const d of selling) {
     for (const line of d.ingredients) {
-      use(line.canonicalIngredientId, d.id)
+      markUsed(line.canonicalIngredientId, d.id)
       const sub = line.componentRecipeId ? byId.get(line.componentRecipeId) : undefined
       // Modifiers are add-ons, not the dish; their ingredients are checked
       // where they are the dish.
       if (sub && !NOT_A_DISH.has(sub.category.trim().toLowerCase())) {
-        for (const l2 of sub.ingredients) use(l2.canonicalIngredientId, d.id)
+        for (const l2 of sub.ingredients) markUsed(l2.canonicalIngredientId, d.id)
       }
     }
   }

@@ -225,14 +225,13 @@ function VendorCard({ vendor: v, store }: { vendor: DraftVendor; store: string }
 }
 
 function SkipSwitch({ data }: { data: DraftData }) {
-  const router = useRouter()
   const [busy, start] = useTransition()
   const [outcome, setOutcome] = useState<Outcome>(null)
   function toggle(skip: boolean) {
     start(async () => {
       const r = await setDraftSkipCount(data.store.id, skip)
+      // The action revalidates the count section; no router.refresh() needed.
       setOutcome(r.ok ? { ok: true, text: r.message ?? "Saved" } : { ok: false, text: r.error })
-      router.refresh()
     })
   }
   return (

@@ -6,7 +6,6 @@ import {
   LEGACY,
   ROOTS,
   isCommitReachable,
-  BaselineUnreachableError,
 } from "../../scripts/counter-lint"
 
 /** A syntactically valid SHA-1 that no repository contains. Deliberately
@@ -252,30 +251,9 @@ describe("C2: shallow-checkout resilience", () => {
     expect(isCommitReachable(UNREACHABLE_COMMIT)).toBe(false)
   })
 
-  it("throws BaselineUnreachableError — not a wall of violations — when the baseline commit can't be read", () => {
-    let thrown: unknown
-    try {
-      // `src/styles`, because it is the last root still LEGACY-covered, and a
-      // root with no LEGACY entry never consults the baseline at all — so the
-      // throw this test exists for could not happen on one.
-      //
-      // This has now moved twice, and both moves were the point rather than
-      // maintenance: it read `src/app/dashboard` until that entry stopped
-      // suppressing anything, then `src/app/(mobile)/m` until 2026-09-04, when
-      // the last two editorial phone routes became shims and that entry
-      // stopped suppressing anything too. When the four `editorial-*.css`
-      // files go, this test loses its last root and should be deleted with
-      // `LEGACY` itself.
-      lintCounter([join(process.cwd(), "src", "styles")], {
-        baselineCommit: UNREACHABLE_COMMIT,
-      })
-    } catch (err) {
-      thrown = err
-    }
-    expect(thrown).toBeInstanceOf(BaselineUnreachableError)
-    expect((thrown as Error).message).toMatch(/fetch-depth/)
-    expect((thrown as Error).message).toMatch(/shallow/i)
-  })
+  // The "throws BaselineUnreachableError" case lived here. It needed a root
+  // still covered by LEGACY, and the last one (src/styles) went with the
+  // editorial stylesheets on 2026-11-17, as its own comment said it should.
 
   it("does not throw for a root with no LEGACY-covered files, even with an unreachable baseline", () => {
     // src/components/counter is not a LEGACY entry, so the exemption check

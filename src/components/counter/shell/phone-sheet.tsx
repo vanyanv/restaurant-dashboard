@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useRef, type CSSProperties, type ReactNode } from "react"
+import { useEffect, useRef, type CSSProperties, type ReactNode, useLayoutEffect } from "react"
 
 /**
  * `.pshade` + `.msheet` — the phone's bottom sheet, and the ONE place the two
@@ -59,7 +59,7 @@ export function PhoneSheet({
 }) {
   const sheetRef = useRef<HTMLDivElement>(null)
   const closeRef = useRef(onClose)
-  closeRef.current = onClose
+  useLayoutEffect(() => { closeRef.current = onClose })
   // Escape closes without choosing anything — the same contract `DateControl`
   // and `StoreSwitcher` keep on the desk. The prototype has no key handling at
   // all here; a sheet a keyboard cannot dismiss is a trap, and a phone in a

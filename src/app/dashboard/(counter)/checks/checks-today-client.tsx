@@ -3,7 +3,6 @@
 import { CheckDetail, PlainHead } from "./checks-plain-ui"
 import { useState, useTransition } from "react"
 import Link from "next/link"
-import { useRouter } from "next/navigation"
 import { Section, useCounterTransition, usePageChrome, useSurfaceHref } from "@/components/counter"
 import { setChecksPaused, setStoreClosed } from "@/lib/counter/actions/checks"
 import { shortStoreName } from "@/lib/checks/names"
@@ -251,7 +250,6 @@ export function Tile({ label, cell, pressed, onClick }: { label: string; cell: C
 }
 
 export function ClosedToggle({ storeId, day, closed }: { storeId: string; day: string; closed: boolean }) {
-  const router = useRouter()
   const [busy, start] = useTransition()
   const [outcome, setOutcome] = useState<Outcome>(null)
   return (
@@ -263,11 +261,7 @@ export function ClosedToggle({ storeId, day, closed }: { storeId: string; day: s
         onClick={() =>
           start(async () => {
             const r = await setStoreClosed({ storeId, day, closed: !closed })
-            if (!r.ok) setOutcome({ ok: false, text: r.error })
-            else {
-              setOutcome(null)
-              router.refresh()
-            }
+            setOutcome(r.ok ? null : { ok: false, text: r.error })
           })
         }
       >
@@ -280,7 +274,6 @@ export function ClosedToggle({ storeId, day, closed }: { storeId: string; day: s
 
 /** The store's checks are paused for training: say so on its card, with the way back. */
 export function PausedNote({ storeId, since }: { storeId: string; since: string }) {
-  const router = useRouter()
   const href = useSurfaceHref()
   const [busy, start] = useTransition()
   const [outcome, setOutcome] = useState<Outcome>(null)
@@ -298,11 +291,7 @@ export function PausedNote({ storeId, since }: { storeId: string; since: string 
           onClick={() =>
             start(async () => {
               const r = await setChecksPaused({ storeId, paused: false })
-              if (!r.ok) setOutcome({ ok: false, text: r.error })
-              else {
-                setOutcome(null)
-                router.refresh()
-              }
+              setOutcome(r.ok ? null : { ok: false, text: r.error })
             })
           }
         >
@@ -318,7 +307,6 @@ export function PausedNote({ storeId, since }: { storeId: string; since: string 
 }
 
 export function PauseLink({ storeId }: { storeId: string }) {
-  const router = useRouter()
   const [busy, start] = useTransition()
   const [outcome, setOutcome] = useState<Outcome>(null)
   return (
@@ -330,11 +318,7 @@ export function PauseLink({ storeId }: { storeId: string }) {
         onClick={() =>
           start(async () => {
             const r = await setChecksPaused({ storeId, paused: true })
-            if (!r.ok) setOutcome({ ok: false, text: r.error })
-            else {
-              setOutcome(null)
-              router.refresh()
-            }
+            setOutcome(r.ok ? null : { ok: false, text: r.error })
           })
         }
       >

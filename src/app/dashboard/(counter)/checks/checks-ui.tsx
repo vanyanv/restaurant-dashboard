@@ -120,7 +120,6 @@ export function Thumbs({ photos, caption }: { photos: PhotoRef[]; caption: strin
       <div className="ck-thumbs">
         {photos.map((p) => (
           <button key={p.id} type="button" className="ck-thumb" onClick={() => setOpen(p)} aria-label={`${p.section} photo`}>
-            {/* eslint-disable-next-line @next/next/no-img-element -- private, session-gated image route */}
             <img src={photoSrc(p.id)} alt="" loading="lazy" />
           </button>
         ))}
@@ -139,7 +138,6 @@ export function Lightbox({ photo, caption, onClose, src }: { photo: PhotoRef; ca
   return (
     <div className="ck-lightbox" role="dialog" aria-modal="true" aria-label={`${photo.section} photo`} onClick={onClose}>
       <figure onClick={(e) => e.stopPropagation()}>
-        {/* eslint-disable-next-line @next/next/no-img-element -- private, session-gated image route */}
         <img src={src ?? photoSrc(photo.id)} alt={`${photo.section} photo, ${caption}`} />
         <figcaption>
           <span>

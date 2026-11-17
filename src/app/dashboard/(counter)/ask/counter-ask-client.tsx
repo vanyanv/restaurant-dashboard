@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState, useEffectEvent } from "react"
 import { usePathname, useRouter } from "next/navigation"
 import {
   PageHead,
@@ -592,12 +592,15 @@ export function CounterAskClient({
   }, [])
   // A new turn: follow it only if the reader was already at the bottom.
   const turnCount = turns.length
-  useEffect(() => {
-    if (turnCount === 0) return
+  // An effect event, so scrolling away does not itself re-run the follow.
+  const followNewTurn = useEffectEvent(() => {
     const el = chatRef.current
     if (!el) return
     if (!awayFromBottom) el.scrollTo({ top: el.scrollHeight, behavior: "smooth" })
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+  })
+  useEffect(() => {
+    if (turnCount === 0) return
+    followNewTurn()
   }, [turnCount])
   const showPill = awayFromBottom && askPending(state)
 

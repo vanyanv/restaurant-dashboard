@@ -26,7 +26,6 @@ import {
 import type { SyncProgressEvent } from "@/types/sync"
 import { withJobRun } from "@/lib/monitoring/job-run"
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 type OtterRow = Record<string, any>
 
 export type ProgressEmitter = (event: SyncProgressEvent) => void
