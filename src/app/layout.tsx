@@ -2,7 +2,6 @@ import type { Metadata } from "next"
 import { Bricolage_Grotesque, DM_Sans, JetBrains_Mono } from "next/font/google"
 import { CounterThemeProvider, themeNoFlashScript } from "@/components/counter/theme-provider"
 import { Toaster } from "sonner"
-import { SpeedInsights } from "@vercel/speed-insights/next"
 import "./globals.css"
 
 const dmSans = DM_Sans({ subsets: ["latin"], variable: "--font-dm-sans" })
@@ -71,9 +70,19 @@ export default function RootLayout({
           <Toaster richColors position="top-right" />
         </CounterThemeProvider>
         {/* Real load and tap timings from the owner's own phone (LCP, INP, TTFB
-            per route), reported to Vercel Speed Insights. Off until Speed
-            Insights is enabled on the Vercel project; a no-op in development. */}
-        <SpeedInsights />
+            per page), reported to Vercel Speed Insights once it is enabled on
+            the Vercel project. Vercel's plain script tag rather than the
+            `@vercel/speed-insights` React component: the component adds ~3 KB
+            to every route's first-load JS (it pushed /m/recipes/[id]/edit over
+            its bundle budget); plain tags in the server HTML cost no bundle bytes
+            (`next/script` itself added ~2 KB), and `defer` keeps it off the
+            critical path. The script path 404s harmlessly until enabled. */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: "window.si=window.si||function(){(window.siq=window.siq||[]).push(arguments)}",
+          }}
+        />
+        <script defer src="/_vercel/speed-insights/script.js" />
       </body>
     </html>
   )
