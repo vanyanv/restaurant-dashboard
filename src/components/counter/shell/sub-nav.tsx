@@ -17,7 +17,7 @@
  *
  * The pressed state is `aria-current="page"`, which is what a link that IS the
  * page you are on says; `.seg button[aria-pressed]`'s twin rule for `a` lives
- * in `counter-repairs.css`.
+ * in `counter-components.css (repairs)`.
  *
  * `.seg` is NOT a fidelity landmark, so this is invisible to the structure
  * pass on both sides — it is judged by the dark sweep like any other chrome,

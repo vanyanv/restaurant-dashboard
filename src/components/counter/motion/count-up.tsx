@@ -28,7 +28,7 @@ export function CountUp({
 }) {
   const shown = useCountUp(value)
   // D3: a figure that changed after first paint wears `ct-changed` for the
-  // length of its cell's cool-down (counter-repairs.css reads it through
+  // length of its cell's cool-down (counter-components.css (repairs) reads it through
   // `:has()` on the cell), so the reader's eye is taken to the one cell that
   // moved. Never on mount, so a page's first paint carries no marks.
   const changed = useChanged(value)

@@ -48,7 +48,7 @@ export interface MathRow {
  * The prototype draws its subtotal rule and its trailing rows with inline
  * `style="border-top:1px solid var(--line-strong);…"` / `style="border-bottom:none"`.
  * Ported as the `.mathline.is-rule` / `.mathline.is-open` classes in
- * `src/styles/counter-repairs.css` instead, because a page drawing its own
+ * `src/styles/counter-components.css` (repairs) instead, because a page drawing its own
  * rules is what the ported sheet exists to prevent.
  *
  * **`npm run tokens` does NOT enforce this, and the plan that asked for it was

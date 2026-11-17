@@ -1,9 +1,11 @@
-"use server"
-
+// Server-only, not a server action: nothing in the browser calls these, so
+// they are plain functions and cannot be invoked from outside the server.
+// Browser saves go through `src/lib/counter/actions/`.
+import "server-only"
+import { getSession } from "@/lib/auth-scope"
 import { revalidatePath } from "next/cache"
-import { getServerSession } from "next-auth"
 import { z } from "zod"
-import { authOptions, hasOwnerAccess } from "@/lib/auth"
+import { hasOwnerAccess } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { invalidateOwnerStoreCache } from "@/lib/chat/owner-scope"
 import { bustTags } from "@/lib/cache/cached"
@@ -52,7 +54,7 @@ export async function createStoreFixedExpense(
   input: z.input<typeof createSchema>
 ): Promise<{ expense: StoreFixedExpenseDTO } | { error: string }> {
   try {
-    const session = await getServerSession(authOptions)
+    const session = await getSession()
     if (!session?.user) return { error: "Unauthorized" }
     if (!hasOwnerAccess(session.user.role))
       return { error: "Only owners can edit fixed expenses" }
@@ -95,7 +97,7 @@ export async function updateStoreFixedExpense(
   input: z.input<typeof updateSchema>
 ): Promise<{ expense: StoreFixedExpenseDTO } | { error: string }> {
   try {
-    const session = await getServerSession(authOptions)
+    const session = await getSession()
     if (!session?.user) return { error: "Unauthorized" }
     if (!hasOwnerAccess(session.user.role))
       return { error: "Only owners can edit fixed expenses" }
@@ -134,7 +136,7 @@ export async function deleteStoreFixedExpense(
   input: { id: string }
 ): Promise<{ success: true } | { error: string }> {
   try {
-    const session = await getServerSession(authOptions)
+    const session = await getSession()
     if (!session?.user) return { error: "Unauthorized" }
     if (!hasOwnerAccess(session.user.role))
       return { error: "Only owners can edit fixed expenses" }

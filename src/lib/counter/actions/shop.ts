@@ -1,9 +1,9 @@
 "use server"
 
-import { getServerSession } from "next-auth"
+import { getSession } from "@/lib/auth-scope"
 import { revalidatePath } from "next/cache"
 import { z } from "zod"
-import { authOptions, hasOwnerAccess } from "@/lib/auth"
+import { hasOwnerAccess } from "@/lib/auth"
 import { shop, ShopNotConnected, ShopRefused } from "@/lib/shop/client"
 
 /**
@@ -16,7 +16,7 @@ import { shop, ShopNotConnected, ShopRefused } from "@/lib/shop/client"
 export type ActionResult = { ok: true; message?: string } | { ok: false; error: string }
 
 async function ownerAccount(): Promise<string> {
-  const session = await getServerSession(authOptions)
+  const session = await getSession()
   if (!session?.user) throw new Error("Unauthorized")
   if (!hasOwnerAccess(session.user.role)) throw new Error("Forbidden")
   return session.user.accountId

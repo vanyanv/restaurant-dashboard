@@ -1,9 +1,10 @@
-"use server"
-
+// Server-only, not a server action: nothing in the browser calls these, so
+// they are plain functions and cannot be invoked from outside the server.
+// Browser saves go through `src/lib/counter/actions/`.
+import "server-only"
+import { getSession } from "@/lib/auth-scope"
 import { ymdUTC as ymd } from "@/lib/date-utils"
 import { businessQueryDate } from "@/lib/counter/business-date"
-import { getServerSession } from "next-auth"
-import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { Prisma } from "@/generated/prisma/client"
 import { weekdayTargets, type SplhInput } from "@/lib/splh"
@@ -253,7 +254,7 @@ const CONFIDENCE_WEIGHT: Record<OpportunityConfidence, number> = {
 export async function getDecisionsView(input: {
   storeId?: string
 } = {}): Promise<GetDecisionsViewResult> {
-  const session = await getServerSession(authOptions)
+  const session = await getSession()
   if (!session?.user) return { ok: false, error: "no_session" }
 
   const cachedSession = await getCachedSession()

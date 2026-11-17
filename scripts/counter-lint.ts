@@ -229,7 +229,7 @@
  *     copies had drifted: a `color-mix()` could fail the components test's
  *     "no colour VALUE outside counter.css" assertion while passing this
  *     rule outright. `\bcolor-mix\(` joins the alternation. Its one existing
- *     consumer, `src/styles/counter-repairs.css`, mixes only `var(--ct-*)`
+ *     consumer, `src/styles/counter-components.css` (repairs), mixes only `var(--ct-*)`
  *     tokens with `transparent` (drop-shadows and a radial bloom on the login
  *     screen, a sweep highlight on its submit button) — no literal colour in
  *     any argument — so it joined `COLOUR_ALLOWED` as a narrow, file-level
@@ -260,14 +260,14 @@
  *     narrow allowlist for that one file, or an inline suppression comment
  *     on that one line — do not build either speculatively. `color-mix(`,
  *     added to this same alternation in Task 20, hit exactly this shape
- *     immediately rather than hypothetically: `counter-repairs.css` already
+ *     immediately rather than hypothetically: `counter-components.css (repairs)` already
  *     mixed only tokens (`color-mix(in srgb, var(--sunk) 70%, transparent)`)
  *     — no consumer needing a literal input has shown up, but the
  *     token-input case is real and on-disk, so it was resolved with the
  *     first option, a narrow file-level allowlist (see `COLOUR_ALLOWED`),
  *     not built speculatively ahead of the need.
  *   - `COLOUR_ALLOWED` matches on BASENAME, unanchored: any file called
- *     `counter.css`, `counter-components.css` or `counter-repairs.css`
+ *     `counter.css`, `counter-components.css` or `counter-components.css (repairs)`
  *     anywhere in ROOTS is exempt from `no-colour-literal`, not only the
  *     three under `src/styles/`. The `counter\.css$` half has always been
  *     this shape (and one test in tests/styles/counter-lint.test.ts depends
@@ -321,7 +321,7 @@ export interface Violation {
  * it's computed — see the `--ct-ink-inverse-3` comment in `counter.css` for
  * a mix that was tried and rejected for precisely that reason on a token the
  * dark-mode gate needed to see. See `COLOUR_ALLOWED` for how
- * `counter-repairs.css`'s existing token-only uses were kept legal.
+ * `counter-components.css (repairs)`'s existing token-only uses were kept legal.
  */
 const COLOUR_LITERAL = /#[0-9a-fA-F]{3,8}\b|\boklch\(|\brgba?\(|\bhsla?\(|\bcolor-mix\(/
 /**
@@ -422,7 +422,7 @@ const MOTION_ALLOWED = /[/\\]components[/\\]counter[/\\]motion[/\\]/
  * app" per CLAUDE.md, each the one function an adapter defers to rather
  * than recomputing (the `prime-cost.ts` pattern) — so they are named
  * individually, the same surgical style `COLOUR_ALLOWED` uses for
- * `counter-repairs.css`. Verified two ways before naming them: (1) each
+ * `counter-components.css (repairs)`. Verified two ways before naming them: (1) each
  * genuinely imports `@/lib/prisma`, `@/generated/prisma/client` (value, not
  * type — `channel-mix.ts` uses `Prisma.sql`/`Prisma.join` at runtime), or an
  * `@/app/actions/*` server action (`statement.ts` calls `getAllStoresPnL`
@@ -526,13 +526,13 @@ const DATA_ALLOWED = new RegExp(
  * speculative one: the need is real and on-disk, not anticipated. The risk
  * taken is the same shape as the other two entries in this regex: the
  * allowlist is file-level, not line-level, so a FUTURE hex or oklch literal
- * added anywhere else in `counter-repairs.css` would also pass unnoticed by
- * rule 1. `counter-repairs.css` is small enough and reviewed closely enough
+ * added anywhere else in `counter-components.css (repairs)` would also pass unnoticed by
+ * rule 1. `counter-components.css (repairs)` is small enough and reviewed closely enough
  * (it is the file that fixes visual defects, not a growing generated port
  * like `counter-components.css`) that this is judged an acceptable trade;
  * revisit if the file grows the way `counter-components.css` did.
  */
-const COLOUR_ALLOWED = /counter\.css$|counter-components\.css$|counter-repairs\.css$/
+const COLOUR_ALLOWED = /counter\.css$|counter-components\.css$/
 /**
  * `SHELL_IN_PAGE`'s exemption: the two layout files that ARE the shell's one
  * legitimate mount site each, plus everything reachable from `ROOTS` that is
@@ -1195,7 +1195,7 @@ export function lintCounter(
  *
  * Ask's composer sits OUTSIDE the two-column grid it belongs under — `.dock`
  * is a sibling of `.askpage`, not a child — so it cannot inherit the rail's
- * width and is offset by these tokens instead (counter-repairs.css). When the
+ * width and is offset by these tokens instead (counter-components.css (repairs)). When the
  * two disagree the composer silently slides out from under the answer, which
  * is the defect 38ed4814 fixed: the input sat 224px to the left of every
  * figure it answers about, and nothing failed.

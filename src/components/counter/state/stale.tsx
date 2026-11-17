@@ -28,7 +28,7 @@ export function StaleBanner({ lastGoodAt }: { lastGoodAt: Date }) {
     <div
       role="status"
       // `stalebanner` carries no style of its own; it is the hook the motion
-      // block in `counter-repairs.css` uses to make this arrive rather than
+      // block in `counter-components.css (repairs)` uses to make this arrive rather than
       // appear — a figure that stopped being current is an operational change.
       className="stalebanner mb-3 flex items-baseline gap-2 rounded-ct-sm border border-ct-signal-line bg-ct-signal-wash px-3 py-2"
     >

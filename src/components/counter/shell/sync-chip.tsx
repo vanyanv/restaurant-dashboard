@@ -30,7 +30,7 @@ import { useReducedMotion } from "@/components/counter/motion/use-reduced-motion
  * and the words cross-fade, so the reader learns the figures are fresh
  * without a toast. `stale` is a state, not an event: the dot turns to the
  * signal colour and stays; nothing loops, because stale does not need the
- * reader this minute. All of it is in counter-repairs.css.
+ * reader this minute. All of it is in counter-components.css (repairs).
  */
 
 export type SyncState = "synced" | "syncing" | "failed" | "stale"

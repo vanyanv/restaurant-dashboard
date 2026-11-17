@@ -1,6 +1,8 @@
-"use server"
-
-import { getAuthScope as requireScope } from "@/lib/auth-scope"
+// Server-only, not a server action: nothing in the browser calls these, so
+// they are plain functions and cannot be invoked from outside the server.
+// Browser saves go through `src/lib/counter/actions/`.
+import "server-only"
+import { getAuthScope } from "@/lib/auth-scope"
 import { prisma } from "@/lib/prisma"
 import { getAccountStoreRows } from "@/lib/account-stores"
 import { Prisma } from "@/generated/prisma/client"
@@ -29,7 +31,7 @@ import { mergeSellPrices } from "@/lib/menu-sell-price-aggregation"
 export async function getMenuItemsForCatalog(
   options?: { sinceDays?: number | null }
 ): Promise<MenuItemForCatalog[]> {
-  const scope = await requireScope()
+  const scope = await getAuthScope()
   if (!scope) return []
   const { accountId } = scope
 
@@ -160,7 +162,7 @@ export async function mapOtterItemToRecipe(input: {
   otterItemName: string
   recipeId: string
 }): Promise<void> {
-  const scope = await requireScope()
+  const scope = await getAuthScope()
   if (!scope) throw new Error("Not authenticated")
   const { ownerId, accountId } = scope
 
@@ -211,7 +213,7 @@ export async function mapOtterItemToRecipe(input: {
 export async function mapOtterItemsBatch(
   pairs: { otterItemName: string; recipeId: string }[]
 ): Promise<{ mapped: number }> {
-  const scope = await requireScope()
+  const scope = await getAuthScope()
   if (!scope) throw new Error("Not authenticated")
   const { accountId } = scope
 
@@ -281,7 +283,7 @@ export type OtterSubItemForCatalog = OtterSubItemForCatalogType
 export async function getOtterSubItemsForCatalog(
   options?: { sinceDays?: number | null }
 ): Promise<OtterSubItemForCatalog[]> {
-  const scope = await requireScope()
+  const scope = await getAuthScope()
   if (!scope) return []
   const { accountId } = scope
 
@@ -402,7 +404,7 @@ export async function mapOtterSubItemToRecipe(input: {
   otterSubItemName: string
   recipeId: string
 }): Promise<void> {
-  const scope = await requireScope()
+  const scope = await getAuthScope()
   if (!scope) throw new Error("Not authenticated")
   const { ownerId, accountId } = scope
 
@@ -444,7 +446,7 @@ export async function mapOtterSubItemToRecipe(input: {
 }
 
 export async function unmapOtterSubItem(skuId: string): Promise<void> {
-  const scope = await requireScope()
+  const scope = await getAuthScope()
   if (!scope) throw new Error("Not authenticated")
   const { ownerId, accountId } = scope
 
@@ -484,7 +486,7 @@ export type MenuItemSellPrice = {
 export async function getMenuItemSellPrices(
   lookbackDays: number = 30
 ): Promise<Map<string, MenuItemSellPrice>> {
-  const scope = await requireScope()
+  const scope = await getAuthScope()
   if (!scope) return new Map()
   const { accountId } = scope
 

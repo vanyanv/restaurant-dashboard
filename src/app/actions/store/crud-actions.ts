@@ -1,5 +1,8 @@
-"use server"
-
+// Server-only, not a server action: nothing in the browser calls these, so
+// they are plain functions and cannot be invoked from outside the server.
+// Browser saves go through `src/lib/counter/actions/`.
+import "server-only"
+import { getSession } from "@/lib/auth-scope"
 import { revalidatePath } from "next/cache"
 import {
   COMMISSION_RATE_INPUTS,
@@ -7,8 +10,7 @@ import {
   percentToFraction,
   type CommissionRateField,
 } from "@/lib/counter/commission-rate-input"
-import { getServerSession } from "next-auth"
-import { authOptions, hasOwnerAccess } from "@/lib/auth"
+import { hasOwnerAccess } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { getAccountStoreRows } from "@/lib/account-stores"
 import { z } from "zod"
@@ -47,7 +49,7 @@ const updateStoreSchema = z.object({
 
 export async function createStore(formData: FormData) {
   try {
-    const session = await getServerSession(authOptions)
+    const session = await getSession()
 
     if (!session?.user) {
       return { error: "Unauthorized" }
@@ -110,7 +112,7 @@ export async function createStore(formData: FormData) {
  * ordering by name, and the callers may read any column.
  */
 const getStoresCached = cache(async () => {
-  const session = await getServerSession(authOptions)
+  const session = await getSession()
   if (!session?.user) return []
 
   // The rows come from `@/lib/account-stores`, which is the ONE store query a
@@ -135,7 +137,7 @@ export async function getStores() {
 
 export async function getStoreById(storeId: string) {
   try {
-    const session = await getServerSession(authOptions)
+    const session = await getSession()
 
     if (!session?.user) {
       return null
@@ -157,7 +159,7 @@ export async function getStoreById(storeId: string) {
 
 export async function updateStore(storeId: string, formData: FormData) {
   try {
-    const session = await getServerSession(authOptions)
+    const session = await getSession()
 
     if (!session?.user) {
       return { error: "Unauthorized" }
@@ -248,7 +250,7 @@ export async function updateStore(storeId: string, formData: FormData) {
 
 export async function deleteStore(storeId: string) {
   try {
-    const session = await getServerSession(authOptions)
+    const session = await getSession()
 
     if (!session?.user) {
       return { error: "Unauthorized" }

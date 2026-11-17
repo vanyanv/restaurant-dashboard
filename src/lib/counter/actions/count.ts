@@ -1,11 +1,10 @@
 "use server"
 
 import { revalidatePath } from "next/cache"
-import { getServerSession } from "next-auth"
 import { z } from "zod"
 import type { Prisma } from "@/generated/prisma/client"
-import { authOptions, hasOwnerAccess } from "@/lib/auth"
-import { requireOwnerStore } from "@/lib/auth-scope"
+import { hasOwnerAccess } from "@/lib/auth"
+import { requireOwnerStore, getSession } from "@/lib/auth-scope"
 import { prisma } from "@/lib/prisma"
 import { applyCalibrationUpdatesForCount } from "@/lib/inventory/calibration-update"
 import {
@@ -43,7 +42,7 @@ const STALE_OPEN_DAYS = 7
 const DAY_MS = 86_400_000
 
 async function requireOwner(): Promise<{ id: string; accountId: string }> {
-  const session = await getServerSession(authOptions)
+  const session = await getSession()
   if (!session?.user) throw new Error("Unauthorized")
   if (!hasOwnerAccess(session.user.role)) throw new Error("Forbidden")
   return { id: session.user.id, accountId: session.user.accountId }

@@ -1,7 +1,8 @@
-"use server"
-
-import { getServerSession } from "next-auth"
-import { authOptions } from "@/lib/auth"
+// Server-only, not a server action: nothing in the browser calls these, so
+// they are plain functions and cannot be invoked from outside the server.
+// Browser saves go through `src/lib/counter/actions/`.
+import "server-only"
+import { getSession } from "@/lib/auth-scope"
 import { prisma } from "@/lib/prisma"
 import { computeDeposit } from "@/lib/deposit"
 import { isFirstPartyPlatform } from "@/lib/first-party-platforms"
@@ -14,7 +15,7 @@ export async function getOtterAnalytics(
   storeId?: string,
   options?: { days?: number; startDate?: string; endDate?: string }
 ): Promise<import("@/types/analytics").StoreAnalyticsData | null> {
-  const session = await getServerSession(authOptions)
+  const session = await getSession()
   if (!session?.user) return null
   const accountId = session.user.accountId
 
@@ -250,7 +251,7 @@ export async function getRevenueTrendData(
   options?: { days?: number }
 ): Promise<{ dailyTrends: import("@/types/analytics").DailyTrend[] } | null> {
   try {
-    const session = await getServerSession(authOptions)
+    const session = await getSession()
     if (!session?.user) return null
 
     const stores = await getStores()
@@ -328,7 +329,7 @@ export async function getRevenueTrendData(
 export async function getDashboardAnalytics(
   options?: { days?: number; startDate?: string; endDate?: string }
 ): Promise<import("@/types/analytics").DashboardData | null> {
-  const session = await getServerSession(authOptions)
+  const session = await getSession()
   if (!session?.user) return null
   const accountId = session.user.accountId
 

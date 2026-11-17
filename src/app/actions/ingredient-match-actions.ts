@@ -1,6 +1,8 @@
-"use server"
-
-import { getAuthScope as requireScope } from "@/lib/auth-scope"
+// Server-only, not a server action: nothing in the browser calls these, so
+// they are plain functions and cannot be invoked from outside the server.
+// Browser saves go through `src/lib/counter/actions/`.
+import "server-only"
+import { getAuthScope } from "@/lib/auth-scope"
 import { prisma } from "@/lib/prisma"
 import { Prisma } from "@/generated/prisma/client"
 import { normalizeVendorName, vendorMatchKey } from "@/lib/vendor-normalize"
@@ -49,7 +51,7 @@ export type UnmatchedSuggestion = {
  * the long tail isn't actionable enough to pay the scan cost for.
  */
 export async function listUnmatchedLineItems(): Promise<UnmatchedLineItemGroup[]> {
-  const scope = await requireScope()
+  const scope = await getAuthScope()
   if (!scope) return []
   const { ownerId, accountId } = scope
 
@@ -248,7 +250,7 @@ export async function searchUnmatchedLineItems(
   query: string,
   limit: number = 20
 ): Promise<UnmatchedLineItemHit[]> {
-  const scope = await requireScope()
+  const scope = await getAuthScope()
   if (!scope) return []
   const { ownerId, accountId } = scope
 
@@ -316,7 +318,7 @@ export async function confirmSkuMatch(input: {
   canonicalIngredientId?: string
   newCanonical?: { name: string; defaultUnit: string; category?: string | null }
 }): Promise<{ backfilled: number; canonicalIngredientId: string }> {
-  const scope = await requireScope()
+  const scope = await getAuthScope()
   if (!scope) throw new Error("Not authenticated")
   const { ownerId, accountId } = scope
 

@@ -1,5 +1,7 @@
-"use server"
-
+// Server-only, not a server action: nothing in the browser calls these, so
+// they are plain functions and cannot be invoked from outside the server.
+// Browser saves go through `src/lib/counter/actions/`.
+import "server-only"
 // AI mapping/combo proposals: propose + one-click confirm.
 //
 // Generation lives in src/lib/mapping-proposals-core.ts (session-free, so
