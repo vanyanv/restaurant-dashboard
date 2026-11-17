@@ -3,6 +3,7 @@
 import { useEffect, useState, useTransition, type ReactNode, useEffectEvent } from "react"
 import { reviewCheckPhoto } from "@/lib/counter/actions/checks"
 import type { CellView } from "@/lib/counter/adapters/checks"
+import { Answer, BigNumber, type Vs } from "@/components/counter/ui"
 import { Glyph, Lightbox, markPhotoSrc, OutcomeLine, photoSrc, type Outcome } from "./checks-ui"
 
 /**
@@ -12,7 +13,10 @@ import { Glyph, Lightbox, markPhotoSrc, OutcomeLine, photoSrc, type Outcome } fr
  * each photo with the owner's Looks good / Redo.
  */
 
-/** One sentence, then the figure that answers it, then the change. */
+/**
+ * One sentence, then the figure that answers it, then the change. Drawn with
+ * the shared `Answer` and `BigNumber`, so it reads like P&L and Invoices.
+ */
 export function PlainHead({
   sentence,
   figure,
@@ -26,23 +30,18 @@ export function PlainHead({
   delta: number | null
   deltaLabel: string
 }) {
+  const vs: Vs | undefined =
+    delta === null
+      ? undefined
+      : delta === 0
+        ? { change: "", tone: "flat", against: `Same as ${deltaLabel.replace(/^vs /, "")}` }
+        : { change: `${delta > 0 ? "▲" : "▼"} ${Math.abs(delta)} pts`, tone: delta > 0 ? "up" : "down", against: deltaLabel }
   return (
     <div className="ck-plain">
-      <p className="ck-plain__say">{sentence}</p>
+      <Answer>{sentence}</Answer>
       {/* No figure, no figure row: a lone "—" under a sentence that already
           says nothing was due repeats it as a glyph (design review 2026-11-11). */}
-      {figure === null ? null : (
-      <div className="ck-plain__fig">
-        <b>{figure}</b>
-        <span className="ck-meta">{figureLabel}</span>
-        {delta !== null && delta !== 0 && (
-          <span className={`ck-plain__delta ${delta > 0 ? "up" : "down"}`}>
-            {delta > 0 ? "▲" : "▼"} {Math.abs(delta)} pts {deltaLabel}
-          </span>
-        )}
-        {delta === 0 && <span className="ck-meta">Same as {deltaLabel.replace(/^vs /, "")}</span>}
-      </div>
-      )}
+      {figure === null ? null : <BigNumber label={figureLabel} value={figure} vs={vs} />}
     </div>
   )
 }

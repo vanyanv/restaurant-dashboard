@@ -3,6 +3,7 @@ import { logger } from "@/lib/logger"
 import type { SubmissionContent } from "./data"
 import { escapeEmailHtml as esc, sendEmail } from "./email"
 import { CHECK_LABEL, clockLabel, dayLabel, dbToDay, windowBounds, type CheckKindName } from "./time"
+import { EMAIL } from "@/lib/email-colors"
 
 /**
  * The owners' email for a check, sent by crew or closed by the app when its
@@ -77,13 +78,13 @@ export function checkReportContent(r: {
     .join("\n")
 
   const cell = "padding:6px 10px 6px 0;vertical-align:top"
-  const dim = "color:#6b604f"
+  const dim = `color:${EMAIL.ink2}`
   const doneRows = (list: ReportItem[]) =>
     list
       .map(
         (i) => `<tr>
 <td style="${cell};${dim};font-family:monospace;white-space:nowrap">${esc(when(i.at))}</td>
-<td style="${cell}">${esc(i.text)}${isLate(i) ? ` <span style="color:#8a5a00">· late</span>` : ""}${i.flag ? `<br><span style="color:#b41d14">Note: ${esc(i.flag)}</span>` : ""}</td>
+<td style="${cell}">${esc(i.text)}${isLate(i) ? ` <span style="color:${EMAIL.warn}">· late</span>` : ""}${i.flag ? `<br><span style="color:${EMAIL.bad}">Note: ${esc(i.flag)}</span>` : ""}</td>
 <td style="${cell};${dim};white-space:nowrap">${esc(i.by ?? "")}</td>
 <td style="padding:6px 0;${dim};vertical-align:top">${i.photo ? "Photo" : ""}</td>
 </tr>`,
@@ -97,16 +98,16 @@ export function checkReportContent(r: {
 </tr>`,
     )
     .join("")
-  const heading = (t: string, color = "#1a1612") => `<p style="margin:18px 0 6px;font-weight:bold;color:${color}">${t}</p>`
-  const html = `<div style="font-family:Arial,sans-serif;font-size:15px;line-height:1.5;color:#1a1612;max-width:560px">
-<div style="background:#e63027;color:#fff2c9;padding:14px 16px;font-weight:bold;letter-spacing:1px">${esc(r.store.toUpperCase())} · ${esc(label.toUpperCase())} CHECK</div>
+  const heading = (t: string, color: string = EMAIL.brandInk) => `<p style="margin:18px 0 6px;font-weight:bold;color:${color}">${t}</p>`
+  const html = `<div style="font-family:Arial,sans-serif;font-size:15px;line-height:1.5;color:${EMAIL.brandInk};max-width:560px">
+<div style="background:${EMAIL.brandRed};color:${EMAIL.brandCream};padding:14px 16px;font-weight:bold;letter-spacing:1px">${esc(r.store.toUpperCase())} · ${esc(label.toUpperCase())} CHECK</div>
 <p style="margin:16px 0 4px;font-size:18px"><b>${esc(headline)}</b> · ${esc(dayLabel(r.day))}</p>
 <p style="margin:0 0 4px;${dim}">${esc(how)}</p>
 ${people.length > 0 ? `<p style="margin:0 0 12px;${dim}">Ticked by ${esc(people.join(", "))}</p>` : ""}
-${missed.length > 0 && done.length > 0 ? `${heading(`Missed (${missed.length})`, "#b41d14")}<table style="border-collapse:collapse;width:100%;font-size:14px;background:#fdeeea;color:#b41d14">${missedRows}</table>` : ""}
-${attention.length > 0 ? `${heading(`Notes and late tasks (${attention.length})`)}<table style="border-collapse:collapse;width:100%;font-size:14px;border-top:1px solid #e3d8bc">${doneRows(attention)}</table>` : ""}
-${done.length > 0 ? `${heading(`Done (${done.length})`)}<table style="border-collapse:collapse;width:100%;font-size:14px;border-top:1px solid #e3d8bc">${doneRows(done)}</table>` : ""}
-<p style="margin:16px 0"><a href="${esc(r.link)}" style="background:#f5b82e;color:#1a1612;padding:10px 14px;text-decoration:none;font-weight:bold">${r.photoCount > 0 ? `See ${r.photoCount} photo${r.photoCount === 1 ? "" : "s"}` : "Open in the dashboard"}</a></p>
+${missed.length > 0 && done.length > 0 ? `${heading(`Missed (${missed.length})`, EMAIL.bad)}<table style="border-collapse:collapse;width:100%;font-size:14px;background:${EMAIL.badWash};color:${EMAIL.bad}">${missedRows}</table>` : ""}
+${attention.length > 0 ? `${heading(`Notes and late tasks (${attention.length})`)}<table style="border-collapse:collapse;width:100%;font-size:14px;border-top:1px solid ${EMAIL.brandLine}">${doneRows(attention)}</table>` : ""}
+${done.length > 0 ? `${heading(`Done (${done.length})`)}<table style="border-collapse:collapse;width:100%;font-size:14px;border-top:1px solid ${EMAIL.brandLine}">${doneRows(done)}</table>` : ""}
+<p style="margin:16px 0"><a href="${esc(r.link)}" style="background:${EMAIL.brandYellow};color:${EMAIL.brandInk};padding:10px 14px;text-decoration:none;font-weight:bold">${r.photoCount > 0 ? `See ${r.photoCount} photo${r.photoCount === 1 ? "" : "s"}` : "Open in the dashboard"}</a></p>
 </div>`
   return { subject, text, html }
 }

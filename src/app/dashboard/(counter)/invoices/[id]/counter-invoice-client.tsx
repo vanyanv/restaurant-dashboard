@@ -18,6 +18,7 @@ import type { SectionSources } from "@/lib/counter/adapters/types"
 import type { InvoiceCheck, InvoiceLines, InvoiceSections } from "@/lib/counter/adapters/invoice"
 import { markInvoiceReturn, resolveInvoiceReview } from "@/lib/counter/actions/invoice"
 import { useRouter } from "next/navigation"
+import { Button, ButtonRow, Status, type StatusTone } from "@/components/counter/ui"
 import { useState, useTransition } from "react"
 import { InvoiceGlyph, Tiles, type InvoiceGlyphKind } from "../invoices-ui"
 
@@ -57,12 +58,12 @@ const CHECK_GLYPH: Record<InvoiceCheck["tone"], InvoiceGlyphKind> = {
   warn: "open",
 }
 
-const STATUS_PILL: Record<string, { word: string; cls: string }> = {
-  REVIEW: { word: "In review", cls: "iv-pill--warn" },
-  APPROVED: { word: "Approved", cls: "iv-pill--good" },
-  MATCHED: { word: "Matched", cls: "iv-pill--good" },
-  REJECTED: { word: "Rejected", cls: "" },
-  PENDING: { word: "No store matched", cls: "iv-pill--warn" },
+const STATUS_PILL: Record<string, { word: string; tone: StatusTone }> = {
+  REVIEW: { word: "In review", tone: "warn" },
+  APPROVED: { word: "Approved", tone: "good" },
+  MATCHED: { word: "Matched", tone: "good" },
+  REJECTED: { word: "Rejected", tone: "off" },
+  PENDING: { word: "No store matched", tone: "warn" },
 }
 
 /**
@@ -172,32 +173,24 @@ function ReviewDecision({
 
   return (
     <>
-      <div className="btnrow">
-        <button
-          className="btn btn--primary"
-          type="button"
+      <ButtonRow>
+        <Button
+          variant="primary"
           disabled={saving || blocked}
           onClick={() => decide(primary.to)}
         >
           {saving ? "Saving…" : primary.label}
-        </button>
-        <button
-          className="btn"
-          type="button"
+        </Button>
+        <Button
           disabled={saving}
           onClick={() => run(() => markInvoiceReturn(invoiceId, !isReturn))}
         >
           {isReturn ? "This is a bill, not a credit" : "Record as a credit"}
-        </button>
-        <button
-          className="btn btn--quiet"
-          type="button"
-          disabled={saving}
-          onClick={() => decide(quiet.to)}
-        >
+        </Button>
+        <Button variant="quiet" disabled={saving} onClick={() => decide(quiet.to)}>
           {quiet.label}
-        </button>
-      </div>
+        </Button>
+      </ButtonRow>
 
       {error ? (
         <Note tight>
@@ -348,16 +341,16 @@ export function CounterInvoiceClient({
 
 /** The verdict and its buttons, above everything they are a verdict on. */
 function DecisionBar({ lines }: { lines: InvoiceLines }) {
-  const pill = STATUS_PILL[lines.status] ?? { word: lines.status, cls: "" }
+  const pill = STATUS_PILL[lines.status] ?? { word: lines.status, tone: "off" as const }
   return (
     <div className={`iv-decide${lines.reconciles ? "" : " iv-decide--bad"}`}>
       <div className="iv-decide__state">
-        <span className={`iv-pill ${pill.cls}`}>{pill.word}</span>
-        {lines.isReturn ? <span className="iv-pill">Credit memo</span> : null}
+        <Status tone={pill.tone}>{pill.word}</Status>
+        {lines.isReturn ? <Status tone="off">Credit memo</Status> : null}
         {lines.reconciles ? (
-          <span className="iv-pill iv-pill--good">Ties out</span>
+          <Status tone="good">Ties out</Status>
         ) : (
-          <span className="iv-pill iv-pill--bad">Does not add up</span>
+          <Status tone="bad">Does not add up</Status>
         )}
       </div>
       <ReviewDecision

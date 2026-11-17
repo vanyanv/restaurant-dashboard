@@ -8,6 +8,7 @@ import type { CellView, HistoryData, HistorySections } from "@/lib/counter/adapt
 import { CheckDetail, PhoneView } from "@/app/dashboard/(counter)/checks/checks-plain-ui"
 import { ChecksHead, Glyph, StorePicker } from "@/app/dashboard/(counter)/checks/checks-ui"
 import { useUrlFlag } from "@/components/counter/keep/use-url-param"
+import { Answer } from "@/components/counter/ui"
 
 /**
  * Store checks on a phone — History. The desk's grid is 30 columns wide, so
@@ -58,7 +59,7 @@ function Days({ data }: { data: HistoryData }) {
 
   return (
     <div className="ckp-hist">
-      <p className="ck-plain__say">{data.sentence}</p>
+      <Answer>{data.sentence}</Answer>
       <div className="ckp-scroll">
         <StorePicker stores={data.stores} current={data.storeId} path="/dashboard/checks/history" allLabel="All stores" extra={`range=${data.range}`} />
       </div>

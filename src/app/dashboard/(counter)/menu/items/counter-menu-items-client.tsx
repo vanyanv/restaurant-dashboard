@@ -21,6 +21,7 @@ import { rangeLabel } from "@/lib/counter/date-range"
 import { count, pct } from "@/lib/counter/format"
 import type { SectionSources } from "@/lib/counter/adapters/types"
 import type { ItemGlyph, MenuItemsData, MenuItemsSections } from "@/lib/counter/adapters/menu-items"
+import { Tile, Tiles } from "@/components/counter/ui"
 
 /**
  * Menu items: the owner's menu as dishes. Tiles, then what needs the owner
@@ -124,32 +125,28 @@ function Body({ data }: { data: MenuItemsData }) {
   const foodCost = c.revenue > 0 ? c.cost / c.revenue : null
   return (
     <div style={{ display: "grid", gap: 16 }}>
-      <div className="sh-tiles">
-        <a className={`sh-tile${c.notCosted > 0 ? " sh-tile--bad" : ""}`} href="#needs">
-          <span className="k">Selling, not costed</span>
-          <span className="v">{count(c.notCosted)}</span>
-          <span className="s">
-            {c.notCosted > 0 ? `${count(c.notCostedSold)} sold with nothing counted for food` : "Every dish that sold has a recipe"}
-          </span>
-        </a>
-        <a className="sh-tile" href="#all">
-          <span className="k">Fully costed</span>
-          <span className="v">
-            {count(c.fullyCosted)} of {count(c.sellingDishes)}
-          </span>
-          <span className="s">Dishes that sold with every line priced</span>
-        </a>
-        <div className="sh-tile">
-          <span className="k">Food cost</span>
-          <span className="v">{pct(foodCost)}</span>
-          <span className="s">Of what costed items collected, after discounts</span>
-        </div>
-        <a className="sh-tile" href="#needs">
-          <span className="k">Prices to check</span>
-          <span className="v">{count(c.staleIngredients)}</span>
-          <span className="s">{c.staleExample ? `${c.staleExample} and others, priced 90+ days ago` : "Every ingredient priced in the last 90 days"}</span>
-        </a>
-      </div>
+      <Tiles>
+        <Tile
+          label="Selling, not costed"
+          value={count(c.notCosted)}
+          sub={c.notCosted > 0 ? `${count(c.notCostedSold)} sold with nothing counted for food` : "Every dish that sold has a recipe"}
+          bad={c.notCosted > 0}
+          href="#needs"
+        />
+        <Tile
+          label="Fully costed"
+          value={`${count(c.fullyCosted)} of ${count(c.sellingDishes)}`}
+          sub="Dishes that sold with every line priced"
+          href="#all"
+        />
+        <Tile label="Food cost" value={pct(foodCost)} sub="Of what costed items collected, after discounts" />
+        <Tile
+          label="Prices to check"
+          value={count(c.staleIngredients)}
+          sub={c.staleExample ? `${c.staleExample} and others, priced 90+ days ago` : "Every ingredient priced in the last 90 days"}
+          href="#needs"
+        />
+      </Tiles>
 
       <section className="sec" aria-labelledby="needs">
         <div className="mi-tools">

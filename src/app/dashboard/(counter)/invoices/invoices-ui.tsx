@@ -7,6 +7,7 @@ import { PageHead, SubNav, useSurfaceHref, type FigureProps } from "@/components
 import { INVOICES_TABS } from "@/lib/counter/nav"
 import { scopeQuery } from "@/lib/counter/url-state"
 import type { InvoiceListRow } from "@/lib/counter/adapters/invoices"
+import { Tile as UiTile, Tiles as UiTiles } from "@/components/counter/ui"
 
 /**
  * Pieces shared by the three Invoices tabs and the invoice page: the head with
@@ -83,27 +84,20 @@ export function InvoiceLegend() {
 export function Tiles({ cells, hrefs }: { cells: FigureProps[]; hrefs?: Array<string | null> }) {
   const scoped = useScoped()
   return (
-    <div className="sh-tiles iv-tiles">
+    <UiTiles>
       {cells.map((c, i) => {
-        const cls = `sh-tile${c.deltaTone === "is-down" ? " sh-tile--bad" : ""}`
-        const body = (
-          <>
-            <span className="k">{c.label}</span>
-            <span className="v">{c.value}</span>
-            {c.delta ? <span className="s">{c.delta}</span> : null}
-          </>
-        )
         const href = hrefs?.[i]
-        return href ? (
-          <Link key={c.label} className={cls} href={scoped(href)}>
-            {body}
-          </Link>
-        ) : (
-          <div key={c.label} className={cls}>
-            {body}
-          </div>
+        return (
+          <UiTile
+            key={c.label}
+            label={c.label}
+            value={c.value}
+            sub={c.delta || undefined}
+            bad={c.deltaTone === "is-down"}
+            href={href ? scoped(href) : undefined}
+          />
         )
       })}
-    </div>
+    </UiTiles>
   )
 }

@@ -1,0 +1,164 @@
+"use client"
+
+import { useState, type ReactNode } from "react"
+import {
+  Answer,
+  BigNumber,
+  BigNumbers,
+  Button,
+  ButtonRow,
+  Card,
+  Fold,
+  NeedsYou,
+  Rows,
+  Status,
+  StoreCard,
+  StoreCardGrid,
+  Tabs,
+  Tile,
+  Tiles,
+  type RowsColumn,
+} from "@/components/counter/ui"
+
+type Invoice = { id: string; vendor: string; where: string; checked: boolean; amount: string }
+
+const INVOICES: Invoice[] = [
+  { id: "a", vendor: "Sysco", where: "Van Nuys · Nov 14", checked: true, amount: "$2,318.40" },
+  { id: "b", vendor: "Premier Meats", where: "Glendale · Nov 13", checked: false, amount: "$1,742.10" },
+  { id: "c", vendor: "Individual FoodService", where: "Hollywood · Nov 12", checked: true, amount: "$618.75" },
+]
+
+const COLUMNS: RowsColumn<Invoice>[] = [
+  { key: "vendor", label: "Vendor", slot: "title", render: (r) => r.vendor },
+  { key: "where", label: "Invoice", slot: "detail", render: (r) => r.where },
+  {
+    key: "status",
+    label: "Status",
+    slot: "status",
+    render: (r) =>
+      r.checked ? <Status tone="good">Checked</Status> : <Status tone="warn">Needs a store</Status>,
+  },
+  { key: "amount", label: "Amount", slot: "amount", align: "end", render: (r) => r.amount },
+]
+
+function Both({ name, replaces, note, children }: { name: string; replaces: string; note: string; children: ReactNode }) {
+  return (
+    <section className="cu-cat" aria-labelledby={`cu-cat-${name}`}>
+      <div className="cu-cat__head">
+        <h2 id={`cu-cat-${name}`}>{name}</h2>
+        <span className="cu-cat__replaces">replaces {replaces}</span>
+      </div>
+      <p className="cu-cat__note">{note}</p>
+      <div className="cu-cat__pair">
+        <div className="cu-cat__frame cu-cat__frame--desk">
+          <span className="cu-cat__bar">Desk</span>
+          <div className="cu-cat__body">{children}</div>
+        </div>
+        <div className="cu-cat__frame cu-cat__frame--phone">
+          <span className="cu-cat__bar">Phone · 390 px</span>
+          <div className="cu-cat__body">{children}</div>
+        </div>
+      </div>
+    </section>
+  )
+}
+
+export function BlocksCatalogue() {
+  const [period, setPeriod] = useState("week")
+  return (
+    <div className="cu-cat__page">
+      <p className="cu-cat__note">Example figures, not your numbers. Each block is the same markup in both frames.</p>
+
+      <Both name="Answer" replaces=".say .lede .pl-lead .iv-lede .ck-plain .pp-say .rs-lead" note="The one plain sentence a page opens with.">
+        <Answer>
+          You kept <b>$6,420</b> last week, <b>$310</b> more than the week before. Glendale&apos;s labor is
+          missing for 2 days, so the real figure may be lower.
+        </Answer>
+      </Both>
+
+      <Both name="BigNumber" replaces=".headline .fig .mhead .pl-big .pl-hero .ck-big .mi-hero .cw-fig" note="Lead figure with vs last period; missing inputs labelled, never counted as $0.">
+        <BigNumbers>
+          <BigNumber label="Sales this week" value="$48,210" vs={{ change: "▲ 4.2%", tone: "up", against: "vs last week" }} />
+          <BigNumber label="Food cost" value="29.8%" vs={{ change: "▲ 0.6 pts", tone: "down", against: "vs last week" }} />
+          <BigNumber label="Labor" value="24.1%" atMost missing="Glendale missing 2 days" />
+        </BigNumbers>
+      </Both>
+
+      <Both name="Status" replaces=".statuspill .mtag .pl-pill .iv-pill .inv-pill .pp-pill .rs-pill" note="Status in words with a dot.">
+        <span className="cu-cat__row">
+          <Status tone="good">On track</Status>
+          <Status tone="warn">Needs a look</Status>
+          <Status tone="bad">Behind</Status>
+          <Status tone="wait">Waiting on data</Status>
+        </span>
+      </Both>
+
+      <Both name="Button" replaces=".btn .mbtn .iv-btn .ibtn .qbtn .pagebtn" note="Main, plain and quiet. Full width and 44 px tall on the phone.">
+        <ButtonRow>
+          <Button variant="primary">Yes, Glendale</Button>
+          <Button>Different store</Button>
+          <Button variant="quiet">Undo</Button>
+        </ButtonRow>
+      </Both>
+
+      <Both name="Card" replaces=".pl-card .iv-card .iv-tile .mi-card .sh-tile .ck-tile" note="Layout-contained, so a change inside it doesn't re-lay-out the page; a menu still shows past its edge.">
+        <Card>
+          <span className="cu-cat__menuhost">
+            <b>Fries case</b>
+            <span className="cu-cat__menu" role="note">Menus and tooltips overflow the card</span>
+          </span>
+          <span>Up $4.20 a case, about $67 a month.</span>
+        </Card>
+      </Both>
+
+      <Both name="StoreCard" replaces=".stcard .pstore .prow .pl-store .iv-store .ck-store .cw-store" note="Side by side on the desk, stacked on the phone.">
+        <StoreCardGrid>
+          <StoreCard name="Hollywood" status={{ tone: "good", label: "On track" }} figures={[{ label: "Sales", value: "$21,940" }, { label: "Kept", value: "$3,180" }]} note="Up $820 on last week" />
+          <StoreCard name="Van Nuys" status={{ tone: "warn", label: "Needs a look" }} figures={[{ label: "Sales", value: "$15,310" }, { label: "Kept", value: "$2,140" }]} note="Food cost 31.2%, above target" />
+          <StoreCard name="Glendale" status={{ tone: "wait", label: "Waiting on data" }} figures={[{ label: "Sales", value: "$10,960" }, { label: "Kept", value: "≤ $1,100" }]} note="Labor missing Nov 12–13" />
+        </StoreCardGrid>
+      </Both>
+
+      <Both name="Rows" replaces=".tbl (desk only) .mlist .iv-row .ck-row .pp-row" note="A table on the desk, stacked cards on the phone, from the same rows.">
+        <Rows columns={COLUMNS} rows={INVOICES} rowKey={(r) => r.id} />
+      </Both>
+
+      <Both name="NeedsYou" replaces=".queue .mlist .pl-todos .iv-tasks .iv-needs .mi-needs .pp-needs .sh-queue" note="A few groups, one fix button each. Collapsed by default on real pages.">
+        <NeedsYou
+          defaultOpen
+          groups={[
+            { key: "store", what: "2 invoices need a store", why: "Premier Meats, $3,484 together", action: <Button variant="primary">Yes, Glendale</Button> },
+            { key: "labor", what: "Labor is missing for 2 days", why: "Glendale, Nov 12–13", action: <Button>Sync from Harri</Button> },
+            { key: "price", what: "1 price went up", why: "Fries case, +$4.20, about $67 a month", action: <Button>See price</Button> },
+          ]}
+        />
+      </Both>
+
+      <Both name="Tabs" replaces=".seg .pp-tabs .rs-seg .iv-sw .cd-switch .ck-secswitch" note="Fills the width on the phone.">
+        <Tabs
+          label="Period"
+          active={period}
+          onSelect={setPeriod}
+          items={[
+            { key: "week", label: "Week" },
+            { key: "month", label: "Month" },
+            { key: "custom", label: "Custom" },
+          ]}
+        />
+      </Both>
+
+      <Both name="Tile" replaces=".sh-tile .ck-rep__tile" note="A small figure that usually opens the list behind it. Red when it is the thing to look at.">
+        <Tiles>
+          <Tile label="To ship" value={3} sub="1 late" bad href="#" />
+          <Tile label="To bag" value={2} sub="Pickup orders to pack" href="#" />
+          <Tile label="Food cost" value="27.4%" sub="After discounts" />
+          <Tile label="Missed" value={1} tone="bad" />
+        </Tiles>
+      </Both>
+
+      <Both name="Fold" replaces=".iv-fold .rs-fold .ck-logfold .ckp-more" note="Everything that isn't the answer, folded at the bottom.">
+        <Fold summary="Show every number">The full statement sits here, folded away.</Fold>
+      </Both>
+    </div>
+  )
+}
