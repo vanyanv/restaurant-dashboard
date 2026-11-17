@@ -19,7 +19,7 @@ const record = vi.mocked(recordError)
 function req(body: unknown, headers: Record<string, string> = {}): Request {
   return new Request("http://test.local/api/telemetry/client-error", {
     method: "POST",
-    headers: { "content-type": "application/json", ...headers },
+    headers: { "content-type": "application/json", origin: "http://test.local", ...headers },
     body: typeof body === "string" ? body : JSON.stringify(body),
   })
 }
@@ -48,8 +48,25 @@ describe("POST /api/telemetry/client-error", () => {
   })
 
   it("records a signed-out error, because crew use the checks page without an account", async () => {
-    await POST(req({ ...valid, path: "/checks/abc" }))
+    await POST(req({ ...valid, path: "/checks/abc", message: "crew page broke" }))
     expect(record).toHaveBeenCalledWith(expect.objectContaining({ route: "/checks/abc", userId: null }))
+  })
+
+  it("records the same error once, however many phones send it", async () => {
+    await POST(req({ ...valid, message: "same fault" }))
+    await POST(req({ ...valid, message: "same fault" }))
+    expect(record).toHaveBeenCalledTimes(1)
+  })
+
+  it("drops a post with neither Sec-Fetch-Site nor a matching Origin", async () => {
+    await POST(req({ ...valid, message: "scripted" }, { origin: "" }))
+    await POST(req({ ...valid, message: "scripted 2" }, { origin: "https://evil.example" }))
+    expect(record).not.toHaveBeenCalled()
+  })
+
+  it("drops a body over the size cap before parsing it", async () => {
+    await POST(req({ ...valid, message: "big", stack: "x".repeat(13_000) }))
+    expect(record).not.toHaveBeenCalled()
   })
 
   it("drops a cross-site post", async () => {

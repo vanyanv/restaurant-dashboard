@@ -137,6 +137,17 @@ export async function awaitSections<S extends object>(
   return out
 }
 
+/** Next's control-flow throws carry a digest such as NEXT_REDIRECT or DYNAMIC_SERVER_USAGE. */
+function isNextSignal(err: unknown): boolean {
+  const digest = (err as { digest?: unknown } | null)?.digest
+  return (
+    typeof digest === "string" &&
+    (digest.startsWith("NEXT_") ||
+      digest === "DYNAMIC_SERVER_USAGE" ||
+      digest === "BAILOUT_TO_CLIENT_SIDE_RENDERING")
+  )
+}
+
 /**
  * The last-resort guard on a streamed section: a rejection becomes a `failed`
  * section instead of a page.
@@ -160,8 +171,10 @@ export function guardSection<T>(
 ): Promise<SectionData<T>> {
   return promise.catch((err: unknown) => {
     // The page still shows, with this section marked as failed — which is
-    // exactly why nobody used to hear about it. Record it in the error log.
-    reportServerError({
+    // exactly why nobody used to hear about it. Record it in the error log,
+    // except Next's own control-flow signals (redirect, notFound, dynamic
+    // bail-outs), which arrive as rejections but are not faults.
+    if (!isNextSignal(err)) reportServerError({
       source: "section",
       message: err instanceof Error ? err.message : String(err),
       stack: err instanceof Error ? (err.stack ?? null) : null,

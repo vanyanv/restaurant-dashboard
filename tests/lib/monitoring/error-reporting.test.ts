@@ -46,6 +46,16 @@ describe("guardSection", () => {
     )
   })
 
+  it("does not report Next's redirect or not-found signals as faults", async () => {
+    const recorder = vi.fn()
+    installServerErrorRecorder(recorder)
+    const redirect = Object.assign(new Error("NEXT_REDIRECT"), { digest: "NEXT_REDIRECT;replace;/login;307;" })
+    const notFound = Object.assign(new Error("NEXT_HTTP_ERROR_FALLBACK;404"), { digest: "NEXT_HTTP_ERROR_FALLBACK;404" })
+    await guardSection(Promise.reject(redirect), "retryA")
+    await guardSection(Promise.reject(notFound), "retryB")
+    expect(recorder).not.toHaveBeenCalled()
+  })
+
   it("reports nothing when the section loads", async () => {
     const recorder = vi.fn()
     installServerErrorRecorder(recorder)
