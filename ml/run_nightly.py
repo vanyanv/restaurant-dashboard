@@ -120,6 +120,25 @@ def _open_run(target: str, scope: str, model_version: str) -> str:
     return run_id
 
 
+def _never_trained(store_id: str, target: str) -> bool:
+    """True when `target` has never once trained successfully at this store.
+
+    What makes "not enough history" a new store waiting rather than a broken
+    one. A store that has trained before and now reads short (its sales rows
+    deleted or re-keyed, its menu re-imported under new names) is losing data,
+    and that has to keep failing the night.
+    """
+    sql = """
+        SELECT 1 FROM "MlTrainingRun"
+        WHERE scope = %s AND target::text = %s AND status = 'SUCCEEDED'
+        LIMIT 1
+    """
+    with connect() as conn:
+        with conn.cursor() as cur:
+            cur.execute(sql, (store_id, target))
+            return cur.fetchone() is None
+
+
 def _close_run(run_id: str, *, mape: float | None, mae: float | None,
                sample_size: int | None, status: str, error: str | None = None) -> None:
     sql = """
@@ -352,11 +371,16 @@ def run_menu_items_for_store(store_id: str, model_version: str) -> dict:
     sample_sizes: list[int] = []
     written_total = 0
     failed_items: list[str] = []
+    # Items `train_menu_item` declined because they have under 60 days of
+    # sales. Kept apart from items that raised: a store whose every item is
+    # still this short is waiting for history, not failing.
+    short_history_items: list[str] = []
     for item_name in items:
         try:
             result = train_menu_item(store_id, item_name)
             if result is None:
                 failed_items.append(item_name)
+                short_history_items.append(item_name)
                 continue
             rows = forecast_menu_item(
                 store_id, item_name, result, horizon_days=MENU_ITEM_HORIZON_DAYS
@@ -371,6 +395,24 @@ def run_menu_items_for_store(store_id: str, model_version: str) -> dict:
             print(f"menu_item {store_id}/{item_name} failed: {exc}")
 
     if not mapes:
+        if failed_items and len(short_history_items) == len(failed_items):
+            # Every item is under 60 days old: a store that opened recently.
+            # The error text is what operator_gate_check's Gate 1 reads as
+            # "not enough history yet", same as REVENUE's.
+            _close_run(
+                run_id,
+                mape=None,
+                mae=None,
+                sample_size=None,
+                status="FAILED",
+                error=f"insufficient_history ({len(failed_items)} items under 60 days)",
+            )
+            return {
+                "store_id": store_id,
+                "ok": False,
+                "reason": "insufficient_history",
+                "failed_count": len(failed_items),
+            }
         _close_run(
             run_id,
             mape=None,
@@ -1031,7 +1073,11 @@ def _run_full_pipeline_for_store(store_id: str, model_version: str) -> int:
     failures = 0
     menu_result = run_menu_items_for_store(store_id, model_version)
     print({"target": "MENU_ITEM", **menu_result})
-    if not menu_result.get("ok"):
+    if (menu_result.get("reason") == "insufficient_history"
+            and _never_trained(store_id, "MENU_ITEM")):
+        print({"phase": "LIFECYCLE", "store_id": store_id, "target": "MENU_ITEM",
+               "action": "waiting_for_history"})
+    elif not menu_result.get("ok"):
         failures += 1
 
     busy_hours_result = run_busy_hours_for_store(store_id, model_version)
@@ -1129,7 +1175,17 @@ def main() -> int:
     for store_id in ready:
         revenue_result = run_revenue_for_store(store_id, model_version)
         print({"target": "REVENUE", **revenue_result})
-        if not revenue_result.get("ok"):
+        if (revenue_result.get("reason") == "insufficient_history"
+                and _never_trained(store_id, "REVENUE")):
+            # A store set to Open in store settings goes straight to `ready`,
+            # skipping `warming_up`, so a new store lands here with weeks of
+            # sales, not 60 days. Van Nuys and Glendale did, and every nightly
+            # since 2026-10-29 failed on them. Waiting for history is not a
+            # failure; operator_gate_check Gate 1 reports it as such. Only
+            # while the store has never trained: see `_never_trained`.
+            print({"phase": "LIFECYCLE", "store_id": store_id, "stage": "ready",
+                   "target": "REVENUE", "action": "waiting_for_history"})
+        elif not revenue_result.get("ok"):
             failures += 1
         failures += _run_full_pipeline_for_store(store_id, model_version)
 

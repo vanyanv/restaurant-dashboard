@@ -27,7 +27,7 @@
 import fs from "fs"
 import path from "path"
 import { fileURLToPath } from "url"
-import { chromium } from "playwright"
+import { chromium, type Page } from "playwright"
 import sodium from "libsodium-wrappers"
 
 import { PAT_REMEDIATION, resolveGitHubCredential } from "../src/lib/github-credential"
@@ -139,7 +139,10 @@ function isoDay(d: Date, endOfDay: boolean): string {
   return `${yyyy}-${mm}-${dd}T${endOfDay ? "23:59:59.999" : "00:00:00.000"}Z`
 }
 
-async function verifyToken(jwt: string): Promise<boolean> {
+async function verifyToken(
+  jwt: string,
+  { requireRows = false }: { requireRows?: boolean } = {},
+): Promise<boolean> {
   // Seven days, not just today: the rotation runs at 00:00 UTC, which is
   // mid-afternoon in Los Angeles on the *previous* business day, and a
   // single-day window that happens to be empty tells us nothing.
@@ -175,6 +178,13 @@ async function verifyToken(jwt: string): Promise<boolean> {
     const data = await res.json()
     if (data.rows && Array.isArray(data.rows)) {
       console.log(`  Verification passed: got ${data.rows.length} row(s)`)
+      if (data.rows.length === 0 && requireRows) {
+        // A token picked up in the browser could belong to anything on the
+        // sign-in pages. Hollywood trades daily, so one that reads no week of
+        // its sales has not proved it is the dashboard's token: refuse it.
+        console.error("  Verification failed: seven days of Hollywood returned no rows.")
+        return false
+      }
       if (data.rows.length === 0) {
         // Not fatal — refusing to save a good token because Otter had a data
         // blip is worse than saving it. But Hollywood trades daily, so an
@@ -480,6 +490,322 @@ export function buildLegSpecs(
   }))
 }
 
+/**
+ * How many times the browser sign-in is tried before the run gives up.
+ *
+ * Since 2026-11-06 the nightly run has failed about every other night with
+ * "Login timed out" while sitting on iam.cloudkitchens.com/login: some page
+ * loads now go through Otter's new single sign-on page, which never calls
+ * the old /api/users/sign_in endpoint the script waited for, and some still
+ * get the old form. A fresh browser usually lands on whichever works.
+ */
+const BROWSER_ATTEMPTS = 3
+
+/**
+ * True when `value` is shaped like a JWT whose `exp` is still ahead. Shape
+ * only — the real test is verifyToken() reading data with it.
+ */
+export function looksLikeLiveJwt(value: unknown, nowMs = Date.now()): value is string {
+  if (typeof value !== "string") return false
+  const parts = value.split(".")
+  if (parts.length !== 3 || parts.some((p) => !/^[A-Za-z0-9_-]+$/.test(p))) return false
+  try {
+    const payload = JSON.parse(Buffer.from(parts[1], "base64url").toString())
+    return typeof payload.exp === "number" && payload.exp * 1000 > nowMs
+  } catch {
+    return false
+  }
+}
+
+/** Seconds until the token's `exp`, or null if it has none. */
+export function secondsLeft(token: string, nowMs = Date.now()): number | null {
+  try {
+    const payload = JSON.parse(Buffer.from(token.split(".")[1], "base64url").toString())
+    return typeof payload.exp === "number" ? Math.floor(payload.exp - nowMs / 1000) : null
+  } catch {
+    return null
+  }
+}
+
+/**
+ * The shortest life a token may have to be saved. The rotation runs once a
+ * day; a token that dies within hours (an OAuth access token from the new
+ * sign-on page, say) would leave Vercel and GitHub holding a dead secret
+ * while the run reported success, which is the 2026-08-13 failure again.
+ */
+export const MIN_TOKEN_LIFETIME_S = 12 * 3600
+
+/** Candidates worth verifying, longest-lived first; short-lived ones dropped. */
+export function rankCandidates(tokens: string[], nowMs = Date.now()): string[] {
+  return tokens
+    .map((t) => ({ t, left: secondsLeft(t, nowMs) ?? -1 }))
+    .filter(({ left }) => left >= MIN_TOKEN_LIFETIME_S)
+    .sort((a, b) => b.left - a.left)
+    .map(({ t }) => t)
+}
+
+/** The token in an `Authorization: Bearer …` header value, if there is one. */
+export function jwtFromAuthHeader(value: string | undefined, nowMs = Date.now()): string | null {
+  if (!value) return null
+  const token = value.replace(/^Bearer\s+/i, "").trim()
+  return looksLikeLiveJwt(token, nowMs) ? token : null
+}
+
+/** The token in a sign-in or OAuth token response body, if there is one. */
+export function jwtFromBody(body: unknown, nowMs = Date.now()): string | null {
+  if (!body || typeof body !== "object") return null
+  const record = body as Record<string, unknown>
+  for (const key of ["accessToken", "access_token", "token", "jwt"]) {
+    if (looksLikeLiveJwt(record[key], nowMs)) return record[key] as string
+  }
+  return null
+}
+
+/**
+ * Host and path only. Failure logs are posted to a GitHub issue, and OAuth
+ * query strings carry one-time codes, so they never go in the log.
+ */
+export function redactUrl(url: string): string {
+  try {
+    const u = new URL(url)
+    return `${u.host}${u.pathname}`
+  } catch {
+    return "(unparseable url)"
+  }
+}
+
+/** The same direct sign-in src/lib/otter.ts falls back to. */
+type DirectResult = { token: string | null; credentialsRejected: boolean }
+
+async function signInDirect(email: string, password: string): Promise<DirectResult> {
+  try {
+    const res = await fetch(SIGN_IN_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "*/*",
+        Origin: "https://manager.tryotter.com",
+        Referer: "https://manager.tryotter.com/",
+        "User-Agent": BROWSER_USER_AGENT,
+      },
+      body: JSON.stringify({ email, password }),
+      signal: AbortSignal.timeout(30_000),
+    })
+    if (res.status === 401 || res.status === 422) {
+      // Wrong or changed password. Trying it three more times in a browser
+      // only risks locking the account, which would also break the app's
+      // own fallback sign-in.
+      console.error(`  Direct sign-in answered ${res.status}: Otter refused the email/password.`)
+      return { token: null, credentialsRejected: true }
+    }
+    if (!res.ok) {
+      console.log(`  Direct sign-in answered ${res.status}; trying the browser.`)
+      return { token: null, credentialsRejected: false }
+    }
+    const fromHeader = jwtFromAuthHeader(res.headers.get("authorization") ?? undefined)
+    if (fromHeader) return { token: fromHeader, credentialsRejected: false }
+    const fromBody = jwtFromBody(await res.json().catch(() => null))
+    if (!fromBody) console.log("  Direct sign-in answered 200 without a token; trying the browser.")
+    return { token: fromBody, credentialsRejected: false }
+  } catch (err) {
+    console.log(`  Direct sign-in did not answer (${err instanceof Error ? err.message : String(err)}); trying the browser.`)
+    return { token: null, credentialsRejected: false }
+  }
+}
+
+const BROWSER_USER_AGENT =
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
+
+const EMAIL_FIELD = '[data-testid="op-auth_email-field"]'
+const PASSWORD_FIELD = '[data-testid="op-auth_password-field"]'
+const LOGIN_BUTTON = '[data-testid="op-auth_login-button"]'
+
+/**
+ * True when the page is on the Otter dashboard's host. The old sign-in form
+ * is served from that host too, so the caller also checks the email field is
+ * gone before treating the browser as signed in.
+ */
+function onDashboard(url: string): boolean {
+  try {
+    return new URL(url).hostname === "manager.tryotter.com"
+  } catch {
+    return false
+  }
+}
+
+/**
+ * What a failed attempt looked like, in words. No screenshot: this repository
+ * is public, so workflow artifacts are too, and a login-page screenshot shows
+ * the account email (and, past the login, the store's sales). The page title,
+ * the pages visited (host and path only) and any on-page error message are
+ * enough to tell "the sign-on page changed" from "Otter said no".
+ */
+async function describePage(page: Page, visited: string[]): Promise<void> {
+  console.error(`  Pages visited: ${visited.join(" -> ") || "(none)"}`)
+  console.error(`  Ended on: ${redactUrl(page.url())}`)
+  const title = await page.title().catch(() => "")
+  if (title) console.error(`  Page title: ${title.slice(0, 120)}`)
+  const alerts = await page
+    .locator('[role="alert"], [aria-live="assertive"]')
+    .allInnerTexts()
+    .catch(() => [] as string[])
+  const message = alerts.map((t) => t.trim()).filter(Boolean).join(" | ")
+  if (message) console.error(`  Message on the page: ${message.slice(0, 200)}`)
+}
+
+function isOtterOrIamHost(url: string): boolean {
+  try {
+    const host = new URL(url).hostname
+    return ["tryotter.com", "cloudkitchens.com"].some(
+      (domain) => host === domain || host.endsWith(`.${domain}`),
+    )
+  } catch {
+    return false
+  }
+}
+
+/**
+ * One headless-browser sign-in. Returns every token seen, newest last.
+ *
+ * Tokens are taken from wherever the sign-in puts one: the old sign-in
+ * response's Authorization header, a token-shaped field in any Otter / IAM
+ * JSON response (the new single sign-on finishes with a token exchange), or
+ * the Authorization header the dashboard itself sends once it is signed in.
+ * The caller verifies each one, so a wrong pick is refused, never saved.
+ */
+async function signInWithBrowser(
+  email: string,
+  password: string,
+  attempt: number,
+): Promise<string[]> {
+  const browser = await chromium.launch({
+    headless: true,
+    args: ["--disable-blink-features=AutomationControlled"],
+  })
+  const found: string[] = []
+  const note = (token: string | null) => {
+    if (token && !found.includes(token)) found.push(token)
+  }
+  const visited: string[] = []
+  let page: Page | undefined
+
+  try {
+    const context = await browser.newContext({ userAgent: BROWSER_USER_AGENT })
+    const tab = await context.newPage()
+    page = tab
+    await tab.addInitScript(() => {
+      Object.defineProperty(navigator, "webdriver", { get: () => false })
+    })
+
+    page.on("framenavigated", (frame) => {
+      if (frame === tab.mainFrame()) visited.push(redactUrl(frame.url()))
+    })
+    page.on("request", (request) => {
+      if (!isOtterOrIamHost(request.url())) return
+      note(jwtFromAuthHeader(request.headers()["authorization"]))
+    })
+    page.on("response", async (response) => {
+      if (!isOtterOrIamHost(response.url())) return
+      note(jwtFromAuthHeader(response.headers()["authorization"]))
+      const type = response.headers()["content-type"] ?? ""
+      if (response.status() === 200 && type.includes("json")) {
+        note(jwtFromBody(await response.json().catch(() => null)))
+      }
+    })
+
+    // Do NOT wait for "networkidle" here. The login SPA holds a connection
+    // open for the life of the page, so the 500ms of network silence
+    // networkidle waits for never arrives and the goto burns its whole
+    // timeout — that is the 2026-08-28 failure, where every daily run died on
+    // `page.goto: Timeout 30000ms exceeded` while the form was interactive in
+    // under three seconds. The email field is the real readiness signal.
+    await page.goto("https://manager.tryotter.com", {
+      waitUntil: "domcontentloaded",
+      timeout: 60_000,
+    })
+    await page.waitForSelector(EMAIL_FIELD, { timeout: 60_000 })
+    await page.fill(EMAIL_FIELD, email)
+    // Single sign-on pages can ask for the email first and the password on a
+    // second step; press the button once more if the password isn't shown.
+    if (!(await page.isVisible(PASSWORD_FIELD))) {
+      await page.click(LOGIN_BUTTON)
+      await page.waitForSelector(PASSWORD_FIELD, { state: "visible", timeout: 30_000 })
+    }
+    await page.fill(PASSWORD_FIELD, password)
+    await page.click(LOGIN_BUTTON)
+
+    // Signed in is "a token turned up", not one particular endpoint
+    // answering. The first token can be an intermediate one (the sign-on
+    // page's own, or a token exchange), so once one is seen keep listening
+    // until the dashboard itself is loaded and has made its calls.
+    const deadline = Date.now() + 60_000
+    let settleUntil: number | null = null
+    while (Date.now() < deadline) {
+      if (
+        found.length > 0 &&
+        settleUntil === null &&
+        onDashboard(page.url()) &&
+        !(await page.isVisible(EMAIL_FIELD).catch(() => true))
+      ) {
+        settleUntil = Date.now() + 5_000
+      }
+      if (settleUntil !== null && Date.now() >= settleUntil) break
+      await page.waitForTimeout(500)
+    }
+
+    if (found.length === 0) {
+      console.error(`  Attempt ${attempt}: no token within 60 s.`)
+      await describePage(page, visited)
+    }
+  } catch (err) {
+    console.error(
+      `  Attempt ${attempt}: ${err instanceof Error ? err.message.split("\n")[0] : String(err)}`,
+    )
+    if (page) await describePage(page, visited)
+  } finally {
+    await browser.close()
+  }
+  return found
+}
+
+/** First token that passes verifyToken(), or null. */
+async function obtainVerifiedJwt(email: string, password: string): Promise<string | null> {
+  console.log("Signing in to Otter (direct)...")
+  const direct = await signInDirect(email, password)
+  if (direct.credentialsRejected) return null
+  if (direct.token) {
+    const [token] = rankCandidates([direct.token])
+    if (!token) {
+      console.log(`  Direct token lives ${describeLifetime(direct.token)}; too short to save. Trying the browser.`)
+    } else {
+      console.log(`Got JWT (${token.length} chars, lives ${describeLifetime(token)}) from the direct sign-in. Verifying...`)
+      if (await verifyToken(token)) return token
+      console.log("  Direct token failed verification; trying the browser.")
+    }
+  }
+
+  for (let attempt = 1; attempt <= BROWSER_ATTEMPTS; attempt++) {
+    console.log(`Signing in to Otter (headless browser, attempt ${attempt}/${BROWSER_ATTEMPTS})...`)
+    const seen = await signInWithBrowser(email, password, attempt)
+    const candidates = rankCandidates(seen)
+    if (seen.length > candidates.length) {
+      console.log(
+        `  ${seen.length - candidates.length} token(s) seen that live under ${MIN_TOKEN_LIFETIME_S / 3600} h; not saved.`,
+      )
+    }
+    for (const token of candidates) {
+      console.log(`Got JWT (${token.length} chars, lives ${describeLifetime(token)}). Verifying...`)
+      if (await verifyToken(token, { requireRows: true })) return token
+    }
+    if (seen.length > 0) console.error(`  Attempt ${attempt}: no token passed verification.`)
+  }
+  return null
+}
+
+function describeLifetime(token: string): string {
+  const left = secondsLeft(token)
+  return left === null ? "an unknown time" : `${(left / 3600).toFixed(1)} h`
+}
 async function main() {
   const env = loadEnvLocal()
   const email = process.env.OTTER_EMAIL ?? env["OTTER_EMAIL"]
@@ -492,87 +818,15 @@ async function main() {
     process.exit(1)
   }
 
-  // 1. Sign in via Playwright (bypasses Cloudflare bot detection)
-  console.log(`Signing in as ${email} (via headless browser)...`)
-  const browser = await chromium.launch({
-    headless: true,
-    args: [
-      "--disable-blink-features=AutomationControlled",
-    ],
-  })
-  const context = await browser.newContext({
-    userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36",
-  })
-  const page = await context.newPage()
-
-  // Hide headless browser signals
-  await page.addInitScript(() => {
-    Object.defineProperty(navigator, "webdriver", { get: () => false })
-  })
-
-  // Intercept the sign-in API response to capture the JWT
-  let jwt: string | undefined
-  page.on("response", async (response) => {
-    if (response.url() === SIGN_IN_URL && response.status() === 200) {
-      const authHeader = response.headers()["authorization"]
-      if (authHeader) {
-        jwt = authHeader.replace("Bearer ", "")
-      }
-    }
-  })
-
-  // Navigate to the Otter login page and fill in the form.
-  //
-  // Do NOT wait for "networkidle" here. The login SPA holds a connection open
-  // for the life of the page, so the 500ms of network silence networkidle
-  // waits for never arrives and the goto burns its whole timeout — that is the
-  // 2026-08-28 failure, where every daily run died on `page.goto: Timeout
-  // 30000ms exceeded` while the form was actually interactive in under three
-  // seconds. The email field is the real readiness signal, so wait for that.
-  await page.goto("https://manager.tryotter.com", {
-    waitUntil: "domcontentloaded",
-    timeout: 60_000,
-  })
-  await page.waitForSelector('[data-testid="op-auth_email-field"]', { timeout: 60_000 })
-
-  // Fill email and password, click sign in
-  await page.fill('[data-testid="op-auth_email-field"]', email)
-  await page.fill('[data-testid="op-auth_password-field"]', password)
-  await page.click('[data-testid="op-auth_login-button"]')
-
-  // Wait for the sign-in API call to complete
-  try {
-    await page.waitForResponse(
-      (response) => response.url() === SIGN_IN_URL && response.status() === 200,
-      { timeout: 30000 },
-    )
-  } catch {
-    // Capture screenshot for debugging
-    const screenshotPath = path.resolve(process.cwd(), "debug-login.png")
-    await page.screenshot({ path: screenshotPath, fullPage: true })
-    console.error(`  Login timed out. Screenshot saved to ${screenshotPath}`)
-    console.error(`  Current URL: ${page.url()}`)
-    await browser.close()
-    process.exit(1)
-  }
-
-  await browser.close()
-
+  // 1. Get a token. A direct API sign-in first (no browser, and it is what the
+  //    app's own fallback does); then a headless browser, up to
+  //    BROWSER_ATTEMPTS times. Every candidate has to read Hollywood's sales
+  //    before it is believed.
+  const jwt = await obtainVerifiedJwt(email, password)
   if (!jwt) {
-    console.error("Sign-in response missing JWT in Authorization header")
+    console.error("Could not get a working Otter token. Nothing was saved.")
     process.exit(1)
   }
-
-  console.log(`Got JWT (${jwt.length} chars)`)
-
-  // 2. Verify
-  console.log("Verifying token...")
-  const valid = await verifyToken(jwt)
-  if (!valid) {
-    console.error("Token verification failed. Not saving.")
-    process.exit(1)
-  }
-
   const legs: OtterLegs = {
     envLocal: "skipped",
     vercel: "skipped",
