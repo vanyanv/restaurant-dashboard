@@ -1,7 +1,9 @@
-"use server"
-
-import { getServerSession } from "next-auth"
-import { authOptions, hasOwnerAccess } from "@/lib/auth"
+// Server-only, not a server action: nothing in the browser calls these, so
+// they are plain functions and cannot be invoked from outside the server.
+// Browser saves go through `src/lib/counter/actions/`.
+import "server-only"
+import { getSession } from "@/lib/auth-scope"
+import { hasOwnerAccess } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { getAccountStoreRows } from "@/lib/account-stores"
 import { cached, stableKey } from "@/lib/cache/cached"
@@ -118,7 +120,7 @@ export async function getSplhSeries(
   granularity: "day" | "week" = "day",
   range?: SplhRange,
 ): Promise<SplhSeries[]> {
-  const session = await getServerSession(authOptions)
+  const session = await getSession()
   if (!session || !hasOwnerAccess(session.user.role)) return []
 
   const windowDays =

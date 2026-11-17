@@ -1,11 +1,10 @@
 "use server"
 
 import { revalidatePath } from "next/cache"
-import { getServerSession } from "next-auth"
 import { z } from "zod"
 import { prisma } from "@/lib/prisma"
-import { authOptions, hasOwnerAccess } from "@/lib/auth"
-import { requireOwnerStore } from "@/lib/auth-scope"
+import { hasOwnerAccess } from "@/lib/auth"
+import { requireOwnerStore, getSession } from "@/lib/auth-scope"
 import { checkLink } from "@/lib/checks/crew"
 import { sendPinEmail } from "@/lib/checks/email"
 import { normalizeUsPhone } from "@/lib/checks/text"
@@ -465,7 +464,7 @@ const EmailList = z.array(z.string().trim().toLowerCase().email("One of those is
 /** Who gets the email for every submitted check, for the whole account. */
 export async function saveCheckReportEmails(input: { emails: string[] }): Promise<ActionResult> {
   try {
-    const session = await getServerSession(authOptions)
+    const session = await getSession()
     if (!session?.user) throw new Error("Unauthorized")
     if (!hasOwnerAccess(session.user.role)) throw new Error("Forbidden")
     const emails = [...new Set(EmailList.parse(input.emails.filter((e) => e.trim())))]
@@ -521,7 +520,7 @@ function flaggedIn(content: SubmissionContent): number {
 export async function reviewCheckPhoto(raw: z.input<typeof ReviewInput>): Promise<ActionResult> {
   try {
     const input = ReviewInput.parse(raw)
-    const session = await getServerSession(authOptions)
+    const session = await getSession()
     if (!session?.user) throw new Error("Unauthorized")
     if (!hasOwnerAccess(session.user.role)) throw new Error("Forbidden")
     const mark = await prisma.checkMark.findFirst({

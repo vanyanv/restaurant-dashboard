@@ -1,6 +1,8 @@
-"use server"
-
-import { getSessionUser as requireSession } from "@/lib/auth-scope"
+// Server-only, not a server action: nothing in the browser calls these, so
+// they are plain functions and cannot be invoked from outside the server.
+// Browser saves go through `src/lib/counter/actions/`.
+import "server-only"
+import { getSessionUser } from "@/lib/auth-scope"
 import { prisma } from "@/lib/prisma"
 import { getAccountStoreRows } from "@/lib/account-stores"
 import { convertNativeToRecipeQty } from "@/lib/inventory/unit-conversion"
@@ -27,7 +29,7 @@ export async function createStockCount(input: {
   countedAt: Date
   note?: string | null
 }): Promise<CreateStockCountResult | null> {
-  const user = await requireSession()
+  const user = await getSessionUser()
   if (!user) return null
 
   const storeIds = await loadStoreIdsForAccount(user.accountId)
@@ -81,7 +83,7 @@ export async function saveStockCountLine(input: {
   estimatedQtyAtCount?: number | null
   calibrationFactorAtCount?: number | null
 }): Promise<SaveStockCountLineResult | null> {
-  const user = await requireSession()
+  const user = await getSessionUser()
   if (!user) return null
 
   if (!Number.isFinite(input.nativeQty) || input.nativeQty < 0) {
@@ -197,7 +199,7 @@ export type CompleteStockCountResult =
 export async function completeStockCount(input: {
   stockCountId: string
 }): Promise<CompleteStockCountResult | null> {
-  const user = await requireSession()
+  const user = await getSessionUser()
   if (!user) return null
 
   const count = await prisma.stockCount.findUnique({
@@ -237,7 +239,7 @@ export async function listStockCounts(options?: {
   storeId?: string
   limit?: number
 }): Promise<StockCountSummary[] | null> {
-  const user = await requireSession()
+  const user = await getSessionUser()
   if (!user) return null
 
   const accountStoreIds = await loadStoreIdsForAccount(user.accountId)

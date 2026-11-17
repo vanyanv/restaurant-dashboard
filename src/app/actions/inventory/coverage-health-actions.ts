@@ -1,7 +1,8 @@
-"use server"
-
-import { getServerSession } from "next-auth"
-import { authOptions } from "@/lib/auth"
+// Server-only, not a server action: nothing in the browser calls these, so
+// they are plain functions and cannot be invoked from outside the server.
+// Browser saves go through `src/lib/counter/actions/`.
+import "server-only"
+import { getSession } from "@/lib/auth-scope"
 import { prisma } from "@/lib/prisma"
 import { canonicalizeUnit } from "@/lib/unit-conversion"
 
@@ -38,7 +39,7 @@ export async function getInventoryCoverageHealth(input: {
   storeId: string
   asOf?: Date
 }): Promise<GetInventoryCoverageHealthResult | null> {
-  const session = (await getServerSession(authOptions)) as SessionLike | null
+  const session = (await getSession()) as SessionLike | null
   const user = session?.user ?? null
   if (!user) return null
 

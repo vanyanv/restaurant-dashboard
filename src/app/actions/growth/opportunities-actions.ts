@@ -1,5 +1,7 @@
-"use server"
-
+// Server-only, not a server action: nothing in the browser calls these, so
+// they are plain functions and cannot be invoked from outside the server.
+// Browser saves go through `src/lib/counter/actions/`.
+import "server-only"
 import { prisma } from "@/lib/prisma"
 import { getAccountStoreRows } from "@/lib/account-stores"
 import type { GrowthOpportunity } from "@/types/growth"

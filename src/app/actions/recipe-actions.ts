@@ -1,6 +1,8 @@
-"use server"
-
-import { getAuthScope as requireScope } from "@/lib/auth-scope"
+// Server-only, not a server action: nothing in the browser calls these, so
+// they are plain functions and cannot be invoked from outside the server.
+// Browser saves go through `src/lib/counter/actions/`.
+import "server-only"
+import { getAuthScope } from "@/lib/auth-scope"
 import { prisma } from "@/lib/prisma"
 import {
   assertNoCycles,
@@ -19,7 +21,7 @@ import {
 import { resolveSellPriceForRecipe } from "@/lib/menu-sell-price"
 
 export async function listRecipes(): Promise<RecipeSummary[]> {
-  const scope = await requireScope()
+  const scope = await getAuthScope()
   if (!scope) return []
   const { accountId } = scope
 
@@ -56,7 +58,7 @@ export async function listRecipes(): Promise<RecipeSummary[]> {
 }
 
 export async function getRecipeDetail(recipeId: string) {
-  const scope = await requireScope()
+  const scope = await getAuthScope()
   if (!scope) return null
   const { ownerId, accountId } = scope
   void ownerId
@@ -84,7 +86,7 @@ export async function getRecipeDetail(recipeId: string) {
 export async function upsertRecipe(
   input: RecipeInput
 ): Promise<{ id: string }> {
-  const scope = await requireScope()
+  const scope = await getAuthScope()
   if (!scope) throw new Error("Not authenticated")
   const { ownerId, accountId } = scope
 
@@ -185,7 +187,7 @@ function normalizeYieldUnit(raw: string | null | undefined): string | null {
 }
 
 export async function deleteRecipe(recipeId: string): Promise<void> {
-  const scope = await requireScope()
+  const scope = await getAuthScope()
   if (!scope) throw new Error("Not authenticated")
   const { ownerId, accountId } = scope
 
@@ -238,7 +240,7 @@ export async function previewRecipeCost(input: {
     ingredientName?: string | null
   }>
 }): Promise<RecipeCostResult> {
-  const scope = await requireScope()
+  const scope = await getAuthScope()
   if (!scope) throw new Error("Not authenticated")
   const { accountId } = scope
 
@@ -290,7 +292,7 @@ export async function confirmRecipe(
   recipeId: string,
   confirmed: boolean
 ): Promise<void> {
-  const scope = await requireScope()
+  const scope = await getAuthScope()
   if (!scope) throw new Error("Not authenticated")
   const { ownerId, accountId } = scope
   const updated = await prisma.recipe.updateMany({
@@ -324,7 +326,7 @@ export type RecipeCatalogSummary = {
 export async function getRecipeCatalogSummary(
   recipeId: string
 ): Promise<RecipeCatalogSummary | null> {
-  const scope = await requireScope()
+  const scope = await getAuthScope()
   if (!scope) return null
   const { ownerId, accountId } = scope
   void ownerId

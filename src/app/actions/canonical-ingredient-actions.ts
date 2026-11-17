@@ -1,9 +1,9 @@
-"use server"
-
-import { getServerSession } from "next-auth"
+// Server-only, not a server action: nothing in the browser calls these, so
+// they are plain functions and cannot be invoked from outside the server.
+// Browser saves go through `src/lib/counter/actions/`.
+import "server-only"
 import { revalidatePath } from "next/cache"
-import { authOptions } from "@/lib/auth"
-import { getAuthScope as requireScope } from "@/lib/auth-scope"
+import { getAuthScope, getSession } from "@/lib/auth-scope"
 import { prisma } from "@/lib/prisma"
 import {
   seedCanonicalIngredientsFromInvoices,
@@ -27,7 +27,7 @@ import type {
 export async function listCanonicalIngredients(): Promise<
   CanonicalIngredientSummary[]
 > {
-  const scope = await requireScope()
+  const scope = await getAuthScope()
   if (!scope) return []
   const { accountId } = scope
 
@@ -88,7 +88,7 @@ export async function setCanonicalPackDefinition(input: {
   innerPackUnit: string | null
   innerPacksPerCase: number | null
 }): Promise<void> {
-  const session = await getServerSession(authOptions)
+  const session = await getSession()
   if (!session?.user) throw new Error("Not authenticated")
   if (session.user.role !== "DEVELOPER") {
     throw new Error("Only developers can edit pack definitions")
@@ -208,7 +208,7 @@ export async function getIngredientPriceHistory(
   canonicalIngredientId: string,
   options?: { periodDays?: number }
 ): Promise<IngredientPriceHistory> {
-  const scope = await requireScope()
+  const scope = await getAuthScope()
   if (!scope) return { points: [] }
   const { accountId } = scope
 
@@ -320,7 +320,7 @@ export async function createCanonicalIngredient(input: {
   category?: string | null
   notes?: string | null
 }) {
-  const scope = await requireScope()
+  const scope = await getAuthScope()
   if (!scope) throw new Error("Not authenticated")
 
   const created = await prisma.canonicalIngredient.create({
@@ -358,7 +358,7 @@ export async function updateCanonicalCost(input: {
   costPerRecipeUnit?: number | null
   costLocked?: boolean
 }): Promise<void> {
-  const scope = await requireScope()
+  const scope = await getAuthScope()
   if (!scope) throw new Error("Not authenticated")
   const { accountId } = scope
 
@@ -401,7 +401,7 @@ export async function updateCanonicalCost(input: {
 }
 
 export async function runCanonicalIngredientSeed(): Promise<SeedResult> {
-  const scope = await requireScope()
+  const scope = await getAuthScope()
   if (!scope) throw new Error("Not authenticated")
   const result = await seedCanonicalIngredientsFromInvoices(scope.ownerId, scope.accountId)
   if (result.canonicalsCreated > 0 || result.aliasesCreated > 0) {
@@ -430,7 +430,7 @@ export async function mergeCanonicalIngredients(input: {
   recipeUses: number
   matchDecisions: number
 }> {
-  const scope = await requireScope()
+  const scope = await getAuthScope()
   if (!scope) throw new Error("Not authenticated")
   const { accountId } = scope
 

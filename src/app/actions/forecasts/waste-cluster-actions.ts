@@ -1,5 +1,7 @@
-"use server"
-
+// Server-only, not a server action: nothing in the browser calls these, so
+// they are plain functions and cannot be invoked from outside the server.
+// Browser saves go through `src/lib/counter/actions/`.
+import "server-only"
 import { startOfDayUTC as startOfDayUtc } from "@/lib/date-utils"
 // F29 — Waste root-cause clustering. For each (store, ingredient) with at
 // least a few completed counts in the lookback window, classify the
