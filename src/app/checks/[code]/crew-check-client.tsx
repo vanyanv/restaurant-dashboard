@@ -669,7 +669,7 @@ function Checklist({
    * flush before then would send those ticks without their photos.
    */
   const photosBack = useRef(false)
-  /** Photo ticks whose photo is still being written to the phone. */
+  /** Photo ticks whose photo is not (yet) stored on the phone; kept in memory only. */
   const saving = useRef(new Set<Queued>())
   /** Write the queue, minus ticks whose photo is not stored yet: a tick noted as having a photo always has one to find. */
   const persist = () => writeQueue(qKey, queue.current.filter((x) => !saving.current.has(x)))
@@ -758,8 +758,10 @@ function Checklist({
     // Photo first, so a tick noted as having one always has one to find.
     if (q.photo) {
       saving.current.add(q)
-      void savePhoto(qKey, q.itemId, q.photo).then(() => {
-        saving.current.delete(q)
+      void savePhoto(qKey, q.itemId, q.photo).then((stored) => {
+        // Not stored (no IndexedDB, disk full): the tick stays memory-only, so a
+        // reload can never pair it with an older photo left for the same task.
+        if (stored) saving.current.delete(q)
         persist()
       })
     } else {
