@@ -174,7 +174,7 @@ describe("Counter P&L — the phone", () => {
   it("composes the page: kept, Needs you, the dollar, day by day, by store, then the full statement", () => {
     const { container } = renderPhone()
     const sc = scroll(container)
-    expect(sc.querySelector(".pl-big")).toBeTruthy()
+    expect(sc.querySelector(".cu-big__value")).toBeTruthy()
     expect(Array.from(sc.querySelectorAll(".sec h3")).map((h) => h.textContent)).toEqual([
       "Needs you",
       "Where each dollar went",
@@ -211,8 +211,8 @@ describe("Counter P&L — the phone", () => {
 
   it("leads with what was kept and marks it 'at most' when labor is missing", () => {
     const { container } = renderPhone()
-    expect(container.querySelector(".pl-big")?.textContent).toBe("≤ $23,916" + "28.4% of sales")
-    expect(container.querySelector(".pl-atmost")?.textContent).toContain("2 Glendale days of labor missing")
+    expect(container.querySelector(".cu-big__value")?.textContent).toBe("≤ $23,916" + "28.4% of sales")
+    expect(container.querySelector(".cu-missing")?.textContent).toContain("2 Glendale days of labor missing")
   })
 
   it("makes a week bar move THIS page's range", () => {
@@ -228,7 +228,8 @@ describe("Counter P&L — the phone", () => {
 
   it("sends Needs you buttons to the phone's own pages", () => {
     const { container } = renderPhone()
-    const links = Array.from(container.querySelectorAll(".pl-todo a")).map((a) => a.getAttribute("href"))
+    const links = Array.from(container.querySelectorAll(".cu-needs__g a")).map((a) => a.getAttribute("href"))
+    expect(links.length).toBeGreaterThan(0)
     expect(links.every((h) => h?.startsWith("/m/"))).toBe(true)
   })
 
@@ -341,7 +342,7 @@ describe("Counter P&L — the phone", () => {
     const { container } = renderPhone("", {
       plain: failed("the rollup is down", "retryStatement"),
     })
-    expect(container.querySelector(".pl-big")).toBeNull()
+    expect(container.querySelector(".cu-big__value")).toBeNull()
     expect(container.querySelectorAll(".moneyline")).toHaveLength(7)
     expect(container.textContent).toContain("the rollup is down")
   })

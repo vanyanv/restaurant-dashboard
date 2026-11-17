@@ -4,6 +4,7 @@ import { CheckDetail } from "../checks-plain-ui"
 import { Fragment, useMemo, useRef, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { Section, useCounterTransition, usePageChrome, useSurfaceHref } from "@/components/counter"
+import { Answer } from "@/components/counter/ui"
 import type { SectionSources } from "@/lib/counter/adapters/types"
 import type { HistoryData, HistorySections } from "@/lib/counter/adapters/checks"
 import { ChecksHead, Glyph, Legend, StorePicker } from "../checks-ui"
@@ -76,7 +77,7 @@ function History({ data }: { data: HistoryData }) {
 
   return (
     <div style={{ display: "grid", gap: 14, padding: 14 }}>
-      <p className="ck-plain__say" style={{ margin: 0 }}>{data.sentence}</p>
+      <Answer>{data.sentence}</Answer>
       <div className="ck-spread">
         <StorePicker
           stores={data.stores}

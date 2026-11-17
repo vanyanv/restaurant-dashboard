@@ -163,14 +163,15 @@ describe("Counter P&L", () => {
 
   it("leads with what was kept, says it is an upper bound when labor is missing, and how it moved", () => {
     const { container } = render(<CounterPnlClient {...base} sections={sections} />)
-    const big = container.querySelector(".pl-big")?.textContent
+    // The shared BigNumber block (`@/components/counter/ui`).
+    const big = container.querySelector(".cu-big__value")?.textContent
     expect(big).toBe("≤ $23,916" + "28.4% of sales")
-    expect(container.querySelector(".pl-atmost")?.textContent).toBe("at most · 2 Glendale days of labor missing")
-    expect(container.querySelector(".pl-delta")?.textContent).toContain("vs Oct 19 – 25: ▲ +$4,413")
-    expect(container.querySelector(".pl-lead")?.textContent).toContain("true number is lower")
-    expect(Array.from(container.querySelectorAll(".pl-pill")).map((p) => p.className)).toEqual([
-      "pl-pill ",
-      "pl-pill is-bad",
+    expect(container.querySelector(".cu-missing")?.textContent).toBe("at most · 2 Glendale days of labor missing")
+    expect(container.querySelector(".cu-big__vs")?.textContent).toContain("▲ +$4,413 vs Oct 19 – 25")
+    expect(container.querySelector(".cu-answer")?.textContent).toContain("true number is lower")
+    expect(Array.from(container.querySelectorAll(".cu-statuses .cu-status")).map((p) => p.className)).toEqual([
+      "cu-status cu-status--good",
+      "cu-status cu-status--bad",
     ])
   })
 
@@ -240,7 +241,7 @@ describe("Counter P&L", () => {
 
   it("presses a store card and scopes the page to it", () => {
     const { container } = render(<CounterPnlClient {...base} sections={sections} />)
-    const cards = container.querySelectorAll("button.pl-store")
+    const cards = container.querySelectorAll("button.cu-store")
     expect(cards).toHaveLength(2)
     expect(cards[1].textContent).toContain("2 days of labor missing")
     fireEvent.click(cards[0])
@@ -272,7 +273,7 @@ describe("Counter P&L", () => {
     const { container } = render(
       <CounterPnlClient {...base} sections={{ ...sections, plain: failed("the rollup timed out", "retryStatement") }} />,
     )
-    expect(container.querySelector(".pl-big")).toBeNull()
+    expect(container.querySelector(".cu-big__value")).toBeNull()
     expect(screen.getAllByRole("alert").length).toBeGreaterThan(0)
     expect(container.querySelectorAll("table.tbl")).toHaveLength(1)
   })
@@ -284,7 +285,7 @@ describe("Counter P&L", () => {
         sections={{ ...sections, plain: empty("pre_open"), statement: empty("pre_open") }}
       />,
     )
-    expect(container.querySelector(".pl-big")).toBeNull()
+    expect(container.querySelector(".cu-big__value")).toBeNull()
     expect(container.querySelectorAll(".empty").length).toBeGreaterThan(0)
   })
 })

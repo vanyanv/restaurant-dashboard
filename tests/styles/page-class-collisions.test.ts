@@ -30,14 +30,13 @@ const PAGE_SHEETS = [
   "counter-count.css",
   "counter-inventory.css",
   "counter-people.css",
+  "counter-ui.css",
 ]
 
 /** class -> the sheets allowed to start a rule with it, and why. */
 const INTENTIONAL: Record<string, string[]> = {
   // Shop's tables reuse the store-checks table and add a selected-row state.
   ".ck-table": ["counter-checks.css", "counter-shop.css"],
-  // Invoices reuses Shop's tile grid with its own column count.
-  ".sh-tiles": ["counter-shop.css", "counter-invoices.css"],
 }
 
 function ruleStarts(css: string): Set<string> {

@@ -16,6 +16,7 @@ import {
 import type { SectionSources } from "@/lib/counter/adapters/types"
 import type { PeopleAccessData, PeopleAccessSections, PersonRow, PersonState } from "@/lib/counter/adapters/people-access"
 import { useUrlParam } from "@/components/counter/keep/use-url-param"
+import { Status, type StatusTone } from "@/components/counter/ui"
 
 /**
  * Admin > People (developer only). Everyone who can sign in, everyone waiting
@@ -46,7 +47,7 @@ const STATE_WORDS: Record<PersonState, string> = {
   ran_out: "Link ran out",
   removed: "Removed",
 }
-const STATE_TONE: Record<PersonState, string> = { in: "good", waiting: "warn", ran_out: "bad", removed: "off" }
+const STATE_TONE: Record<PersonState, StatusTone> = { in: "good", waiting: "warn", ran_out: "bad", removed: "off" }
 
 type Filter = "all" | PersonState
 
@@ -462,7 +463,7 @@ function PersonLine({
         </span>
       </span>
       <span className="pp-when">{r.when}</span>
-      <span className={`pp-pill pp-pill--${STATE_TONE[r.state]}`}>{STATE_WORDS[r.state]}</span>
+      <span className="pp-st"><Status tone={STATE_TONE[r.state]}>{STATE_WORDS[r.state]}</Status></span>
       <span className="pp-acts" ref={wrap}>
         {main}
         {r.you ? <span className="pp-meta">You</span> : null}

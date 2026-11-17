@@ -5,6 +5,7 @@ import { Section, useCounterTransition, usePageChrome, useSurfaceHref } from "@/
 import type { SectionSources } from "@/lib/counter/adapters/types"
 import type { ReportData, ReportSections } from "@/lib/counter/adapters/checks"
 import { ChecksHead, StorePicker } from "../checks-ui"
+import { Card, Tile, Tiles } from "@/components/counter/ui"
 import { PlainHead } from "../checks-plain-ui"
 
 /**
@@ -76,19 +77,21 @@ function Report({ data }: { data: ReportData }) {
           something, beside "checks due". */}
       {quiet ? null : (
         <div className="ck-rep__tiles">
-          <Tile n={f.checks.due} label="checks due" />
+        <Tiles>
+          <Tile value={f.checks.due} label="checks due" />
           {tiles
             .filter((t) => t.n > 0)
             .map((t) => (
-              <Tile key={t.label} n={t.n} label={t.label} tone={t.tone} />
+              <Tile key={t.label} value={t.n} label={t.label} tone={t.tone} />
             ))}
+        </Tiles>
         </div>
       )}
 
       {quiet ? null : (
       <>
       <div className="ck-rep__grid">
-        <div className="ck-rep__card">
+        <Card className="ck-rep__c">
           <h3>Missed most</h3>
           {f.mostMissed.length === 0 ? (
             <p className="ck-meta">No task was missed in these {data.range} days.</p>
@@ -115,9 +118,9 @@ function Report({ data }: { data: ReportData }) {
               })}
             </ol>
           )}
-        </div>
+        </Card>
 
-        <div className="ck-rep__card">
+        <Card className="ck-rep__c">
           <h3>By weekday</h3>
           {f.weekdays.length === 0 ? (
             <p className="ck-meta">No check with a task list was due.</p>
@@ -141,11 +144,11 @@ function Report({ data }: { data: ReportData }) {
             ))
           )}
           <p className="ck-meta">Share of tasks done, by the day the check belongs to.</p>
-        </div>
+        </Card>
       </div>
 
       {data.topFlags.length > 0 && (
-        <div className="ck-rep__card">
+        <Card className="ck-rep__c">
           <h3>Flagged most</h3>
           <ol className="ck-rep__bars">
             {data.topFlags.map((t) => (
@@ -162,10 +165,10 @@ function Report({ data }: { data: ReportData }) {
             ))}
           </ol>
           <p className="ck-meta">Tasks crew marked as needing attention.</p>
-        </div>
+        </Card>
       )}
 
-      <div className="ck-rep__card ck-rep__people">
+      <Card className="ck-rep__c ck-rep__people">
         <h3>Crew</h3>
         {f.people.length === 0 ? (
           <p className="ck-meta">Nobody ticked a task in these {data.range} days.</p>
@@ -194,18 +197,10 @@ function Report({ data }: { data: ReportData }) {
             <p className="ck-meta">Typical time is the middle of each person's first-to-last tick on a check.</p>
           </>
         )}
-      </div>
+      </Card>
       </>
       )}
     </div>
   )
 }
 
-function Tile({ n, label, tone }: { n: number; label: string; tone?: "good" | "warn" | "bad" }) {
-  return (
-    <div className={`ck-rep__tile${tone ? ` ${tone}` : ""}`}>
-      <b>{n}</b>
-      <span className="ck-meta">{label}</span>
-    </div>
-  )
-}

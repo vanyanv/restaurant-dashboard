@@ -1,0 +1,156 @@
+// @vitest-environment jsdom
+/**
+ * The shared blocks (`@/components/counter/ui`). Behaviour and markup only:
+ * jsdom has no layout, so the desk/phone shapes are checked by screenshot on
+ * /dashboard/blocks. What IS checked here is what the CSS keys off.
+ */
+import { describe, it, expect, vi } from "vitest"
+import { readFileSync, readdirSync } from "node:fs"
+import { join } from "node:path"
+import { render, screen, fireEvent } from "@testing-library/react"
+import {
+  Answer,
+  BigNumber,
+  BigNumbers,
+  Button,
+  ButtonLink,
+  Card,
+  Fold,
+  NeedsYou,
+  Rows,
+  Tile,
+  Tiles,
+  Status,
+  StoreCard,
+  Tabs,
+} from "@/components/counter/ui"
+
+const UI = join(process.cwd(), "src/components/counter/ui")
+const CSS = readFileSync(join(process.cwd(), "src/styles/counter-ui.css"), "utf8")
+
+describe("shared blocks", () => {
+  it("every ui/*.tsx is exported from the ui entry point", () => {
+    const barrel = readFileSync(join(UI, "index.ts"), "utf8")
+    for (const f of readdirSync(UI).filter((f) => f.endsWith(".tsx"))) {
+      expect(barrel).toMatch(new RegExp(`from "\\./${f.replace(/\.tsx$/, "")}"`))
+    }
+  })
+
+  it("Answer is one paragraph", () => {
+    const { container } = render(<Answer>You kept <b>$1</b>.</Answer>)
+    expect(container.innerHTML).toBe('<p class="cu-answer">You kept <b>$1</b>.</p>')
+  })
+
+  it("BigNumber marks an upper bound and labels a missing input instead of showing $0", () => {
+    render(
+      <BigNumbers>
+        <BigNumber label="Labor" value="24.1%" atMost missing="Glendale missing 2 days" />
+        <BigNumber label="Kept" value={null} />
+      </BigNumbers>,
+    )
+    expect(screen.getByText("≤ 24.1%")).toBeTruthy()
+    expect(screen.getByText("Glendale missing 2 days").className).toBe("cu-missing")
+    expect(screen.getByText("—")).toBeTruthy()
+  })
+
+  it("BigNumber's comparison carries its tone", () => {
+    render(<BigNumber label="Sales" value="$1" vs={{ change: "▲ 4%", tone: "up", against: "vs last week" }} />)
+    expect(screen.getByText("▲ 4%").className).toBe("cu-vs cu-vs--up")
+  })
+
+  it("Status has one class per tone, and every tone has a rule", () => {
+    for (const tone of ["good", "warn", "bad", "wait"] as const) {
+      const { container } = render(<Status tone={tone}>x</Status>)
+      expect(container.firstElementChild?.className).toBe(`cu-status cu-status--${tone}`)
+      expect(CSS).toContain(`.cu-status--${tone}{`)
+    }
+  })
+
+  it("Button defaults to type=button and passes clicks through; ButtonLink is a link", () => {
+    const onClick = vi.fn()
+    render(<Button variant="primary" onClick={onClick}>Fix it</Button>)
+    const b = screen.getByRole("button", { name: "Fix it" })
+    expect(b.getAttribute("type")).toBe("button")
+    expect(b.className).toBe("cu-btn cu-btn--primary")
+    fireEvent.click(b)
+    expect(onClick).toHaveBeenCalledOnce()
+    render(<ButtonLink href="/dashboard/invoices">Open</ButtonLink>)
+    expect(screen.getByRole("link", { name: "Open" }).getAttribute("href")).toBe("/dashboard/invoices")
+  })
+
+  it("Card contains layout but never paint, so menus and tooltips can overflow it", () => {
+    const rule = CSS.match(/\.cu-card\{[^}]*\}/)?.[0] ?? ""
+    expect(rule).toContain("contain:layout")
+    expect(rule).not.toMatch(/contain:[^;]*(paint|strict|content)/)
+    expect(rule).not.toMatch(/overflow:\s*(hidden|clip)/)
+    const { container } = render(<Card as="section">x</Card>)
+    expect(container.firstElementChild?.tagName).toBe("SECTION")
+  })
+
+  it("StoreCard shows its status in words", () => {
+    render(<StoreCard name="Glendale" status={{ tone: "wait", label: "Waiting on data" }} figures={[{ label: "Sales", value: "$10" }]} />)
+    expect(screen.getByText("Waiting on data").className).toBe("cu-status cu-status--wait")
+  })
+
+  it("Rows is a real table at every width, with each cell's phone slot", () => {
+    render(
+      <Rows
+        rowKey={(r) => r.id}
+        rows={[{ id: "1", v: "Sysco", a: "$2" }]}
+        columns={[
+          { key: "v", label: "Vendor", slot: "title", render: (r) => r.v },
+          { key: "a", label: "Amount", slot: "amount", align: "end", render: (r) => r.a },
+        ]}
+      />,
+    )
+    expect(screen.getByRole("table")).toBeTruthy()
+    expect(screen.getByRole("columnheader", { name: "Vendor" })).toBeTruthy()
+    expect(screen.getByText("Sysco").getAttribute("data-slot")).toBe("title")
+    expect(screen.getByText("$2").className).toBe("cu-end")
+  })
+
+  it("NeedsYou is collapsed by default, counts its groups, and renders nothing when empty", () => {
+    const { container } = render(
+      <NeedsYou groups={[{ key: "a", what: "2 invoices need a store", action: <Button>Yes</Button> }]} />,
+    )
+    const d = container.querySelector("details")!
+    expect(d.open).toBe(false)
+    expect(d.querySelector("summary")?.textContent).toBe("1thing needs you")
+    expect(render(<NeedsYou groups={[]} />).container.innerHTML).toBe("")
+  })
+
+  it("Tabs: buttons report the pressed tab, links mark the current page", () => {
+    const onSelect = vi.fn()
+    render(<Tabs label="Period" active="week" onSelect={onSelect} items={[{ key: "week", label: "Week" }, { key: "month", label: "Month" }]} />)
+    expect(screen.getByRole("button", { name: "Week" }).getAttribute("aria-pressed")).toBe("true")
+    fireEvent.click(screen.getByRole("button", { name: "Month" }))
+    expect(onSelect).toHaveBeenCalledWith("month")
+    render(<Tabs label="Pages" active="a" items={[{ key: "a", label: "All", href: "/x" }]} />)
+    expect(screen.getByRole("link", { name: "All" }).getAttribute("aria-current")).toBe("page")
+  })
+
+  it("Fold is a closed details by default", () => {
+    const { container } = render(<Fold summary="Show every number">x</Fold>)
+    expect(container.querySelector("details")?.open).toBe(false)
+  })
+
+  it("the stylesheet uses only tokens: no colour literals", () => {
+    const body = CSS.replace(/\/\*[\s\S]*?\*\//g, "")
+    expect(body).not.toMatch(/#[0-9a-f]{3,8}\b|rgb\(|hsl\(|oklch\(/i)
+  })
+
+  it("Tile: a link when it goes somewhere, red when bad, number coloured by tone", () => {
+    const { container } = render(
+      <Tiles>
+        <Tile label="To ship" value={3} sub="1 late" bad href="/x" />
+        <Tile label="Missed" value={1} tone="bad" />
+      </Tiles>,
+    )
+    const [a, b] = container.querySelectorAll(".cu-tiles > *")
+    expect(a.tagName).toBe("A")
+    expect(a.className).toBe("cu-tile cu-tile--bad")
+    expect(a.querySelector(".cu-tile__value")?.textContent).toBe("3")
+    expect(b.tagName).toBe("DIV")
+    expect(b.className).toBe("cu-tile cu-tile--tone-bad")
+  })
+})

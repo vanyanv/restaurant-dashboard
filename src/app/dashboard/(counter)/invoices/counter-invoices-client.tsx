@@ -19,6 +19,18 @@ import type {
 } from "@/lib/counter/adapters/invoices";
 import type { PriceSections } from "@/lib/counter/adapters/prices";
 import { confirmInvoiceStore } from "@/lib/counter/actions/invoice";
+import {
+  Answer,
+  Button,
+  ButtonLink,
+  ButtonRow,
+  Card,
+  NeedsYouItem,
+  NeedsYouList,
+  Notice,
+  Status,
+  Statuses,
+} from "@/components/counter/ui";
 import { InvoicesHead, useScoped } from "./invoices-ui";
 
 /**
@@ -190,8 +202,8 @@ function openNeeds() {
 function Lede({ week }: { week: InvoiceWeek }) {
   const scoped = useScoped();
   return (
-    <section className="iv-lede" aria-label="This week in one sentence">
-      <p>
+    <Card as="section" label="This week in one sentence">
+      <Answer>
         {week.lede.map((part, i) =>
           part.strong ? (
             <b key={i}>{part.text}</b>
@@ -199,30 +211,21 @@ function Lede({ week }: { week: InvoiceWeek }) {
             <span key={i}>{part.text}</span>
           ),
         )}
-      </p>
-      <div className="iv-pills">
+      </Answer>
+      <Statuses>
         {week.pills.map((p) =>
           p.href.includes("#iv-needs") ? (
-            <button
-              key={p.label}
-              type="button"
-              className={`iv-pill iv-pill--${p.tone} iv-pill--dot`}
-              onClick={openNeeds}
-            >
+            <Status key={p.label} tone={p.tone} onClick={openNeeds}>
               {p.label}
-            </button>
+            </Status>
           ) : (
-            <Link
-              key={p.label}
-              className={`iv-pill iv-pill--${p.tone} iv-pill--dot`}
-              href={scoped(p.href)}
-            >
+            <Status key={p.label} tone={p.tone} href={scoped(p.href)}>
               {p.label}
-            </Link>
+            </Status>
           ),
         )}
-      </div>
-    </section>
+      </Statuses>
+    </Card>
   );
 }
 
@@ -239,13 +242,9 @@ function Needs({ week }: { week: InvoiceWeek }) {
     notes.length > 0 ? (
       <div className="iv-notes" role="status">
         {notes.map((x, i) => (
-          <span
-            key={i}
-            className={x.tone === "good" ? "iv-task__done" : "iv-task__err"}
-          >
-            {x.tone === "good" ? "✓ " : ""}
+          <Notice key={i} tone={x.tone}>
             {x.text}
-          </span>
+          </Notice>
         ))}
       </div>
     ) : null;
@@ -262,7 +261,7 @@ function Needs({ week }: { week: InvoiceWeek }) {
   return (
     <>
       {banner}
-      <ol className="iv-tasks">
+      <NeedsYouList numbered>
         {week.needs.map((it, i) => (
           <Task
             key={it.key}
@@ -273,30 +272,29 @@ function Needs({ week }: { week: InvoiceWeek }) {
           />
         ))}
         {week.unlinked ? (
-          <li className="iv-task">
-            <span className="iv-task__n">{week.needs.length + 1}</span>
-            <div className="iv-task__body">
-              <b>
+          <NeedsYouItem
+            what={
+              <>
                 Link {plural(week.unlinked.lines, "supply line")} so{" "}
                 {week.unlinked.lines === 1 ? "it counts" : "they count"} in your
                 costs
-              </b>
-              <span className="iv-task__d">
+              </>
+            }
+            why={
+              <>
                 {week.unlinked.total} this week reached no ingredient. Biggest:{" "}
                 {week.unlinked.top}.
-              </span>
-              <div className="btnrow">
-                <Link
-                  className="btn btn--primary"
-                  href={scoped("/dashboard/ingredients")}
-                >
-                  Link them
-                </Link>
-              </div>
-            </div>
-          </li>
+              </>
+            }
+          >
+            <ButtonRow>
+              <ButtonLink variant="primary" href={scoped("/dashboard/ingredients")}>
+                Link them
+              </ButtonLink>
+            </ButtonRow>
+          </NeedsYouItem>
         ) : null}
-      </ol>
+      </NeedsYouList>
     </>
   );
 }
@@ -350,91 +348,84 @@ function Task({
   };
 
   return (
-    <li className={`iv-task${item.glyph === "miss" ? " iv-task--bad" : ""}`}>
-      <span className="iv-task__n">{n}</span>
-      <div className="iv-task__body">
-        <b>
+    <NeedsYouItem
+      bad={item.glyph === "miss"}
+      what={
+        <>
           {item.reason} {item.vendor} #{item.number}, {item.total}
-        </b>
-        <span className="iv-task__d">
+        </>
+      }
+      why={
+        <>
           {item.where} · {item.detail}
-        </span>
-        {done ? (
-          <span className="iv-task__done" role="status">
-            ✓ {done}
-          </span>
-        ) : item.confirmStore ? (
-          <>
-            <div className="btnrow">
-              <button
-                type="button"
-                className="btn btn--primary"
+        </>
+      }
+    >
+      {done ? (
+        <Notice tone="good">{done}</Notice>
+      ) : item.confirmStore ? (
+        <>
+          <ButtonRow>
+            <Button
+              variant="primary"
+              disabled={saving}
+              onClick={() =>
+                save(item.confirmStore!.storeId, item.confirmStore!.storeName)
+              }
+            >
+              {saving ? "Saving…" : `Yes, ${item.confirmStore.storeName}`}
+            </Button>
+            {others.length > 0 ? (
+              <Button
                 disabled={saving}
+                onClick={() => setPicking((p) => !p)}
+                aria-expanded={picking}
+              >
+                Different store
+              </Button>
+            ) : null}
+            <ButtonLink variant="quiet" href={surface(item.href)}>
+              Open invoice
+            </ButtonLink>
+          </ButtonRow>
+          {picking ? (
+            <div className="iv-move">
+              <label htmlFor={`move-${item.key}`}>Move it to</label>
+              <select
+                id={`move-${item.key}`}
+                value={moveTo}
+                onChange={(e) => setMoveTo(e.target.value)}
+              >
+                {others.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name}
+                  </option>
+                ))}
+              </select>
+              <Button
+                variant="primary"
+                disabled={saving || !moveTo}
                 onClick={() =>
-                  save(item.confirmStore!.storeId, item.confirmStore!.storeName)
+                  save(
+                    moveTo,
+                    others.find((s) => s.id === moveTo)?.name ?? "that store",
+                  )
                 }
               >
-                {saving ? "Saving…" : `Yes, ${item.confirmStore.storeName}`}
-              </button>
-              {others.length > 0 ? (
-                <button
-                  type="button"
-                  className="btn"
-                  disabled={saving}
-                  onClick={() => setPicking((p) => !p)}
-                  aria-expanded={picking}
-                >
-                  Different store
-                </button>
-              ) : null}
-              <Link className="btn btn--quiet" href={surface(item.href)}>
-                Open invoice
-              </Link>
+                Move and approve
+              </Button>
             </div>
-            {picking ? (
-              <div className="iv-move">
-                <label htmlFor={`move-${item.key}`}>Move it to</label>
-                <select
-                  id={`move-${item.key}`}
-                  value={moveTo}
-                  onChange={(e) => setMoveTo(e.target.value)}
-                >
-                  {others.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.name}
-                    </option>
-                  ))}
-                </select>
-                <button
-                  type="button"
-                  className="btn btn--primary"
-                  disabled={saving || !moveTo}
-                  onClick={() =>
-                    save(
-                      moveTo,
-                      others.find((s) => s.id === moveTo)?.name ?? "that store",
-                    )
-                  }
-                >
-                  Move and approve
-                </button>
-              </div>
-            ) : null}
-          </>
-        ) : (
-          <div className="btnrow">
-            <Link className="btn btn--primary" href={surface(item.href)}>
-              {item.act}
-            </Link>
-          </div>
-        )}
-        {error ? (
-          <span className="iv-task__err" role="alert">
-            {error}
-          </span>
-        ) : null}
-      </div>
-    </li>
+          ) : null}
+        </>
+      ) : (
+        <ButtonRow>
+          <ButtonLink variant="primary" href={surface(item.href)}>
+            {item.act}
+          </ButtonLink>
+        </ButtonRow>
+      )}
+      {error ? <Notice tone="bad">{error}</Notice> : null}
+    </NeedsYouItem>
   );
 }
 
@@ -458,9 +449,9 @@ function CameIn({ week }: { week: InvoiceWeek }) {
                 </span>
                 <span className="where">{r.store}</span>
                 <span className="amt">{r.total}</span>
-                <span className={`st st--${r.status.tone}`}>
+                <Status plain tone={r.status.tone}>
                   {r.status.label}
-                </span>
+                </Status>
               </Link>
             ))}
           </div>

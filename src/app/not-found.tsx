@@ -1,4 +1,4 @@
-import Link from "next/link"
+import { ButtonLink, ButtonRow } from "@/components/counter/ui"
 
 /**
  * The root 404, on Counter.
@@ -20,14 +20,12 @@ export default function NotFound() {
           <span className="t">Nothing here</span>
           <span className="s">The link may be old, or the page has moved.</span>
         </div>
-        <div style={{ display: "flex", gap: 10 }}>
-          <Link className="mbtn mbtn--primary" href="/">
+        <ButtonRow>
+          <ButtonLink variant="primary" href="/">
             To the front page
-          </Link>
-          <Link className="mbtn" href="/login">
-            Sign in
-          </Link>
-        </div>
+          </ButtonLink>
+          <ButtonLink href="/login">Sign in</ButtonLink>
+        </ButtonRow>
       </div>
     </div>
   )
