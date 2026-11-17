@@ -6,7 +6,7 @@ generator client {
 
 datasource db {
   provider   = "postgresql"
-  extensions = [vector]
+  extensions = [vector, pg_stat_statements]
 }
 
 enum Role {
@@ -974,6 +974,13 @@ model OtterOrderItem {
 
   @@index([orderId])
   @@index([skuId])
+  // Covering index for the "lines of these orders" joins (item discounts,
+  // menu-item and ingredient adapters). With only (orderId), Postgres chose
+  // to read all ~250k lines for a 7-day window (prod: 89 ms warm, 305 ms right
+  // after the database wakes; 17.6k full scans since stats began). With the
+  // name/price/quantity columns in the index it answers from the index alone:
+  // 27 -> 9 ms (7 days) and 32 -> 19 ms (30 days) on an order-sized local copy.
+  @@index([orderId, name, price, quantity], map: "OtterOrderItem_orderId_cover_idx")
 }
 
 model OtterOrderSubItem {
