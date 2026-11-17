@@ -1,14 +1,12 @@
 import { describe, it, expect } from "vitest"
 import { readFileSync } from "node:fs"
 import { join } from "node:path"
-import { generate } from "../../scripts/extract-prototype-css"
 
 /**
- * `src/styles/counter-components.css` is not written by hand: it is the
- * prototype's own stylesheet, lifted out of docs/counter/counter-prototype.html
- * by scripts/extract-prototype-css.ts. Everything below is asserted against the
- * COMMITTED file, because that is what ships — the generator is only checked
- * for agreeing with it.
+ * Part 1 of `src/styles/counter-components.css` began as the prototype's own
+ * stylesheet, lifted out of docs/counter/counter-prototype.html by a generator
+ * retired on 2026-11-17, when the file became hand-owned. Everything below is
+ * asserted against the COMMITTED file, because that is what ships.
  *
  * The parsing here is deliberately its own small implementation rather than an
  * import of the extractor's helpers. The extractor decides what to port; this
@@ -22,7 +20,17 @@ import { generate } from "../../scripts/extract-prototype-css"
  */
 
 const ROOT = process.cwd()
-const CSS = readFileSync(join(ROOT, "src", "styles", "counter-components.css"), "utf-8")
+const FILE = readFileSync(join(ROOT, "src", "styles", "counter-components.css"), "utf-8")
+/**
+ * Part 1 of the file: the rules ported from the prototype. Parts 2 and 3
+ * (the section fold and the repairs, which used to be counter-components.css (fold) and
+ * counter-components.css (repairs)) are hand-written on top and deliberately do things the
+ * port must not (e.g. `html[data-theme-switching] body`), so the port's
+ * safety checks below read Part 1 only. Colour rules for the whole file are
+ * enforced by `npm run tokens` (scripts/counter-lint.ts).
+ */
+const PART_2 = "/* ════════ Part 2."
+const CSS = FILE.slice(0, FILE.indexOf(PART_2) === -1 ? FILE.length : FILE.indexOf(PART_2))
 const COUNTER_CSS = readFileSync(join(ROOT, "src", "styles", "counter.css"), "utf-8")
 const GLOBALS = readFileSync(join(ROOT, "src", "app", "globals.css"), "utf-8")
 const LAYOUT = readFileSync(join(ROOT, "src", "app", "layout.tsx"), "utf-8")
@@ -456,9 +464,13 @@ describe("counter-components.css", () => {
     expect(proto).toContain(".pshade{position:absolute;inset:0;background:oklch(24% 0.014 40 / .3)")
   })
 
-  it("is exactly what the extractor produces from the prototype today", () => {
-    // Regeneration is deterministic, and the committed file is not stale.
-    expect(generate()).toBe(CSS)
+  it("keeps its three parts in the old import order: port, fold, repairs", () => {
+    // The merge of 2026-11-17 kept the cascade identical by keeping this
+    // order; a repair moved above the rule it repairs would stop winning.
+    const fold = FILE.indexOf(PART_2)
+    const repairs = FILE.indexOf("/* ════════ Part 3.")
+    expect(fold).toBeGreaterThan(0)
+    expect(repairs).toBeGreaterThan(fold)
   })
 
   it("carries the @keyframes its own rules animate with", () => {

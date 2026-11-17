@@ -195,7 +195,7 @@ export function PhoneShell({
       />
 
       {/* `.mscroll` is the phone page's grid: 12px of padding, 11px between
-          blocks, and the staggered entry `counter-repairs.css` already repairs
+          blocks, and the staggered entry `counter-components.css (repairs)` already repairs
           for `.mscroll > *`. */}
       <div className="mscroll">
         <CounterTransitionContext.Provider value={transition}>

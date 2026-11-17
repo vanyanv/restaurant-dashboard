@@ -21,12 +21,11 @@
 @source not "../../*.md";
 @source not "../../tests";
 @import "../styles/counter.css";
-/* The prototype's own stylesheet, ported verbatim by
- * scripts/extract-prototype-css.ts. AFTER counter.css, so its alias layer
- * resolves against tokens that are already declared. */
+/* The Counter component stylesheet: one hand-owned file that also holds what
+ * were counter-components.css (fold) and counter-components.css (repairs), in their old import order.
+ * AFTER counter.css, so its alias layer resolves against tokens that are
+ * already declared. */
 @import "../styles/counter-components.css";
-@import "../styles/counter-fold.css";
-@import "../styles/counter-repairs.css";
 @import "../styles/counter-checks.css";
 @import "../styles/crew-checks.css";
 @import "../styles/counter-shop.css";

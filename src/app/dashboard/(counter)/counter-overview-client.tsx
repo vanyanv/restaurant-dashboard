@@ -410,7 +410,7 @@ export function CounterOverviewClient({
                 // 480ms, worded by the same `money` it would be worded by at
                 // rest. Data arriving is louder than a hover and quieter than
                 // a figure that needs the reader — see the motion block in
-                // `counter-repairs.css` for the hierarchy.
+                // `counter-components.css (repairs)` for the hierarchy.
                 value={<CountUp value={d.grossSales} format={(v) => money(v)} />}
                 // The shape behind the number, in the slot the prototype gives
                 // a figure's sparkline. It is the same array the chart below

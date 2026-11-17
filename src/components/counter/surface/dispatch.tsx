@@ -33,7 +33,7 @@ import { useFreshKeys } from "@/components/counter/motion/use-fresh-keys"
  *
  * Motion (tier 2, D4): a `hot` fact whose text changed AFTER first paint — the
  * count of what needs the reader went up while the page was open — rings the
- * whole line once: `is-ringing`, the bad cool-down from counter-repairs.css.
+ * whole line once: `is-ringing`, the bad cool-down from counter-components.css (repairs).
  * `useFreshKeys` is what knows "after first paint", and `scope` (the store and
  * range the page is showing) is what stops the reader's own range change from
  * ringing. Each fact is keyed on its text, so a changed fact remounts and

@@ -35,7 +35,7 @@ import { useState } from "react"
  * after 8s". `role="alert"` is ours; the prototype has no assistive layer.
  *
  * Motion. Failing is an operational change (tier 2): the panel rises with the
- * bad cool-down and the mark lands — counter-repairs.css, on `.failed` and
+ * bad cool-down and the mark lands — counter-components.css (repairs), on `.failed` and
  * `.failed .fi`. Retrying is the reader's own act (tier 4), so it is quiet:
  * `is-retrying` dims the panel to half and disables the button until the
  * section's data comes back, at which point `Section` swaps this component

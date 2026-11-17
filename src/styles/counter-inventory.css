@@ -255,7 +255,7 @@ details.iv-bucket[open]>.iv-bucket__h .n::after{transform:rotate(-135deg);margin
   .ct-phone .mscroll > .iv-foot{position:fixed;left:0;right:0;bottom:calc(var(--m-bar-h) + env(safe-area-inset-bottom,0px));z-index:30;
     display:grid;grid-template-columns:minmax(0,1.5fr) minmax(0,1fr);padding:8px 12px;background:var(--paper);border-top:1px solid var(--line)}
   /* Said at the phone shell's own specificity: its `.m-shell__main > .ct-root.ct-phone > .mscroll`
-     padding (counter-repairs.css) outranks a plainer selector, and the page then ended under the bar. */
+     padding (counter-components.css (repairs)) outranks a plainer selector, and the page then ended under the bar. */
   .ct-phone .mscroll:has(> .iv-foot),
   .m-shell__main > .ct-root.ct-phone > .mscroll:has(> .iv-foot){padding-bottom:calc(12px + var(--m-bar-h) + env(safe-area-inset-bottom,0px) + 4.25rem)}
 }

@@ -57,7 +57,7 @@ export function PageHead({
   return (
     /*
      * The entry-animation repair that used to be an inline style HERE now
-     * lives in `src/styles/counter-repairs.css`, applied to every
+     * lives in `src/styles/counter-components.css` (repairs), applied to every
      * `.screen > *` rather than to this one element.
      *
      * Why it moved: the defect is not the pagehead's. A FILLING

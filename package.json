@@ -26,7 +26,6 @@
     "eval:chat": "tsx -r ./scripts/lib/server-only-shim.cjs scripts/eval-chat/run.ts",
     "eval:llm": "DOTENV_CONFIG_PATH=.env.local tsx -r dotenv/config -r ./scripts/lib/server-only-shim.cjs scripts/eval-llm/run.ts",
     "eval:ingredient-match": "tsx scripts/eval-ingredient-match/run.ts",
-    "css:extract": "tsx scripts/extract-prototype-css.ts",
     "tokens": "tsx scripts/counter-lint.ts",
     "typecheck": "tsc --noEmit",
     "typecheck:scripts": "tsc --noEmit -p tsconfig.scripts.json",

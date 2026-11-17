@@ -9,7 +9,7 @@ import type { ReactNode } from "react"
  * and gives eight different answers. Our tree inherited that and reached 157
  * call sites at eighteen values. Consolidating them is a deliberate deviation
  * from the prototype, argued in full above `.ct-note` in
- * `src/styles/counter-repairs.css`; read that before changing the value. The spacing lives there, in CSS, beside the rest of the
+ * `src/styles/counter-components.css` (repairs); read that before changing the value. The spacing lives there, in CSS, beside the rest of the
  * system's spacing; this component's only job is to be the one thing that
  * applies it, so the next note cannot quietly become the nineteenth value.
  *

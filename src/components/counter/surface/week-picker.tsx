@@ -29,7 +29,7 @@ export type WeekDay = {
  * the page is in for four days out of seven.
  *
  * Renders `.wkd` as a `<button>`, not the prototype's `<div>` (ruling N-R10),
- * so the cell is keyboard-reachable. `src/styles/counter-repairs.css` carries
+ * so the cell is keyboard-reachable. `src/styles/counter-components.css` (repairs) carries
  * the declarations `.wkd` itself never sets, which a `<button>` would
  * otherwise pick up from the UA stylesheet instead of inheriting.
  *

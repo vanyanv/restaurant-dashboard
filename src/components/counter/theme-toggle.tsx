@@ -18,7 +18,7 @@ import { useCounterTheme, type Theme } from "./theme-provider"
  * explicitly. Add the third option back the day the pin goes.
  *
  * The switch itself is Tier 4 motion: `data-theme-switching` on `<html>`
- * for 320ms lets every colour cross-fade (counter-repairs.css) instead of
+ * for 320ms lets every colour cross-fade (counter-components.css (repairs)) instead of
  * cutting; reduced motion drops the transition and the cut is the design.
  */
 

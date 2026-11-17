@@ -181,7 +181,7 @@ type SectionProps<T> = {
   /**
    * Marks the qualifier as the one thing on the screen that is time-critical:
    * `.sec__head .k` gains `.hot`, which is tier 1's single pulsing dot (see
-   * `counter-repairs.css`, "the one loop").
+   * `counter-components.css (repairs)`, "the one loop").
    *
    * A FUNCTION of the section's data, because whether a head is hot is a fact
    * about what arrived — "2 before the next delivery" pulses, "0 before the
