@@ -6,11 +6,13 @@ import { describe, it, expect, vi, beforeEach } from "vitest"
 
 const objects = new Map<string, Uint8Array>()
 const reads: string[] = []
+const broken = new Set<string>()
 
 vi.mock("@/lib/blob", () => ({
   checkThumbKey: (k: string) => `${k.replace(/\.[A-Za-z0-9]+$/, "")}.thumb.jpg`,
   async getCheckPhotoStream(key: string) {
     reads.push(key)
+    if (broken.has(key)) throw new Error("storage hiccup")
     const bytes = objects.get(key)
     const stream = new ReadableStream<Uint8Array>({
       start(c) {
@@ -28,6 +30,7 @@ const text = async (s: ReadableStream<Uint8Array>) => new TextDecoder().decode(a
 
 beforeEach(() => {
   objects.clear()
+  broken.clear()
   reads.length = 0
 })
 
@@ -62,6 +65,19 @@ describe("readCheckPhoto", () => {
     const r = await readCheckPhoto("checks/s/a.jpg", "full")
     expect(await text(r.stream)).toBe("FULL")
     expect(reads).toEqual(["checks/s/a.jpg"])
+  })
+
+  it("falls back to the full photo when reading the small copy fails", async () => {
+    objects.set("checks/s/a.jpg", new TextEncoder().encode("FULL"))
+    broken.add("checks/s/a.thumb.jpg")
+    const r = await readCheckPhoto("checks/s/a.jpg", "thumb")
+    expect(r).toMatchObject({ found: true, thumb: false })
+    expect(await text(r.stream)).toBe("FULL")
+  })
+
+  it("lets a failure reading the full photo reach the route", async () => {
+    broken.add("checks/s/a.jpg")
+    await expect(readCheckPhoto("checks/s/a.jpg", "thumb")).rejects.toThrow("storage hiccup")
   })
 
   it("reports a photo missing from storage", async () => {

@@ -20,6 +20,8 @@ export const maxDuration = 30
 /** A crew of four ticking fast on one store Wi-Fi stays well under this. */
 const MARK_LIMIT = { limit: 120, windowMs: 60_000, identifyBy: "ip" as const }
 const MAX_NOTE = 200
+/** The optional small copy never holds up saving the tick for longer than this. */
+const THUMB_WAIT_MS = 3_000
 
 export async function POST(request: NextRequest, { params }: { params: Promise<{ code: string }> }) {
   const limited = await rateLimit(request, MARK_LIMIT)
@@ -102,7 +104,12 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     if (thumb instanceof File && thumb.size > 0 && thumb.size <= MAX_THUMB_BYTES) {
       const bytes = new Uint8Array(await thumb.arrayBuffer())
       if (bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) {
-        await putCheckPhotoThumb(photo.key, Buffer.from(bytes)).catch(() => {})
+        // Never holds the tick up for long: past the wait the upload carries
+        // on, and the owner's page falls back to the full photo meanwhile.
+        await Promise.race([
+          putCheckPhotoThumb(photo.key, Buffer.from(bytes)).catch(() => {}),
+          new Promise<void>((resolve) => setTimeout(resolve, THUMB_WAIT_MS)),
+        ])
       }
     }
   }

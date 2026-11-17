@@ -16,9 +16,11 @@ export async function readCheckPhoto(
   size: PhotoSize,
 ): Promise<{ found: boolean; stream: ReadableStream<Uint8Array>; contentType: string | null; thumb: boolean }> {
   if (size === "thumb") {
-    const small = await getCheckPhotoStream(checkThumbKey(photoKey))
-    if (small.statusCode === 200) return { found: true, stream: small.stream, contentType: "image/jpeg", thumb: true }
-    await small.stream.cancel().catch(() => {})
+    // Any failure reading the small copy falls through to the full photo; only
+    // a failure reading the full photo reaches the route.
+    const small = await getCheckPhotoStream(checkThumbKey(photoKey)).catch(() => null)
+    if (small?.statusCode === 200) return { found: true, stream: small.stream, contentType: "image/jpeg", thumb: true }
+    await small?.stream.cancel().catch(() => {})
   }
   const full = await getCheckPhotoStream(photoKey)
   return { found: full.statusCode === 200, stream: full.stream, contentType: full.contentType, thumb: false }
