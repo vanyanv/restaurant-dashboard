@@ -226,6 +226,15 @@ def gate1_eval_rows_today(conn, target_date: date) -> tuple[bool, str]:
                   AND ("errorMessage" ILIKE '%%insufficient!_history%%' ESCAPE '!'
                     OR "errorMessage" ILIKE '%%insufficient!_hourly!_history%%' ESCAPE '!'
                     OR "errorMessage" ILIKE '%%no!_items!_in!_lookback%%' ESCAPE '!')
+                  -- Only a pair that has never trained. One that trained
+                  -- before and now reads short is losing data, the same rule
+                  -- as `ml.run_nightly._never_trained`.
+                  AND NOT EXISTS (
+                      SELECT 1 FROM "MlTrainingRun" ok
+                      WHERE ok.scope = "MlTrainingRun".scope
+                        AND ok.target = "MlTrainingRun".target
+                        AND ok.status = 'SUCCEEDED'
+                  )
             )
             SELECT s.id AS "storeId", s.name, t.target,
                    COUNT(e.id) AS rows_today,

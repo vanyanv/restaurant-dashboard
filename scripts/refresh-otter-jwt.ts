@@ -620,7 +620,11 @@ const EMAIL_FIELD = '[data-testid="op-auth_email-field"]'
 const PASSWORD_FIELD = '[data-testid="op-auth_password-field"]'
 const LOGIN_BUTTON = '[data-testid="op-auth_login-button"]'
 
-/** True once the browser is back on the Otter dashboard after signing in. */
+/**
+ * True when the page is on the Otter dashboard's host. The old sign-in form
+ * is served from that host too, so the caller also checks the email field is
+ * gone before treating the browser as signed in.
+ */
 function onDashboard(url: string): boolean {
   try {
     return new URL(url).hostname === "manager.tryotter.com"
@@ -737,7 +741,12 @@ async function signInWithBrowser(
     const deadline = Date.now() + 60_000
     let settleUntil: number | null = null
     while (Date.now() < deadline) {
-      if (found.length > 0 && settleUntil === null && onDashboard(page.url())) {
+      if (
+        found.length > 0 &&
+        settleUntil === null &&
+        onDashboard(page.url()) &&
+        !(await page.isVisible(EMAIL_FIELD).catch(() => true))
+      ) {
         settleUntil = Date.now() + 5_000
       }
       if (settleUntil !== null && Date.now() >= settleUntil) break

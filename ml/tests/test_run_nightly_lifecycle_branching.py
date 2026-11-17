@@ -180,14 +180,24 @@ def test_ready_store_short_history_does_not_hide_other_failures():
     assert rc == 1
 
 
-def test_store_that_trained_before_and_now_reads_short_still_fails():
+import pytest  # noqa: E402
+
+_SHORT = {"ok": False, "reason": "insufficient_history", "failed_count": 30}
+
+
+@pytest.mark.parametrize(
+    "revenue, menu",
+    [
+        (_SHORT, {"ok": True}),   # only REVENUE reads short
+        ({"ok": True}, _SHORT),   # only MENU_ITEM reads short
+    ],
+    ids=["revenue", "menu_item"],
+)
+def test_store_that_trained_before_and_now_reads_short_still_fails(revenue, menu):
     # Hollywood's sales rows deleted or its menu re-imported under new names
     # reads as "insufficient history" too; that is data loss, not a new store.
-    rc = _run_ready_store(
-        revenue={"ok": False, "reason": "insufficient_history"},
-        menu={"ok": False, "reason": "insufficient_history", "failed_count": 30},
-        never_trained=False,
-    )
+    # One target at a time, so each target's guard is tested on its own.
+    rc = _run_ready_store(revenue=revenue, menu=menu, never_trained=False)
     assert rc == 1
 
 

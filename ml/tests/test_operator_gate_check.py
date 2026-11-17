@@ -121,3 +121,23 @@ def test_store_with_no_native_rows_reads_warming_up():
     v = classify_coverage_row("Van Nuys", 0.552, 2, 0, 0)
     assert v.counted is False
     assert "warming up" in v.line
+
+
+def test_gate1_thin_exemption_requires_a_pair_that_never_trained():
+    """A ready store whose last success is older than the 7-day window and
+    whose run today reads short is losing data; Gate 1 must not excuse it."""
+    from datetime import date
+    from unittest.mock import MagicMock
+
+    from ml.evaluation.operator_gate_check import gate1_eval_rows_today
+
+    conn = MagicMock()
+    cur = conn.cursor.return_value.__enter__.return_value
+    cur.fetchall.return_value = [("Hollywood", "Hollywood", "MENU_ITEM", 0, False, "ready", False)]
+
+    ok, _ = gate1_eval_rows_today(conn, date(2026, 11, 17))
+
+    sql = cur.execute.call_args.args[0]
+    assert "NOT EXISTS" in sql and "ok.status = 'SUCCEEDED'" in sql
+    # Not thin (the query excluded it), so a ready store with no success fails.
+    assert ok is False
