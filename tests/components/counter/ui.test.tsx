@@ -18,6 +18,8 @@ import {
   Fold,
   NeedsYou,
   Rows,
+  Tile,
+  Tiles,
   Status,
   StoreCard,
   Tabs,
@@ -135,5 +137,20 @@ describe("shared blocks", () => {
   it("the stylesheet uses only tokens: no colour literals", () => {
     const body = CSS.replace(/\/\*[\s\S]*?\*\//g, "")
     expect(body).not.toMatch(/#[0-9a-f]{3,8}\b|rgb\(|hsl\(|oklch\(/i)
+  })
+
+  it("Tile: a link when it goes somewhere, red when bad, number coloured by tone", () => {
+    const { container } = render(
+      <Tiles>
+        <Tile label="To ship" value={3} sub="1 late" bad href="/x" />
+        <Tile label="Missed" value={1} tone="bad" />
+      </Tiles>,
+    )
+    const [a, b] = container.querySelectorAll(".cu-tiles > *")
+    expect(a.tagName).toBe("A")
+    expect(a.className).toBe("cu-tile cu-tile--bad")
+    expect(a.querySelector(".cu-tile__value")?.textContent).toBe("3")
+    expect(b.tagName).toBe("DIV")
+    expect(b.className).toBe("cu-tile cu-tile--tone-bad")
   })
 })

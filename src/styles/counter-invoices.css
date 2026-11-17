@@ -9,7 +9,6 @@
  */
 
 /* ── tiles: the invoices strip has five figures, not four ─────────────── */
-.sh-tiles.iv-tiles{grid-template-columns:repeat(auto-fit,minmax(170px,1fr))}
 
 /* ── list ─────────────────────────────────────────────────────────────── */
 .iv-inv{display:flex;gap:10px;align-items:center;min-width:0}

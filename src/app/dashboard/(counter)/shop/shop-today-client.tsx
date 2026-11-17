@@ -5,6 +5,7 @@ import { Section, useCounterTransition, usePageChrome, useSurfaceHref } from "@/
 import type { SectionSources } from "@/lib/counter/adapters/types"
 import type { OrderLine, TodayData, TodaySections } from "@/lib/counter/adapters/shop"
 import { OrderRow, ShopGlyphMark, ShopHead, ShopLegend } from "./shop-ui"
+import { BigNumber, Tile, Tiles } from "@/components/counter/ui"
 
 /**
  * Shop — Today. The desk in one screen: late orders on top, then the ship
@@ -95,23 +96,13 @@ function Top({ data }: { data: TodayData }) {
           ))}
         </div>
       )}
-      <div className="sh-tiles">
-        <Tile k="To ship" v={c.toShip} s={c.lateToShip ? `${c.lateToShip} late` : "None late"} bad={c.lateToShip > 0} href={surface("/dashboard/shop/orders")} />
-        <Tile k="To bag" v={c.toBag} s="Pickup orders to pack" href={surface("/dashboard/shop/orders")} />
-        <Tile k="At the counter" v={c.readyForPickup} s="Bagged, waiting for the customer" href={surface("/dashboard/shop/orders")} />
-        <Tile k="Done this week" v={c.doneLast7} s="Shipped or picked up" href={surface("/dashboard/shop/orders?filter=all")} />
-      </div>
+      <Tiles>
+        <Tile label="To ship" value={c.toShip} sub={c.lateToShip ? `${c.lateToShip} late` : "None late"} bad={c.lateToShip > 0} href={surface("/dashboard/shop/orders")} />
+        <Tile label="To bag" value={c.toBag} sub="Pickup orders to pack" href={surface("/dashboard/shop/orders")} />
+        <Tile label="At the counter" value={c.readyForPickup} sub="Bagged, waiting for the customer" href={surface("/dashboard/shop/orders")} />
+        <Tile label="Done this week" value={c.doneLast7} sub="Shipped or picked up" href={surface("/dashboard/shop/orders?filter=all")} />
+      </Tiles>
     </div>
-  )
-}
-
-function Tile({ k, v, s, bad, href }: { k: string; v: number; s: string; bad?: boolean; href: string }) {
-  return (
-    <Link className={`sh-tile${bad ? " sh-tile--bad" : ""}`} href={href}>
-      <span className="k">{k}</span>
-      <span className="v">{v}</span>
-      <span className="s">{s}</span>
-    </Link>
   )
 }
 
@@ -132,10 +123,11 @@ function Sales({ data }: { data: TodayData }) {
   return (
     <div style={{ display: "grid", gap: 10 }}>
       <div className="ck-spread">
-        <span className="sh-tile" style={{ border: 0, padding: 0 }}>
-          <span className="v">{data.sales7.total}</span>
-          <span className="s">{data.sales7.refunded === "$0.00" ? "No refunds" : `${data.sales7.refunded} refunded`}</span>
-        </span>
+        <BigNumber
+          label="Last 7 days"
+          value={data.sales7.total}
+          sub={data.sales7.refunded === "$0.00" ? "No refunds" : `${data.sales7.refunded} refunded`}
+        />
       </div>
       <div className="sh-spark" role="img" aria-label={data.sales7.days.map((d) => `${d.label} ${d.amount}`).join(", ")}>
         {data.sales7.days.map((d) => (

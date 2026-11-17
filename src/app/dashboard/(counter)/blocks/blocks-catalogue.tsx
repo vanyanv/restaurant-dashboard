@@ -15,6 +15,8 @@ import {
   StoreCard,
   StoreCardGrid,
   Tabs,
+  Tile,
+  Tiles,
   type RowsColumn,
 } from "@/components/counter/ui"
 
@@ -143,6 +145,15 @@ export function BlocksCatalogue() {
             { key: "custom", label: "Custom" },
           ]}
         />
+      </Both>
+
+      <Both name="Tile" replaces=".sh-tile .ck-rep__tile" note="A small figure that usually opens the list behind it. Red when it is the thing to look at.">
+        <Tiles>
+          <Tile label="To ship" value={3} sub="1 late" bad href="#" />
+          <Tile label="To bag" value={2} sub="Pickup orders to pack" href="#" />
+          <Tile label="Food cost" value="27.4%" sub="After discounts" />
+          <Tile label="Missed" value={1} tone="bad" />
+        </Tiles>
       </Both>
 
       <Both name="Fold" replaces=".iv-fold .rs-fold .ck-logfold .ckp-more" note="Everything that isn't the answer, folded at the bottom.">

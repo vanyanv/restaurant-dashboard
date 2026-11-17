@@ -5,7 +5,7 @@ import { Section, useCounterTransition, usePageChrome, useSurfaceHref } from "@/
 import type { SectionSources } from "@/lib/counter/adapters/types"
 import type { ReportData, ReportSections } from "@/lib/counter/adapters/checks"
 import { ChecksHead, StorePicker } from "../checks-ui"
-import { Card } from "@/components/counter/ui"
+import { Card, Tile, Tiles } from "@/components/counter/ui"
 import { PlainHead } from "../checks-plain-ui"
 
 /**
@@ -77,12 +77,14 @@ function Report({ data }: { data: ReportData }) {
           something, beside "checks due". */}
       {quiet ? null : (
         <div className="ck-rep__tiles">
-          <Tile n={f.checks.due} label="checks due" />
+        <Tiles>
+          <Tile value={f.checks.due} label="checks due" />
           {tiles
             .filter((t) => t.n > 0)
             .map((t) => (
-              <Tile key={t.label} n={t.n} label={t.label} tone={t.tone} />
+              <Tile key={t.label} value={t.n} label={t.label} tone={t.tone} />
             ))}
+        </Tiles>
         </div>
       )}
 
@@ -202,11 +204,3 @@ function Report({ data }: { data: ReportData }) {
   )
 }
 
-function Tile({ n, label, tone }: { n: number; label: string; tone?: "good" | "warn" | "bad" }) {
-  return (
-    <div className={`ck-rep__tile${tone ? ` ${tone}` : ""}`}>
-      <b>{n}</b>
-      <span className="ck-meta">{label}</span>
-    </div>
-  )
-}

@@ -172,6 +172,21 @@ a.cu-card:focus-visible,button.cu-card:focus-visible{outline:2px solid var(--acc
 .cu-fold>summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .cu-fold__in{padding-bottom:12px}
 
+/* ---- Tile: a small figure in a box, often a link ----
+   auto-fill keeps it four across on the desk and two on a phone without a
+   query: the column minimum does the work. */
+.cu-tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;min-width:0}
+.cu-tile{display:grid;gap:4px;align-content:start;min-width:0;padding:12px 14px;background:var(--surface);border:1px solid var(--line);border-radius:var(--r);color:inherit;text-decoration:none}
+a.cu-tile:hover{border-color:var(--line-strong)}
+a.cu-tile:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.cu-tile__label{font-family:var(--mono);font-size:var(--t-micro);letter-spacing:.07em;text-transform:uppercase;color:var(--ink-3)}
+.cu-tile__value{font-size:28px;font-weight:600;line-height:1.1;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+.cu-tile__sub{font-size:var(--t-cap);color:var(--ink-2)}
+.cu-tile--bad{border-color:var(--bad);background:var(--bad-wash)}
+.cu-tile--tone-good .cu-tile__value{color:var(--good)}
+.cu-tile--tone-warn .cu-tile__value{color:var(--warn)}
+.cu-tile--tone-bad .cu-tile__value{color:var(--bad)}
+
 /* ---- /dashboard/blocks, the catalogue page (not a block) ---- */
 .cu-cat__page{display:grid;gap:32px;padding-bottom:48px}
 .cu-cat{display:grid;gap:10px}
