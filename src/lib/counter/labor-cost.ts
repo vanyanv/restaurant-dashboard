@@ -1,5 +1,7 @@
 import { cache } from "react"
 import { prisma } from "@/lib/prisma"
+import { cached, stableKey } from "@/lib/cache/cached"
+import { CLOSED_RANGE_TTL, rangeScopedTags } from "@/lib/cache/closed-range"
 import {
   daysBetween,
   foldLaborCost,
@@ -55,7 +57,7 @@ export async function loadLaborCost(
   const key = `${accountId}|${[...storeIds].sort().join(",")}|${days[0]}|${days[days.length - 1]}`
   let shared = memo.get(key)
   if (!shared) {
-    shared = loadLaborCostFor(accountId, storeIds, days, prisma)
+    shared = loadLaborCostSaved(accountId, storeIds, days)
     memo.set(key, shared)
     // A failed read is dropped so the next caller in the render retries,
     // as each did on its own before this was shared.
@@ -74,6 +76,25 @@ export async function loadLaborCost(
  * fresh map per call, so nothing is shared there.
  */
 const laborCostThisRequest = cache(() => new Map<string, Promise<LaborCost>>())
+
+/**
+ * Past days only: saved across requests until a write to one of those days
+ * (the Harri sync) or a store's payroll tax changes. A range that includes
+ * today, or one too long to save, reads fresh. See @/lib/cache/closed-range.
+ */
+function loadLaborCostSaved(accountId: string, storeIds: string[], days: string[]): Promise<LaborCost> {
+  const load = () => loadLaborCostFor(accountId, storeIds, days, prisma)
+  const first = days[0]
+  const last = days[days.length - 1]
+  const tags = rangeScopedTags(new Date(`${first}T00:00:00.000Z`), new Date(`${last}T00:00:00.000Z`), [])
+  if (tags.length === 0) return load()
+  return cached(
+    `counter:labor-cost:v1:${stableKey({ a: accountId, ids: [...storeIds].sort(), f: first, l: last })}`,
+    CLOSED_RANGE_TTL,
+    tags,
+    load,
+  )
+}
 
 async function loadLaborCostFor(
   accountId: string,

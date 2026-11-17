@@ -3,6 +3,7 @@ import { FOOD_COST_ROWS } from "@/lib/counter/food-cost-scope"
 import { getScopedStores } from "@/lib/account-stores"
 import { cached, monthTags, stableKey } from "@/lib/cache/cached"
 import { rangeTtl } from "@/lib/cache/range"
+import { rangeScopedTags } from "@/lib/cache/closed-range"
 import { toQueryBounds, type DateRange } from "@/lib/counter/date-range"
 import { getItemDiscounts } from "@/lib/counter/item-discounts"
 import { foldItemEconomics } from "@/lib/counter/item-economics"
@@ -387,7 +388,7 @@ export async function loadCogs(input: {
     rangeTtl(endDate),
     // `cogs` is what `recomputeDailyCogsForRange` busts; the month tags let a
     // recompute of last month leave this month's window alone.
-    ["cogs", ...monthTags(startDate, endDate)],
+    rangeScopedTags(startDate, endDate, ["cogs", ...monthTags(startDate, endDate)]),
     () => foldCogsRows({ accountId, storeIds, startDate, endDate, plan }),
   )
 

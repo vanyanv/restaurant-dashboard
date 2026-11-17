@@ -1,5 +1,6 @@
 import { monthTags } from "./cached"
 import { todayInLA } from "@/lib/dashboard-utils"
+import { rangeScopedTags } from "./closed-range"
 
 /**
  * Cache policy for Counter's range-scoped reads.
@@ -46,5 +47,8 @@ export function rangeTtl(endDate: Date): number {
  * touched only reaches the broad tags, so a key must stay reachable by them.
  */
 export function otterRangeTags(startDate: Date, endDate: Date): string[] {
-  return ["otter", "dash", ...monthTags(startDate, endDate)]
+  // A closed range gets the marker instead: kept for hours and dropped by any
+  // write that feeds it, rather than by the hourly sync's broad bust. See
+  // `./closed-range`.
+  return rangeScopedTags(startDate, endDate, ["otter", "dash", ...monthTags(startDate, endDate)])
 }

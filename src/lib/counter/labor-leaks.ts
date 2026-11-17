@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma"
 import { getScopedStores } from "@/lib/account-stores"
 import { cached, monthTags, stableKey } from "@/lib/cache/cached"
 import { rangeTtl } from "@/lib/cache/range"
+import { rangeScopedTags } from "@/lib/cache/closed-range"
 import { toQueryBounds, type DateRange } from "@/lib/counter/date-range"
 
 /**
@@ -222,7 +223,7 @@ export async function loadLeakLedger(input: {
     // Written by `runHarriLaborSync`, which the harri cron runs before it
     // busts `harri`, `dash` and the months it wrote. No Otter table here, so
     // no `otter` tag — an hourly sales sync should not evict a timekeeping ledger.
-    ["harri", "dash", ...monthTags(startDate, endDate)],
+    rangeScopedTags(startDate, endDate, ["harri", "dash", ...monthTags(startDate, endDate)]),
     () =>
       prisma.harriTimekeepingAlert.findMany({
         where: { storeId: { in: storeIds }, date: { gte: startDate, lte: endDate } },
