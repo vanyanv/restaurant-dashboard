@@ -445,12 +445,17 @@ export async function loadLaborWeek(input: {
   range: DateRange
   storeId: string | null
   accountId: string
-  /** Per-day Total Sales, keyed `YYYY-MM-DD`, off the statement the page already loaded. */
-  salesByDay: Map<string, number>
+  /**
+   * Per-day Total Sales, keyed `YYYY-MM-DD`, off the statement the page already
+   * loaded. May be a promise: the fold below does not need it, so a page can
+   * start this load before its statement has arrived and the labour read runs
+   * alongside the P&L rollup instead of after it.
+   */
+  salesByDay: Map<string, number> | Promise<Map<string, number>>
   /** The same Net Sales per store and day, off the same statement — see `salesByStoreDayOf`. */
-  salesByStoreDay: Map<string, Map<string, number>>
+  salesByStoreDay: Map<string, Map<string, number>> | Promise<Map<string, Map<string, number>>>
 }): Promise<{ days: LaborDay[]; roles: LaborRole[]; overtimeCost: number }> {
-  const { range, storeId, accountId, salesByDay, salesByStoreDay } = input
+  const { range, storeId, accountId } = input
   const { startDate, endDate } = toQueryBounds(range)
 
   const stores = await getScopedStores(accountId, storeId ?? null)
@@ -474,6 +479,7 @@ export async function loadLaborWeek(input: {
     () => foldLaborWeekRows({ accountId, storeIds, startDate, endDate }),
   )
 
+  const [salesByDay, salesByStoreDay] = await Promise.all([input.salesByDay, input.salesByStoreDay])
   const missing = missingLaborByDay(fold.missingByDay, salesByStoreDay)
 
   const days: LaborDay[] = []

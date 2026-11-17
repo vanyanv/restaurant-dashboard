@@ -1466,20 +1466,27 @@ function loadEverything(input: LaborSectionsInput) {
     })
   })
 
+  // Started NOW, alongside the statement: the labour fold does not need the
+  // sales, only the per-day labour % does, and `loadLaborWeek` awaits them for
+  // that alone. Before, the whole labour read waited for the P&L rollup.
+  const statementP = scopeP.then((scopeSd) => dataOf(scopeSd))
+  const laborWeekLoad = loadLaborWeek({
+    range,
+    storeId,
+    accountId,
+    salesByDay: statementP.then((st) => (st ? salesByDayOf(st, range) : new Map<string, number>())),
+    salesByStoreDay: statementP.then((st) =>
+      st ? salesByStoreDayOf(st, range) : new Map<string, Map<string, number>>(),
+    ),
+  })
+  // Read below through `classify`; this only keeps an early rejection from
+  // surfacing as unhandled while the statement is still loading.
+  laborWeekLoad.catch(() => {})
+
   const laborP = scopeP.then((scopeSd) =>
     chainReady(scopeSd, async (statement) => {
       const map = salesByDayOf(statement, range)
-      const sd = await classify(
-        () =>
-          loadLaborWeek({
-            range,
-            storeId,
-            accountId,
-            salesByDay: map,
-            salesByStoreDay: salesByStoreDayOf(statement, range),
-          }),
-        { retryAction: "retryLabor" },
-      )
+      const sd = await classify(() => laborWeekLoad, { retryAction: "retryLabor" })
       return mapReady(sd, (raw) => ({
         days: raw.days,
         roles: raw.roles,
