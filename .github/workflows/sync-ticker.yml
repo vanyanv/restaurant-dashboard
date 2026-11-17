@@ -22,6 +22,9 @@ on:
       last:
         description: 'UTC hour (YYYYMMDDHH) already dispatched by the previous link'
         default: ''
+      pending:
+        description: 'Workflows from that hour the previous link could not dispatch'
+        default: ''
 
 concurrency:
   group: sync-ticker
@@ -41,11 +44,12 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           LAST: ${{ github.event.inputs.last }}
+          PENDING: ${{ github.event.inputs.pending }}
         run: |
           set -u
           end=$(( $(date +%s) + 340 * 60 ))
           last="${LAST:-}"
-          pending=""   # targets for the current hour not yet accepted by GitHub
+          pending="${PENDING:-}"   # targets for the current hour not yet accepted by GitHub
           dispatch() {
             if gh workflow run "$1" --ref main; then
               echo "$(date -u +%FT%TZ) dispatched $1"
@@ -81,7 +85,7 @@ jobs:
           # Hand off. Retried so one failed request doesn't end the chain and
           # leave it to the unreliable backup schedule.
           for attempt in 1 2 3 4 5; do
-            if gh workflow run sync-ticker.yml --ref main -f last="$last"; then
+            if gh workflow run sync-ticker.yml --ref main -f last="$last" -f pending="$(echo $pending)"; then
               echo "handed off (last=$last)"
               exit 0
             fi
