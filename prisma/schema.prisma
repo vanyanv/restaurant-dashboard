@@ -959,6 +959,12 @@ model OtterOrder {
   //   prisma/manual-migrations/2026-05-03_otter_pending_details_index.sql
   // — index name `OtterOrder_pending_details_idx`.
   @@index([platform])
+  // Covering index for range totals over raw orders: commission on every P&L
+  // rollup (src/lib/counter/commission.ts) and the Orders page strip. Every
+  // column they filter, group or sum is here, so they read the index alone.
+  // Cold prod read of 30 days touched 3,613 table pages (585 ms after wake).
+  // See prisma/manual-migrations/2026-11-17_order_fees_cover_index.sql.
+  @@index([storeId, referenceTimeLocal, platform, fulfillmentMode, orderStatus, commission, subtotal, discount], map: "OtterOrder_store_time_fees_idx")
 }
 
 model OtterOrderItem {

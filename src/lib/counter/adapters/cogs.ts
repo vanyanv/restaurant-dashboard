@@ -1346,15 +1346,33 @@ function loadEverything(input: CogsSectionsInput) {
     })
   })
 
+  // C-R1: the denominator is the statement's Total Sales, summed over the
+  // range's own calendar days — the same map the chart divides bucket by
+  // bucket, so the headline and every column of the chart are the same
+  // division of the same two numbers.
+  const salesByDayP = scopeP.then((scopeSd) => {
+    const statement = dataOf(scopeSd)
+    return statement ? salesByDayOf(statement, range) : new Map<string, number>()
+  })
+  // Started NOW, not after the statement: the cost rows do not depend on the
+  // statement, only the final division does, and `loadCogs` awaits the sales
+  // promise just for that. This was the rollup's ~7 round trips and then the
+  // fold's, in a row.
+  const cogsLoad = loadCogs({
+    range,
+    storeId,
+    accountId,
+    sales: salesByDayP.then((m) => Array.from(m.values()).reduce((t, n) => t + n, 0)),
+  })
+  // Read below through `classify`; this only stops an early rejection from
+  // being reported as unhandled while the statement is still loading.
+  cogsLoad.catch(() => {})
+  salesByDayP.catch(() => {})
+
   const cogsP = scopeP.then((scopeSd) =>
-    chainReady(scopeSd, async (statement) => {
-      const salesByDay = salesByDayOf(statement, range)
-      // C-R1: the denominator is the statement's Total Sales, summed over the
-      // range's own calendar days — the same map the chart divides bucket by
-      // bucket, so the headline and every column of the chart are the same
-      // division of the same two numbers.
-      const sales = Array.from(salesByDay.values()).reduce((t, n) => t + n, 0)
-      const sd = await classify(() => loadCogs({ range, storeId, accountId, sales }), {
+    chainReady(scopeSd, async () => {
+      const salesByDay = await salesByDayP
+      const sd = await classify(() => cogsLoad, {
         retryAction: "retryCogs",
       })
       return mapReady(sd, (raw) => ({

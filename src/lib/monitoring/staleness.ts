@@ -64,11 +64,15 @@ export const JOB_DATA_OWNERSHIP: Record<string, JobDataOwnership> = {
     column: "updatedAt",
     maxAgeMinutes: 60 * 10,
   },
+  // 16h, not 8h: since 2026-11-17 the sync rewrites only orders that are new
+  // or changed, so `syncedAt` sits still from the last late-night order until
+  // the first sync after opening (stores close 1-3am; the 4-hourly cron can
+  // fire hours late). OtterDailySummary's 8h check still catches a dead feed.
   "otter.orders.sync": {
     kind: "timestamp",
     table: "OtterOrder",
     column: "syncedAt",
-    maxAgeMinutes: 60 * 8,
+    maxAgeMinutes: 60 * 16,
   },
   // Date-partitioned: syncedAt/computedAt are @default(now()) without
   // @updatedAt, so they don't move on re-sync. Coverage is the honest check.

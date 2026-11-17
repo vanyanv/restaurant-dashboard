@@ -336,10 +336,12 @@ export async function loadCogs(input: {
   storeId: string | null
   accountId: string
   /** THE STATEMENT'S Total Sales, off the statement the adapter already
-   *  loaded (C-R1). Never derived here from `DailyCogsItem`. */
-  sales: number
+   *  loaded (C-R1). Never derived here from `DailyCogsItem`. May be a
+   *  promise: the fold does not read it, so the page can start this load
+   *  before its statement arrives and read the cost rows alongside it. */
+  sales: number | Promise<number>
 }): Promise<{ window: CogsWindow; items: CogsItem[]; byDay: CogsDay[] }> {
-  const { range, storeId, accountId, sales } = input
+  const { range, storeId, accountId } = input
   const { startDate, endDate } = toQueryBounds(range)
 
   const stores = await getScopedStores(accountId, storeId ?? null)
@@ -349,7 +351,7 @@ export async function loadCogs(input: {
     return {
       window: cogsWindow({
         cost: 0,
-        sales,
+        sales: await input.sales,
         plan: null,
         categories: [],
         partialLines: 0,
@@ -389,6 +391,7 @@ export async function loadCogs(input: {
     () => foldCogsRows({ accountId, storeIds, startDate, endDate, plan }),
   )
 
+  const sales = await input.sales
   const window = cogsWindow({
     cost: fold.cost,
     sales,

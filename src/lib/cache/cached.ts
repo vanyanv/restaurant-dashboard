@@ -1,3 +1,4 @@
+import { cache } from "react"
 import { getRedis } from "./redis"
 import {
   bumpHit,
@@ -138,7 +139,43 @@ export function monthTagsForRange(start: Date, end: Date): string[] {
   return tags.includes(WIDE_RANGE_TAG) ? tags : [...tags, WIDE_RANGE_TAG]
 }
 
+/**
+ * In-flight sharing within one server render.
+ *
+ * Several sections of one page often ask for the same key at the same moment
+ * (Overview: the labor fold, the fee groups, a rollup the SPLH series and the
+ * statement both need). On a cold cache every one of them missed Redis and ran
+ * its own loader, so the database saw the same query several times per page.
+ * React's `cache()` scopes this map to one request; outside a render (route
+ * handlers, crons, scripts) it is a fresh map per call, i.e. no sharing.
+ *
+ * Every caller gets its own `structuredClone`, so a caller that mutates its
+ * copy cannot change what another section renders. Values are JSON-shaped already (Redis
+ * stores them as JSON), so cloning is always possible.
+ */
+const requestInflight = cache(() => new Map<string, Promise<unknown>>())
+
 export async function cached<T>(
+  key: string,
+  ttlSeconds: number,
+  tags: string[],
+  loader: () => Promise<T>,
+): Promise<T> {
+  const inflight = requestInflight()
+  let run = inflight.get(key) as Promise<T> | undefined
+  if (!run) {
+    run = cachedUncoalesced(key, ttlSeconds, tags, loader)
+    inflight.set(key, run)
+    // A failed load must not poison the rest of the render: drop it so the
+    // next caller retries.
+    run.catch(() => inflight.delete(key))
+  }
+  // EVERY caller gets its own copy, the first included, so a section that
+  // sorts or pushes into its result cannot change what a later one reads.
+  return run.then((v) => (v === null || v === undefined ? v : structuredClone(v)))
+}
+
+async function cachedUncoalesced<T>(
   key: string,
   ttlSeconds: number,
   tags: string[],
