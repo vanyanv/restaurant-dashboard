@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, type CSSProperties } from "react"
 import {
   placeMatrix,
   QUADRANT_CORNERS,
@@ -78,7 +78,7 @@ export function Matrix({
             // `--qc` is the swatch's colour and every value is a token
             // reference. `.mdot.STAR` and this must agree, so both read the
             // same four names.
-            style={{ ["--qc" as string]: QUADRANT_SWATCH[q.quadrant] }}
+            style={{ "--qc": QUADRANT_SWATCH[q.quadrant] } as CSSProperties}
             aria-pressed={!hidden.has(q.quadrant)}
             onClick={() => toggle(q.quadrant)}
           >

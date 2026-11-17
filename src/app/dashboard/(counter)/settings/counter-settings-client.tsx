@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState, useTransition } from "react"
+import { useEffect, useState, useTransition, type CSSProperties } from "react"
 import { signOut } from "next-auth/react"
 import {
   Kv,
@@ -396,7 +396,7 @@ export function CounterSettingsClient({
                 <span
                   className="qbtn"
                   key={sw.key}
-                  style={{ ["--qc" as string]: `var(--${sw.token})` }}
+                  style={{ "--qc": `var(--${sw.token})` } as CSSProperties}
                 >
                   <i />
                   {sw.label}

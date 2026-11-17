@@ -828,10 +828,9 @@ function Builder({
         })),
       })
       setNote({ ok: result.ok, text: result.ok ? "Saved." : result.error ?? "Could not save." })
-      if (result.ok) {
-        onSaved()
-        router.refresh()
-      }
+      // No router.refresh(): the action revalidates this recipe's path, so the
+      // server's rows arrive with the action's response.
+      if (result.ok) onSaved()
     })
   }
 
@@ -841,13 +840,12 @@ function Builder({
       const result = await markRecipeConfirmed(builder.recipeId)
       setNote({ ok: result.ok, text: result.ok ? "Confirmed." : result.error ?? "Could not confirm." })
       if (result.ok) {
-        // The refresh replaces the rows with the server's, so the draft has
+        // The action's re-render replaces the rows with the server's, so the draft has
         // to go with them. Without this the rows reverted while the cost
         // panel went on showing the discarded draft's figures under the word
         // "unsaved" — the same defect `clearDraft` exists for, wired into
         // only one of the two controls that refresh.
         onSaved()
-        router.refresh()
       }
     })
   }

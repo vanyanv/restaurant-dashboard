@@ -437,7 +437,6 @@ function StoreFileForm({
  * never ride along with an unrelated save.
  */
 function ChecksPauseRow({ storeId, since }: { storeId: string; since: string | null }) {
-  const router = useRouter()
   const [busy, start] = useTransition()
   const [error, setError] = useState<string | null>(null)
   const paused = since !== null
@@ -445,8 +444,9 @@ function ChecksPauseRow({ storeId, since }: { storeId: string; since: string | n
     setError(null)
     start(async () => {
       const r = await setChecksPaused({ storeId, paused: !paused })
+      // No router.refresh(): the action revalidates /stores, and Next sends the
+      // re-rendered page back with the action's own response.
       if (!r.ok) setError(r.error)
-      else router.refresh()
     })
   }
   return (

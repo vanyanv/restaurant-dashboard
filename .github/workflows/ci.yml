@@ -22,6 +22,9 @@ on:
       - 'tsconfig.scripts.json'
       - 'pytest.ini'
       - 'vitest.config.*'
+      - 'eslint.config.mjs'
+      - 'playwright.config.ts'
+      - 'e2e/**'
       - '.github/workflows/ci.yml'
   # Work reaches main by direct push here as often as by PR, and a
   # pull_request-only trigger means those commits are never checked at all.
@@ -40,6 +43,9 @@ on:
       - 'tsconfig.scripts.json'
       - 'pytest.ini'
       - 'vitest.config.*'
+      - 'eslint.config.mjs'
+      - 'playwright.config.ts'
+      - 'e2e/**'
       - '.github/workflows/ci.yml'
   workflow_dispatch:
 
@@ -84,6 +90,11 @@ jobs:
         # scripts/ is outside the main tsconfig; without this a bare
         # ReferenceError in a cron entrypoint only surfaces in production.
         run: npm run typecheck:scripts
+      - name: React hooks and compiler rules
+        # React Compiler silently skips any component that breaks these rules.
+        # The script's --max-warnings is the count when this step landed:
+        # CI fails if it goes up. Lower it as findings are fixed.
+        run: npm run lint:hooks
       - name: Unit tests
         run: npm test
       - name: Counter rules
@@ -91,6 +102,60 @@ jobs:
         # the build" -- it needs the full-history checkout above (C2 fix) or
         # it fails loudly for the wrong reason instead.
         run: npm run tokens
+
+  e2e:
+    # The click-through suite under e2e/ (desktop + mobile, including the axe
+    # accessibility sweeps). It used to run only when someone ran it by hand.
+    # It runs against a throwaway Postgres seeded with the demo account, never
+    # a real database, so pages assert on shape and states, not on figures.
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # Report-only for now. The first run (2026-11-17, local, demo seed) had 15
+    # of 30 failing, none from the change that added this job: stale fixture
+    # ids, the Speed Insights script 404ing off Vercel, data the demo seed
+    # does not have. Remove this line once that list is fixed, so a red e2e
+    # blocks a merge like the web job does.
+    continue-on-error: true
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: e2e
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/e2e
+      NEXTAUTH_SECRET: ci-placeholder
+      NEXTAUTH_URL: http://localhost:3100
+      E2E_USER_EMAIL: demo@restaurantos.com
+      E2E_USER_PASSWORD: demo123
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Create schema and seed the demo account
+        run: |
+          psql "$DATABASE_URL" -c 'CREATE EXTENSION IF NOT EXISTS vector'
+          npx prisma db push
+          npm run db:seed
+      - name: Browser tests (desktop + mobile)
+        run: npx playwright test --project=desktop --project=mobile --trace off
+      - name: Keep the report when something fails
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 7
 
   ml:
     runs-on: ubuntu-latest

@@ -28,7 +28,6 @@ export default async function Page({ params }: { params: Promise<{ code: string 
       <main className="ct-root ckc ckb">
         <div className="ckc__col">
           <header className="ckb__band">
-            {/* eslint-disable-next-line @next/next/no-img-element -- static brand asset */}
             <img src="/checks-logo.png" alt="Chris N Eddy's" />
           </header>
           <div style={{ display: "grid", gap: 10, textAlign: "center", marginTop: 24 }}>

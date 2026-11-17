@@ -32,7 +32,6 @@ export function Poster({ store, className = "" }: { store: PosterStore; classNam
   return (
     <article className={`ck-letter ${className}`} aria-label={`${store.name} store checks poster`}>
       <header className="ck-letter__logo">
-        {/* eslint-disable-next-line @next/next/no-img-element -- static brand asset, printed */}
         <img src="/checks-logo.png" alt="Chris N Eddy's" />
       </header>
       <div className="ck-letter__band">
@@ -119,7 +118,6 @@ export function QrCode({ size, cells, label }: { size: number; cells: string; la
         <path d={d} fill="currentColor" />
       </svg>
       <span className="logo">
-        {/* eslint-disable-next-line @next/next/no-img-element -- static brand asset, printed */}
         <img src="/checks-logo.png" alt="" />
       </span>
     </div>

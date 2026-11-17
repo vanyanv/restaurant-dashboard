@@ -85,7 +85,11 @@ export interface ChartProps extends ChartSpec {
  * reading is not a chart.
  */
 export function Chart(props: ChartProps) {
-  const { fmt = (v: number) => money(v), bandFmt, ...spec } = props
+  // `money` as a plain default, not an inline arrow in the destructuring:
+  // React Compiler cannot reorder a default-value arrow and skipped the
+  // whole chart because of it.
+  const { fmt: fmtProp, bandFmt, ...spec } = props
+  const fmt = fmtProp ?? money
   const { animate, barStaggerMs } = useChartDraw()
 
   // Every hook runs before the single-reading return below — that branch is

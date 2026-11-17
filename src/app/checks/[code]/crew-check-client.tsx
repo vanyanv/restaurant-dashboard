@@ -306,7 +306,6 @@ export function CrewCheckClient({ code, initial }: { code: string; initial: Crew
     <main className="ct-root ckc ckb" lang={lang}>
       <div className="ckc__col">
         <header className="ckb__band">
-          {/* eslint-disable-next-line @next/next/no-img-element -- static brand asset */}
           <img src="/checks-logo.png" alt="Chris N Eddy's" />
           <span className="ckb__store">{shortStoreName(view.store.name)}</span>
           <LangToggle lang={lang} setLang={setLang} />
@@ -1141,7 +1140,6 @@ function PhotoSheet({
       <div onClick={(e) => e.stopPropagation()}>
         <span className="ck-mono">{t.photoTitle}</span>
         <h2>{title}</h2>
-        {/* eslint-disable-next-line @next/next/no-img-element -- local preview blob */}
         <img className="ckb__preview" src={url} alt="" />
         <div className="ckc__err" role="alert">
           {busy ? t.uploading : error}

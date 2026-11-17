@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, useLayoutEffect } from "react"
 import { usePathname, useRouter } from "next/navigation"
 import {
   Chart,
@@ -286,7 +286,7 @@ export function CounterOrdersClient({
   const [draft, setDraft] = useState(search)
   // Read by `onToggle`, which must not re-create itself on every keystroke.
   const draftRef = useRef(draft)
-  draftRef.current = draft
+  useLayoutEffect(() => { draftRef.current = draft })
 
   /*
    * What we believe the URL's `q` is — which is NOT the same as `search`.
@@ -349,11 +349,11 @@ export function CounterOrdersClient({
    * those orders. See `writeCounterParams`.
    */
   const filtering = channels.length > 0 || search !== ""
-  const onClear = useCallback(() => {
+  const onClear = () => {
     setDraft("")
     setCommitted("")
     push({ channels: [], search: "" })
-  }, [push])
+  }
 
   return (
     /*

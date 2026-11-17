@@ -4,7 +4,6 @@ import localFont from "next/font/local"
 import { shortStoreName } from "@/lib/checks/names"
 import { useEffect, useRef, useState, useTransition } from "react"
 import { createPortal } from "react-dom"
-import { useRouter } from "next/navigation"
 import { Section, useCounterTransition, usePageChrome } from "@/components/counter"
 import { rotateCheckLink, saveCheckReportEmails } from "@/lib/counter/actions/checks"
 import type { SectionSources } from "@/lib/counter/adapters/types"
@@ -99,7 +98,6 @@ function PrintSheets({ stores, onDone }: { stores: PosterStore[]; onDone: () => 
 }
 
 function PosterCard({ store, onPrint }: { store: PosterStore; onPrint: () => void }) {
-  const router = useRouter()
   const [confirm, setConfirm] = useState(false)
   const [outcome, setOutcome] = useState<Outcome>(null)
   const [busy, start] = useTransition()
@@ -127,7 +125,6 @@ function PosterCard({ store, onPrint }: { store: PosterStore; onPrint: () => voi
       const r = await rotateCheckLink({ storeId: store.id })
       setConfirm(false)
       setOutcome(r.ok ? { ok: true, text: r.message ?? "New link made" } : { ok: false, text: r.error })
-      if (r.ok) router.refresh()
     })
 
   return (
@@ -175,7 +172,6 @@ function PosterCard({ store, onPrint }: { store: PosterStore; onPrint: () => voi
 }
 
 function ReportEmails({ emails, ready }: { emails: string[]; ready: boolean }) {
-  const router = useRouter()
   const [text, setText] = useState(emails.join(", "))
   const [outcome, setOutcome] = useState<Outcome>(null)
   const [busy, start] = useTransition()
@@ -184,7 +180,6 @@ function ReportEmails({ emails, ready }: { emails: string[]; ready: boolean }) {
       const list = text.split(/[\s,;]+/).filter(Boolean)
       const r = await saveCheckReportEmails({ emails: list })
       setOutcome(r.ok ? { ok: true, text: r.message ?? "Saved." } : { ok: false, text: r.error })
-      if (r.ok) router.refresh()
     })
   return (
     <div style={{ display: "grid", gap: 10, maxWidth: 640 }}>

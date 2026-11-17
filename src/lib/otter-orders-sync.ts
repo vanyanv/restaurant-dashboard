@@ -119,12 +119,10 @@ export type DetailsDrainResult = {
   limit: number
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function asString(v: any): string | null {
   if (v == null) return null
   return String(v)
 }
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function asNumber(v: any): number {
   if (v == null) return 0
   const n = Number(v)
