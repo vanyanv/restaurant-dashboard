@@ -25,8 +25,12 @@ const PUBLIC_ON_PURPOSE: Record<string, string> = {}
 
 type Fn = { file: string; name: string; exported: boolean; body: string }
 
+/** Source with comments removed, so a comment naming getSession( cannot pass for a call. */
 function read(file: string): string {
-  return fs.readFileSync(path.join(ROOT, file), "utf8")
+  return fs
+    .readFileSync(path.join(ROOT, file), "utf8")
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .replace(/(^|[^:"'`])\/\/.*$/gm, "$1")
 }
 
 function resolveImport(from: string, spec: string): string | null {
@@ -117,6 +121,19 @@ function reachesGuard(file: string, name: string, seen = new Set<string>()): boo
 describe("server actions", () => {
   it("finds the server action files", () => {
     expect(actionFiles.length).toBeGreaterThan(5)
+  })
+
+  it("understands every export in a server action file", () => {
+    // An export shape the parser below does not recognise (export default,
+    // export { a }, export const x = wrap(async ...)) would be skipped
+    // silently and so never checked. Fail instead, so the parser gets taught.
+    const unseen: string[] = []
+    for (const file of actionFiles) {
+      const exports = read(file).match(/^export (?!type |interface )/gm)?.length ?? 0
+      const parsed = functionsOf(file).filter((f) => f.exported).length
+      if (exports !== parsed) unseen.push(`${file}: ${exports} exports, ${parsed} understood`)
+    }
+    expect(unseen).toEqual([])
   })
 
   it("every exported server action reaches the sign-in check", () => {
