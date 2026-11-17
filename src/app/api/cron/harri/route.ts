@@ -4,6 +4,7 @@ import { runHarriLaborSync } from "@/lib/harri-labor-sync"
 import { runHarriScheduleSync } from "@/lib/harri-schedule-sync"
 import { scheduleSyncWindow } from "@/lib/harri-schedule"
 import { bustTags, monthTagsForRange } from "@/lib/cache/cached"
+import { laDatesBetween, withScopedWrites } from "@/lib/cache/closed-range"
 
 // Raised from 60 when the schedule sync joined this route: it adds four
 // week-addressable gateway calls plus a transaction each, on top of the labor
@@ -42,27 +43,38 @@ export const POST = withCronAuth(
     startDate.setUTCDate(startDate.getUTCDate() - (days - 1))
 
     try {
-      const result = await runHarriLaborSync({
-        storeId,
-        startDate,
-        endDate,
-        triggeredBy: fromCron ? "cron" : "manual",
-      })
       const { startDate: schedStart, endDate: schedEnd } = scheduleSyncWindow()
-      let schedule: Record<string, unknown>
-      try {
-        schedule = { ...(await runHarriScheduleSync({
-          storeId,
-          startDate: schedStart,
-          endDate: schedEnd,
-          triggeredBy: fromCron ? "cron" : "manual",
-        })) }
-      } catch (error) {
-        console.error("Harri schedule sync error:", error)
-        schedule = {
-          error: error instanceof Error ? error.message : "schedule sync failed",
-        }
-      }
+      // Scoped: afterwards it retires the saved figures of exactly the days it
+      // wrote (the labour window and the schedule ahead), and no others.
+      const { result, schedule } = await withScopedWrites(
+        () => [
+          ...laDatesBetween(startDate.toISOString(), endDate.toISOString()),
+          ...laDatesBetween(schedStart.toISOString(), schedEnd.toISOString()),
+        ],
+        async () => {
+          const result = await runHarriLaborSync({
+            storeId,
+            startDate,
+            endDate,
+            triggeredBy: fromCron ? "cron" : "manual",
+          })
+          let schedule: Record<string, unknown>
+          try {
+            schedule = { ...(await runHarriScheduleSync({
+              storeId,
+              startDate: schedStart,
+              endDate: schedEnd,
+              triggeredBy: fromCron ? "cron" : "manual",
+            })) }
+          } catch (error) {
+            console.error("Harri schedule sync error:", error)
+            schedule = {
+              error: error instanceof Error ? error.message : "schedule sync failed",
+            }
+          }
+          return { result, schedule }
+        },
+      )
 
       if (result.daysWritten > 0 || Number(schedule.shiftsWritten ?? 0) > 0) {
         /*

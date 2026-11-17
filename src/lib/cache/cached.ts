@@ -9,6 +9,11 @@ import {
   prefixOf,
 } from "@/lib/monitoring/cache-stats"
 import { recordError } from "@/lib/monitoring/errors"
+import {
+  CLOSED_RANGE_TTL,
+  closedRangeVersion,
+  parseClosedMarker,
+} from "./closed-range"
 
 /**
  * Tag-aware read-through cache backed by Upstash Redis.
@@ -185,6 +190,25 @@ async function cachedUncoalesced<T>(
   if (!redis) return loader()
 
   const prefix = prefixOf(key)
+
+  // A past-day read (see `./closed-range`): keyed by the range's version
+  // instead of tagged, and kept for the long TTL. Reading the version can fail
+  // like any Redis read; then the figure is simply not saved.
+  const closed = tags.map(parseClosedMarker).find((m) => m !== null)
+  if (closed) {
+    let version: string | null
+    try {
+      version = await closedRangeVersion(closed.from, closed.to)
+    } catch (err) {
+      console.error("[cache] closed-range version read failed", { key, err })
+      bumpFailure(prefix)
+      return loader()
+    }
+    if (version === null) return loader()
+    key = `${key}:cv${version}`
+    ttlSeconds = CLOSED_RANGE_TTL
+    tags = []
+  }
 
   try {
     const hit = await redis.get<T>(key)
