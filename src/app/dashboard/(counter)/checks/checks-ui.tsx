@@ -102,13 +102,20 @@ export function Legend() {
 
 export type PhotoRef = { id: string; section: string }
 
-export function photoSrc(id: string): string {
-  return `/api/checks/photo/${encodeURIComponent(id)}`
+/**
+ * `thumb` asks for the 640 px copy saved at upload (30 to 60 KB instead of
+ * about 470 KB) and falls back to the full photo when there is none. Use it
+ * for tiles and review cards; a photo opened large keeps the full one.
+ */
+export type PhotoSize = "full" | "thumb"
+
+export function photoSrc(id: string, size: PhotoSize = "full"): string {
+  return `/api/checks/photo/${encodeURIComponent(id)}${size === "thumb" ? "?size=thumb" : ""}`
 }
 
 /** A photo taken on a task of the shared form, before or after submit. */
-export function markPhotoSrc(id: string): string {
-  return `/api/checks/mark-photo/${encodeURIComponent(id)}`
+export function markPhotoSrc(id: string, size: PhotoSize = "full"): string {
+  return `/api/checks/mark-photo/${encodeURIComponent(id)}${size === "thumb" ? "?size=thumb" : ""}`
 }
 
 /** Thumbnails that open one photo large. */
@@ -120,7 +127,7 @@ export function Thumbs({ photos, caption }: { photos: PhotoRef[]; caption: strin
       <div className="ck-thumbs">
         {photos.map((p) => (
           <button key={p.id} type="button" className="ck-thumb" onClick={() => setOpen(p)} aria-label={`${p.section} photo`}>
-            <img src={photoSrc(p.id)} alt="" loading="lazy" />
+            <img src={photoSrc(p.id, "thumb")} alt="" loading="lazy" />
           </button>
         ))}
       </div>

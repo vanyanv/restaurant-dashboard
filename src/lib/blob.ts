@@ -230,6 +230,21 @@ function localCheckPhotoDir(): string | null {
   return process.env.CHECK_PHOTOS_LOCAL_DIR ?? `${process.cwd()}/.check-photos`
 }
 
+async function putCheckObject(key: string, bytes: Buffer, contentType: string): Promise<void> {
+  const localDir = localCheckPhotoDir()
+  if (localDir) {
+    const { mkdir, writeFile } = await import("node:fs/promises")
+    const path = `${localDir}/${key}`
+    await mkdir(path.slice(0, path.lastIndexOf("/")), { recursive: true })
+    await writeFile(path, bytes)
+    return
+  }
+  const { client, bucket } = getR2Client()
+  await client.send(
+    new PutObjectCommand({ Bucket: bucket, Key: key, Body: bytes, ContentType: contentType }),
+  )
+}
+
 export async function putCheckPhoto(
   storeId: string,
   photoBytes: Buffer,
@@ -237,21 +252,22 @@ export async function putCheckPhoto(
 ): Promise<ProductPhotoUpload> {
   const safeId = storeId.replace(/[^A-Za-z0-9._-]/g, "_")
   const key = `checks/${safeId}/${randomUUID()}.${PRODUCT_PHOTO_CONTENT_TYPES[contentType]}`
-
-  const localDir = localCheckPhotoDir()
-  if (localDir) {
-    const { mkdir, writeFile } = await import("node:fs/promises")
-    const path = `${localDir}/${key}`
-    await mkdir(path.slice(0, path.lastIndexOf("/")), { recursive: true })
-    await writeFile(path, photoBytes)
-    return { pathname: key, size: photoBytes.byteLength, uploadedAt: new Date() }
-  }
-
-  const { client, bucket } = getR2Client()
-  await client.send(
-    new PutObjectCommand({ Bucket: bucket, Key: key, Body: photoBytes, ContentType: contentType }),
-  )
+  await putCheckObject(key, photoBytes, contentType)
   return { pathname: key, size: photoBytes.byteLength, uploadedAt: new Date() }
+}
+
+/**
+ * Where the small copy of a check photo lives: beside the full one, so any
+ * row that knows the photo's key can find its thumbnail with no new column.
+ * Photos taken before thumbnails existed have none; readers fall back.
+ */
+export function checkThumbKey(photoKey: string): string {
+  return `${photoKey.replace(/\.[A-Za-z0-9]+$/, "")}.thumb.jpg`
+}
+
+/** Save the phone-made small JPEG of a check photo next to the full one. */
+export async function putCheckPhotoThumb(photoKey: string, jpegBytes: Buffer): Promise<void> {
+  await putCheckObject(checkThumbKey(photoKey), jpegBytes, "image/jpeg")
 }
 
 /** Best-effort removal, for photos of a submission that did not go through. */

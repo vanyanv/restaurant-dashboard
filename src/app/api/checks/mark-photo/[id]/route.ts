@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions, hasOwnerAccess } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { getCheckPhotoStream } from "@/lib/blob"
+import { PHOTO_CACHE_CONTROL } from "@/lib/checks/photo"
+import { photoSizeFrom, readCheckPhoto } from "@/lib/checks/photo-serve"
 import { rateLimit, RATE_LIMIT_TIERS } from "@/lib/rate-limit"
 import { logger } from "@/lib/logger"
 
@@ -24,17 +25,18 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
 
   let result
   try {
-    result = await getCheckPhotoStream(photo.photoKey!)
+    result = await readCheckPhoto(photo.photoKey!, photoSizeFrom(request.url))
   } catch (err) {
     logger.error("[check-mark-photo] fetch failed", { id, message: err instanceof Error ? err.message : String(err) })
     return NextResponse.json({ error: "Photo storage is temporarily unavailable" }, { status: 503 })
   }
-  if (result.statusCode !== 200) return NextResponse.json({ error: "Photo not found in storage" }, { status: 404 })
+  if (!result.found) return NextResponse.json({ error: "Photo not found in storage" }, { status: 404 })
 
   return new Response(result.stream, {
     headers: {
       "Content-Type": result.contentType ?? photo.photoType ?? "image/jpeg",
-      "Cache-Control": "private, max-age=3600",
+      "X-Photo-Size": result.thumb ? "thumb" : "full",
+      "Cache-Control": PHOTO_CACHE_CONTROL,
       "X-Content-Type-Options": "nosniff",
     },
   })

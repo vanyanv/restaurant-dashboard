@@ -155,7 +155,7 @@ function PhotoCard({ p, onOpen, onReviewed }: { p: CellView["markPhotos"][number
   return (
     <figure className={`ck-prv__card${p.review === "redo" ? " is-redo" : ""}`}>
       <button type="button" className="ck-prv__img" onClick={onOpen} aria-label={`Open ${p.task} photo`}>
-        <img src={markPhotoSrc(p.id)} alt="" loading="lazy" />
+        <img src={markPhotoSrc(p.id, "thumb")} alt="" loading="lazy" />
       </button>
       <figcaption>
         <b>{p.task}</b>
@@ -257,7 +257,7 @@ export function CheckDetail({
             </span>
             {l.photo ? (
               <button type="button" style={{ padding: 0, border: 0, background: "none", cursor: "zoom-in" }} onClick={() => setOpen({ id: l.id, section: l.text, mark: true })} aria-label={`Open ${l.text} photo`}>
-                <img src={markPhotoSrc(l.id)} alt="" loading="lazy" />
+                <img src={markPhotoSrc(l.id, "thumb")} alt="" loading="lazy" />
               </button>
             ) : (
               <span />
@@ -272,7 +272,7 @@ export function CheckDetail({
     <div className="ck-big">
       {cell.photos.map((p) => (
         <button key={p.id} type="button" onClick={() => setOpen({ id: p.id, section: p.section, mark: false })} aria-label={`Open ${p.section} photo`}>
-          <img src={photoSrc(p.id)} alt="" loading="lazy" />
+          <img src={photoSrc(p.id, "thumb")} alt="" loading="lazy" />
           <span className="ck-mono">{p.section}</span>
         </button>
       ))}
@@ -476,7 +476,7 @@ export function PhotoViewer({ cell, caption }: { cell: CellView; caption: string
                 aria-label={`${x.task}${x.review === "ok" ? ", looks good" : x.review === "redo" ? ", sent back" : ""}`}
                 onClick={() => setAt(j)}
               >
-                <img src={markPhotoSrc(x.id)} alt="" loading="lazy" />
+                <img src={markPhotoSrc(x.id, "thumb")} alt="" loading="lazy" />
               </button>
             ))}
           </div>
