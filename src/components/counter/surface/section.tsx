@@ -110,12 +110,39 @@ import { AskGlyph } from "./ask-glyph"
  * page at all. `npm run tokens`' `no-status-branch` rule survives this change
  * untouched.
  */
+/**
+ * One key per promise, so a NEW promise gets a NEW Suspense boundary.
+ *
+ * A day or store change is a transition (`router.push` inside
+ * `startTransition`), and React will not put an already-visible boundary back
+ * into its fallback during a transition: it holds the whole screen on the old
+ * content until EVERY section's new promise resolves. Measured on the phone,
+ * that made a date-arrow tap wait for the slowest section on the page before
+ * anything changed. A fresh key per promise makes each section a new boundary,
+ * so the new page commits as soon as its frame is ready and each section fills
+ * in when its own figure lands. Re-renders that pass the SAME promise keep the
+ * same key, so nothing remounts on an unrelated state change.
+ *
+ * Module-level and hook-free on purpose: `Section` is also rendered from
+ * server components, which cannot hold refs or state.
+ */
+const promiseKeys = new WeakMap<object, number>()
+let nextPromiseKey = 0
+function keyFor(source: object): number {
+  let key = promiseKeys.get(source)
+  if (key === undefined) {
+    key = ++nextPromiseKey
+    promiseKeys.set(source, key)
+  }
+  return key
+}
+
 export function Section<T>({ data, ...chrome }: SectionProps<T>) {
   if (isPendingSource(data)) {
     return (
       // The fallback is the section's own loading state, so the head, the
       // title and the box are already on screen and only the body swaps.
-      <Suspense fallback={<SectionBody<T> {...chrome} data={loading<T>()} />}>
+      <Suspense key={keyFor(data)} fallback={<SectionBody<T> {...chrome} data={loading<T>()} />}>
         <PendingSection<T> {...chrome} source={data} />
       </Suspense>
     )

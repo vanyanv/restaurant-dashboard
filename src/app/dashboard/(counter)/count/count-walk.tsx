@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useRef, useState, useTransition, type KeyboardEvent } from "react"
+import { useEffect, useRef, useState, useTransition, type KeyboardEvent, useEffectEvent } from "react"
 import Link from "next/link"
 import { useRouter, useSearchParams } from "next/navigation"
 import { useSurfaceHref } from "@/components/counter"
@@ -106,8 +106,10 @@ export function CountWalk({ data, base }: { data: WalkData; base: "/dashboard/co
   const draftKey = `count-walk:${data.store.id}`
   const [restored, setRestored] = useState(false)
   const [resumeId, setResumeId] = useState<string | null>(null)
-  useEffect(() => {
-    const d = readDraft<{ countId: string | null; itemId: string | null; typed: Record<string, string[]> }>(draftKey)
+  // An effect event: reads the current count and saved items, but runs once
+  // per store (the effect below keys on `draftKey` only).
+  const restoreDraft = useEffectEvent((key: string) => {
+    const d = readDraft<{ countId: string | null; itemId: string | null; typed: Record<string, string[]> }>(key)
     // A draft from a count that has since been finished (or a different one)
     // is not this count's work.
     if (d && d.countId === (data.count?.id ?? null)) {
@@ -116,12 +118,11 @@ export function CountWalk({ data, base }: { data: WalkData; base: "/dashboard/co
       const idx = d.itemId ? data.items.findIndex((i) => i.id === d.itemId) : -1
       if (idx >= 0 && data.count?.id) setResumeId(d.itemId)
     } else if (d) {
-      clearDraft(draftKey)
+      clearDraft(key)
     }
     setRestored(true)
-    // Once per store.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [draftKey])
+  })
+  useEffect(() => restoreDraft(draftKey), [draftKey])
   useEffect(() => {
     if (!restored) return
     if (screen.kind === "done") {
@@ -248,7 +249,7 @@ export function CountWalk({ data, base }: { data: WalkData; base: "/dashboard/co
       setOkIds(new Set())
       setResumeId(null)
       setScreen({ kind: "done", n: done, value: shelfValue })
-      router.refresh()
+      // No router.refresh(): finishCount revalidates the count section.
     })
   }
 

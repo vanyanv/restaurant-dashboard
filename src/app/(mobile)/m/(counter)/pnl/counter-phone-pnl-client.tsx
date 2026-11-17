@@ -1,5 +1,6 @@
 "use client"
 
+import type { PhonePnlSections } from "@/lib/counter/adapters/pnl"
 import { useCallback, useMemo } from "react"
 import { useRouter } from "next/navigation"
 import { PlainDays, PlainDollar, PlainHero, PlainStatuses, PlainStores, PlainTodos } from "@/app/dashboard/(counter)/pnl/pnl-plain-ui"
@@ -86,7 +87,7 @@ export function CounterPhonePnlClient({
   /** The query string as PLAIN TEXT — a `URLSearchParams` loses its prototype crossing the RSC boundary. */
   params: string
   today: Date
-  sections: SectionSources<PnlSections>
+  sections: SectionSources<PhonePnlSections>
   storeSections?: SectionSources<StoreFixedSections> | null
 }) {
   const params = useMemo(() => new URLSearchParams(paramsString), [paramsString])

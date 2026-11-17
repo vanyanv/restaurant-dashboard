@@ -1,5 +1,6 @@
 "use client"
 
+import type { PhoneOverviewSections } from "@/lib/counter/adapters/overview"
 import Link from "next/link"
 import { useMemo } from "react"
 import {
@@ -104,7 +105,7 @@ export function CounterPhoneOverviewClient({
   params: string
   stores: SwitchableStore[]
   today: Date
-  sections: SectionSources<OverviewSections>
+  sections: SectionSources<PhoneOverviewSections>
 }) {
   const params = useMemo(() => new URLSearchParams(paramsString), [paramsString])
   const counterParams = useMemo(() => readCounterParams(params, today), [params, today])

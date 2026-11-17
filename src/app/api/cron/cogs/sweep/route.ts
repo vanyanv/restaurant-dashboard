@@ -27,6 +27,8 @@ type CogsSweepOutcome = {
  * and only drops items that fell out of the source data, so historical rows
  * for other days can never be touched.
  */
+import { laDatesBetween, withScopedWrites } from "@/lib/cache/closed-range"
+
 export const POST = withCronAuth(async (request) => {
   const startedAt = Date.now()
   const url = new URL(request.url)
@@ -64,7 +66,16 @@ export const POST = withCronAuth(async (request) => {
   startDate.setUTCDate(startDate.getUTCDate() - lookbackDays)
 
   try {
-    const result: CogsSweepOutcome = await withJobRun(
+    // Scoped: afterwards it retires the saved figures of exactly the days in
+    // its window. A skipped sweep wrote nothing and retires none.
+    let wrote = true
+    const result: CogsSweepOutcome = await withScopedWrites(
+      () =>
+        wrote
+          ? laDatesBetween(startDate.toISOString(), endDate.toISOString())
+          : [],
+      async () => {
+        const r: CogsSweepOutcome = await withJobRun(
       "cogs.sweep",
       {
         storeId: store.id,
@@ -125,6 +136,10 @@ export const POST = withCronAuth(async (request) => {
           ...r,
         }
       }
+    )
+        wrote = !r.skipped
+        return r
+      },
     )
 
     return NextResponse.json({

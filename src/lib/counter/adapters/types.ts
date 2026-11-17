@@ -164,3 +164,66 @@ export function guardSection<T>(
     ),
   )
 }
+
+/**
+ * A promise whose work starts the first time something waits on it.
+ *
+ * Adapters build every load and every section this way, so a page that shows
+ * four of an adapter's ten sections runs only the queries those four read:
+ * a section is started when React serializes it to the client (or when
+ * `chooseSections` starts it), and it starts exactly the loads its own
+ * derivation `.then`s. Loads two sections share still run once: the work is
+ * memoised on the first `then`.
+ *
+ * Duck-typed as a Promise: `Promise.all`, `await`, `use()` and React's
+ * serializer all accept any thenable. Never test it with `instanceof`.
+ */
+export function lazy<T>(start: () => Promise<T>): Promise<T> {
+  let running: Promise<T> | null = null
+  const run = (): Promise<T> => {
+    if (!running) {
+      try {
+        running = Promise.resolve(start())
+      } catch (err) {
+        running = Promise.reject(err)
+      }
+    }
+    return running
+  }
+  return {
+    then: (ok, bad) => run().then(ok, bad),
+    catch: (bad) => run().catch(bad),
+    finally: (f) => run().finally(f),
+    [Symbol.toStringTag]: "Promise",
+  } as Promise<T>
+}
+
+const noop = () => {}
+
+/**
+ * Start the sections a page will show, and hand back only those.
+ *
+ * Without `only`, every section starts now and the whole record comes back:
+ * the desk pages, which show everything, keep their loads running while the
+ * page awaits its store list. With `only`, the rest are never started, so
+ * their queries never run. A page must pass on what this returns, not the
+ * full record, or serializing the full record starts everything again.
+ */
+export function chooseSections<S extends object>(all: StreamedSections<S>): StreamedSections<S>
+export function chooseSections<S extends object, K extends keyof S>(
+  all: StreamedSections<S>,
+  only: readonly K[],
+): StreamedSections<Pick<S, K>>
+export function chooseSections<S extends object, K extends keyof S>(
+  all: StreamedSections<S>,
+  only?: readonly K[],
+): StreamedSections<S> | StreamedSections<Pick<S, K>> {
+  const keys = (only ?? (Object.keys(all) as K[])) as K[]
+  const out = {} as StreamedSections<Pick<S, K>>
+  for (const k of keys) {
+    const p = all[k]
+    p.then(noop, noop)
+    out[k] = p as StreamedSections<Pick<S, K>>[K]
+  }
+  return only ? out : all
+}

@@ -54,7 +54,6 @@ export async function getInvoiceSummary(options?: {
     async () => {
   const { storeId, days, startDate, endDate } = options ?? {}
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const where: any = { accountId }
   if (storeId) where.storeId = storeId
   if (startDate && endDate) {
@@ -177,7 +176,6 @@ export async function getInvoiceList(filters?: {
   const limit = pageSize(rawLimit, 25)
   const page = pageNumber(rawPage)
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const where: any = { accountId: session.user.accountId }
   if (storeId) where.storeId = storeId
   if (status) where.status = status
@@ -472,7 +470,6 @@ export async function getInvoiceSpendTimeline(options: {
 
   const { storeId, startDate, endDate, granularity } = options
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const where: any = {
     accountId: session.user.accountId,
     invoiceDate: {

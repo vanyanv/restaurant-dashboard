@@ -107,7 +107,6 @@ function Row({ p, selected, onOpen }: { p: ProductLine; selected: boolean; onOpe
       <td>
         <span className="sh-pname">
           {p.thumb ? (
-            // eslint-disable-next-line @next/next/no-img-element -- served by chrisneddys.com, not this app
             <img className="sh-thumb" src={p.thumb} alt="" loading="lazy" />
           ) : (
             <span className="sh-thumb sh-thumb--none" aria-hidden />
@@ -234,7 +233,6 @@ function Editor({ p, onClose }: { p: ProductEdit; onClose: () => void }) {
       {p.photos.length > 0 && (
         <div className="sh-photos">
           {p.photos.slice(0, 4).map((ph) => (
-            // eslint-disable-next-line @next/next/no-img-element -- served by chrisneddys.com, not this app
             <img key={ph.id} src={ph.url} alt={ph.alt} loading="lazy" />
           ))}
         </div>

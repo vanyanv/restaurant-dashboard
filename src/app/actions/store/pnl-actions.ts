@@ -25,6 +25,7 @@ import type { UnmappedMenuItem } from "@/types/cogs"
 import { recomputeDailyCogsForRange } from "@/lib/cogs-materializer"
 import { CogsStatus } from "@/generated/prisma/client"
 import { cached, monthTags, stableKey } from "@/lib/cache/cached"
+import { rangeScopedTags } from "@/lib/cache/closed-range"
 import {
   loadLaborCost,
   laborByPeriods,
@@ -425,70 +426,73 @@ export async function getStorePnL(input: {
     const overallStart = periods[0].startDate
     const overallEnd = periods[periods.length - 1].endDate
 
-    const summaries = await prisma.otterDailySummary.findMany({
-      where: {
-        storeId: store.id,
-        date: { gte: overallStart, lte: overallEnd },
-      },
-      select: {
-        date: true,
-        platform: true,
-        paymentMethod: true,
-        fpGrossSales: true,
-        tpGrossSales: true,
-        fpTaxCollected: true,
-        tpTaxCollected: true,
-        fpDiscounts: true,
-        tpDiscounts: true,
-        fpServiceCharges: true,
-        tpServiceCharges: true,
-        tpRefundsAdjustments: true,
-        tpOrderCount: true,
-      },
-    })
+    // Independent loads, run side by side (they were five round trips in a row).
+    const [summaries, feeGroups, fixedExpenseRows, cogsRows, laborCost] = await Promise.all([
+      prisma.otterDailySummary.findMany({
+        where: {
+          storeId: store.id,
+          date: { gte: overallStart, lte: overallEnd },
+        },
+        select: {
+          date: true,
+          platform: true,
+          paymentMethod: true,
+          fpGrossSales: true,
+          tpGrossSales: true,
+          fpTaxCollected: true,
+          tpTaxCollected: true,
+          fpDiscounts: true,
+          tpDiscounts: true,
+          fpServiceCharges: true,
+          tpServiceCharges: true,
+          tpRefundsAdjustments: true,
+          tpOrderCount: true,
+        },
+      }),
+      loadOrderFeeGroups({
+        accountId: session.user.accountId,
+        storeIds: [store.id],
+        startDate: overallStart,
+        endDate: overallEnd,
+      }),
+      prisma.storeFixedExpense.findMany({
+        where: { storeId: store.id, isActive: true },
+        orderBy: FIXED_EXPENSE_ORDER,
+        select: { id: true, label: true, amount: true, frequency: true },
+      }),
+      prisma.dailyCogsItem.findMany({
+        where: {
+          storeId: store.id,
+          date: { gte: overallStart, lte: overallEnd },
+          ...FOOD_COST_ROWS,
+        },
+        select: {
+          date: true,
+          itemName: true,
+          category: true,
+          qtySold: true,
+          salesRevenue: true,
+          lineCost: true,
+          status: true,
+          recipeId: true,
+        },
+      }),
+      // Labor dollars: `loadLaborCost` is the one rule (daily actual, else the
+      // position sum, else the day is missing), shared with the Labor page.
+      // computeStorePnL uses the result to override the fixed-monthly labor line
+      // by coverage, with proportional fixed-cost fallback for missing days.
+      loadLaborCost({
+        accountId: session.user.accountId,
+        storeIds: [store.id],
+        startDate: overallStart,
+        endDate: overallEnd,
+      }),
+    ])
 
     const bucketed = bucketSummariesByPeriod(summaries, periods)
-    const feeGroups = await loadOrderFeeGroups({
-      accountId: session.user.accountId,
-      storeIds: [store.id],
-      startDate: overallStart,
-      endDate: overallEnd,
-    })
-    const fixedExpenseRows = await prisma.storeFixedExpense.findMany({
-      where: { storeId: store.id, isActive: true },
-      orderBy: FIXED_EXPENSE_ORDER,
-      select: { id: true, label: true, amount: true, frequency: true },
-    })
     const customFixedExpenses = toCustomFixedExpenses(fixedExpenseRows)
-    const cogsRows = await prisma.dailyCogsItem.findMany({
-      where: {
-        storeId: store.id,
-        date: { gte: overallStart, lte: overallEnd },
-        ...FOOD_COST_ROWS,
-      },
-      select: {
-        date: true,
-        itemName: true,
-        category: true,
-        qtySold: true,
-        salesRevenue: true,
-        lineCost: true,
-        status: true,
-        recipeId: true,
-      },
-    })
     const cogs = summarizeDailyCogs(cogsRows, periods)
 
-    // Labor dollars: `loadLaborCost` is the one rule (daily actual, else the
-    // position sum, else the day is missing), shared with the Labor page.
-    // computeStorePnL uses the result to override the fixed-monthly labor line
-    // by coverage, with proportional fixed-cost fallback for missing days.
-    const laborCost = await loadLaborCost({
-      accountId: session.user.accountId,
-      storeIds: [store.id],
-      startDate: overallStart,
-      endDate: overallEnd,
-    })
     const harriLaborByPeriod = laborByPeriods(laborCost.stores[store.id], periods)
 
     const computed = computeStorePnL({
@@ -626,6 +630,9 @@ export async function getAllStoresPnL(input: {
       s: input.startDate.toISOString(),
       e: input.endDate.toISOString(),
       g: input.granularity,
+      // Custom periods (Monday weeks from `loadWeekStatements`) bucket the same
+      // span differently from plain `weekly`, so they must not share an entry.
+      p: input.periods?.map((p) => `${p.startDate.toISOString()}/${p.endDate.toISOString()}`).join(",") ?? null,
     })}`,
     600,
     // "pnl" stays: writers that cannot say which dates they touched
@@ -634,7 +641,14 @@ export async function getAllStoresPnL(input: {
     // must remain reachable by them. The month tags are what let the hourly
     // sync stop evicting a statement from six weeks ago that it never wrote.
     // See `monthTags` in @/lib/cache/cached.
-    ["pnl", `account:${accountId}`, ...monthTags(input.startDate, input.endDate)],
+    // A range that ended before today is saved for hours instead, cleared only
+    // by a write to one of its own days or an undated figure write (a fixed
+    // expense, a store rate); see @/lib/cache/closed-range.
+    rangeScopedTags(input.startDate, input.endDate, [
+      "pnl",
+      `account:${accountId}`,
+      ...monthTags(input.startDate, input.endDate),
+    ]),
     async () => {
   try {
     const stores = await pnlStoresCached(session.user.accountId)
@@ -669,7 +683,12 @@ export async function getAllStoresPnL(input: {
     const overallStart = periods[0].startDate
     const overallEnd = periods[periods.length - 1].endDate
 
-    const allSummaries = await prisma.otterDailySummary.findMany({
+    // The five loads below are independent of each other: each needs only the
+    // store list and the overall bounds. They were awaited one after another,
+    // which put five database round trips in a row on every rollup miss; this
+    // rollup is the base of Overview, P&L, Analytics, Labor, COGS and Decisions.
+    const [allSummaries, allFeeGroups, allCogsRows, allFixedExpenses, laborCost] = await Promise.all([
+      prisma.otterDailySummary.findMany({
       where: {
         storeId: { in: storeIds },
         date: { gte: overallStart, lte: overallEnd },
@@ -690,17 +709,45 @@ export async function getAllStoresPnL(input: {
         tpRefundsAdjustments: true,
         tpOrderCount: true,
       },
-    })
-
-    // ONE grouped OtterOrder read for every store's commission — see
-    // `@/lib/counter/commission`. Cached on its own key, and inside this
-    // rollup's cache too.
-    const allFeeGroups = await loadOrderFeeGroups({
-      accountId,
-      storeIds,
-      startDate: overallStart,
-      endDate: overallEnd,
-    })
+    }),
+      // ONE grouped OtterOrder read for every store's commission — see
+      // `@/lib/counter/commission`. Cached on its own key, and inside this
+      // rollup's cache too.
+      loadOrderFeeGroups({
+        accountId,
+        storeIds,
+        startDate: overallStart,
+        endDate: overallEnd,
+      }),
+      prisma.dailyCogsItem.findMany({
+        where: {
+          storeId: { in: storeIds },
+          date: { gte: overallStart, lte: overallEnd },
+          ...FOOD_COST_ROWS,
+        },
+        select: {
+          storeId: true,
+          date: true,
+          itemName: true,
+          category: true,
+          qtySold: true,
+          salesRevenue: true,
+          lineCost: true,
+          status: true,
+          recipeId: true,
+        },
+      }),
+      pnlFixedExpensesCached(storeIds.join(",")),
+      // Labor dollars, batched across stores through the same `loadLaborCost`
+      // rule `getStorePnL` uses, so the all-stores roll-up and a store's own P&L
+      // cannot price a week differently.
+      loadLaborCost({
+        accountId: session.user.accountId,
+        storeIds,
+        startDate: overallStart,
+        endDate: overallEnd,
+      }),
+    ])
     const feeGroupsByStore = new Map<string, OrderFeeGroup[]>()
     for (const g of allFeeGroups) {
       const arr = feeGroupsByStore.get(g.storeId) ?? []
@@ -718,24 +765,6 @@ export async function getAllStoresPnL(input: {
 
     const sum = (xs: number[]) => xs.reduce((a, b) => a + b, 0)
 
-    const allCogsRows = await prisma.dailyCogsItem.findMany({
-      where: {
-        storeId: { in: storeIds },
-        date: { gte: overallStart, lte: overallEnd },
-        ...FOOD_COST_ROWS,
-      },
-      select: {
-        storeId: true,
-        date: true,
-        itemName: true,
-        category: true,
-        qtySold: true,
-        salesRevenue: true,
-        lineCost: true,
-        status: true,
-        recipeId: true,
-      },
-    })
     const cogsByStore = new Map<string, DailyCogsRow[]>()
     for (const r of allCogsRows) {
       const arr = cogsByStore.get(r.storeId) ?? []
@@ -743,7 +772,6 @@ export async function getAllStoresPnL(input: {
       cogsByStore.set(r.storeId, arr)
     }
 
-    const allFixedExpenses = await pnlFixedExpensesCached(storeIds.join(","))
     const expensesByStore = new Map<string, FixedExpenseRow[]>()
     for (const e of allFixedExpenses) {
       const arr = expensesByStore.get(e.storeId) ?? []
@@ -751,15 +779,6 @@ export async function getAllStoresPnL(input: {
       expensesByStore.set(e.storeId, arr)
     }
 
-    // Labor dollars, batched across stores through the same `loadLaborCost`
-    // rule `getStorePnL` uses, so the all-stores roll-up and a store's own P&L
-    // cannot price a week differently.
-    const laborCost = await loadLaborCost({
-      accountId: session.user.accountId,
-      storeIds,
-      startDate: overallStart,
-      endDate: overallEnd,
-    })
 
     const perStoreComputed: Array<ReturnType<typeof computeStorePnL>> = []
     const perStoreMissing: number[][] = []

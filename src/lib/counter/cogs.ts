@@ -3,6 +3,7 @@ import { FOOD_COST_ROWS } from "@/lib/counter/food-cost-scope"
 import { getScopedStores } from "@/lib/account-stores"
 import { cached, monthTags, stableKey } from "@/lib/cache/cached"
 import { rangeTtl } from "@/lib/cache/range"
+import { rangeScopedTags } from "@/lib/cache/closed-range"
 import { toQueryBounds, type DateRange } from "@/lib/counter/date-range"
 import { getItemDiscounts } from "@/lib/counter/item-discounts"
 import { foldItemEconomics } from "@/lib/counter/item-economics"
@@ -336,10 +337,12 @@ export async function loadCogs(input: {
   storeId: string | null
   accountId: string
   /** THE STATEMENT'S Total Sales, off the statement the adapter already
-   *  loaded (C-R1). Never derived here from `DailyCogsItem`. */
-  sales: number
+   *  loaded (C-R1). Never derived here from `DailyCogsItem`. May be a
+   *  promise: the fold does not read it, so the page can start this load
+   *  before its statement arrives and read the cost rows alongside it. */
+  sales: number | Promise<number>
 }): Promise<{ window: CogsWindow; items: CogsItem[]; byDay: CogsDay[] }> {
-  const { range, storeId, accountId, sales } = input
+  const { range, storeId, accountId } = input
   const { startDate, endDate } = toQueryBounds(range)
 
   const stores = await getScopedStores(accountId, storeId ?? null)
@@ -349,7 +352,7 @@ export async function loadCogs(input: {
     return {
       window: cogsWindow({
         cost: 0,
-        sales,
+        sales: await input.sales,
         plan: null,
         categories: [],
         partialLines: 0,
@@ -385,10 +388,11 @@ export async function loadCogs(input: {
     rangeTtl(endDate),
     // `cogs` is what `recomputeDailyCogsForRange` busts; the month tags let a
     // recompute of last month leave this month's window alone.
-    ["cogs", ...monthTags(startDate, endDate)],
+    rangeScopedTags(startDate, endDate, ["cogs", ...monthTags(startDate, endDate)]),
     () => foldCogsRows({ accountId, storeIds, startDate, endDate, plan }),
   )
 
+  const sales = await input.sales
   const window = cogsWindow({
     cost: fold.cost,
     sales,

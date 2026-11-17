@@ -41,7 +41,6 @@ export default async function Page({ params }: { params: Promise<{ code: string 
     <main className="ct-root ckc ckb">
       <div className="ckc__col ckb__how">
         <header className="ckb__band">
-          {/* eslint-disable-next-line @next/next/no-img-element -- static brand asset */}
           <img src="/checks-logo.png" alt="Chris N Eddy's" />
           <span className="ckb__store">{store.name}</span>
         </header>

@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition, useLayoutEffect } from "react"
 import { usePathname, useRouter } from "next/navigation"
 import {
   Chart,
@@ -383,7 +383,7 @@ export function CounterAlertsClient({
 
   const [draft, setDraft] = useState(search)
   const draftRef = useRef(draft)
-  draftRef.current = draft
+  useLayoutEffect(() => { draftRef.current = draft })
 
   /*
    * What we believe the URL's `q` is — NOT the same as `search`.

@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { useCallback, useMemo, useState, useTransition} from "react"
+import { useCallback, useMemo, useState, useTransition, type CSSProperties } from "react"
 import { usePathname, useRouter } from "next/navigation"
 import {
   Chart,
@@ -254,7 +254,7 @@ export function CounterMenuItemClient({
                   key: r.key,
                   cells: {
                     channel: (
-                      <span className="chip" style={{ ["--pc" as string]: r.tint }}>
+                      <span className="chip" style={{ "--pc": r.tint } as CSSProperties}>
                         <i />
                         {r.channel}
                       </span>

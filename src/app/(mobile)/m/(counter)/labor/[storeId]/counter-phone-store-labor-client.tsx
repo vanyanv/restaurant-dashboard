@@ -1,5 +1,6 @@
 "use client"
 
+import type { PhoneStoreLaborSections } from "@/lib/counter/adapters/labor"
 import { useMemo } from "react"
 import {
   Chart,
@@ -76,7 +77,7 @@ export function CounterPhoneStoreLaborClient({
   storeId: string
   stores: SwitchableStore[]
   today: Date
-  sections: SectionSources<StoreLaborSections>
+  sections: SectionSources<PhoneStoreLaborSections>
 }) {
   const params = useMemo(() => new URLSearchParams(paramsString), [paramsString])
   const counterParams = useMemo(() => readCounterParams(params, today), [params, today])

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { withCronAuth } from "@/lib/cron-auth"
 import { runHourlySync } from "@/lib/hourly-sync"
 import { bustTags, monthTagsForDates } from "@/lib/cache/cached"
+import { withScopedWrites } from "@/lib/cache/closed-range"
 
 export const maxDuration = 60
 
@@ -9,9 +10,24 @@ export const maxDuration = 60
 export const POST = withCronAuth(
   async (_request, { fromCron }) => {
     try {
-      const result = await runHourlySync({
-        triggeredBy: fromCron ? "cron" : "manual",
-      })
+      // Scoped: the sync rewrites today and yesterday only, so afterwards it
+      // retires the saved figures of exactly those days, and last week's stay.
+      let written: string[] | null = null
+      const result = await withScopedWrites(
+        () => {
+          // Null only if the sync threw before saying what it wrote; then
+          // the global bump is the safe answer.
+          if (!written) throw new Error("unknown dates")
+          return written
+        },
+        async () => {
+          const r = await runHourlySync({
+            triggeredBy: fromCron ? "cron" : "manual",
+          })
+          written = r.datesCovered
+          return r
+        },
+      )
       if (result.bucketsWritten > 0) {
         /*
          * NOT `"pnl"`. This route runs every hour and writes a two-day window

@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState, useLayoutEffect } from "react"
 import { usePathname, useRouter } from "next/navigation"
 import {
   PhoneSheet,
@@ -166,7 +166,7 @@ export function CounterPhoneAskClient({
    */
   const askedRef = useRef<string | null>(null)
   const contextRef = useRef(context)
-  contextRef.current = context
+  useLayoutEffect(() => { contextRef.current = context })
   const key = `${question} · ${context.sentence}`
 
   useEffect(() => {

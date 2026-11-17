@@ -68,3 +68,42 @@ def test_below_minimum_history_returns_none(monkeypatch):
     df = _synthetic_qty(days=30)
     monkeypatch.setattr(menu_item_model, "load_daily_quantity", lambda s, i: df)
     assert menu_item_model.train("store-test", "Burger") is None
+
+
+# --- run_menu_items_for_store: short history vs. a real failure ------------
+
+def _run_menu_items(train_side_effect):
+    from unittest.mock import patch as _patch
+    from ml import run_nightly
+
+    closed: dict = {}
+
+    def _close(run_id, **kwargs):
+        closed.update(kwargs)
+
+    with _patch.object(run_nightly, "_open_run", return_value="run-1"), \
+         _patch.object(run_nightly, "_close_run", side_effect=_close), \
+         _patch.object(run_nightly, "load_top_items", return_value=["Fries", "Slider", "Shake"]), \
+         _patch.object(run_nightly, "train_menu_item", side_effect=train_side_effect):
+        result = run_nightly.run_menu_items_for_store("store-vnys", "v1")
+    return result, closed
+
+
+def test_every_item_under_60_days_reads_as_insufficient_history():
+    result, closed = _run_menu_items(lambda store, item: None)
+    assert result["reason"] == "insufficient_history"
+    assert result["failed_count"] == 3
+    # operator_gate_check Gate 1 matches this text to say "not enough history yet".
+    assert closed["error"].startswith("insufficient_history")
+    assert closed["status"] == "FAILED"
+
+
+def test_an_item_that_raised_keeps_all_items_failed():
+    def train(store, item):
+        if item == "Slider":
+            raise RuntimeError("boom")
+        return None
+
+    result, closed = _run_menu_items(train)
+    assert result["reason"] == "all_items_failed"
+    assert closed["error"] == "all_items_failed (3)"

@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, useEffectEvent } from "react"
 import Link from "next/link"
 import { Section, useCounterTransition, usePageChrome, useSurfaceHref } from "@/components/counter"
 import { useUrlParam } from "@/components/counter/keep/use-url-param"
@@ -73,12 +73,12 @@ function OneShelf({ data, shelf }: { data: ShelfData; shelf: StoreShelf }) {
   }
 
   // A link from the Overview's map names its section in the hash: open it.
-  useEffect(() => {
+  // Once, for the hash the page arrived with.
+  const openFromHash = useEffectEvent(() => {
     const area = window.location.hash.replace(/^#iv-sec-/, "")
     if (area && data.areas.some((a) => a.id === area)) toggle(area, true)
-    // Once, for the hash the page arrived with.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  })
+  useEffect(() => openFromHash(), [])
 
   if (shelf.lines.length === 0) {
     return (

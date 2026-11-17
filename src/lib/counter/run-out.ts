@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma"
+import { Prisma } from "@/generated/prisma/client"
 import {
   loadStoreInventoryContext,
   runningOnHandFromContext,
@@ -172,24 +173,34 @@ export async function loadRunOut(input: RunOutInput): Promise<RunOut> {
   const rows: RunOutRow[] = []
   let partial = false
 
-  for (const storeId of input.storeIds) {
-    const [ctx, vendorLines] = await Promise.all([
-      loadStoreInventoryContext({ storeId, accountId: input.accountId, asOf: input.asOf }),
-      prisma.invoiceLineItem.findMany({
-        where: { invoice: { storeId }, canonicalIngredientId: { not: null } },
-        orderBy: { invoice: { invoiceDate: "desc" } },
-        select: {
-          canonicalIngredientId: true,
-          invoice: { select: { vendorName: true } },
-        },
-      }),
-    ])
+  // Every store's context and latest vendors, read together. This was a loop
+  // that awaited each store in turn, and its vendor read pulled every invoice
+  // line the store ever had just to keep the newest vendor per ingredient.
+  const perStore = await Promise.all(
+    input.storeIds.map(async (storeId) => {
+      const [ctx, vendorLines] = await Promise.all([
+        loadStoreInventoryContext({ storeId, accountId: input.accountId, asOf: input.asOf }),
+        // Newest invoice's vendor per ingredient, in the database. Same order
+        // the old `orderBy: { invoice: { invoiceDate: "desc" } }` used,
+        // including Postgres's NULLS FIRST for a descending sort.
+        prisma.$queryRaw<{ canonicalIngredientId: string; vendorName: string }[]>(Prisma.sql`
+          SELECT DISTINCT ON (l."canonicalIngredientId") l."canonicalIngredientId", i."vendorName"
+          FROM "InvoiceLineItem" l
+          JOIN "Invoice" i ON i."id" = l."invoiceId"
+          WHERE i."storeId" = ${storeId}
+            AND i."accountId" = ${input.accountId}
+            AND l."canonicalIngredientId" IS NOT NULL
+          ORDER BY l."canonicalIngredientId", i."invoiceDate" DESC NULLS FIRST
+        `),
+      ])
+      return { storeId, ctx, vendorLines }
+    }),
+  )
 
+  for (const { storeId, ctx, vendorLines } of perStore) {
     const vendorByIngredient = new Map<string, string>()
     for (const line of vendorLines) {
-      if (!line.canonicalIngredientId) continue
-      if (vendorByIngredient.has(line.canonicalIngredientId)) continue
-      vendorByIngredient.set(line.canonicalIngredientId, line.invoice.vendorName)
+      vendorByIngredient.set(line.canonicalIngredientId, line.vendorName)
     }
 
     const forecast = forecastLookup.get(storeId)

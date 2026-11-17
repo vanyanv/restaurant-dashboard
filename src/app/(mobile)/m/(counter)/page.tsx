@@ -2,8 +2,9 @@ import { getServerSession } from "next-auth"
 import { redirect } from "next/navigation"
 import { authOptions, hasOwnerAccess } from "@/lib/auth"
 import { readCounterParams } from "@/lib/counter/url-state"
-import { getOverviewSectionPromises, getOverviewStores } from "@/lib/counter/adapters/overview"
+import { getOverviewSectionPromises, PHONE_OVERVIEW_SECTIONS, getOverviewStores } from "@/lib/counter/adapters/overview"
 import { CounterPhoneOverviewClient } from "./counter-phone-overview-client"
+import { chooseSections } from "@/lib/counter/adapters/types"
 import { counterToday } from "@/lib/counter/today"
 
 export const dynamic = "force-dynamic"
@@ -66,15 +67,18 @@ export default async function MobileHomePage({
   // NOT AWAITED — one promise per section, each unwrapped inside its own
   // Suspense boundary by `Section`. See the desk page's note. Started before
   // the store list so the two are concurrent.
-  const sections = getOverviewSectionPromises({
-    range: counterParams.range,
-    comparisonId: counterParams.comparisonId,
-    storeId: counterParams.storeId,
-    accountId: session.user.accountId,
-    // The alert queue's "days open" is a business-date count. Taking its own
-    // clock would leave it on UTC, and unpinnable by COUNTER_TODAY.
-    today,
-  })
+  const sections = chooseSections(
+    getOverviewSectionPromises({
+      range: counterParams.range,
+      comparisonId: counterParams.comparisonId,
+      storeId: counterParams.storeId,
+      accountId: session.user.accountId,
+      // The alert queue's "days open" is a business-date count. Taking its own
+      // clock would leave it on UTC, and unpinnable by COUNTER_TODAY.
+      today,
+    }),
+    PHONE_OVERVIEW_SECTIONS,
+  )
 
   const stores = await getOverviewStores()
 

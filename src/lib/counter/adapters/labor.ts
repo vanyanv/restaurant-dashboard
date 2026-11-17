@@ -35,6 +35,7 @@ import {
   awaitSections,
   classify,
   guardSection,
+  lazy,
   type StreamedSections,
 } from "@/lib/counter/adapters/types"
 import type { QueueEntry } from "@/lib/counter/adapters/overview"
@@ -1396,20 +1397,20 @@ function loadEverything(input: LaborSectionsInput) {
   )
 
   // Rule 1 / A-R13: DAILY, once, whatever the display grain is.
-  const dailyP = classify(() => loadStatement({ range, storeId, granularity: "daily" }), {
+  const dailyP = lazy(() => classify(() => loadStatement({ range, storeId, granularity: "daily" }), {
     retryAction: "retryStatement",
-  })
+  }))
 
-  const filesP = classify(() => getStores(), { retryAction: "retryStores" })
+  const filesP = lazy(() => classify(() => getStores(), { retryAction: "retryStores" }))
 
-  const curveLoadP = classify(
+  const curveLoadP = lazy(() => classify(
     () => loadStaffingCurve({ date: nextDay, storeId, accountId }),
     { retryAction: "retryCurve" },
-  )
+  ))
 
-  const gapP = classify(() => loadScheduleGap({ storeId, accountId, from: nextDay }), {
+  const gapP = lazy(() => classify(() => loadScheduleGap({ storeId, accountId, from: nextDay }), {
     retryAction: "retryScheduleGap",
-  })
+  }))
 
   /*
    * The trend's own per-week Total Sales (L-R2 / task 4b). Loaded off the
@@ -1430,7 +1431,7 @@ function loadEverything(input: LaborSectionsInput) {
    * granularity), so this is one more cheap call, exactly as the Analytics
    * adapter already makes one for its comparison window.
    */
-  const trendLoadP = classify(
+  const trendLoadP = lazy(() => classify(
     async () => {
       const trendWindows = trailingWeeks(range.end, TREND_WEEKS)
       let salesByDay = new Map<string, number>()
@@ -1454,42 +1455,55 @@ function loadEverything(input: LaborSectionsInput) {
       })
     },
     { retryAction: "retryTrend" },
-  )
+  ))
 
   // ONE decision about what this page is looking at, applied to every section,
   // so no section works out for itself whether a pre-open store is an error.
-  const scopeP = Promise.all([dailyP, filesP]).then(([dailySd, filesSd]) => {
+  const scopeP = lazy(() => Promise.all([dailyP, filesP]).then(([dailySd, filesSd]) => {
     const files = dataOf(filesSd) ?? []
     return mapReadyTo(dailySd, (s) => {
       const reason = scopeReason(s, files, storeId)
       return reason === null ? ready(s) : empty<Statement>(reason)
     })
+  }))
+
+  // Started NOW, alongside the statement: the labour fold does not need the
+  // sales, only the per-day labour % does, and `loadLaborWeek` awaits them for
+  // that alone. Before, the whole labour read waited for the P&L rollup.
+  const statementP = lazy(() => scopeP.then((scopeSd) => dataOf(scopeSd)))
+  const laborWeekLoad = lazy(() => loadLaborWeek({
+    range,
+    storeId,
+    accountId,
+    salesByDay: statementP.then((st) => (st ? salesByDayOf(st, range) : new Map<string, number>())),
+    salesByStoreDay: statementP.then((st) =>
+      st ? salesByStoreDayOf(st, range) : new Map<string, Map<string, number>>(),
+    ),
+  }))
+
+  const laborP = lazy(() => {
+    // Start the labor week alongside the statement, not after it. It is read
+    // below through `classify`; the catch only keeps an early rejection from
+    // surfacing as unhandled while the statement is still loading.
+    laborWeekLoad.catch(() => {})
+    // `statementP` feeds two promises `loadLaborWeek` may never await (no
+    // stores): give them a handler too. The section still reads `scopeP`.
+    statementP.catch(() => {})
+    return scopeP.then((scopeSd) =>
+      chainReady(scopeSd, async (statement) => {
+        const map = salesByDayOf(statement, range)
+        const sd = await classify(() => laborWeekLoad, { retryAction: "retryLabor" })
+        return mapReady(sd, (raw) => ({
+          days: raw.days,
+          roles: raw.roles,
+          week: laborWeek(raw.days, raw.overtimeCost),
+          salesByDay: map,
+        }))
+      }),
+    )
   })
 
-  const laborP = scopeP.then((scopeSd) =>
-    chainReady(scopeSd, async (statement) => {
-      const map = salesByDayOf(statement, range)
-      const sd = await classify(
-        () =>
-          loadLaborWeek({
-            range,
-            storeId,
-            accountId,
-            salesByDay: map,
-            salesByStoreDay: salesByStoreDayOf(statement, range),
-          }),
-        { retryAction: "retryLabor" },
-      )
-      return mapReady(sd, (raw) => ({
-        days: raw.days,
-        roles: raw.roles,
-        week: laborWeek(raw.days, raw.overtimeCost),
-        salesByDay: map,
-      }))
-    }),
-  )
-
-  const leaksP = laborP.then((laborSd) =>
+  const leaksP = lazy(() => laborP.then((laborSd) =>
     chainReady<LaborData, LeakLedger>(laborSd, (d): Promise<SectionData<LeakLedger>> => {
       const rate = d.week.blendedRate
       // No hours worked means no rate to cost an alert at, and a ledger costed
@@ -1507,7 +1521,7 @@ function loadEverything(input: LaborSectionsInput) {
         retryAction: "retryLeaks",
       })
     }),
-  )
+  ))
 
   return { nextDay, scopeP, laborP, leaksP, curveLoadP, gapP, trendLoadP }
 }
@@ -1597,6 +1611,14 @@ function trendSection(sd: SectionData<LaborTrendWeek[]>): SectionData<TrendSecti
 /* ── The group page ───────────────────────────────────────────────────── */
 
 /**
+ * The sections the phone page shows. The phone page passes
+ * `chooseSections(sections, PHONE_LABOR_SECTIONS)` to its client, so the loads only the
+ * desk reads never run on a phone.
+ */
+export const PHONE_LABOR_SECTIONS = ["headline", "decision", "schedule", "roles"] as const satisfies ReadonlyArray<keyof LaborSections>
+export type PhoneLaborSections = Pick<LaborSections, (typeof PHONE_LABOR_SECTIONS)[number]>
+
+/**
  * The group page's eight sections, as eight promises.
  *
  * Every load starts in `loadEverything` and none is awaited here. The staffing
@@ -1618,26 +1640,26 @@ export function getLaborSectionPromises(
   }).format(nextDay)
 
   return {
-    headline: guardSection(
+    headline: lazy(() => guardSection(
       Promise.all([laborP, leaksP]).then(([laborSd, leakSd]) =>
         headlineSection(laborSd, leakSd, false),
       ),
       "retryLabor",
-    ),
+    )),
 
-    week: guardSection(
+    week: lazy(() => guardSection(
       laborP.then((laborSd) =>
         laborSection(laborSd, NO_HARRI_OWED, (d) => buildWeekStrip(d.days, range, today)),
       ),
       "retryLabor",
-    ),
+    )),
 
-    schedule: guardSection(
+    schedule: lazy(() => guardSection(
       laborP.then((laborSd) => scheduleSection(laborSd, range, granularity)),
       "retryLabor",
-    ),
+    )),
 
-    curve: guardSection(
+    curve: lazy(() => guardSection(
       Promise.all([scopeP, curveLoadP]).then(([scopeSd, curveSd]) =>
         mapReadyTo(gate(scopeSd, curveSd), (curve) =>
           // `loadStaffingCurve` returns null when the day carries neither a
@@ -1652,16 +1674,16 @@ export function getLaborSectionPromises(
         ),
       ),
       "retryCurve",
-    ),
+    )),
 
-    roles: guardSection(laborP.then(rolesSection), "retryLabor"),
+    roles: lazy(() => guardSection(laborP.then(rolesSection), "retryLabor")),
 
-    leaks: guardSection(
+    leaks: lazy(() => guardSection(
       Promise.all([laborP, leaksP]).then(([laborSd, leakSd]) => leaksSection(laborSd, leakSd)),
       "retryLeaks",
-    ),
+    )),
 
-    decision: guardSection(
+    decision: lazy(() => guardSection(
       Promise.all([scopeP, gapP]).then(([scopeSd, gapSd]) =>
         mapReadyTo(gate(scopeSd, gapSd), (gap) =>
           // L-R8's other half: full coverage is not owed work and it is not a
@@ -1673,14 +1695,14 @@ export function getLaborSectionPromises(
         ),
       ),
       "retryScheduleGap",
-    ),
+    )),
 
-    trend: guardSection(
+    trend: lazy(() => guardSection(
       Promise.all([scopeP, trendLoadP]).then(([scopeSd, trendSd]) =>
         trendSection(gate(scopeSd, trendSd)),
       ),
       "retryTrend",
-    ),
+    )),
   }
 }
 
@@ -1694,6 +1716,14 @@ export async function getLaborSections(input: LaborSectionsInput): Promise<Labor
 }
 
 /* ── The store page ───────────────────────────────────────────────────── */
+
+/**
+ * The sections the phone page shows. The phone page passes
+ * `chooseSections(sections, PHONE_STORE_LABOR_SECTIONS)` to its client, so the loads only the
+ * desk reads never run on a phone.
+ */
+export const PHONE_STORE_LABOR_SECTIONS = ["headline", "schedule", "roles"] as const satisfies ReadonlyArray<keyof StoreLaborSections>
+export type PhoneStoreLaborSections = Pick<StoreLaborSections, (typeof PHONE_STORE_LABOR_SECTIONS)[number]>
 
 /**
  * One store's six sections.
@@ -1712,40 +1742,40 @@ export function getStoreLaborSectionPromises(
   const { laborP, leaksP, trendLoadP, scopeP } = loadEverything(input)
 
   return {
-    headline: guardSection(
+    headline: lazy(() => guardSection(
       Promise.all([laborP, leaksP]).then(([laborSd, leakSd]) =>
         headlineSection(laborSd, leakSd, true),
       ),
       "retryLabor",
-    ),
+    )),
 
-    schedule: guardSection(
+    schedule: lazy(() => guardSection(
       laborP.then((laborSd) => scheduleSection(laborSd, range, granularity)),
       "retryLabor",
-    ),
+    )),
 
-    roles: guardSection(laborP.then(rolesSection), "retryLabor"),
+    roles: lazy(() => guardSection(laborP.then(rolesSection), "retryLabor")),
 
-    leaks: guardSection(
+    leaks: lazy(() => guardSection(
       Promise.all([laborP, leaksP]).then(([laborSd, leakSd]) => leaksSection(laborSd, leakSd)),
       "retryLeaks",
-    ),
+    )),
 
-    week: guardSection(
+    week: lazy(() => guardSection(
       laborP.then((laborSd) =>
         laborSection(laborSd, NO_HARRI_OWED, (d) =>
           buildWeekTable(d.days, d.week, d.salesByDay),
         ),
       ),
       "retryLabor",
-    ),
+    )),
 
-    trend: guardSection(
+    trend: lazy(() => guardSection(
       Promise.all([scopeP, trendLoadP]).then(([scopeSd, trendSd]) =>
         trendSection(gate(scopeSd, trendSd)),
       ),
       "retryTrend",
-    ),
+    )),
   }
 }
 

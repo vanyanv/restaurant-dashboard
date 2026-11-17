@@ -6,7 +6,7 @@ generator client {
 
 datasource db {
   provider   = "postgresql"
-  extensions = [vector]
+  extensions = [vector, pg_stat_statements]
 }
 
 enum Role {
@@ -959,6 +959,12 @@ model OtterOrder {
   //   prisma/manual-migrations/2026-05-03_otter_pending_details_index.sql
   // — index name `OtterOrder_pending_details_idx`.
   @@index([platform])
+  // Covering index for range totals over raw orders: commission on every P&L
+  // rollup (src/lib/counter/commission.ts) and the Orders page strip. Every
+  // column they filter, group or sum is here, so they read the index alone.
+  // Cold prod read of 30 days touched 3,613 table pages (585 ms after wake).
+  // See prisma/manual-migrations/2026-11-17_order_fees_cover_index.sql.
+  @@index([storeId, referenceTimeLocal, platform, fulfillmentMode, orderStatus, commission, subtotal, discount], map: "OtterOrder_store_time_fees_idx")
 }
 
 model OtterOrderItem {
@@ -974,6 +980,13 @@ model OtterOrderItem {
 
   @@index([orderId])
   @@index([skuId])
+  // Covering index for the "lines of these orders" joins (item discounts,
+  // menu-item and ingredient adapters). With only (orderId), Postgres chose
+  // to read all ~250k lines for a 7-day window (prod: 89 ms warm, 305 ms right
+  // after the database wakes; 17.6k full scans since stats began). With the
+  // name/price/quantity columns in the index it answers from the index alone:
+  // 27 -> 9 ms (7 days) and 32 -> 19 ms (30 days) on an order-sized local copy.
+  @@index([orderId, name, price, quantity], map: "OtterOrderItem_orderId_cover_idx")
 }
 
 model OtterOrderSubItem {

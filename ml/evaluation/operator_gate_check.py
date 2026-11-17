@@ -226,6 +226,15 @@ def gate1_eval_rows_today(conn, target_date: date) -> tuple[bool, str]:
                   AND ("errorMessage" ILIKE '%%insufficient!_history%%' ESCAPE '!'
                     OR "errorMessage" ILIKE '%%insufficient!_hourly!_history%%' ESCAPE '!'
                     OR "errorMessage" ILIKE '%%no!_items!_in!_lookback%%' ESCAPE '!')
+                  -- Only a pair that has never trained. One that trained
+                  -- before and now reads short is losing data, the same rule
+                  -- as `ml.run_nightly._never_trained`.
+                  AND NOT EXISTS (
+                      SELECT 1 FROM "MlTrainingRun" ok
+                      WHERE ok.scope = "MlTrainingRun".scope
+                        AND ok.target = "MlTrainingRun".target
+                        AND ok.status = 'SUCCEEDED'
+                  )
             )
             SELECT s.id AS "storeId", s.name, t.target,
                    COUNT(e.id) AS rows_today,
@@ -481,6 +490,14 @@ def _post_epoch_coverage(conn) -> dict[str, tuple[int, float | None]]:
     widening, which is what `horizon_calibration` exists to fix), but only 21
     post-epoch rows carry a `horizonDay` at all. A per-horizon band on n=1..6
     would be noise. Revisit once the typed rows outnumber the untyped ones.
+
+    Native rows only. Transfer rows are Hollywood's model scaled to a store
+    that was warming up; they say nothing about the store's own model. Van
+    Nuys went straight to `ready` from store settings with 67 reconciled
+    transfer rows at 0.552 coverage and no native model at all yet, so Gate 3
+    called a model that does not exist BROKEN (2026-11-16 check).
+    With them out, such a store reads "warming up" until its own model has
+    reconciled _COVERAGE_MIN_SAMPLE days.
     """
     with conn.cursor() as cur:
         cur.execute(
@@ -492,6 +509,7 @@ def _post_epoch_coverage(conn) -> dict[str, tuple[int, float | None]]:
             FROM "ForecastDailyRevenue" f
             JOIN "Store" s ON s.id = f."storeId"
             WHERE f."hourBucket" = 0
+              AND f."forecastSource" = 'native'
               AND f."actualRevenue" IS NOT NULL
               AND f.p10 IS NOT NULL
               AND f.p90 IS NOT NULL

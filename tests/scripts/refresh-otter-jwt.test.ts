@@ -2,7 +2,17 @@ import { describe, expect, it } from "vitest"
 
 import { summarizeLegs } from "@/lib/rotation-health"
 
-import { buildLegSpecs, type OtterLegs } from "../../scripts/refresh-otter-jwt"
+import {
+  buildLegSpecs,
+  jwtFromAuthHeader,
+  jwtFromBody,
+  looksLikeLiveJwt,
+  MIN_TOKEN_LIFETIME_S,
+  rankCandidates,
+  redactUrl,
+  secondsLeft,
+  type OtterLegs,
+} from "../../scripts/refresh-otter-jwt"
 
 /**
  * Which legs a run is allowed to fail. Pinned because these are judgment calls,
@@ -83,5 +93,97 @@ describe("buildLegSpecs", () => {
     for (const label of [".env.local", "Vercel", "GitHub Actions", "Vercel redeploy"]) {
       expect(text).toContain(label)
     }
+  })
+})
+
+/**
+ * Token pickers for the sign-in. Since 2026-11-06 about every other nightly
+ * run landed on Otter's new single sign-on page (iam.cloudkitchens.com),
+ * which never calls the old /api/users/sign_in endpoint the script waited
+ * for. The script now takes a token from wherever one turns up and lets
+ * verifyToken() decide, so these only have to recognise a token's shape.
+ */
+
+const NOW = Date.UTC(2026, 10, 17, 20, 0, 0)
+
+function fakeJwt(expSeconds: number): string {
+  const enc = (o: object) => Buffer.from(JSON.stringify(o)).toString("base64url")
+  return `${enc({ alg: "HS256", typ: "JWT" })}.${enc({ sub: "u1", exp: expSeconds })}.c2lnbmF0dXJl`
+}
+
+const LIVE = fakeJwt(NOW / 1000 + 3600)
+const EXPIRED = fakeJwt(NOW / 1000 - 60)
+
+describe("looksLikeLiveJwt", () => {
+  it("accepts a three-part token whose exp is ahead", () => {
+    expect(looksLikeLiveJwt(LIVE, NOW)).toBe(true)
+  })
+  it("refuses an expired token, a non-token and a non-string", () => {
+    expect(looksLikeLiveJwt(EXPIRED, NOW)).toBe(false)
+    expect(looksLikeLiveJwt("not.a.jwt!", NOW)).toBe(false)
+    expect(looksLikeLiveJwt("abc", NOW)).toBe(false)
+    expect(looksLikeLiveJwt(undefined, NOW)).toBe(false)
+    expect(looksLikeLiveJwt(42, NOW)).toBe(false)
+  })
+  it("refuses a token with no exp", () => {
+    const enc = (o: object) => Buffer.from(JSON.stringify(o)).toString("base64url")
+    expect(looksLikeLiveJwt(`${enc({})}.${enc({ sub: "u" })}.x`, NOW)).toBe(false)
+  })
+})
+
+describe("jwtFromAuthHeader", () => {
+  it("reads a Bearer header, the way the old sign-in answered", () => {
+    expect(jwtFromAuthHeader(`Bearer ${LIVE}`, NOW)).toBe(LIVE)
+    expect(jwtFromAuthHeader(`bearer ${LIVE}`, NOW)).toBe(LIVE)
+  })
+  it("ignores missing, expired and non-token headers", () => {
+    expect(jwtFromAuthHeader(undefined, NOW)).toBeNull()
+    expect(jwtFromAuthHeader(`Bearer ${EXPIRED}`, NOW)).toBeNull()
+    expect(jwtFromAuthHeader("Basic dXNlcjpwYXNz", NOW)).toBeNull()
+  })
+})
+
+describe("jwtFromBody", () => {
+  it("reads accessToken (old sign-in body) and access_token (OAuth token exchange)", () => {
+    expect(jwtFromBody({ accessToken: LIVE }, NOW)).toBe(LIVE)
+    expect(jwtFromBody({ access_token: LIVE, token_type: "Bearer" }, NOW)).toBe(LIVE)
+  })
+  it("ignores bodies without a live token", () => {
+    expect(jwtFromBody(null, NOW)).toBeNull()
+    expect(jwtFromBody([LIVE], NOW)).toBeNull()
+    expect(jwtFromBody({ accessToken: EXPIRED }, NOW)).toBeNull()
+    expect(jwtFromBody({ refresh_token: "opaque" }, NOW)).toBeNull()
+  })
+})
+
+describe("redactUrl", () => {
+  it("keeps host and path, drops one-time codes in the query", () => {
+    expect(
+      redactUrl("https://iam.cloudkitchens.com/login/?splash=generic&oauth2_authorize_request_id=abc"),
+    ).toBe("iam.cloudkitchens.com/login/")
+    expect(redactUrl("https://manager.tryotter.com/callback?code=secret#x")).toBe(
+      "manager.tryotter.com/callback",
+    )
+  })
+  it("never throws on junk", () => {
+    expect(redactUrl("not a url")).toBe("(unparseable url)")
+  })
+})
+
+describe("rankCandidates", () => {
+  const DAY = fakeJwt(NOW / 1000 + 24 * 3600)
+  const TWO_DAYS = fakeJwt(NOW / 1000 + 48 * 3600)
+  const ONE_HOUR = fakeJwt(NOW / 1000 + 3600)
+
+  it("drops tokens that would die before the next nightly run", () => {
+    expect(rankCandidates([ONE_HOUR], NOW)).toEqual([])
+    expect(MIN_TOKEN_LIFETIME_S).toBeGreaterThanOrEqual(12 * 3600)
+  })
+  it("tries the longest-lived token first", () => {
+    expect(rankCandidates([ONE_HOUR, DAY, TWO_DAYS], NOW)).toEqual([TWO_DAYS, DAY])
+  })
+  it("reads the time left from exp", () => {
+    expect(secondsLeft(DAY, NOW)).toBe(24 * 3600)
+    expect(secondsLeft("junk", NOW)).toBeNull()
   })
 })

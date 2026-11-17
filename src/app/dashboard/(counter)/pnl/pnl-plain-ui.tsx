@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { Fragment, useState } from "react"
+import { Fragment, useState, type CSSProperties } from "react"
 import { useSurfaceHref } from "@/components/counter"
 import { money, pct } from "@/lib/counter/format"
 import { isoDay, readWeekWindow, type DateRange, type SerializedWeekWindow } from "@/lib/counter/date-range"
@@ -223,7 +223,7 @@ export function PlainDays({ days, showStores }: { days: PlainDay[]; showStores: 
       {days.length <= 14 ? (
         <div
           className="pl-dchart"
-          style={{ ["--pl-n" as string]: days.length }}
+          style={{ "--pl-n": days.length } as CSSProperties}
           role="img"
           aria-label={days.map((d) => `${d.label} kept ${money(d.kept)}`).join(", ")}
         >

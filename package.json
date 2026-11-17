@@ -30,6 +30,7 @@
     "tokens": "tsx scripts/counter-lint.ts",
     "typecheck": "tsc --noEmit",
     "typecheck:scripts": "tsc --noEmit -p tsconfig.scripts.json",
+    "lint:hooks": "eslint src --max-warnings 60",
     "test": "vitest run",
     "shot": "tsx scripts/shot-page.ts",
     "e2e": "playwright test",
@@ -53,7 +54,7 @@
     "bcryptjs": "^3.0.3",
     "date-fns": "^4.4.0",
     "lucide-react": "^1.33.0",
-    "next": "^16.3.2",
+    "next": "^16.4.6",
     "next-auth": "^4.24.15",
     "openai": "^6.49.0",
     "prisma": "^7.9.1",
@@ -66,7 +67,10 @@
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.13.0",
-    "@next/bundle-analyzer": "^16.3.2",
+    "@babel/core": "^7.29.13",
+    "@babel/eslint-parser": "^7.29.13",
+    "@babel/preset-typescript": "^7.29.7",
+    "@next/bundle-analyzer": "^16.4.6",
     "@playwright/test": "^1.62.1",
     "@tailwindcss/postcss": "^4.3.3",
     "@testing-library/dom": "^10.4.1",
@@ -81,6 +85,8 @@
     "@types/react-dom": "^19.2.5",
     "babel-plugin-react-compiler": "^1.0.0",
     "culori": "^4.0.2",
+    "eslint": "^9.39.5",
+    "eslint-plugin-react-hooks": "^7.1.1",
     "husky": "^9.1.7",
     "jsdom": "^29.1.1",
     "libsodium-wrappers": "^0.8.4",
@@ -97,9 +103,14 @@
     "express-rate-limit": "8.6.2",
     "lodash": "4.18.1",
     "minimatch": "9.0.9",
+    "mysql2": "3.24.6",
     "path-to-regexp": "8.4.2",
     "postcss": "8.5.26",
-    "protobufjs": "7.6.5"
+    "protobufjs": "7.6.5",
+    "vite": "8.2.2",
+    "eslint": {
+      "minimatch": "10.2.5"
+    }
   },
   "browserslist": [
     "chrome >= 123",

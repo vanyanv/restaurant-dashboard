@@ -1,5 +1,11 @@
 import { PrismaClient } from '@/generated/prisma/client'
 import { PrismaPg } from '@prisma/adapter-pg'
+import { after } from 'next/server'
+import {
+  bumpClosedGeneration,
+  inScopedWrites,
+  isFigureWrite,
+} from '@/lib/cache/closed-range'
 
 const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined
@@ -98,7 +104,40 @@ const withTrace = (client: PrismaClient): PrismaClient => {
   }) as unknown as PrismaClient
 }
 
-export const prisma = globalForPrisma.prisma ?? withTrace(createPrismaClient())
+/**
+ * Drops saved past-day figures when their data changes. See
+ * `@/lib/cache/closed-range` for the scheme; this is the half that notices
+ * writes.
+ *
+ * After a successful write to a figure model, bump the generation now, and
+ * again once the request has finished (`after`). The second bump covers an
+ * interactive transaction: the first fires before COMMIT, so a reader in that
+ * window could save the old rows under the new generation. Outside a request
+ * (a script) `after` throws and only the first bump happens.
+ *
+ * Writers inside `withScopedWrites` skip this; they bump once at the end if
+ * they touched a closed day.
+ */
+const withClosedRangeBust = (client: PrismaClient): PrismaClient =>
+  client.$extends({
+    query: {
+      async $allOperations({ model, operation, args, query }) {
+        const result = await query(args)
+        if (isFigureWrite(model, operation) && !inScopedWrites()) {
+          await bumpClosedGeneration()
+          try {
+            after(bumpClosedGeneration)
+          } catch {
+            // Not inside a request.
+          }
+        }
+        return result
+      },
+    },
+  }) as unknown as PrismaClient
+
+export const prisma =
+  globalForPrisma.prisma ?? withTrace(withClosedRangeBust(createPrismaClient()))
 
 if (process.env.NODE_ENV !== 'production') {
   globalForPrisma.prisma = prisma

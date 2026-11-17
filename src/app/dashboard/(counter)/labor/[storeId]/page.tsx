@@ -6,6 +6,7 @@ import { getStoreLaborSectionPromises } from "@/lib/counter/adapters/labor"
 import { getOverviewStores } from "@/lib/counter/adapters/overview"
 import { CounterStoreLaborClient } from "./counter-store-labor-client"
 import { counterToday } from "@/lib/counter/today"
+import { chooseSections } from "@/lib/counter/adapters/types"
 
 /**
  * Counter Labor for ONE store — the sibling of `../page.tsx`, composed from
@@ -119,18 +120,20 @@ export default async function StoreLaborPage({
   // `LaborSectionsInput` has no such field. Nothing on this page is drawn
   // against a comparison window, which is why the subtitle in the island does
   // not name one either.
-  const sections = getStoreLaborSectionPromises({
-    range: counterParams.range,
-    // The PATH's store, never `counterParams.storeId` — the query string has
-    // already been reconciled above.
-    storeId,
-    accountId: session.user.accountId,
-    // The same `today` the params reader and the island get. No section on
-    // THIS route reads it (the week strip's `is-today` belongs to the group
-    // page), but `LaborSectionsInput` requires it and one clock resolved in
-    // one place is the rule that keeps it that way.
-    today,
-  })
+  const sections = chooseSections(
+    getStoreLaborSectionPromises({
+      range: counterParams.range,
+      // The PATH's store, never `counterParams.storeId` — the query string has
+      // already been reconciled above.
+      storeId,
+      accountId: session.user.accountId,
+      // The same `today` the params reader and the island get. No section on
+      // THIS route reads it (the week strip's `is-today` belongs to the group
+      // page), but `LaborSectionsInput` requires it and one clock resolved in
+      // one place is the rule that keeps it that way.
+      today,
+    }),
+  )
 
   const stores = await storesP
   if (!stores.some((s) => s.id === storeId)) notFound()

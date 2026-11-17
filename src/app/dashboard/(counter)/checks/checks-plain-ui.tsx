@@ -1,7 +1,6 @@
 "use client"
 
-import { useEffect, useState, useTransition, type ReactNode } from "react"
-import { useRouter } from "next/navigation"
+import { useEffect, useState, useTransition, type ReactNode, useEffectEvent } from "react"
 import { reviewCheckPhoto } from "@/lib/counter/actions/checks"
 import type { CellView } from "@/lib/counter/adapters/checks"
 import { Glyph, Lightbox, markPhotoSrc, OutcomeLine, photoSrc, type Outcome } from "./checks-ui"
@@ -140,7 +139,6 @@ export function PhotoReview({ cell, caption }: { cell: CellView; caption: string
 }
 
 function PhotoCard({ p, onOpen, onReviewed }: { p: CellView["markPhotos"][number]; onOpen: () => void; onReviewed?: () => void }) {
-  const router = useRouter()
   const [busy, start] = useTransition()
   const [asking, setAsking] = useState(false)
   const [note, setNote] = useState("")
@@ -151,15 +149,13 @@ function PhotoCard({ p, onOpen, onReviewed }: { p: CellView["markPhotos"][number
       setOutcome(r.ok ? { ok: true, text: r.message ?? "Saved." } : { ok: false, text: r.error })
       if (r.ok) {
         setAsking(false)
-        router.refresh()
         onReviewed?.()
       }
     })
   return (
     <figure className={`ck-prv__card${p.review === "redo" ? " is-redo" : ""}`}>
       <button type="button" className="ck-prv__img" onClick={onOpen} aria-label={`Open ${p.task} photo`}>
-        {/* eslint-disable-next-line @next/next/no-img-element -- private, session-gated image route */}
-        <img src={markPhotoSrc(p.id)} alt="" loading="lazy" />
+        <img src={markPhotoSrc(p.id, "thumb")} alt="" loading="lazy" />
       </button>
       <figcaption>
         <b>{p.task}</b>
@@ -261,8 +257,7 @@ export function CheckDetail({
             </span>
             {l.photo ? (
               <button type="button" style={{ padding: 0, border: 0, background: "none", cursor: "zoom-in" }} onClick={() => setOpen({ id: l.id, section: l.text, mark: true })} aria-label={`Open ${l.text} photo`}>
-                {/* eslint-disable-next-line @next/next/no-img-element -- private, session-gated image route */}
-                <img src={markPhotoSrc(l.id)} alt="" loading="lazy" />
+                <img src={markPhotoSrc(l.id, "thumb")} alt="" loading="lazy" />
               </button>
             ) : (
               <span />
@@ -277,8 +272,7 @@ export function CheckDetail({
     <div className="ck-big">
       {cell.photos.map((p) => (
         <button key={p.id} type="button" onClick={() => setOpen({ id: p.id, section: p.section, mark: false })} aria-label={`Open ${p.section} photo`}>
-          {/* eslint-disable-next-line @next/next/no-img-element -- private, session-gated image route */}
-          <img src={photoSrc(p.id)} alt="" loading="lazy" />
+          <img src={photoSrc(p.id, "thumb")} alt="" loading="lazy" />
           <span className="ck-mono">{p.section}</span>
         </button>
       ))}
@@ -412,7 +406,6 @@ function wideSentence(cell: CellView): string {
  * whether a check has three photos or fifteen.
  */
 export function PhotoViewer({ cell, caption }: { cell: CellView; caption: string }) {
-  const router = useRouter()
   const photos = cell.markPhotos
   const [at, setAt] = useState(() => Math.max(0, photos.findIndex((p) => p.review === null)))
   const [open, setOpen] = useState(false)
@@ -448,7 +441,6 @@ export function PhotoViewer({ cell, caption }: { cell: CellView; caption: string
         }
       }
       setOutcome(failed ? { ok: false, text: failed } : { ok: true, text: `${todo.length} marked as looking good.` })
-      router.refresh()
     })
 
   return (
@@ -484,8 +476,7 @@ export function PhotoViewer({ cell, caption }: { cell: CellView; caption: string
                 aria-label={`${x.task}${x.review === "ok" ? ", looks good" : x.review === "redo" ? ", sent back" : ""}`}
                 onClick={() => setAt(j)}
               >
-                {/* eslint-disable-next-line @next/next/no-img-element -- private, session-gated image route */}
-                <img src={markPhotoSrc(x.id)} alt="" loading="lazy" />
+                <img src={markPhotoSrc(x.id, "thumb")} alt="" loading="lazy" />
               </button>
             ))}
           </div>
@@ -539,12 +530,15 @@ function taskCount(n: number): string {
  * instead of leaving the page.
  */
 export function PhoneView({ title, onBack, children }: { title: string; onBack: () => void; children: ReactNode }) {
+  // onBack changes identity on every render; an effect event reads the latest
+  // one without reopening the view.
+  const back = useEffectEvent(onBack)
   useEffect(() => {
     const prev = document.body.style.overflow
     document.body.style.overflow = "hidden"
     // A history entry of its own, so the system back closes the view.
     window.history.pushState({ ckView: true }, "")
-    const onPop = () => onBack()
+    const onPop = () => back()
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") window.history.back()
     }
@@ -555,8 +549,7 @@ export function PhoneView({ title, onBack, children }: { title: string; onBack: 
       window.removeEventListener("popstate", onPop)
       window.removeEventListener("keydown", onKey)
     }
-    // Opened once per view; onBack changes identity on every render.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // Opened once per view.
   }, [])
   return (
     <div className="ckp-view" role="dialog" aria-modal="true" aria-label={title}>

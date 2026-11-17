@@ -79,16 +79,7 @@ export function CounterInvoicesClient({
         <Section
           title="Needs you"
           fold="closed"
-          meta={(w) =>
-            [
-              w.needs.length > 0
-                ? `${plural(w.needs.length, "invoice")} · ${w.needsTotal}`
-                : null,
-              w.unlinked ? `${plural(w.unlinked.lines, "line")} to link` : null,
-            ]
-              .filter(Boolean)
-              .join(" · ") || "nothing waiting"
-          }
+          meta={needsMeta}
           data={sections.week}
           pending={pending}
           pad={false}
@@ -170,6 +161,18 @@ export function CounterInvoicesClient({
       </div>
     </>
   );
+}
+
+/**
+ * The "Needs you" fold's one-line count. A plain function rather than an
+ * inline `meta` arrow: React Compiler could not compile a ternary inside the
+ * `|| "nothing waiting"` fallback and skipped the whole page because of it.
+ */
+function needsMeta(w: InvoiceWeek): string {
+  const parts: string[] = []
+  if (w.needs.length > 0) parts.push(`${plural(w.needs.length, "invoice")} · ${w.needsTotal}`)
+  if (w.unlinked) parts.push(`${plural(w.unlinked.lines, "line")} to link`)
+  return parts.length > 0 ? parts.join(" · ") : "nothing waiting"
 }
 
 function plural(n: number, word: string) {

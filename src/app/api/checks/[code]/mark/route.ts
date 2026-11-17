@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { rateLimit } from "@/lib/rate-limit"
-import { isProductPhotoContentType, putCheckPhoto } from "@/lib/blob"
+import { isProductPhotoContentType, putCheckPhoto, putCheckPhotoThumb } from "@/lib/blob"
 import { findStoreByCode, loadCrewView } from "@/lib/checks/crew"
 import { crewFromPass, markDecision } from "@/lib/checks/marks"
 import { dayToDb } from "@/lib/checks/time"
-import { looksLikeImage, MAX_PHOTO_BYTES } from "@/lib/checks/photo"
+import { looksLikeImage, MAX_PHOTO_BYTES, MAX_THUMB_BYTES } from "@/lib/checks/photo"
 
 /**
  * One tick, untick or note on the shared form, saved the moment crew tap.
@@ -20,6 +20,8 @@ export const maxDuration = 30
 /** A crew of four ticking fast on one store Wi-Fi stays well under this. */
 const MARK_LIMIT = { limit: 120, windowMs: 60_000, identifyBy: "ip" as const }
 const MAX_NOTE = 200
+/** The optional small copy never holds up saving the tick for longer than this. */
+const THUMB_WAIT_MS = 3_000
 
 export async function POST(request: NextRequest, { params }: { params: Promise<{ code: string }> }) {
   const limited = await rateLimit(request, MARK_LIMIT)
@@ -94,6 +96,21 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       photo = { key: up.pathname, type: file.type, size: up.size }
     } catch {
       return NextResponse.json({ error: "The photo didn't upload. Try again." }, { status: 502 })
+    }
+    // The phone's small copy, for the owner's thumbnails. Optional: a phone
+    // that could not make one, or a failed save, only means the owner's page
+    // loads the full photo for this task, as it did before small copies.
+    const thumb = form.get("thumb")
+    if (thumb instanceof File && thumb.size > 0 && thumb.size <= MAX_THUMB_BYTES) {
+      const bytes = new Uint8Array(await thumb.arrayBuffer())
+      if (bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) {
+        // Never holds the tick up for long: past the wait the upload carries
+        // on, and the owner's page falls back to the full photo meanwhile.
+        await Promise.race([
+          putCheckPhotoThumb(photo.key, Buffer.from(bytes)).catch(() => {}),
+          new Promise<void>((resolve) => setTimeout(resolve, THUMB_WAIT_MS)),
+        ])
+      }
     }
   }
 

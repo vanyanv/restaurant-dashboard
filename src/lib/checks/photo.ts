@@ -9,3 +9,12 @@ export function looksLikeImage(head: Uint8Array): boolean {
   const at = (i: number, ...b: number[]) => b.every((v, j) => head[i + j] === v)
   return at(0, 0xff, 0xd8, 0xff) || at(0, 0x89, 0x50, 0x4e, 0x47) || (at(0, 0x52, 0x49, 0x46, 0x46) && at(8, 0x57, 0x45, 0x42, 0x50))
 }
+
+/** The phone's small copy: 640 px JPEG, 30 to 60 KB. Anything over this is not one. */
+export const MAX_THUMB_BYTES = 200 * 1024
+
+/**
+ * A check photo never changes under its id (a retake is a new mark), so the
+ * browser may keep it a week and never ask again.
+ */
+export const PHOTO_CACHE_CONTROL = "private, max-age=604800, immutable"

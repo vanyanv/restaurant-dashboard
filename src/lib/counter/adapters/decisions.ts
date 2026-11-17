@@ -1,3 +1,5 @@
+import { ymdUTC } from "@/lib/date-utils"
+import { businessQueryDate } from "@/lib/counter/business-date"
 import {
   getDecisionsView,
   type DecisionAction,
@@ -26,6 +28,7 @@ import {
   awaitSections,
   classify,
   guardSection,
+  lazy,
   type StreamedSections,
 } from "@/lib/counter/adapters/types"
 import type { ReadingSegment, StripCell } from "@/lib/counter/adapters/pnl"
@@ -1619,6 +1622,14 @@ function deadlineWords(a: DecisionAction): string {
 /* ── The entry points ─────────────────────────────────────────────────── */
 
 /**
+ * The sections the phone page shows. The phone page passes
+ * `chooseSections(sections, PHONE_DECISIONS_SECTIONS)` to its client, so the loads only the
+ * desk reads never run on a phone.
+ */
+export const PHONE_DECISIONS_SECTIONS = ["head", "week", "phoneQueue", "phoneRunOut"] as const satisfies ReadonlyArray<keyof DecisionsSections>
+export type PhoneDecisionsSections = Pick<DecisionsSections, (typeof PHONE_DECISIONS_SECTIONS)[number]>
+
+/**
  * The Needs-you page's ten sections, as ten promises over ONE load — plus a
  * second, dependent load for the half of the week that has already closed.
  *
@@ -1638,14 +1649,14 @@ export function getDecisionsSectionPromises(
   // that answers `{ ok: false }` is a FAILED section and not an empty one:
   // `empty` would tell the reader there is nothing to decide this week, and
   // there may be plenty — we could not load it.
-  const viewP: Promise<SectionData<DecisionsView>> = classify(
+  const viewP: Promise<SectionData<DecisionsView>> = lazy(() => classify(
     async () => {
       const res = await getDecisionsView({ storeId: input.storeId })
       if (!res.ok) throw new Error(loadError(res.error))
       return res.data
     },
     { retryAction: "retryDecisions" },
-  )
+  ))
 
   const on = <T,>(f: (view: DecisionsView) => SectionData<T>): Promise<SectionData<T>> =>
     guardSection(
@@ -1685,12 +1696,12 @@ export function getDecisionsSectionPromises(
    * picker with the forward days alone — exactly what it drew before this
    * ruling. A settled query that broke must not take the week down with it.
    */
-  const settledP: Promise<SettledDay[]> = viewP
+  const settledP: Promise<SettledDay[]> = lazy(() => viewP
     .then((sd) => {
       const view = dataOf(sd)
       return view === null ? [] : loadSettledDays(view, input.storeId, input.accountId)
     })
-    .catch(() => [])
+    .catch(() => []))
 
   /*
    * Which model called each day, and whether reconciliation has been over it.
@@ -1700,14 +1711,14 @@ export function getDecisionsSectionPromises(
    * missing provenance row costs the panel a `MODEL not recorded` caption, and
    * must never cost it the panel.
    */
-  const provenanceP: Promise<Map<string, DayProvenance>> = viewP
+  const provenanceP: Promise<Map<string, DayProvenance>> = lazy(() => viewP
     .then((sd) => {
       const view = dataOf(sd)
       return view === null
         ? new Map<string, DayProvenance>()
         : loadWeekProvenance(view, input.storeId, input.accountId)
     })
-    .catch(() => new Map<string, DayProvenance>())
+    .catch(() => new Map<string, DayProvenance>()))
 
   /*
    * The shelf against the week. Its OWN load, in parallel with the view rather
@@ -1721,20 +1732,35 @@ export function getDecisionsSectionPromises(
    * forward, which `no_counts` says and tells the reader how to fix; a table
    * of nothing under a heading would say the week is safe.
    */
-  const runOutP: Promise<SectionData<RunOut>> = viewP.then(async (sd) => {
-    const view = dataOf(sd)
-    if (view === null) return mapReady(sd, () => undefined as never)
-    const asOf = parseDayKey(view.asOf) ?? new Date()
+  // Started NOW rather than after the view: `view.asOf` is
+  // `ymd(businessQueryDate(now))` (get-decisions-view.ts), so the same day is
+  // worked out here and the run-out reads run alongside the view's ~50
+  // queries instead of after them. The section still waits for the view, so a
+  // failed view fails this section exactly as before.
+  const runOutAsOf = parseDayKey(ymdUTC(businessQueryDate(new Date()))) ?? new Date()
+  const runOutLoad = lazy(() => (async () => {
     const resolved = await resolveStoreContext(input.storeId, input.accountId)
-    if (!resolved.ok) {
-      return notComputed<RunOut>("Pick a store to see what runs out.")
-    }
-    const runOut = await loadRunOut({
+    if (!resolved.ok) return null
+    return loadRunOut({
       accountId: input.accountId,
       storeIds: resolved.ctx.storeIds,
-      asOf,
+      asOf: runOutAsOf,
     })
+  })())
+  const runOutP: Promise<SectionData<RunOut>> = lazy(() => {
+    // Start the run-out reads alongside the view, not after it. The catch
+    // only keeps an early rejection from being reported as unhandled while
+    // the view is still loading; it is awaited below.
+    runOutLoad.catch(() => {})
+    return viewP.then(async (sd) => {
+    const view = dataOf(sd)
+    if (view === null) return mapReady(sd, () => undefined as never)
+    const runOut = await runOutLoad
+    if (runOut === null) {
+      return notComputed<RunOut>("Pick a store to see what runs out.")
+    }
     return runOut.rows.length === 0 ? empty<RunOut>("no_counts") : ready(runOut)
+  })
   })
 
   /** The two sections that read the settled half as well as the view. */
@@ -1773,8 +1799,8 @@ export function getDecisionsSectionPromises(
   ): Promise<SectionData<T>> => withWeek((view, settled) => f(view, buildDecisionsWeek(view, settled)))
 
   return {
-    head: withWeekDays((view, week) => ready(buildDecisionsHead(view, week))),
-    strip: withWeekDays((view, week) => ready(buildDecisionsStrip(view, week))),
+    head: lazy(() => withWeekDays((view, week) => ready(buildDecisionsHead(view, week)))),
+    strip: lazy(() => withWeekDays((view, week) => ready(buildDecisionsStrip(view, week)))),
     /*
      * The briefing, and the two ways it can be empty.
      *
@@ -1786,19 +1812,19 @@ export function getDecisionsSectionPromises(
      * everywhere else. Whether there WAS a line is the same fact the headline
      * now needs, and `fromBriefing` carries it.
      */
-    briefing: simple((view) => buildDecisionsBriefing(view), (view, lines) =>
+    briefing: lazy(() => simple((view) => buildDecisionsBriefing(view), (view, lines) =>
       lines.length > 0 ? null : view.verdict.fromBriefing ? "verdict_carried_it" : "all_clear",
-    ),
+    )),
 
     // Monday to Sunday, forecast against actual — not the forward window.
     // The same series the headline and the strip sum, one function above.
-    week: withWeek((view, settled) => ready(buildDecisionsWeek(view, settled))),
+    week: lazy(() => withWeek((view, settled) => ready(buildDecisionsWeek(view, settled)))),
 
     // The one section that can be asked about a day the week does not have.
     // A week with no days at all is owed work rather than a failure — the
     // forecast has not been written for this store yet, which is a real state
     // for a store that has not opened.
-    day: guardSection(
+    day: lazy(() => guardSection(
       Promise.all([viewP, settledP, provenanceP]).then(([sd, settled, prov]) => {
         if (sd.status !== "ready" && sd.status !== "stale") {
           return mapReady(sd, () => undefined as never)
@@ -1818,18 +1844,18 @@ export function getDecisionsSectionPromises(
         )
       }),
       "retryDecisions",
-    ),
+    )),
 
-    accuracy: on<Accuracy>(buildAccuracy),
+    accuracy: lazy(() => on<Accuracy>(buildAccuracy)),
 
     // N-R5: ready-and-empty, never `empty()`. `DecisionLog` holds zero rows in
     // production and `simple` classifies an empty array as READY, because
     // `classify`'s `isEmpty` is not passed — deliberately, and this comment is
     // the reason it never should be.
-    ledger: simple((view) => buildLedger(view.decisions)),
+    ledger: lazy(() => simple((view) => buildLedger(view.decisions))),
 
     // N-R6: three of the loader's five, and the cap said out loud beside them.
-    queue: simple(buildQueueSection),
+    queue: lazy(() => simple(buildQueueSection)),
 
     /*
      * The shelf against the week. Its OWN load, in parallel with the view
@@ -1842,18 +1868,18 @@ export function getDecisionsSectionPromises(
      * than as a failure: an account with no completed stock count has nothing
      * to run out OF, and that is a true answer, not a broken query.
      */
-    runOut: guardSection(runOutP, "retryDecisions"),
+    runOut: lazy(() => guardSection(runOutP, "retryDecisions")),
 
     // The urgent half of the same object. ONE load, two shapes — see
     // `buildPhoneRunOut`.
-    phoneRunOut: guardSection(
+    phoneRunOut: lazy(() => guardSection(
       runOutP.then((sd) => mapReadyTo(sd, (r) => ready(buildPhoneRunOut(r)))),
       "retryDecisions",
-    ),
+    )),
 
     // N-R16: the same three, as the phone's rows. Built from the desk's own
     // section, so one figure has one presentation.
-    phoneQueue: simple((view) => buildPhoneQueue(buildQueueSection(view))),
+    phoneQueue: lazy(() => simple((view) => buildPhoneQueue(buildQueueSection(view)))),
   }
 }
 
