@@ -6,7 +6,7 @@ export type NeedsYouGroup = {
   what: ReactNode
   /** One line of why or how much. */
   why?: ReactNode
-  /** The one fix button for the whole group. */
+  /** The fix: a Button, or a ButtonRow. */
   action?: ReactNode
 }
 
@@ -17,35 +17,74 @@ export type NeedsYouGroup = {
  * Shared block: replaces `.queue` (desk), `.mlist` (phone), `.pl-todos`,
  * `.iv-tasks`, `.iv-needs`, `.mi-needs`, `.pp-needs` and `.sh-queue`.
  * Renders nothing when there are no groups.
+ *
+ * A page whose Needs you already sits in a folding `Section` uses the parts
+ * instead: `NeedsYouList` and `NeedsYouItem`, which draw the same rows with
+ * no fold of their own.
  */
 export function NeedsYou({
   groups,
   defaultOpen = false,
-  title = "need you",
 }: {
   groups: NeedsYouGroup[]
   defaultOpen?: boolean
-  /** Words after the count: "3 things need you". */
-  title?: string
 }) {
   if (groups.length === 0) return null
-  const noun = groups.length === 1 ? "thing" : "things"
-  const verb = title === "need you" && groups.length === 1 ? "needs you" : title
+  const words = groups.length === 1 ? "thing needs you" : "things need you"
   return (
     <details className="cu-card cu-needs" open={defaultOpen}>
       <summary>
         <span>
           <span className="cu-needs__n">{groups.length}</span>
-          {noun} {verb}
+          {words}
         </span>
       </summary>
-      {groups.map((g) => (
-        <div className="cu-needs__g" key={g.key}>
-          <span className="cu-needs__what">{g.what}</span>
-          {g.why ? <span className="cu-needs__why">{g.why}</span> : null}
-          {g.action ? <span className="cu-needs__act">{g.action}</span> : null}
-        </div>
-      ))}
+      <NeedsYouList>
+        {groups.map((g) => (
+          <NeedsYouItem key={g.key} what={g.what} why={g.why}>
+            {g.action}
+          </NeedsYouItem>
+        ))}
+      </NeedsYouList>
     </details>
+  )
+}
+
+/** The rows of a Needs you list. `numbered` puts 1, 2, 3 beside them. */
+export function NeedsYouList({ children, numbered }: { children: ReactNode; numbered?: boolean }) {
+  return <ol className={`cu-needs__list${numbered ? " cu-needs__list--n" : ""}`}>{children}</ol>
+}
+
+/**
+ * One row: what, why, and the fix underneath (desk: beside it when it is a
+ * single button). `bad` marks a row that is wrong rather than waiting.
+ */
+export function NeedsYouItem({
+  what,
+  why,
+  bad,
+  children,
+}: {
+  what: ReactNode
+  why?: ReactNode
+  bad?: boolean
+  children?: ReactNode
+}) {
+  return (
+    <li className={`cu-needs__g${bad ? " cu-needs__g--bad" : ""}`}>
+      <span className="cu-needs__what">{what}</span>
+      {why ? <div className="cu-needs__why">{why}</div> : null}
+      {children ? <div className="cu-needs__act">{children}</div> : null}
+    </li>
+  )
+}
+
+/** The line a fix leaves behind: "✓ Saved to Glendale" or what went wrong. */
+export function Notice({ tone, children }: { tone: "good" | "bad"; children: ReactNode }) {
+  return (
+    <span className={`cu-notice cu-notice--${tone}`} role={tone === "bad" ? "alert" : "status"}>
+      {tone === "good" ? "✓ " : null}
+      {children}
+    </span>
   )
 }

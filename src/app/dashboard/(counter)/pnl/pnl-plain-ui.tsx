@@ -1,8 +1,20 @@
 "use client"
 
-import Link from "next/link"
 import { Fragment, useState, type CSSProperties } from "react"
 import { useSurfaceHref } from "@/components/counter"
+import {
+  Answer,
+  BigNumber,
+  ButtonLink,
+  Card,
+  NeedsYouItem,
+  NeedsYouList,
+  Status,
+  Statuses,
+  StoreCard,
+  StoreCardGrid,
+  type StatusTone,
+} from "@/components/counter/ui"
 import { money, pct } from "@/lib/counter/format"
 import { isoDay, readWeekWindow, type DateRange, type SerializedWeekWindow } from "@/lib/counter/date-range"
 import type { PlainDay, PlainLine, PlainTone, PnlPlain } from "@/lib/counter/pnl-plain"
@@ -18,6 +30,8 @@ import type { PlainDay, PlainLine, PlainTone, PnlPlain } from "@/lib/counter/pnl
  */
 
 const toneClass = (t: PlainTone) => (t === "ok" ? "" : `is-${t}`)
+
+const STATUS_TONE: Record<PlainTone, StatusTone> = { ok: "good", warn: "warn", bad: "bad" }
 
 /** "12¢" */
 const cents = (v: number | null) => (v === null ? "—" : `${Math.round(v * 100)}¢`)
@@ -45,43 +59,31 @@ export function PlainHero({
   const v = p.vsPrior
   return (
     <div className="pl-hero">
-      <div className="pl-card pl-kept">
-        <span className="pl-cap">Kept after every cost</span>
-        <div className="pl-big">
-          {p.sales > 0 ? (
-            <>
-              {p.atMost ? "≤ " : ""}
-              {money(p.kept)}
-              <small>{pct(p.keptPct)} of sales</small>
-            </>
-          ) : (
-            "No sales"
-          )}
-        </div>
-        {p.atMost ? <span className="pl-atmost">{p.atMost}</span> : null}
-        <div className="pl-delta">
-          {v ? (
-            <>
-              <span>
-                vs {v.label}:{" "}
-                <b className={v.kept >= 0 ? "pl-up" : "pl-down"}>
-                  {v.kept >= 0 ? "▲ " : "▼ "}
-                  {signed(v.kept)}
-                </b>
-              </span>
-              {v.pts !== null ? (
-                <span>
-                  <b className={v.pts >= 0 ? "pl-up" : "pl-down"}>{pts(v.pts)}</b> of sales
-                </span>
-              ) : null}
-              <span>sales {signed(v.sales)}</span>
-            </>
-          ) : (
-            <span>no earlier period to compare</span>
-          )}
-        </div>
-        {p.sentence ? <p className="pl-lead">{p.sentence}</p> : null}
-      </div>
+      <Card>
+        <BigNumber
+          label="Kept after every cost"
+          value={p.sales > 0 ? money(p.kept) : "No sales"}
+          atMost={p.sales > 0 && Boolean(p.atMost)}
+          sub={p.sales > 0 ? `${pct(p.keptPct)} of sales` : undefined}
+          missing={p.atMost ?? undefined}
+          vs={
+            v
+              ? [
+                  {
+                    change: `${v.kept >= 0 ? "▲ " : "▼ "}${signed(v.kept)}`,
+                    tone: v.kept >= 0 ? "up" : "down",
+                    against: `vs ${v.label}`,
+                  },
+                  ...(v.pts !== null
+                    ? [{ change: pts(v.pts), tone: v.pts >= 0 ? ("up" as const) : ("down" as const), against: "of sales" }]
+                    : []),
+                  { change: "", tone: "flat" as const, against: `sales ${signed(v.sales)}` },
+                ]
+              : { change: "", tone: "flat", against: "no earlier period to compare" }
+          }
+        />
+        {p.sentence ? <Answer>{p.sentence}</Answer> : null}
+      </Card>
 
       {p.weeks.length > 0 ? (
         <div className="pl-card pl-weeks">
@@ -130,13 +132,13 @@ export function PlainHero({
 
 export function PlainStatuses({ p }: { p: PnlPlain }) {
   return (
-    <div className="pl-pills">
+    <Statuses>
       {p.statuses.map((s) => (
-        <span key={s.text} className={`pl-pill ${toneClass(s.tone)}`}>
+        <Status key={s.text} tone={STATUS_TONE[s.tone]}>
           {s.text}
-        </span>
+        </Status>
       ))}
-    </div>
+    </Statuses>
   )
 }
 
@@ -147,21 +149,24 @@ export function PlainTodos({ p }: { p: PnlPlain }) {
     return <p className="pl-nodays">Every input behind this number is on file.</p>
   }
   return (
-    <ul className="pl-todos">
+    <NeedsYouList>
       {p.todos.map((t) => (
-        <li key={t.title} className={`pl-todo is-${t.tone}`}>
-          <span className="pl-todo__t">{t.title}</span>
-          <ul>
-            {t.items.map((i) => (
-              <li key={i}>{i}</li>
-            ))}
-          </ul>
-          <Link className="btn" href={href(t.action.href)}>
-            {t.action.label}
-          </Link>
-        </li>
+        <NeedsYouItem
+          key={t.title}
+          bad={t.tone === "bad"}
+          what={t.title}
+          why={
+            <ul>
+              {t.items.map((i) => (
+                <li key={i}>{i}</li>
+              ))}
+            </ul>
+          }
+        >
+          <ButtonLink href={href(t.action.href)}>{t.action.label}</ButtonLink>
+        </NeedsYouItem>
       ))}
-    </ul>
+    </NeedsYouList>
   )
 }
 
@@ -355,40 +360,61 @@ function DayDetail({ d, showStores }: { d: PlainDay; showStores: boolean }) {
 /** One card per store; pressing one scopes the page to it. */
 export function PlainStores({ p, onStore }: { p: PnlPlain; onStore: (storeId: string) => void }) {
   return (
-    <div className="pl-stores">
+    <StoreCardGrid>
       {p.stores.map((s) => (
-        <button key={s.storeId} type="button" className="pl-store" onClick={() => onStore(s.storeId)}>
-          <span className="pl-store__nm">{s.name}</span>
-          {s.sales > 0 ? (
-            <>
-              <span className="pl-store__big">
-                {s.atMost ? "≤ " : ""}
-                {money(s.kept)}
-              </span>
-              <span className="pl-store__sub">
-                {pct(s.keptPct)} of {money(s.sales)}
+        <StoreCard
+          key={s.storeId}
+          name={s.name}
+          onClick={() => onStore(s.storeId)}
+          status={
+            s.flags.length > 0
+              ? { tone: "warn", label: "Inputs missing" }
+              : { tone: "good", label: "Every input on file" }
+          }
+          figures={
+            s.sales > 0
+              ? [
+                  { label: "Kept", value: `${s.atMost ? "≤ " : ""}${money(s.kept)}` },
+                  { label: "Of sales", value: pct(s.keptPct) },
+                ]
+              : []
+          }
+          note={
+            s.sales > 0 ? (
+              <>
+                {money(s.sales)} sales
                 {s.keptChange !== null ? (
                   <>
                     {" · "}
-                    <span className={s.keptChange >= 0 ? "pl-up" : "pl-down"}>{signed(s.keptChange)}</span> vs
-                    before
+                    <span className={s.keptChange >= 0 ? "cu-vs cu-vs--up" : "cu-vs cu-vs--down"}>
+                      {signed(s.keptChange)}
+                    </span>{" "}
+                    vs before
                   </>
                 ) : null}
-              </span>
-              <span className="pl-store__sub">
+                <br />
                 food {cents(s.food)} · labor {cents(s.labor)} · fees {cents(s.fees)}
-              </span>
-            </>
-          ) : (
-            <span className="pl-store__sub">no sales in this range</span>
-          )}
-          {s.flags.length > 0 ? (
-            <span className="pl-store__flag">{s.flags.join(" · ")}</span>
-          ) : (
-            <span className="pl-store__sub pl-up">every input on file</span>
-          )}
-        </button>
+                {s.flags.length > 0 ? (
+                  <>
+                    <br />
+                    {s.flags.join(" · ")}
+                  </>
+                ) : null}
+              </>
+            ) : (
+              <>
+                No sales in this range
+                {s.flags.length > 0 ? (
+                  <>
+                    <br />
+                    {s.flags.join(" · ")}
+                  </>
+                ) : null}
+              </>
+            )
+          }
+        />
       ))}
-    </div>
+    </StoreCardGrid>
   )
 }

@@ -8,6 +8,8 @@ export type StoreCardProps = {
   figures: { label: string; value: string }[]
   note?: ReactNode
   href?: string
+  /** Pressing the card does something on this page (e.g. scopes it to the store). */
+  onClick?: () => void
 }
 
 /**
@@ -18,24 +20,33 @@ export type StoreCardProps = {
  * `.pl-store`, `.iv-store`, `.ck-store` and `.cw-store`. Put them in a
  * `StoreCardGrid`: three across on the desk, stacked on the phone.
  */
-export function StoreCard({ name, status, figures, note, href }: StoreCardProps) {
+export function StoreCard({ name, status, figures, note, href, onClick }: StoreCardProps) {
   const body = (
     <>
       <span className="cu-store__top">
         <span className="cu-store__name">{name}</span>
         <Status tone={status.tone}>{status.label}</Status>
       </span>
-      <span className="cu-store__figs">
-        {figures.map((f) => (
-          <span key={f.label}>
-            <span className="cu-store__k">{f.label}</span>
-            <span className="cu-store__v">{f.value}</span>
-          </span>
-        ))}
-      </span>
+      {figures.length > 0 ? (
+        <span className="cu-store__figs">
+          {figures.map((f) => (
+            <span key={f.label}>
+              <span className="cu-store__k">{f.label}</span>
+              <span className="cu-store__v">{f.value}</span>
+            </span>
+          ))}
+        </span>
+      ) : null}
       {note ? <span className="cu-store__note">{note}</span> : null}
     </>
   )
+  if (onClick) {
+    return (
+      <button type="button" className="cu-card cu-store" onClick={onClick}>
+        {body}
+      </button>
+    )
+  }
   return href ? (
     <Link className="cu-card cu-store" href={href}>
       {body}

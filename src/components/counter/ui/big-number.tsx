@@ -2,13 +2,17 @@ import type { ReactNode } from "react"
 
 export type VsTone = "up" | "down" | "flat"
 
+export type Vs = { change: string; tone: VsTone; against: string }
+
 export type BigNumberProps = {
   /** What the number is, e.g. "Sales this week". */
   label: string
   /** The formatted figure. Pass `null` when an input is missing and there is no honest number. */
   value: string | null
-  /** The comparison, already worded, e.g. "▲ 4.2%" + " vs last week". */
-  vs?: { change: string; tone: VsTone; against: string }
+  /** Small words after the figure, e.g. "23.1% of sales". */
+  sub?: string
+  /** The comparison(s), already worded, e.g. "▲ 4.2%" + "vs last week". */
+  vs?: Vs | Vs[]
   /** A missing input, labelled rather than counted as $0, e.g. "Glendale labor missing 2 days". */
   missing?: string
   /** The figure is an upper bound because an input is missing: drawn as "≤ value". */
@@ -23,20 +27,24 @@ export type BigNumberProps = {
  * figure in a `BigNumbers` row is the lead; on a phone-width container the
  * others become a short list under it.
  */
-export function BigNumber({ label, value, vs, missing, atMost }: BigNumberProps) {
+export function BigNumber({ label, value, sub, vs, missing, atMost }: BigNumberProps) {
+  const comparisons = vs === undefined ? [] : Array.isArray(vs) ? vs : [vs]
   return (
     <div className="cu-big">
       <span className="cu-big__label">{label}</span>
       <span className="cu-big__value">
         {value === null ? "—" : atMost ? `≤ ${value}` : value}
+        {sub ? <small className="cu-big__sub">{sub}</small> : null}
       </span>
-      {vs || missing ? (
+      {comparisons.length > 0 || missing ? (
         <span className="cu-big__vs">
-          {vs ? (
-            <>
-              <span className={`cu-vs cu-vs--${vs.tone}`}>{vs.change}</span> {vs.against}
-            </>
-          ) : null}
+          {comparisons.map((c) => (
+            <span key={`${c.change}${c.against}`}>
+              {c.change ? <span className={`cu-vs cu-vs--${c.tone}`}>{c.change}</span> : null}
+              {c.change && c.against ? " " : null}
+              {c.against}
+            </span>
+          ))}
           {missing ? <span className="cu-missing">{missing}</span> : null}
         </span>
       ) : null}

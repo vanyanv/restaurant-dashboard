@@ -28,6 +28,12 @@
 .cu-status--warn{background:var(--warn-wash);color:var(--warn)}
 .cu-status--bad{background:var(--bad-wash);color:var(--bad)}
 .cu-status--wait{background:none;color:var(--ink-2);border:1px dashed var(--line-strong)}
+.cu-status--off{background:var(--sunk);color:var(--ink-3)}
+.cu-status--plain{background:none;border:0;padding:0;gap:5px}
+a.cu-status,button.cu-status{font-family:inherit;text-decoration:none;cursor:pointer}
+a.cu-status:hover,button.cu-status:hover{text-decoration:underline;text-underline-offset:3px}
+a.cu-status:focus-visible,button.cu-status:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.cu-statuses{display:flex;flex-wrap:wrap;gap:8px}
 
 /* ---- Button ---- */
 .cu-btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:36px;padding:0 16px;border-radius:var(--r);
@@ -54,13 +60,15 @@
    `contain: layout`, not `paint`: paint containment would clip menus,
    tooltips and the date picker that are meant to overflow. See card.tsx. */
 .cu-card{display:grid;gap:10px;align-content:start;min-width:0;padding:14px;background:var(--surface);border:1px solid var(--line);border-radius:var(--r);contain:layout;color:inherit;text-decoration:none}
-a.cu-card:hover{border-color:var(--line-strong)}
-a.cu-card:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+button.cu-card{font:inherit;text-align:left;cursor:pointer}
+a.cu-card:hover,button.cu-card:hover{border-color:var(--line-strong)}
+a.cu-card:focus-visible,button.cu-card:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 
 /* ---- BigNumber ---- */
 .cu-big{display:grid;gap:4px;min-width:0}
 .cu-big__label{font-family:var(--mono);font-size:var(--t-micro);letter-spacing:.07em;text-transform:uppercase;color:var(--ink-3)}
 .cu-big__value{font-size:44px;line-height:1;font-weight:700;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+.cu-big__sub{margin-left:10px;font-size:var(--t-body);font-weight:500;letter-spacing:0;color:var(--ink-2)}
 .cu-big__vs{display:flex;flex-wrap:wrap;gap:4px 10px;align-items:center;font-size:var(--t-body);color:var(--ink-2)}
 .cu-vs{font-weight:600;font-variant-numeric:tabular-nums}
 .cu-vs--up{color:var(--good)}
@@ -75,7 +83,8 @@ a.cu-card:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
   .cu-bigs__in>.cu-big:first-child .cu-big__value{font-size:38px}
   .cu-bigs__in>.cu-big:not(:first-child){grid-template-columns:minmax(0,1fr) auto;align-items:baseline;gap:2px 12px;padding-top:10px;border-top:1px solid var(--line)}
   .cu-bigs__in>.cu-big:not(:first-child) .cu-big__value{grid-row:1;grid-column:2;font-size:var(--t-lg)}
-  .cu-bigs__in>.cu-big:not(:first-child) .cu-big__vs{grid-column:1/-1}
+  .cu-bigs__in>.cu-big:not(:first-child) .cu-big__sub{margin-left:10px;font-size:var(--t-body);font-weight:500;letter-spacing:0;color:var(--ink-2)}
+.cu-big__vs{grid-column:1/-1}
 }
 
 /* ---- StoreCard ---- */
@@ -115,21 +124,35 @@ a.cu-card:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 }
 
 /* ---- NeedsYou ---- */
-.cu-needs{container-type:inline-size;padding:0;gap:0}
+.cu-needs{padding:0;gap:0}
 .cu-needs>summary{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:12px 14px;font-weight:600;cursor:pointer;list-style:none}
 .cu-needs>summary::-webkit-details-marker{display:none}
 .cu-needs>summary::after{content:"Show";font-size:var(--t-cap);font-weight:500;color:var(--ink-2);text-decoration:underline;text-underline-offset:3px}
 .cu-needs[open]>summary::after{content:"Hide"}
 .cu-needs>summary:focus-visible{outline:2px solid var(--accent);outline-offset:-2px;border-radius:var(--r)}
 .cu-needs__n{display:inline-grid;place-items:center;min-width:22px;height:22px;margin-right:8px;padding:0 6px;border-radius:999px;background:var(--signal);color:var(--ink);font-size:var(--t-cap);font-weight:700;font-variant-numeric:tabular-nums}
+.cu-needs__list{container-type:inline-size;list-style:none;margin:0;padding:0;display:grid;counter-reset:cu-needs}
 .cu-needs__g{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 16px;align-items:center;padding:12px 14px;border-top:1px solid var(--line)}
+.cu-needs__list>.cu-needs__g:first-child{border-top:0}
+.cu-needs>.cu-needs__list>.cu-needs__g:first-child{border-top:1px solid var(--line)}
 .cu-needs__what{font-weight:600}
-.cu-needs__why{grid-column:1;font-size:var(--t-cap);color:var(--ink-2)}
-.cu-needs__act{grid-column:2;grid-row:1/span 2}
+.cu-needs__why{grid-column:1;font-size:var(--t-cap);line-height:1.5;color:var(--ink-2)}
+.cu-needs__why ul{margin:2px 0 0;padding-left:18px}
+.cu-needs__act{grid-column:2;grid-row:1/span 2;display:grid;gap:6px;justify-items:end}
+/* Numbered: the number sits in its own column; actions go under the words. */
+.cu-needs__list--n>.cu-needs__g{counter-increment:cu-needs;grid-template-columns:auto minmax(0,1fr);padding:14px 16px}
+.cu-needs__list--n>.cu-needs__g::before{content:counter(cu-needs);grid-row:1/span 3;align-self:start;display:grid;place-items:center;width:24px;height:24px;border-radius:50%;
+  background:var(--sunk);color:var(--ink-2);font-size:var(--t-cap);font-weight:700;font-variant-numeric:tabular-nums}
+.cu-needs__list--n>.cu-needs__g--bad::before{background:var(--bad-wash);color:var(--bad)}
+.cu-needs__list--n .cu-needs__what,.cu-needs__list--n .cu-needs__why,.cu-needs__list--n .cu-needs__act{grid-column:2}
+.cu-needs__list--n .cu-needs__act{grid-row:auto;justify-items:start;margin-top:6px}
+.cu-notice{font-size:var(--t-cap);font-weight:600}
+.cu-notice--good{color:var(--good)}
+.cu-notice--bad{color:var(--bad);font-weight:500}
 @container (max-width:520px){
   .cu-needs__g{grid-template-columns:minmax(0,1fr)}
-  .cu-needs__act{grid-column:1;grid-row:auto;display:grid}
-  .cu-needs__act .cu-btn{width:100%;min-height:44px}
+  .cu-needs__act{grid-column:1;grid-row:auto;justify-items:stretch}
+  .cu-needs__act>.cu-btn{width:100%;min-height:44px}
 }
 
 /* ---- Tabs ---- */

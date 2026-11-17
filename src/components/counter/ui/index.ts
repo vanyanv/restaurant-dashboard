@@ -14,12 +14,12 @@
  * /dashboard/blocks.
  */
 export { Answer } from "./answer"
-export { BigNumber, BigNumbers, type BigNumberProps, type VsTone } from "./big-number"
-export { Status, type StatusTone } from "./status"
+export { BigNumber, BigNumbers, type BigNumberProps, type Vs, type VsTone } from "./big-number"
+export { Status, Statuses, type StatusTone } from "./status"
 export { Button, ButtonLink, ButtonRow, type ButtonVariant } from "./button"
 export { Card } from "./card"
 export { StoreCard, StoreCardGrid, type StoreCardProps } from "./store-card"
 export { Rows, type RowsColumn, type RowSlot } from "./rows"
-export { NeedsYou, type NeedsYouGroup } from "./needs-you"
+export { NeedsYou, NeedsYouList, NeedsYouItem, Notice, type NeedsYouGroup } from "./needs-you"
 export { Tabs, type TabItem } from "./tabs"
 export { Fold } from "./fold"
