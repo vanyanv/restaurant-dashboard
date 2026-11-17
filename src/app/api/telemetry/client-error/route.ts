@@ -54,12 +54,38 @@ function isSameOrigin(req: Request): boolean {
 const bodySchema = z.object({
   kind: z.string().min(1).max(40),
   path: z.string().min(1).max(300),
-  message: z.string().min(1).max(2000),
+  // An Error thrown with no message still has a stack and a page worth logging.
+  message: z.preprocess((m) => (m === "" ? "(no message)" : m), z.string().min(1).max(2000)),
   stack: z.string().max(8000).nullable().optional(),
   digest: z.string().max(100).nullable().optional(),
 })
 
 const NO_CONTENT = () => new NextResponse(null, { status: 204 })
+
+/** The body as text, or null once it passes `max` bytes; stops reading there, whatever Content-Length said. */
+async function readCapped(req: Request, max: number): Promise<string | null> {
+  if (!req.body) return ""
+  const reader = req.body.getReader()
+  const chunks: Uint8Array[] = []
+  let size = 0
+  for (;;) {
+    const { done, value } = await reader.read()
+    if (done) break
+    size += value.byteLength
+    if (size > max) {
+      await reader.cancel().catch(() => {})
+      return null
+    }
+    chunks.push(value)
+  }
+  const bytes = new Uint8Array(size)
+  let at = 0
+  for (const c of chunks) {
+    bytes.set(c, at)
+    at += c.byteLength
+  }
+  return new TextDecoder().decode(bytes)
+}
 
 export async function POST(req: Request): Promise<NextResponse> {
   try {
@@ -68,16 +94,20 @@ export async function POST(req: Request): Promise<NextResponse> {
 
     if (!isSameOrigin(req)) return NO_CONTENT()
     if (Number(req.headers.get("content-length") ?? "0") > MAX_BODY_BYTES) return NO_CONTENT()
-    const raw = await req.text()
-    if (raw.length > MAX_BODY_BYTES) return NO_CONTENT()
+    const raw = await readCapped(req, MAX_BODY_BYTES)
+    if (raw === null) return NO_CONTENT()
 
     const parsed = bodySchema.safeParse(JSON.parse(raw))
     if (!parsed.success) return NO_CONTENT()
     const { kind, path, message, stack, digest } = parsed.data
     if (!path.startsWith("/")) return NO_CONTENT()
     const route = path.split(/[?#]/)[0]!
-    if (!shouldRecord(`${route}|${message}`)) return NO_CONTENT()
+    // Ask first, take the key only once there is room: a report turned away by
+    // the instance cap must not stop the same fault being logged a minute later.
+    const key = `${route}|${message}|${digest ?? ""}`
+    if (!shouldRecord(key, Date.now(), false)) return NO_CONTENT()
     if (!underInstanceCap()) return NO_CONTENT()
+    shouldRecord(key)
 
     const session = await getServerSession(authOptions)
 

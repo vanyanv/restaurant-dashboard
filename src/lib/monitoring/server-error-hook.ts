@@ -19,7 +19,7 @@ export interface ServerErrorReport {
   metadata?: Record<string, unknown> | null
 }
 
-type Recorder = (report: ServerErrorReport) => void
+type Recorder = (report: ServerErrorReport) => void | Promise<void>
 
 const KEY = "__counterServerErrorRecorder__"
 
@@ -27,12 +27,17 @@ export function installServerErrorRecorder(recorder: Recorder): void {
   ;(globalThis as Record<string, unknown>)[KEY] = recorder
 }
 
-export function reportServerError(report: ServerErrorReport): void {
+/**
+ * Resolves once the report is written (or skipped). Never rejects. Callers on
+ * a request's own path (`onRequestError`) await it so a serverless function is
+ * not frozen mid-write; `guardSection` does not wait, the page comes first.
+ */
+export async function reportServerError(report: ServerErrorReport): Promise<void> {
   if (typeof window !== "undefined") return
   const recorder = (globalThis as Record<string, unknown>)[KEY] as Recorder | undefined
   if (!recorder) return
   try {
-    recorder(report)
+    await recorder(report)
   } catch {
     // Reporting must never break the page that is already failing.
   }

@@ -174,7 +174,7 @@ export function guardSection<T>(
     // exactly why nobody used to hear about it. Record it in the error log,
     // except Next's own control-flow signals (redirect, notFound, dynamic
     // bail-outs), which arrive as rejections but are not faults.
-    if (!isNextSignal(err)) reportServerError({
+    if (!isNextSignal(err)) void reportServerError({
       source: "section",
       message: err instanceof Error ? err.message : String(err),
       stack: err instanceof Error ? (err.stack ?? null) : null,

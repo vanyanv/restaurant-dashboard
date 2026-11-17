@@ -28,12 +28,13 @@ export function reportClientError(report: ClientErrorReport): void {
     if (typeof window === "undefined") return
     if (sent >= MAX_PER_LOAD) return
     const path = window.location.pathname
-    if (!shouldSend(`${report.kind}|${path}|${report.message}`)) return
+    const message = report.message || "(no message)"
+    if (!shouldSend(`${report.kind}|${path}|${message}|${report.digest ?? ""}`)) return
     sent++
     const body = JSON.stringify({
       kind: report.kind.slice(0, 40),
       path,
-      message: report.message.slice(0, 2000),
+      message: message.slice(0, 2000),
       stack: report.stack?.slice(0, 8000) ?? null,
       digest: report.digest ?? null,
     })

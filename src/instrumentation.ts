@@ -27,8 +27,9 @@ export async function register() {
   const shouldRecord = createDedupe(ERROR_DEDUPE_MS)
   installServerErrorRecorder((report) => {
     const where = report.route ?? String(report.metadata?.section ?? "")
-    if (!shouldRecord(`${report.source}|${where}|${report.message}`)) return
-    void recordError(report)
+    const digest = String(report.metadata?.digest ?? "")
+    if (!shouldRecord(`${report.source}|${where}|${report.message}|${digest}`)) return
+    return recordError(report)
   })
 }
 
@@ -43,7 +44,7 @@ export const onRequestError: Instrumentation.onRequestError = async (error, requ
   if (process.env.NEXT_RUNTIME !== "nodejs") return
   const { reportServerError } = await import("@/lib/monitoring/server-error-hook")
   const err = error instanceof Error ? error : new Error(String(error))
-  reportServerError({
+  await reportServerError({
     source: ROUTE_SOURCE[context.routeType] ?? "render",
     route: request.path.split("?")[0] ?? request.path,
     method: request.method,

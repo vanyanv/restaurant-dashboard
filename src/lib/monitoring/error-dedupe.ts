@@ -13,9 +13,11 @@
  */
 export function createDedupe(windowMs: number, maxKeys = 500) {
   const seen = new Map<string, number>()
-  return function shouldRecord(key: string, now = Date.now()): boolean {
+  /** `commit: false` only asks; the key is not taken until a call commits it. */
+  return function shouldRecord(key: string, now = Date.now(), commit = true): boolean {
     const last = seen.get(key)
     if (last !== undefined && now - last < windowMs) return false
+    if (!commit) return true
     if (seen.size >= maxKeys) {
       for (const [k, at] of seen) if (now - at >= windowMs) seen.delete(k)
       if (seen.size >= maxKeys) seen.clear()

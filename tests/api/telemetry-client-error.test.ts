@@ -69,6 +69,17 @@ describe("POST /api/telemetry/client-error", () => {
     expect(record).not.toHaveBeenCalled()
   })
 
+  it("keeps an error thrown with no message, for its stack and page", async () => {
+    await POST(req({ ...valid, path: "/m/count", message: "" }))
+    expect(record).toHaveBeenCalledWith(expect.objectContaining({ route: "/m/count", message: "(no message)" }))
+  })
+
+  it("logs two failures on one page with the same text but different references", async () => {
+    await POST(req({ ...valid, path: "/m/labor", message: "render failed", digest: "111" }))
+    await POST(req({ ...valid, path: "/m/labor", message: "render failed", digest: "222" }))
+    expect(record).toHaveBeenCalledTimes(2)
+  })
+
   it("drops a cross-site post", async () => {
     const res = await POST(req(valid, { "sec-fetch-site": "cross-site" }))
     expect(res.status).toBe(204)
