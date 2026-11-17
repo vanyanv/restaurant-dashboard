@@ -1,3 +1,5 @@
+import { ymdUTC } from "@/lib/date-utils"
+import { businessQueryDate } from "@/lib/counter/business-date"
 import {
   getDecisionsView,
   type DecisionAction,
@@ -1721,19 +1723,32 @@ export function getDecisionsSectionPromises(
    * forward, which `no_counts` says and tells the reader how to fix; a table
    * of nothing under a heading would say the week is safe.
    */
+  // Started NOW rather than after the view: `view.asOf` is
+  // `ymd(businessQueryDate(now))` (get-decisions-view.ts), so the same day is
+  // worked out here and the run-out reads run alongside the view's ~50
+  // queries instead of after them. The section still waits for the view, so a
+  // failed view fails this section exactly as before.
+  const runOutAsOf = parseDayKey(ymdUTC(businessQueryDate(new Date()))) ?? new Date()
+  const runOutLoad = (async () => {
+    const resolved = await resolveStoreContext(input.storeId, input.accountId)
+    if (!resolved.ok) return null
+    return loadRunOut({
+      accountId: input.accountId,
+      storeIds: resolved.ctx.storeIds,
+      asOf: runOutAsOf,
+    })
+  })()
+  // Awaited below; this only keeps an early rejection from being reported as
+  // unhandled while the view is still loading.
+  runOutLoad.catch(() => {})
+
   const runOutP: Promise<SectionData<RunOut>> = viewP.then(async (sd) => {
     const view = dataOf(sd)
     if (view === null) return mapReady(sd, () => undefined as never)
-    const asOf = parseDayKey(view.asOf) ?? new Date()
-    const resolved = await resolveStoreContext(input.storeId, input.accountId)
-    if (!resolved.ok) {
+    const runOut = await runOutLoad
+    if (runOut === null) {
       return notComputed<RunOut>("Pick a store to see what runs out.")
     }
-    const runOut = await loadRunOut({
-      accountId: input.accountId,
-      storeIds: resolved.ctx.storeIds,
-      asOf,
-    })
     return runOut.rows.length === 0 ? empty<RunOut>("no_counts") : ready(runOut)
   })
 

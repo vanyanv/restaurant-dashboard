@@ -1,3 +1,4 @@
+import { after } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { logger } from "@/lib/logger"
 import { VERDICT_NARRATION_VERSION, generateVerdictLine } from "@/lib/decision-verdict-llm"
@@ -69,26 +70,35 @@ export async function getVerdictLine(input: {
     return { line: composeVerdict(facts), model: null }
   }
 
-  const result = await generateVerdictLine(facts, { storeId, userId })
+  /*
+   * NOT ON THE PAGE'S CRITICAL PATH. The completion took up to its 20 s timeout
+   * and every Decisions section waited on this view, so the first load of each
+   * day (and every load after a figure moved) waited on the model. Now the page
+   * gets the deterministic sentence at once and the completion is bought after
+   * the response is sent (`after`), stored under the same key, and shown on the
+   * next load. One call per scope per day, as before.
+   */
+  after(async () => {
+    try {
+      const result = await generateVerdictLine(facts, { storeId, userId })
+      await prisma.decisionVerdict.upsert({
+        where: { scopeKey_asOfDate: { scopeKey, asOfDate } },
+        create: {
+          scopeKey,
+          storeId,
+          asOfDate,
+          inputsHash,
+          line: result.line,
+          model: result.model,
+        },
+        update: { inputsHash, line: result.line, model: result.model },
+      })
+    } catch (err) {
+      // Worth knowing about — an un-writable cache means every view pays again —
+      // but the page already has a correct sentence.
+      logger.error("[decision-verdict] background narration failed:", err)
+    }
+  })
 
-  try {
-    await prisma.decisionVerdict.upsert({
-      where: { scopeKey_asOfDate: { scopeKey, asOfDate } },
-      create: {
-        scopeKey,
-        storeId,
-        asOfDate,
-        inputsHash,
-        line: result.line,
-        model: result.model,
-      },
-      update: { inputsHash, line: result.line, model: result.model },
-    })
-  } catch (err) {
-    // Worth knowing about — an un-writable cache means every view pays again —
-    // but the sentence in hand is still correct, so the page gets it.
-    logger.error("[decision-verdict] cache write failed:", err)
-  }
-
-  return result
+  return { line: composeVerdict(facts), model: null }
 }
