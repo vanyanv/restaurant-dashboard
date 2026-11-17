@@ -101,7 +101,7 @@ describe("getCountAndWaste", () => {
     vi.mocked(getCountWasteSectionPromises).mockReturnValue({
       waste: Promise.resolve({
         status: "ready",
-        data: { weekDollars: 12.345, recent: [{ id: "w1", name: "Buns", amount: "6 ea", reason: "Dropped", when: "Mon 3:00 PM", dollars: 2.1, note: null }] },
+        data: { week: { dollars: 12.345 }, recent: [{ id: "w1", name: "Buns", amount: "6 ea", reason: "Dropped", when: "Mon 3:00 PM", dollars: 2.1, note: null }] },
       }),
     } as never)
 

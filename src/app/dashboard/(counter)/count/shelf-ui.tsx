@@ -261,7 +261,7 @@ export function Tiles({ shelf }: { shelf: StoreShelf }) {
         <span className="iv-mono">Thrown out</span>
         {w.entries === 0
           ? <strong className="txt">Nothing logged</strong>
-          : w.unpriced === w.entries
+          : w.dollars === null
             ? <strong className="txt">Not valued yet</strong>
             : <strong>{money(w.dollars)}</strong>}
         <span>
@@ -277,12 +277,14 @@ export function Tiles({ shelf }: { shelf: StoreShelf }) {
 export function PinnedActions({ shelf, children }: { shelf: StoreShelf | null; children?: ReactNode }) {
   const href = useSurfaceHref()
   const q = shelf ? `?store=${shelf.id}` : ""
+  // Straight to the form: with every store picked it asks which one first.
+  const log = shelf ? `?store=${shelf.id}&log=1` : "?log=1"
   return (
     <div className="iv-foot">
       <Link className="iv-btn iv-btn--ink" href={href(`/dashboard/count/walk${q}`)}>
         {shelf ? (shelf.openCount !== null ? `Resume count · ${shelf.name}` : `Count ${shelf.name}`) : "Count a store"}
       </Link>
-      {children ?? <Link className="iv-btn" href={href(`/dashboard/count/waste${q}`)}>Log waste</Link>}
+      {children ?? <Link className="iv-btn" href={href(`/dashboard/count/waste${log}`)}>Log waste</Link>}
     </div>
   )
 }

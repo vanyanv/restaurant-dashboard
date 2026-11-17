@@ -145,7 +145,7 @@ export const getCountAndWaste: ChatTool<typeof params, CountWasteResult> = {
           completedCounts: r?.counts.length ?? 0,
           wasteLastWeek: w
             ? {
-                dollars: round2(w.weekDollars),
+                dollars: round2(w.week.dollars ?? 0),
                 unpricedEntries: w.recent.filter((e) => e.dollars === null).length,
                 entries: w.recent.map((e) => ({
                   item: e.name,

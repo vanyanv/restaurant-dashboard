@@ -1,13 +1,13 @@
 import { getServerSession } from "next-auth"
 import { redirect } from "next/navigation"
 import { authOptions, hasOwnerAccess } from "@/lib/auth"
-import { getCountWasteSectionPromises } from "@/lib/counter/adapters/count"
+import { getInventoryWasteSectionPromises } from "@/lib/counter/adapters/inventory-waste"
 import { getInventorySwitcherSectionPromises } from "@/lib/counter/adapters/inventory-shelf"
-import { PhoneWasteClient } from "./phone-waste-client"
+import { WasteClient } from "@/app/dashboard/(counter)/count/waste/waste-client"
 
 export const dynamic = "force-dynamic"
 
-/** The waste log on a phone — where `/dashboard/count/waste` lands a phone. */
+/** Inventory — Waste on a phone: the desk client in the phone shell. */
 export default async function Page({ searchParams }: { searchParams: Promise<{ store?: string }> }) {
   const session = await getServerSession(authOptions)
   if (!session) redirect("/login")
@@ -15,13 +15,13 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ s
   const sp = await searchParams
 
   const sections = {
-    ...getCountWasteSectionPromises({ accountId: session.user.accountId, storeId: sp.store }),
+    ...getInventoryWasteSectionPromises({ accountId: session.user.accountId, storeId: sp.store }),
     ...getInventorySwitcherSectionPromises({ accountId: session.user.accountId }),
   }
 
   return (
     <>
-      <PhoneWasteClient sections={sections} />
+      <WasteClient sections={sections} />
       <span hidden data-perf-ready="/m/count/waste" />
     </>
   )

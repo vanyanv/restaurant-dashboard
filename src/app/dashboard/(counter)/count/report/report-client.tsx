@@ -1,177 +1,337 @@
 "use client"
 
+import type { ReactNode } from "react"
 import Link from "next/link"
-import { useRouter } from "next/navigation"
+import { usePathname } from "next/navigation"
 import { Section, useCounterTransition, usePageChrome, useSurfaceHref } from "@/components/counter"
 import type { SectionSources } from "@/lib/counter/adapters/types"
-import type { ReportData, ReportSections } from "@/lib/counter/adapters/count"
+import type { GapRow, ReportData } from "@/lib/counter/adapters/count"
+import type { ReportPictureSections, ReportView } from "@/lib/counter/adapters/inventory-report"
 import type { SwitcherSections } from "@/lib/counter/adapters/inventory-shelf"
-import { fmtQty } from "@/lib/counter/count-layers"
+import { biggestShort, gapVerdict, type GapChange, type GapCoverage, type GapHeadline } from "@/lib/counter/gap-picture"
+import { barShares } from "@/lib/counter/waste-picture"
 import { CountHead, money } from "../count-ui"
+import { Bars, Hero, ItemLink, TwoBars, VerdictPill, q, type BarRow } from "../picture-ui"
 
 /**
- * Count & waste — Report. For each item counted this time and last time:
- * last count + delivered − what sales used − logged waste, theft and returns = what should be on
- * the shelf. The gap to what was counted is food that went somewhere nobody
- * wrote down. Below it, how often each item is ordered, from invoices.
+ * Inventory — Report. The picture first: what went missing between two
+ * counts, how much of the list that covers, and each item that is off as two
+ * bars (should have, counted), biggest gap first. The working — last count +
+ * delivered − what sales used − what was logged = should have — is folded
+ * under it, with how often each item is ordered. With every store picked it
+ * is the same figure per store. One client for the desk and the phone.
  */
-export function ReportClient({ sections }: { sections: SectionSources<ReportSections & SwitcherSections> }) {
+export function ReportClient({ sections }: { sections: SectionSources<ReportPictureSections & SwitcherSections> }) {
   usePageChrome({ leaf: "Report" })
   const { pending } = useCounterTransition()
   return (
     <>
-      <CountHead sub="Between two counts: what should be on the shelf, what was, and where the difference went" switcher={sections.switcher} />
-      <Section title="Where food went" meta={(d) => (d?.current ? `${d.store.name} · ${d.current.label}` : d?.store.name ?? "")} data={sections.report} pending={pending} pad={false}>
-        {(d) => (d ? <Gap data={d} /> : null)}
-      </Section>
-      <Section title="How often each item is ordered" meta={() => "Last 8 weeks, from invoices"} data={sections.report} pending={pending} pad={false}>
-        {(d) => (d ? <Orders data={d} /> : null)}
+      <CountHead sub="What should be on the shelf, what was, and where the difference went" switcher={sections.switcher} allView />
+      <Section bare title="Report" data={sections.report} pending={pending}>
+        {(d) => (d ? <div className="iv-c">{d.one ? <OneStore data={d.one} /> : <AllStores data={d} />}</div> : null)}
       </Section>
     </>
   )
 }
 
-function q(n: number): string {
-  return fmtQty(Math.round(n * 10) / 10)
+function plural(n: number, one: string, many = `${one}s`): string {
+  return `${n} ${n === 1 ? one : many}`
 }
 
-/** The report in one sentence: how much went missing, and on what. */
-function summary(d: ReportData): string {
-  if (!d.previous || !d.current) return ""
-  const top = d.rows.filter((r) => (r.missingDollars ?? 0) > 0).slice(0, 3).map((r) => r.name)
-  const span = `Between ${d.previous.label} and ${d.current.label}`
-  const missing = d.missingDollars > 0
-    ? `${money(d.missingDollars)} of food went missing that nobody logged${top.length ? `, most of it ${top.join(", ")}` : ""}.`
-    : "nothing went missing that wasn't logged."
-  const waste = d.wasteDollars > 0 ? ` You logged ${money(d.wasteDollars)} of waste.` : ""
-  return `${span}, ${missing}${waste}`
+/** A "went missing" figure, or the words for why there is none. Never $0 for an unknown. */
+function missingFigure(h: GapHeadline | null): { figure: string; words: boolean } {
+  if (!h || h.items === 0) return { figure: "Nothing to compare", words: true }
+  if (h.missingDollars === null) return { figure: "Not valued yet", words: true }
+  return { figure: money(h.missingDollars), words: false }
 }
 
-function Gap({ data }: { data: ReportData }) {
-  const router = useRouter()
+// ---------------------------------------------------------------------------
+// One store
+// ---------------------------------------------------------------------------
+
+function OneStore({ data }: { data: ReportData }) {
+  const pathname = usePathname() ?? ""
   const href = useSurfaceHref()
+  const walk = href(`/dashboard/count/walk?store=${data.store.id}`)
   return (
-    <div style={{ display: "grid" }}>
+    <div className="inv-stack">
       {data.counts.length > 1 && (
-        <div className="cw-pad" style={{ borderBottom: "1px solid var(--line)" }}>
-          <div className="cw__chips" role="group" aria-label="Count">
-            {data.counts.slice(0, 8).map((c) => (
-              <button
-                key={c.id}
-                type="button"
-                className="cw__chip"
-                aria-pressed={data.current?.id === c.id}
-                onClick={() => router.push(href(`/dashboard/count/report?store=${data.store.id}&count=${c.id}`))}
-              >
-                {c.label}
-              </button>
-            ))}
-          </div>
-        </div>
+        <nav className="iv-chips" aria-label="Count">
+          {data.counts.slice(0, 8).map((c) => (
+            <Link
+              key={c.id}
+              className="iv-chip"
+              aria-current={data.current?.id === c.id ? "true" : undefined}
+              href={`${pathname}?${new URLSearchParams({ store: data.store.id, count: c.id })}`}
+            >
+              {c.label}
+            </Link>
+          ))}
+        </nav>
       )}
-      {!data.current ? (
-        <div className="cw-pad">
-          <p className="cw__sub">No finished count for {data.store.name} yet. Finish one and it becomes the starting point; the second count makes the first report.</p>
-          <div className="cw__foot" style={{ maxWidth: 360 }}>
-            <Link className="cw__btn cw__btn--primary" href={href(`/dashboard/count/walk?store=${data.store.id}`)}>Start the count</Link>
-          </div>
-        </div>
-      ) : !data.previous ? (
-        <div className="cw-pad">
-          <p className="cw__sub">
-            The {data.current.label} count is the starting point for {data.store.name}. The next finished count is compared against it, and this page fills in.
+
+      {!data.current || !data.previous ? (
+        <section className="iv-card iv-lead" aria-label="Went missing">
+          <div className="iv-lead__n iv-lead__n--text"><strong>Needs two counts</strong></div>
+          <p className="iv-say">
+            {!data.current
+              ? `${data.store.name} has no finished count yet.`
+              : data.counts.length > 1
+                ? `The ${data.current.label} count is the first one at ${data.store.name}, so it has nothing before it to compare with.`
+                : `${data.store.name} has one finished count, from ${data.current.label}.`}
+            <small>
+              {!data.current
+                ? "The first count is the starting point. The second one shows what should have been there and what went missing."
+                : "It is the starting point. The next finished count is compared against it, and this page fills in. Until then there is no dollar figure here."}
+            </small>
           </p>
-        </div>
+          <Link className="iv-btn iv-btn--ink" href={walk}>Count {data.store.name}</Link>
+        </section>
       ) : (
-        <>
-          <div className="cw-pad" style={{ borderBottom: "1px solid var(--line)" }}>
-            <p className="cw__say">{summary(data)}</p>
-          </div>
-          <div className="cw-figs">
-            <div className="cw-fig">
-              <span className="cw__mono">Missing, nobody logged it</span>
-              <b className={data.missingDollars > 0 ? "miss" : ""}>{money(data.missingDollars)}</b>
-              <span>Should have been there, wasn&apos;t, and nothing logged it</span>
-            </div>
-            <div className="cw-fig">
-              <span className="cw__mono">Extra on the shelf</span>
-              <b>{money(data.extraDollars)}</b>
-              <span>More counted than the numbers say, often a delivery whose invoice hasn&apos;t come in</span>
-            </div>
-            <div className="cw-fig">
-              <span className="cw__mono">Waste you logged</span>
-              <b>{money(data.wasteDollars)}</b>
-              <span>{data.wasteEntries} {data.wasteEntries === 1 ? "entry" : "entries"} since {data.previous.label} · dropped, went bad, burnt, remade, damaged</span>
-            </div>
-            <div className="cw-fig">
-              <span className="cw__mono">Theft · sent back · other</span>
-              <b>{money(data.theftDollars + data.returnDollars + data.otherDollars)}</b>
-              <span>Theft {money(data.theftDollars)} · sent back {money(data.returnDollars)} · other {money(data.otherDollars)}</span>
-            </div>
+        <Compared data={data} from={data.previous.label} to={data.current.label} />
+      )}
+
+      <details className="iv-card iv-fold">
+        <summary>How often you order <span>8 weeks of invoices at {data.store.name}</span></summary>
+        <Orders data={data} />
+      </details>
+    </div>
+  )
+}
+
+function coverageSay(c: GapCoverage): string {
+  const parts: string[] = []
+  if (c.noSize > 0) parts.push(`${c.noSize} ${c.noSize === 1 ? "has" : "have"} a box with no size yet.`)
+  if (c.notOnThis > 0) parts.push(`${c.notOnThis} ${c.notOnThis === 1 ? "was" : "were"} not on this count.`)
+  if (c.notOnLast > 0) parts.push(`${c.notOnLast} had no whole count before this one to start from.`)
+  return parts.join(" ")
+}
+
+/**
+ * The rows that are off. What is short leads, because the headline is what
+ * went missing: biggest shortage in dollars first, a shortage with no price
+ * after the priced ones, then what is extra, biggest first.
+ */
+function offRows(rows: GapRow[]): GapRow[] {
+  const rank = (r: GapRow) => (gapVerdict(r) === "short" ? (r.missingDollars === null ? 1 : 0) : 2)
+  return rows
+    .filter((r) => gapVerdict(r) !== "match")
+    .sort((a, b) => rank(a) - rank(b) || Math.abs(b.missingDollars ?? 0) - Math.abs(a.missingDollars ?? 0))
+}
+
+/**
+ * "$12.40 more than the counts before", only ever over the items both pairs
+ * of counts compared. After a partial recount that is a few lines, and it
+ * says so; with no item in both there is no comparison, and it says why.
+ */
+function changeVsBefore(change: GapChange, before: string): ReactNode {
+  if (change.kind === "no_items_in_both") {
+    return `Not compared with ${before}: no item was compared both times (a partial recount, or the list changed), so there is no fair comparison.`
+  }
+  if (change.kind === "cant_tell") return `Not compared with ${before}: the items compared both times have no price on file.`
+  const on = change.sameItems
+    ? ""
+    : ` on the ${plural(change.items, "item")} compared both times. The two did not cover the same items (a partial recount, or the list changed), so the totals themselves are not compared`
+  if (change.kind === "same") return <>The same as {before}{on}.</>
+  return <><b>{money(change.dollars)} {change.kind}</b> than {before}{on}.</>
+}
+
+/** One class kept apart, in words: never $0 for entries nobody can value. */
+/** What the entries on no row are worth: the priced ones, and how many have no price. Never $0.00 for an unknown. */
+function offReportValue(d: Pick<ReportData, "offReportEntries" | "offReportDollars" | "offReportUnpriced">): string {
+  if (d.offReportUnpriced >= d.offReportEntries) return "not valued yet"
+  return `${money(d.offReportDollars)}${d.offReportUnpriced > 0 ? `, ${d.offReportUnpriced} not valued` : ""}`
+}
+
+function apartSay(a: ReportData["apart"][number]): string {
+  if (a.dollars === null) return `${a.label} not valued yet (${plural(a.entries, "entry", "entries")})`
+  return `${a.label} ${money(a.dollars)}${a.unpriced > 0 ? `, ${a.unpriced} not valued` : ""}`
+}
+
+function Compared({ data, from, to }: { data: ReportData; from: string; to: string }) {
+  const h = data.headline
+  const { figure, words } = missingFigure(h)
+  // Named from the rows the list calls short: a row within 5% is a match there, never "where it went".
+  const top = biggestShort(data.rows).map((r) => r.name)
+  const off = offRows(data.rows)
+  const matching = data.rows.length - off.length
+  const c = data.coverage
+  const apart = data.apart.filter((a) => a.entries > 0)
+  const apartPriced = apart.filter((a) => a.dollars !== null)
+  return (
+    <>
+      <div className="iv-rep">
+        <div className="iv-rep__hero">
+        <Hero
+          label={`Went missing · ${from} → ${to}`}
+          figure={figure}
+          words={words}
+          aside={h && h.items > 0 && data.before ? changeVsBefore(data.before.change, `the counts before (${data.before.from} → ${data.before.to})`) : undefined}
+        >
+          <p className="iv-cover-t">
+            {!h || h.items === 0
+              ? `No item was counted on both ${from} and ${to}, so there is nothing to compare yet.`
+              : h.missingDollars === null
+                ? `${plural(h.items, "item")} compared, and none has a price on file yet, so the gap has no dollar figure.`
+                : h.missingDollars > 0
+                  ? `Food that should have been on the shelf and was not, and that nobody logged. ${top.length ? `The biggest: ${top.join(", ")}.` : "It is all small gaps: every item was counted within 5% of what the numbers say, so no single item is short."}`
+                  : "Nothing went missing that wasn't logged."}
+            {h && h.missingDollars !== null && h.unpriced > 0 ? ` ${plural(h.unpriced, "compared item")} with no price ${h.unpriced === 1 ? "is" : "are"} not in the figure.` : ""}
+          </p>
+          {c && c.lines > 0 && (
+            <>
+              <span className="iv-cover" aria-hidden="true">
+                {c.compared > 0 ? <i style={{ flexGrow: c.compared }} /> : null}
+                {c.noSize > 0 ? <i className="ny" style={{ flexGrow: c.noSize }} /> : null}
+                {c.notOnThis + c.notOnLast > 0 ? <i className="nc" style={{ flexGrow: c.notOnThis + c.notOnLast }} /> : null}
+              </span>
+              <p className="iv-cover-t">
+                <b>{c.compared} of {plural(c.lines, "line")} compared.</b> {coverageSay(c)}
+              </p>
+            </>
+          )}
+        </Hero>
+        </div>
+
+        <section className="iv-card iv-rep__items" aria-label="Item by item">
+          <div className="iv-card__h">
+            <b>Should have, and counted</b>
+            <span className="iv-mono">what is short first</span>
           </div>
           {data.rows.length === 0 ? (
-            <p className="cw__sub" style={{ padding: 14 }}>No item was counted both times, so there is nothing to compare yet.</p>
+            <p className="iv-quiet iv-pad">No item was counted both times, so there is nothing to compare yet.</p>
           ) : (
-            <div className="cw-wrap">
-              <table className="cw-tbl cw-tbl--cards">
-                <thead>
-                  <tr>
-                    <th>Item</th>
-                    <th>Last count</th>
-                    <th>+ Delivered</th>
-                    <th>− Sales used</th>
-                    <th>− Waste</th>
-                    <th>− Theft, sent back, other</th>
-                    <th>= Should have</th>
-                    <th>You counted</th>
-                    <th>Missing</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {data.rows.map((r) => {
-                    const off = Math.abs(r.missing) < Math.max(0.05 * Math.max(r.should, r.counted), 0.01)
-                    return (
-                      <tr key={r.name}>
-                        <td>
-                          <b>{r.name}</b>
-                          {r.partial ? <><br /><small style={{ color: "var(--ink-2)" }}>Some deliveries need a case size</small></> : null}
-                        </td>
-                        <td data-label="Last count">{q(r.last)} {r.unit}</td>
-                        <td data-label="+ Delivered">{q(r.delivered)}</td>
-                        <td data-label="− Sales used">{q(r.used)}</td>
-                        <td data-label="− Waste">{q(r.waste)}</td>
-                        <td data-label="− Theft, sent back, other">{q(r.theft + r.returned + r.other)}</td>
-                        <td data-label="= Should have">{q(r.should)}</td>
-                        <td data-label="You counted">{q(r.counted)}</td>
-                        <td data-label="Missing" className={off ? "ok" : r.missing > 0 ? "miss" : ""}>
-                          {off
-                            ? "✓ matches"
-                            : r.missing > 0
-                              ? `${q(r.missing)} ${r.unit}${r.missingDollars != null ? ` · ${money(r.missingDollars)}` : ""}`
-                              : `${q(-r.missing)} ${r.unit} extra`}
-                        </td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
-            </div>
+            <ul className="iv-list iv-list--two">
+              {off.map((r) => (
+                <li key={r.ingredientId} className="iv-it">
+                  <div className="iv-it__h">
+                    <b><ItemLink id={r.ingredientId} store={data.store.id} className="inv-open">{r.name}</ItemLink></b>
+                    <VerdictPill verdict={gapVerdict(r)} missing={r.missing} unit={r.unit} />
+                  </div>
+                  <TwoBars should={r.should} counted={r.counted} unit={r.unit} />
+                  <p className="iv-it__x">
+                    {r.missingDollars === null
+                      ? "No price on file, so no dollars."
+                      : r.missing > 0 ? `${money(r.missingDollars)} that nobody logged.` : `${money(-r.missingDollars)} more than the numbers say.`}
+                    {r.partial ? " Some deliveries need a case size, so “should have” may read low." : ""}
+                  </p>
+                </li>
+              ))}
+              {matching > 0 && (
+                <li className="iv-it">
+                  <div className="iv-it__h">
+                    <b>{off.length > 0 ? `${plural(matching, "more item")}` : plural(matching, "item")}</b>
+                    <span className="inv-pill inv-pill--good">{matching === 1 ? "Matches" : "Match"}</span>
+                  </div>
+                  <p className="iv-it__x">Counted within 5% of what the numbers say. They are in the working below.</p>
+                </li>
+              )}
+            </ul>
           )}
-          <details className="rs-fold">
-          <summary>How this is worked out</summary>
-          <p className="cw__sub" style={{ padding: "0 14px 14px" }}>
-            Every row adds across: last count + delivered − sales used − waste − theft, sent back and other = should have. The figures above are those rows summed{data.offReportEntries > 0 ? `; ${data.offReportEntries} more ${data.offReportEntries === 1 ? "entry" : "entries"} (${money(data.offReportDollars)}) were logged against items not counted both times, so they are on no row` : ""}. &quot;Sales used&quot; is every item sold times its recipe. Extras and &quot;no cheese&quot; changes aren&apos;t in it yet, so a small gap on cheese or sauce is expected. &quot;Extra&quot; means more on the shelf than the numbers say, usually a delivery whose invoice hasn&apos;t come in.
+        </section>
+
+      <div className="iv-tri iv-rep__tiles">
+        <div className="iv-card iv-tile">
+          <span className="iv-mono">Extra on the shelf</span>
+          {!h || h.items === 0
+            ? <strong className="txt">Nothing to compare</strong>
+            : h.missingDollars === null || (data.extraDollars === 0 && data.extraUnpriced > 0)
+              ? <strong className="txt">Not valued yet</strong>
+              : <strong>{money(data.extraDollars)}</strong>}
+          <span>
+            More counted than the numbers say, often a delivery whose invoice hasn&apos;t come in. Never netted against what went missing.
+            {h && h.items > 0 && data.extraUnpriced > 0 ? ` ${plural(data.extraUnpriced, "item")} counted over with no price ${data.extraUnpriced === 1 ? "is" : "are"} not in the figure.` : ""}
+          </span>
+        </div>
+        <div className="iv-card iv-tile">
+          <span className="iv-mono">Waste you logged</span>
+          {data.thrownEntries === 0
+            ? <strong className="txt">Nothing logged</strong>
+            : data.thrownUnpriced === data.thrownEntries
+              ? <strong className="txt">Not valued yet</strong>
+              : <strong>{money(data.thrownDollars)}</strong>}
+          <span>
+            {plural(data.thrownEntries, "entry", "entries")} between the counts, on the items compared: everything the Waste tab counts as thrown out.
+            {data.thrownUnpriced > 0 && data.thrownUnpriced < data.thrownEntries ? ` ${data.thrownUnpriced} without a price not added in.` : ""}
+          </span>
+        </div>
+        <div className="iv-card iv-tile">
+          <span className="iv-mono">Theft · sent back</span>
+          {apart.length === 0
+            ? <strong className="txt">Nothing logged</strong>
+            : apartPriced.length === 0
+              ? <strong className="txt">Not valued yet</strong>
+              : <strong>{money(apartPriced.reduce((t, a) => t + (a.dollars ?? 0), 0))}</strong>}
+          <span>{apart.length === 0 ? "Kept apart from waste." : `${apart.map(apartSay).join(" · ")}.`}</span>
+        </div>
+      </div>
+      </div>
+
+      {data.rows.length > 0 && (
+        <details className="iv-card iv-fold">
+          <summary>Show the working <span>One row per item: last count, delivered, sold, logged</span></summary>
+          <Working data={data} />
+          <p>
+            Every row adds across: last count + delivered − sales used − thrown out − theft and sent back = should have. The figures above are those rows summed{data.offReportEntries > 0 ? `; ${plural(data.offReportEntries, "more entry", "more entries")} (${offReportValue(data)}) ${data.offReportEntries === 1 ? "was" : "were"} logged against items not compared, so ${data.offReportEntries === 1 ? "it is" : "they are"} on no row` : ""}. &quot;Sales used&quot; is every item sold times its recipe. Extras and &quot;no cheese&quot; changes aren&apos;t in it yet, so a small gap on cheese or sauce is expected. Shortages and extras are never netted against each other.
           </p>
-          </details>
-        </>
+        </details>
       )}
+    </>
+  )
+}
+
+function Working({ data }: { data: ReportData }) {
+  return (
+    <div className="cw-wrap">
+      <table className="cw-tbl cw-tbl--cards cw-tbl--wide">
+        <thead>
+          <tr>
+            <th>Item</th>
+            <th>Last count</th>
+            <th>+ Delivered</th>
+            <th>− Sales used</th>
+            <th>− Thrown out</th>
+            <th>− Theft, sent back</th>
+            <th>= Should have</th>
+            <th>You counted</th>
+            <th>Missing</th>
+          </tr>
+        </thead>
+        <tbody>
+          {data.rows.map((r) => {
+            const v = gapVerdict(r)
+            return (
+              <tr key={r.ingredientId}>
+                <td>
+                  <b>{r.name}</b>
+                  {r.partial ? <><br /><small style={{ color: "var(--ink-2)" }}>Some deliveries need a case size</small></> : null}
+                </td>
+                <td data-label="Last count">{q(r.last)} {r.unit}</td>
+                <td data-label="+ Delivered">{q(r.delivered)}</td>
+                <td data-label="− Sales used">{q(r.used)}</td>
+                <td data-label="− Thrown out">{q(r.thrown)}</td>
+                <td data-label="− Theft, sent back">{q(r.theft + r.returned)}</td>
+                <td data-label="= Should have">{q(r.should)}</td>
+                <td data-label="You counted">{q(r.counted)}</td>
+                <td data-label="Missing" className={v === "match" ? "ok" : v === "short" ? "miss" : ""}>
+                  {v === "match"
+                    ? "✓ matches"
+                    : v === "short"
+                      ? `${q(r.missing)} ${r.unit}${r.missingDollars != null ? ` · ${money(r.missingDollars)}` : ""}`
+                      : `${q(-r.missing)} ${r.unit} extra`}
+                </td>
+              </tr>
+            )
+          })}
+        </tbody>
+      </table>
     </div>
   )
 }
 
 function Orders({ data }: { data: ReportData }) {
   if (data.orders.length === 0) {
-    return <p className="cw__sub" style={{ padding: 14 }}>No invoices for {data.store.name} in the last 8 weeks.</p>
+    return <p>No invoices for {data.store.name} in the last 8 weeks.</p>
   }
   return (
     <div className="cw-wrap">
@@ -189,7 +349,7 @@ function Orders({ data }: { data: ReportData }) {
         </thead>
         <tbody>
           {data.orders.map((o) => (
-            <tr key={o.name}>
+            <tr key={o.ingredientId}>
               <td><b>{o.name}</b></td>
               <td data-label="Vendor">{o.vendor}</td>
               <td data-label="Orders">{o.orders}</td>
@@ -201,6 +361,55 @@ function Orders({ data }: { data: ReportData }) {
           ))}
         </tbody>
       </table>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Every store
+// ---------------------------------------------------------------------------
+
+function AllStores({ data }: { data: ReportView }) {
+  const n = data.byStore.length
+  const waiting = data.byStore.filter((s) => s.gap === null).map((s) => s.name)
+  const shares = barShares(data.byStore.map((s) => s.gap?.missingDollars ?? null))
+  const rows: BarRow[] = data.byStore.map((s, i) => {
+    const g = s.gap
+    const { figure } = missingFigure(g)
+    return {
+      key: s.id,
+      label: s.name,
+      share: shares[i],
+      none: !g || g.missingDollars === null,
+      value: !g ? "Needs two counts" : figure,
+      sub: !g
+        ? "One finished count or none, so there is nothing to compare yet."
+        : `${g.from} → ${g.to}, ${plural(g.items, "item")} compared${g.unpriced > 0 && g.missingDollars !== null ? `, ${g.unpriced} without a price not included` : ""}.`,
+    }
+  })
+  return (
+    <div className="inv-stack">
+      <div className="iv-cols">
+        <Hero
+          label={`Went missing · latest two counts · ${data.total.stores} of ${n} stores`}
+          figure={data.total.dollars !== null ? money(data.total.dollars) : waiting.length === n ? "Needs two counts" : "Not valued yet"}
+          words={data.total.dollars === null}
+          aside={data.total.dollars !== null ? "nobody logged where it went" : undefined}
+        >
+          <p className="iv-cover-t">
+            Each store is compared between its own two most recent finished counts, so the dates differ.
+            {waiting.length > 0 ? ` ${waiting.join(" and ")} ${waiting.length === 1 ? "needs" : "need"} two counts and ${waiting.length === 1 ? "is" : "are"} not in the figure.` : ""}
+          </p>
+        </Hero>
+        <section className="iv-card" aria-label="Went missing, by store">
+          <div className="iv-card__h">
+            <b>Went missing, by store</b>
+            <span className="iv-mono">latest two counts</span>
+          </div>
+          <Bars rows={rows} label="Went missing, by store" />
+          <p className="iv-note">Pick a store above for the item-by-item picture and the working.</p>
+        </section>
+      </div>
     </div>
   )
 }

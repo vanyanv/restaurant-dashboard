@@ -141,6 +141,10 @@ export const DESKTOP_TO_MOBILE: Record<string, string> = {
 const DYNAMIC_SUBROUTES: Array<[string, string]> = [
   ["/dashboard/analytics", "/m/analytics"],
   ["/dashboard/cogs", "/m/cogs"],
+  // Carries /dashboard/count/item/<id> to /m/count/item/<id>: the one-item
+  // page, the desk client in the phone shell. The base has no page of its
+  // own on either surface; the tabs under /dashboard/count are exact entries.
+  ["/dashboard/count/item", "/m/count/item"],
   ["/dashboard/invoices", "/m/invoices"],
   ["/dashboard/labor", "/m/labor"],
   // Carries /dashboard/menu/catalog/<item> to /m/menu/catalog/<item>. The

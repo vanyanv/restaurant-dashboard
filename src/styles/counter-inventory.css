@@ -1,6 +1,7 @@
 /* src/styles/counter-inventory.css
  *
- * Inventory — the store switcher, the Overview and the Shelf tab. Every colour
+ * Inventory — the store switcher, the Overview, the Shelf tab, the pictures
+ * the Waste and Report tabs lead with, and the one-item page. Every colour
  * is a Counter token; nothing here declares one. Sizes are in rem so the page follows the
  * reader's text size, and every grid child may shrink (`min-width:0`) and
  * wrap, so nothing is clipped or pushes the page sideways from 320px up.
@@ -211,7 +212,8 @@ details.iv-bucket[open]>.iv-bucket__h .n::after{transform:rotate(-135deg);margin
 .iv-chips{display:flex;gap:6px;flex-wrap:wrap}
 .iv-chip{min-height:2.75rem;padding:4px 14px;border-radius:999px;border:1px solid var(--line-strong);background:var(--surface);
   font:inherit;font-size:.8125rem;font-weight:600;color:var(--ink);cursor:pointer}
-.iv-chip[aria-pressed="true"]{background:var(--ink);border-color:var(--ink);color:var(--surface)}
+.iv-chip[aria-pressed="true"],.iv-chip[aria-current="true"]{background:var(--ink);border-color:var(--ink);color:var(--surface)}
+a.iv-chip{display:inline-flex;align-items:center;text-decoration:none;box-sizing:border-box}
 .iv-accs{display:grid;gap:10px;grid-template-columns:minmax(0,1fr)}
 .iv-acc{border:1px solid var(--line);border-radius:var(--r);background:var(--surface);overflow:hidden;min-width:0;scroll-margin-top:9rem}
 .iv-acc summary{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:2px 10px;align-items:center;min-height:2.75rem;padding:10px 12px;cursor:pointer;list-style:none;box-sizing:border-box}
@@ -232,9 +234,46 @@ details.iv-bucket[open]>.iv-bucket__h .n::after{transform:rotate(-135deg);margin
 .iv-it__c em{font-style:normal;font-weight:600;color:var(--ink)}
 .iv-it__c .v{font-size:.9375rem;font-weight:600;color:var(--ink);font-variant-numeric:tabular-nums}
 .iv-it__x{margin:0;font-size:.78125rem;color:var(--ink-2)}
+.iv-it__h .v{font-size:.9375rem;font-weight:600;font-variant-numeric:tabular-nums}
+/* The same rows where they are a plain list, one under the other at any width. */
+.iv-list{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:minmax(0,1fr)}
+/* A row that opens its item: the name is the link and its hit area is the
+   whole row, so the target is the row's height. Anything else in the row
+   that can be pressed sits above it. */
+.iv-it,.iv-o{position:relative}
+.inv-open{color:inherit;text-decoration:none}
+.inv-open::after{content:"";position:absolute;inset:0}
+.inv-open:focus-visible{outline:none}
+.inv-open:focus-visible::after{outline:2px solid var(--accent);outline-offset:-2px;border-radius:var(--r-sm)}
+.iv-it:has(.inv-open:hover),.iv-o:has(.inv-open:hover){background:var(--paper)}
+.iv-it a:not(.inv-open),.iv-it button,.iv-o a:not(.inv-open){position:relative;z-index:1}
+.iv-it__c .iv-btn{flex:none}
 .iv-it .inv-bar{flex-basis:4rem;max-width:12rem}
 .iv-it .inv-days>span:last-child{flex-basis:9rem}
-.iv-fold>summary{cursor:pointer;font-weight:600;font-size:.875rem;min-height:2.75rem;padding:10px 12px;display:flex;align-items:center;box-sizing:border-box}
+.iv-fold>summary{cursor:pointer;font-weight:600;font-size:.875rem;min-height:2.75rem;padding:10px 12px;display:flex;flex-wrap:wrap;gap:2px 10px;align-items:center;box-sizing:border-box}
+.iv-fold>summary span{font-weight:400;font-size:.8125rem;color:var(--ink-2)}
+.iv-fold[open]>summary{border-bottom:1px solid var(--line)}
+/* The working has nine columns: its headings wrap so it fits a desk, and in
+   a page too narrow for it (`@container iv`, below) each row is a card. */
+.iv-fold .cw-tbl--wide th{white-space:normal;vertical-align:bottom}
+.iv-fold .cw-tbl--wide th,.iv-fold .cw-tbl--wide td{padding-inline:8px}
+.iv-fold .cw-tbl--wide td:first-child{white-space:normal}
+@container iv (max-width:61.99rem){
+  .iv-fold .cw-tbl--wide thead{display:none}
+  .iv-fold .cw-tbl--wide tr{display:grid;grid-template-columns:minmax(0,1fr) auto;justify-items:end;gap:4px 12px;padding:12px 14px;border-bottom:1px solid var(--line)}
+  .iv-fold .cw-tbl--wide tr:last-child{border-bottom:0}
+  .iv-fold .cw-tbl--wide td{display:contents;white-space:normal}
+  .iv-fold .cw-tbl--wide td:first-child{display:block;justify-self:stretch;grid-column:1/-1;padding:0 0 4px;border:0}
+  .iv-fold .cw-tbl--wide td[data-label]::before{content:attr(data-label);font-family:var(--mono);font-size:.6875rem;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3);justify-self:start}
+}
+/* The waste form in a card on a phone: its Save bar is fixed above the tab
+   bar, so the room for it goes at the end of the page, after "What was
+   logged", not inside the form's own card. */
+.ct-phone .iv-card .cw:has(>.cw__foot--stick){padding-bottom:0}
+/* "Back to the count" is a third of that bar: on a phone it takes two lines rather than running out of its button. */
+.iv-card .cw-item-foot>.cw__btn{white-space:normal;text-align:center;line-height:1.15;padding-inline:8px}
+.m-shell__main > .ct-root.ct-phone > .mscroll:has(.iv-card .cw__foot--stick){padding-bottom:calc(12px + var(--m-bar-h) + env(safe-area-inset-bottom,0px) + 4.75rem)}
+.iv-fold>p{margin:0;padding:10px 12px;font-size:.8125rem;color:var(--ink-2);line-height:1.45}
 .iv-wide-only{display:none}
 .iv-sheetwrap{overflow-x:auto;border-top:1px solid var(--line)}
 .iv-sheet{width:100%;border-collapse:collapse;font-size:.8125rem;font-variant-numeric:tabular-nums;table-layout:fixed}
@@ -245,6 +284,62 @@ details.iv-bucket[open]>.iv-bucket__h .n::after{transform:rotate(-135deg);margin
 .iv-sheet td b{font-weight:600}
 .iv-sheet td small{display:block;color:var(--ink-2)}
 .iv-sheet td.dim{color:var(--ink-3)}
+
+/* ---------- the picture: a headline, bars, the working ---------- */
+.iv-hero{display:grid;gap:8px;padding:14px;align-content:start}
+.iv-hero>*{min-width:0}
+.iv-hero__n{display:flex;align-items:baseline;gap:6px 10px;flex-wrap:wrap}
+.iv-hero__n strong{font-size:2.5rem;font-weight:600;letter-spacing:-.03em;line-height:1;font-variant-numeric:tabular-nums;overflow-wrap:anywhere;min-width:0}
+.iv-hero__n strong.txt{font-size:1.5rem;letter-spacing:-.01em;line-height:1.15}
+.iv-hero__n span{font-size:.8125rem;color:var(--ink-2);min-width:0}
+.iv-hero__n span b,.iv-cover-t b{color:var(--ink);font-weight:600}
+.iv-hero p{margin:0}
+.iv-cover-t{margin:0;font-size:.78125rem;color:var(--ink-2);line-height:1.45}
+.iv-cols{display:grid;gap:14px;grid-template-columns:minmax(0,1fr);align-items:start;min-width:0}
+.iv-cols>*{min-width:0}
+.inv-stack{display:grid;gap:14px;grid-template-columns:minmax(0,1fr);min-width:0}
+/* The Report's picture: headline, the items, the three tiles. One column in
+   that order; with room the items stand beside the headline and the tiles. */
+.iv-rep{display:grid;gap:14px;grid-template-columns:minmax(0,1fr);align-items:start;min-width:0}
+.iv-rep>*{min-width:0}
+/* A bar on its track. Solid: a real amount. Outlined: what should have been
+   there. Hatched: nothing the app can draw (not valued, not counted). */
+.iv-hb{position:relative;display:block;height:.625rem;border-radius:var(--r-sm);background:var(--sunk);min-width:0}
+.iv-hb>i{position:absolute;inset:0 auto 0 0;min-width:3px;border-radius:var(--r-sm);background:var(--ink)}
+.iv-hb--lite>i{background:var(--surface);border:1.5px solid var(--ink-2);box-sizing:border-box}
+.iv-hb--none{background:repeating-linear-gradient(135deg,var(--ink-3) 0 1.5px,transparent 1.5px 5px);border:1px solid var(--line-strong);box-sizing:border-box}
+.inv-bars{list-style:none;margin:0;padding:12px;display:grid;gap:11px;grid-template-columns:minmax(0,1fr)}
+.inv-bars li{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,auto);gap:4px 10px;align-items:baseline;min-width:0;font-size:.8125rem}
+.inv-bars li>b{font-weight:600;min-width:0;overflow-wrap:anywhere}
+.inv-bars li>.v{font-weight:600;font-variant-numeric:tabular-nums;text-align:right;min-width:0;overflow-wrap:anywhere}
+.inv-bars li>.v--none{font-weight:400;color:var(--ink-2)}
+.inv-bars li>.iv-hb{grid-column:1/-1;grid-row:2}
+.inv-bars li>small{grid-column:1/-1;font-size:.78125rem;color:var(--ink-2);line-height:1.4}
+.iv-two{display:grid;gap:6px;min-width:0}
+.iv-two__r{display:grid;grid-template-columns:minmax(0,5.25rem) minmax(0,1fr) minmax(0,auto);gap:8px;align-items:center;font-size:.78125rem;color:var(--ink-2);min-width:0}
+.iv-two__r b{color:var(--ink);font-weight:600;font-variant-numeric:tabular-nums;text-align:right;min-width:0;overflow-wrap:anywhere}
+.iv-ledger{display:grid;margin:0;font-size:.8125rem}
+.iv-ledger div{display:flex;justify-content:space-between;gap:10px;padding:8px 12px;border-bottom:1px solid var(--line)}
+.iv-ledger div:last-child{border-bottom:0}
+.iv-ledger dt{color:var(--ink-2);min-width:0}
+.iv-ledger dd{margin:0;font-weight:600;font-variant-numeric:tabular-nums;text-align:right}
+.iv-ledger .sum{background:var(--paper)}
+.iv-ledger .sum dt{color:var(--ink);font-weight:700}
+.iv-kv{display:grid;grid-template-columns:minmax(0,auto) minmax(0,1fr);gap:7px 12px;margin:0;padding:12px;font-size:.8125rem}
+.iv-kv dt{color:var(--ink-2);min-width:0}
+.iv-kv dd{margin:0;text-align:right;font-weight:600;min-width:0;overflow-wrap:anywhere}
+.iv-nybox{border:1px dashed var(--line-strong);border-radius:var(--r);padding:12px;display:grid;gap:6px;font-size:.8125rem;color:var(--ink-2);background:var(--paper);min-width:0;line-height:1.45}
+.iv-nybox>b{color:var(--ink);font-size:.875rem}
+.iv-nybox p{margin:0}
+.iv-nybox .iv-btn{justify-self:start}
+.iv-back{display:inline-flex;align-items:center;min-height:2.75rem;font-size:.8125rem;font-weight:600;color:var(--ink-2);text-decoration:none;justify-self:start}
+.iv-back:hover{color:var(--ink)}
+.iv-title{display:grid;gap:4px;min-width:0}
+.iv-title__h{display:flex;justify-content:space-between;align-items:baseline;gap:6px 10px;flex-wrap:wrap}
+.iv-title h2{margin:0;font-size:1.375rem;font-weight:700;letter-spacing:-.01em;line-height:1.15;min-width:0;overflow-wrap:anywhere}
+.iv-picks{display:flex;flex-wrap:wrap;gap:8px;padding:12px}
+.iv-working{border-top:1px solid var(--line)}
+.iv-working>summary{cursor:pointer;font-weight:600;font-size:.8125rem;min-height:2.75rem;padding:10px 12px;display:flex;align-items:center;box-sizing:border-box}
 
 /* ---------- the pinned actions ---------- */
 .iv-foot{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:8px;min-width:0}
@@ -258,13 +353,26 @@ details.iv-bucket[open]>.iv-bucket__h .n::after{transform:rotate(-135deg);margin
      padding (counter-components.css (repairs)) outranks a plainer selector, and the page then ended under the bar. */
   .ct-phone .mscroll:has(> .iv-foot),
   .m-shell__main > .ct-root.ct-phone > .mscroll:has(> .iv-foot){padding-bottom:calc(12px + var(--m-bar-h) + env(safe-area-inset-bottom,0px) + 4.25rem)}
+  .ct-phone .mscroll > .iv-foot--one{grid-template-columns:minmax(0,1fr)}
 }
 
 /* ---------- with room: two columns, then three ---------- */
 @container iv (min-width:26rem){
   .iv-tri{grid-template-columns:repeat(3,minmax(0,1fr))}
 }
+@container iv (min-width:30rem){
+  /* Name, bar and figure on one line once there is room for all three. */
+  .inv-bars li{grid-template-columns:minmax(5.5rem,10rem) minmax(0,1fr) minmax(4.5rem,auto);align-items:center}
+  .inv-bars li>.iv-hb{grid-column:auto;grid-row:auto}
+  .iv-two__r{grid-template-columns:minmax(0,6.5rem) minmax(0,1fr) minmax(5rem,auto)}
+}
 @container iv (min-width:44rem){
+  .iv-rep{grid-template-columns:minmax(0,5fr) minmax(0,8fr);grid-template-rows:auto 1fr;grid-template-areas:"hero items" "tiles items"}
+  .iv-rep__hero{grid-area:hero}
+  .iv-rep__items{grid-area:items}
+  .iv-rep__tiles{grid-area:tiles;grid-template-columns:minmax(0,1fr)}
+  .iv-cols{grid-template-columns:minmax(0,5fr) minmax(0,8fr)}
+  .iv-cols--even{grid-template-columns:repeat(2,minmax(0,1fr))}
   /* The map is taller than the answer beside it: the spare height goes to the
      row under the answer, not between them. */
   .iv--one{grid-template-columns:minmax(0,5fr) minmax(0,8fr);grid-template-rows:auto auto 1fr auto auto;
@@ -290,6 +398,9 @@ details.iv-bucket[open]>.iv-bucket__h .n::after{transform:rotate(-135deg);margin
   .iv-rows .iv-it:nth-child(odd){border-right:1px solid var(--line)}
 }
 @container iv (min-width:62rem){
+  .iv-list--two{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .iv-list--two .iv-it{border-bottom:1px solid var(--line)}
+  .iv-list--two .iv-it:nth-child(odd){border-right:1px solid var(--line)}
   .iv-buckets{grid-template-columns:none;grid-auto-flow:column;grid-auto-columns:minmax(0,1fr)}
   .iv-rows{grid-template-columns:repeat(3,minmax(0,1fr))}
   .iv-rows .iv-it:nth-child(odd){border-right:0}

@@ -95,6 +95,30 @@ export const ADJUST_FORM_REASONS = pick([
 
 export type AdjustFormReason = (typeof ADJUST_FORM_REASONS)[number]["id"]
 
+/**
+ * WHAT "THROWN OUT" IS ON THE INVENTORY TABS. One set, read by the Waste tab's
+ * total, the Inventory overview's tile, the Report's "Thrown out, logged"
+ * tile and the one-item page's working, so the four cannot disagree.
+ *
+ * An entry does not record which form wrote it, so the set is every reason
+ * either form uses for food that left the shelf as waste: the waste log's five
+ * (Dropped, Went bad, Burnt, Remake, Other) plus Damaged from "Adjust on
+ * hand". Theft and "sent back" are never in it: they are shown apart.
+ *
+ * This is wider than the `waste` CLASS above by "Other": Product usage and
+ * COGS still print the class, under their own "Waste logged" label.
+ */
+export const THROWN_OUT_REASONS = pick(["DROPPED", "EXPIRY", "BURNT", "REMAKE", "DAMAGE", "OTHER"] as const)
+
+export const THROWN_OUT_REASON_IDS: AdjustmentReason[] = THROWN_OUT_REASONS.map((r) => r.id)
+
+const THROWN_OUT = new Set<string>(THROWN_OUT_REASON_IDS)
+
+/** Does an entry logged under this reason count as thrown out? */
+export function isThrownOut(reason: string): boolean {
+  return THROWN_OUT.has(reason)
+}
+
 /** One adjustment, valued: `qty` in recipe units × `cost` per recipe unit. */
 export interface ValuedAdjustment {
   reason: string

@@ -257,7 +257,7 @@ export function describeShelf(layers: Layer[], values: ReadonlyArray<number | nu
  */
 export const WASTE_REASONS = WASTE_LOG_REASONS
 export type WasteReason = (typeof WASTE_REASONS)[number]["id"]
-/** The reasons the waste log writes — what it may list and undo as its own entries. */
+/** The reasons the waste log's form offers and writes. What the Waste tab LISTS is wider: `isThrownOut` in `waste-reasons.ts`. */
 export const WASTE_REASON_IDS: WasteReason[] = WASTE_REASONS.map((r) => r.id)
 
 export function wasteReasonLabel(id: string): string {

@@ -1,13 +1,13 @@
 import { getServerSession } from "next-auth"
 import { redirect } from "next/navigation"
 import { authOptions, hasOwnerAccess } from "@/lib/auth"
-import { getCountWasteSectionPromises } from "@/lib/counter/adapters/count"
+import { getInventoryWasteSectionPromises } from "@/lib/counter/adapters/inventory-waste"
 import { getInventorySwitcherSectionPromises } from "@/lib/counter/adapters/inventory-shelf"
 import { WasteClient } from "./waste-client"
 
 export const dynamic = "force-dynamic"
 
-/** Count & waste — Waste: log what was thrown out, and the last 7 days. Owners only. */
+/** Inventory — Waste: what was thrown out in the last 7 days, why and where, and the form that logs it. Owners only. */
 export default async function Page({ searchParams }: { searchParams: Promise<{ store?: string }> }) {
   const session = await getServerSession(authOptions)
   if (!session) redirect("/login")
@@ -15,7 +15,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ s
   const sp = await searchParams
 
   const sections = {
-    ...getCountWasteSectionPromises({ accountId: session.user.accountId, storeId: sp.store }),
+    ...getInventoryWasteSectionPromises({ accountId: session.user.accountId, storeId: sp.store }),
     ...getInventorySwitcherSectionPromises({ accountId: session.user.accountId }),
   }
 
