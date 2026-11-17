@@ -1,3 +1,5 @@
+import { EMAIL } from "@/lib/email-colors"
+
 export interface PriceHike {
   vendorName: string
   productName: string
@@ -61,50 +63,50 @@ export function buildPriceAlertEmail(hikes: PriceHike[]): {
       )
       return `
         <tr>
-          <td style="padding:8px 12px;border-bottom:1px solid #eee;">
+          <td style="padding:8px 12px;border-bottom:1px solid ${EMAIL.line};">
             <strong>${escapeHtml(h.vendorName)}</strong><br/>
-            <span style="color:#888;font-size:12px;">Invoice ${escapeHtml(h.invoiceNumber)}</span>
+            <span style="color:${EMAIL.ink3};font-size:12px;">Invoice ${escapeHtml(h.invoiceNumber)}</span>
           </td>
-          <td style="padding:8px 12px;border-bottom:1px solid #eee;">
+          <td style="padding:8px 12px;border-bottom:1px solid ${EMAIL.line};">
             ${escapeHtml(h.productName)}<br/>
-            <span style="color:#888;font-size:12px;">${h.sku ? "SKU " + escapeHtml(h.sku) : ""}${h.unit ? " · " + escapeHtml(h.unit) : ""}</span>
+            <span style="color:${EMAIL.ink3};font-size:12px;">${h.sku ? "SKU " + escapeHtml(h.sku) : ""}${h.unit ? " · " + escapeHtml(h.unit) : ""}</span>
           </td>
-          <td style="padding:8px 12px;border-bottom:1px solid #eee;text-align:right;">
+          <td style="padding:8px 12px;border-bottom:1px solid ${EMAIL.line};text-align:right;">
             ${fmtUsd(h.prevPrice)}<br/>
-            <span style="color:#888;font-size:12px;">${fmtDate(h.prevDate)}</span>
+            <span style="color:${EMAIL.ink3};font-size:12px;">${fmtDate(h.prevDate)}</span>
           </td>
-          <td style="padding:8px 12px;border-bottom:1px solid #eee;text-align:right;">
+          <td style="padding:8px 12px;border-bottom:1px solid ${EMAIL.line};text-align:right;">
             <strong>${fmtUsd(h.latestPrice)}</strong><br/>
-            <span style="color:#888;font-size:12px;">${fmtDate(h.latestDate)}</span>
+            <span style="color:${EMAIL.ink3};font-size:12px;">${fmtDate(h.latestDate)}</span>
           </td>
-          <td style="padding:8px 12px;border-bottom:1px solid #eee;text-align:right;">
-            <strong style="color:#c0392b;">${fmtPct(h.pctChange)}</strong><br/>
-            <span style="color:#888;font-size:12px;">+${fmtUsd(dollarDelta)} · ${dateGapDays}d gap</span>
+          <td style="padding:8px 12px;border-bottom:1px solid ${EMAIL.line};text-align:right;">
+            <strong style="color:${EMAIL.bad};">${fmtPct(h.pctChange)}</strong><br/>
+            <span style="color:${EMAIL.ink3};font-size:12px;">+${fmtUsd(dollarDelta)} · ${dateGapDays}d gap</span>
           </td>
         </tr>`
     })
     .join("")
 
   const html = `<!DOCTYPE html>
-<html><body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;color:#222;margin:0;padding:24px;background:#f7f7f8;">
-<div style="max-width:720px;margin:0 auto;background:#fff;border:1px solid #e5e5e5;border-radius:8px;overflow:hidden;">
-  <div style="padding:20px 24px;border-bottom:1px solid #eee;">
+<html><body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;color:${EMAIL.ink};margin:0;padding:24px;background:${EMAIL.sunk};">
+<div style="max-width:720px;margin:0 auto;background:${EMAIL.surface};border:1px solid ${EMAIL.lineStrong};border-radius:8px;overflow:hidden;">
+  <div style="padding:20px 24px;border-bottom:1px solid ${EMAIL.line};">
     <h2 style="margin:0;font-size:18px;">Price increases detected on ${hikes.length} product${hikes.length === 1 ? "" : "s"}</h2>
-    <p style="margin:6px 0 0;color:#666;font-size:14px;">Based on invoices synced in the last run. Threshold: 5% increase vs the prior order.</p>
+    <p style="margin:6px 0 0;color:${EMAIL.ink2};font-size:14px;">Based on invoices synced in the last run. Threshold: 5% increase vs the prior order.</p>
   </div>
   <table style="width:100%;border-collapse:collapse;font-size:14px;">
     <thead>
-      <tr style="background:#fafafa;">
-        <th style="padding:10px 12px;text-align:left;border-bottom:1px solid #eee;font-weight:600;">Vendor</th>
-        <th style="padding:10px 12px;text-align:left;border-bottom:1px solid #eee;font-weight:600;">Product</th>
-        <th style="padding:10px 12px;text-align:right;border-bottom:1px solid #eee;font-weight:600;">Prev price</th>
-        <th style="padding:10px 12px;text-align:right;border-bottom:1px solid #eee;font-weight:600;">Latest price</th>
-        <th style="padding:10px 12px;text-align:right;border-bottom:1px solid #eee;font-weight:600;">Change</th>
+      <tr style="background:${EMAIL.paper};">
+        <th style="padding:10px 12px;text-align:left;border-bottom:1px solid ${EMAIL.line};font-weight:600;">Vendor</th>
+        <th style="padding:10px 12px;text-align:left;border-bottom:1px solid ${EMAIL.line};font-weight:600;">Product</th>
+        <th style="padding:10px 12px;text-align:right;border-bottom:1px solid ${EMAIL.line};font-weight:600;">Prev price</th>
+        <th style="padding:10px 12px;text-align:right;border-bottom:1px solid ${EMAIL.line};font-weight:600;">Latest price</th>
+        <th style="padding:10px 12px;text-align:right;border-bottom:1px solid ${EMAIL.line};font-weight:600;">Change</th>
       </tr>
     </thead>
     <tbody>${rows}</tbody>
   </table>
-  <div style="padding:16px 24px;color:#666;font-size:13px;border-top:1px solid #eee;">
+  <div style="padding:16px 24px;color:${EMAIL.ink2};font-size:13px;border-top:1px solid ${EMAIL.line};">
     Open the dashboard to see all price movers and historical trends.
   </div>
 </div>

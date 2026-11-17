@@ -68,12 +68,7 @@
 .pp-who b em{font-style:normal;font-weight:400;color:var(--ink-3)}
 .pp-who > span{font-size:var(--t-cap);color:var(--ink-3);overflow-wrap:anywhere}
 .pp-when{font-size:var(--t-cap);color:var(--ink-2)}
-.pp-pill{justify-self:start;display:inline-flex;align-items:center;gap:6px;padding:3px 9px;border-radius:999px;font-family:var(--mono);font-size:10.5px;letter-spacing:.03em;white-space:nowrap}
-.pp-pill::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor}
-.pp-pill--good{background:var(--good-wash);color:var(--good)}
-.pp-pill--warn{background:var(--warn-wash);color:var(--warn)}
-.pp-pill--bad{background:var(--bad-wash);color:var(--bad)}
-.pp-pill--off{background:var(--sunk);color:var(--ink-3)}
+.pp-st{justify-self:start;min-width:0}
 .pp-acts{position:relative;display:flex;gap:4px;align-items:center;justify-content:flex-end}
 .pp-kebab{width:32px;height:32px;border:0;border-radius:var(--r-sm);background:none;color:var(--ink-3);font-size:18px;line-height:1;cursor:pointer}
 .pp-kebab:hover,.pp-kebab[aria-expanded="true"]{background:var(--sunk);color:var(--ink)}
