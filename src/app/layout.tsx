@@ -2,6 +2,7 @@ import type { Metadata } from "next"
 import { Bricolage_Grotesque, DM_Sans, JetBrains_Mono } from "next/font/google"
 import { CounterThemeProvider, themeNoFlashScript } from "@/components/counter/theme-provider"
 import { Toaster } from "sonner"
+import { ClientErrorListener } from "@/components/telemetry/client-error-listener"
 import "./globals.css"
 
 const dmSans = DM_Sans({ subsets: ["latin"], variable: "--font-dm-sans" })
@@ -55,19 +56,20 @@ export default function RootLayout({
           * `/login` (218.9 KB gzipped) and `/shutdown` (164.5 KB), the two
           * routes a signed-out visitor sees.
           *
-          * Neither is used outside the editorial tree: `useQuery` appears only
-          * in `components/analytics` and `components/monitoring`, `useSession`
-          * only in `app-sidebar.tsx`, and no Counter component imports
-          * framer-motion at all (`components/counter/motion/` is hand-rolled).
-          * Both now live in `(editorial)/layout.tsx`.
+          * Neither is used any more: the editorial tree that needed them was
+          * deleted, and no Counter component imports framer-motion
+          * (`components/counter/motion/` is hand-rolled).
           *
           * `CounterThemeProvider` stays: its no-flash script has to run before
           * first paint, which is the whole reason it is inline in <head>.
-          * `Toaster` stays because `toast()` is called from both trees.
+          * `Toaster` stays because `toast()` is called across the app.
+          * `ClientErrorListener` sends browser errors no boundary caught to
+          * the error log on Monitoring (a few hundred bytes, no render).
           */}
         <CounterThemeProvider>
           {children}
           <Toaster richColors position="top-right" />
+          <ClientErrorListener />
         </CounterThemeProvider>
         {/* Real load and tap timings from the owner's own phone (LCP, INP, TTFB
             per page), reported to Vercel Speed Insights once it is enabled on

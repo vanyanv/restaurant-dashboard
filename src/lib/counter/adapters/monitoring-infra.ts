@@ -253,8 +253,12 @@ function headlineOf(d: InfraData): InfraHeadline {
     {
       label: "Errors logged",
       value: count(d.errors.length),
-      delta: `in ${count(ERROR_DAYS)} days, all of them the watchdog`,
-      deltaTone: "is-flat",
+      delta: d.errors.length === 0
+        ? `none in ${count(ERROR_DAYS)} days`
+        : d.errors.every((e) => e.source.startsWith("cron."))
+          ? `latest ${count(d.errors.length)} in ${count(ERROR_DAYS)} days, all the watchdog`
+          : `latest ${count(d.errors.length)} in ${count(ERROR_DAYS)} days, see Activity`,
+      deltaTone: d.errors.some((e) => !e.source.startsWith("cron.")) ? "is-down" : "is-flat",
     },
   ]
 

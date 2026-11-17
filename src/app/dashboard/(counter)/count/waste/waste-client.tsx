@@ -109,7 +109,7 @@ function OneStore({ data, one }: { data: WasteView; one: WasteOne }) {
   const { figure, words } = figureOf(w)
   const n = data.byStore.length
   return (
-    <div className="iv-stack">
+    <div className="inv-stack">
       <div className="iv-cols">
         <Hero label={`Thrown out · last 7 days · ${one.store.name}`} figure={figure} words={words} aside={changeSay(one.change, "the 7 days before")}>
           {w.entries === 0 ? (
@@ -164,7 +164,7 @@ function AllStores({ data }: { data: WasteView }) {
   const { figure, words } = figureOf(a)
   const quiet = data.byStore.filter((s) => s.entries === 0).map((s) => s.name)
   return (
-    <div className="iv-stack">
+    <div className="inv-stack">
       <Hero
         label={`Thrown out · last 7 days · ${a.storesLogged} of ${n} stores`}
         figure={figure}
@@ -203,7 +203,7 @@ function LogMode({ one, back }: { one: WasteOne; back: string }) {
   const base = (usePathname() ?? "").startsWith("/m/") ? "/m/count" : "/dashboard/count"
   return (
     <div className="iv-c">
-      <div className="iv-stack">
+      <div className="inv-stack">
         <Link className="iv-back" href={back}>‹ Waste · {one.store.name}</Link>
         <div className="iv-cols iv-cols--even">
           <section className="iv-card iv-pad" aria-label={`Log waste at ${one.store.name}`}>

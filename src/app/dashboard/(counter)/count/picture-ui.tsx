@@ -73,7 +73,7 @@ export type BarRow = {
 /** One row per thing, every bar on the same scale, the figure beside each. */
 export function Bars({ rows, label }: { rows: BarRow[]; label: string }) {
   return (
-    <ul className="iv-bars" aria-label={label}>
+    <ul className="inv-bars" aria-label={label}>
       {rows.map((r) => (
         <li key={r.key}>
           <b>{r.label}</b>
@@ -115,7 +115,7 @@ const VERDICT_PILL: Record<GapVerdict, string> = { match: "good", short: "warn",
 /** "Matches" / "12 lb short" / "3 lb extra". */
 export function VerdictPill({ verdict, missing, unit }: { verdict: GapVerdict; missing: number; unit: string }) {
   return (
-    <span className={`iv-pill iv-pill--${VERDICT_PILL[verdict]}`}>
+    <span className={`inv-pill inv-pill--${VERDICT_PILL[verdict]}`}>
       {verdict === "match" ? "Matches" : verdict === "short" ? `${q(missing)} ${unit} short` : `${q(-missing)} ${unit} extra`}
     </span>
   )

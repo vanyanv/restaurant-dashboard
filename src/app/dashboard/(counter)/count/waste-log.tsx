@@ -195,7 +195,7 @@ export function WasteEntries({ entries }: { entries: WasteEntry[] }) {
               <b>{w.name}</b>
               {w.dollars != null
                 ? <span className="v">{money(w.dollars)}</span>
-                : <span className="iv-pill iv-pill--notyet">Not valued yet</span>}
+                : <span className="inv-pill inv-pill--notyet">Not valued yet</span>}
             </div>
             <div className="iv-it__c">
               <span>

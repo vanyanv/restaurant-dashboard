@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect } from "react"
+import { reportClientError } from "@/lib/monitoring/client-error"
 
 /**
  * Last-resort boundary: only fires when the root layout itself throws, which
@@ -39,6 +40,12 @@ export default function GlobalError({
 }) {
   useEffect(() => {
     console.error(error)
+    reportClientError({
+      kind: "global",
+      message: error.message,
+      stack: error.stack ?? null,
+      digest: error.digest ?? null,
+    })
   }, [error])
 
   return (

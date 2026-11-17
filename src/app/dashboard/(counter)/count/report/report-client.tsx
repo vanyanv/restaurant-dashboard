@@ -54,7 +54,7 @@ function OneStore({ data }: { data: ReportData }) {
   const href = useSurfaceHref()
   const walk = href(`/dashboard/count/walk?store=${data.store.id}`)
   return (
-    <div className="iv-stack">
+    <div className="inv-stack">
       {data.counts.length > 1 && (
         <nav className="iv-chips" aria-label="Count">
           {data.counts.slice(0, 8).map((c) => (
@@ -205,7 +205,7 @@ function Compared({ data, from, to }: { data: ReportData; from: string; to: stri
               {off.map((r) => (
                 <li key={r.ingredientId} className="iv-it">
                   <div className="iv-it__h">
-                    <b><ItemLink id={r.ingredientId} store={data.store.id} className="iv-open">{r.name}</ItemLink></b>
+                    <b><ItemLink id={r.ingredientId} store={data.store.id} className="inv-open">{r.name}</ItemLink></b>
                     <VerdictPill verdict={gapVerdict(r)} missing={r.missing} unit={r.unit} />
                   </div>
                   <TwoBars should={r.should} counted={r.counted} unit={r.unit} />
@@ -221,7 +221,7 @@ function Compared({ data, from, to }: { data: ReportData; from: string; to: stri
                 <li className="iv-it">
                   <div className="iv-it__h">
                     <b>{off.length > 0 ? `${plural(matching, "more item")}` : plural(matching, "item")}</b>
-                    <span className="iv-pill iv-pill--good">{matching === 1 ? "Matches" : "Match"}</span>
+                    <span className="inv-pill inv-pill--good">{matching === 1 ? "Matches" : "Match"}</span>
                   </div>
                   <p className="iv-it__x">Counted within 5% of what the numbers say. They are in the working below.</p>
                 </li>
@@ -388,7 +388,7 @@ function AllStores({ data }: { data: ReportView }) {
     }
   })
   return (
-    <div className="iv-stack">
+    <div className="inv-stack">
       <div className="iv-cols">
         <Hero
           label={`Went missing · latest two counts · ${data.total.stores} of ${n} stores`}

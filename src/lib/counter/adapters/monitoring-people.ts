@@ -458,7 +458,7 @@ interface ActivityData {
   feed: ActivityFeedRow[]
   errors24h: number
   byHour: number[]
-  recent: Array<{ at: Date; source: string; message: string }>
+  recent: Array<{ at: Date; source: string; route: string | null; message: string }>
   syncRuns24h: number
   syncFailed24h: number
   stores: Array<{ name: string; stage: string | null; lastOrder: Date | null; orders30d: number }>
@@ -473,8 +473,8 @@ async function loadActivity(accountId: string): Promise<ActivityData> {
       SELECT EXTRACT(HOUR FROM "occurredAt")::int AS hr, COUNT(*)::int AS n
       FROM "ErrorEvent" WHERE "occurredAt" >= NOW() - INTERVAL '24 hours'
       GROUP BY 1 ORDER BY 1`,
-    prisma.$queryRaw<Array<{ at: Date; source: string; message: string }>>`
-      SELECT "occurredAt" AS at, source, message FROM "ErrorEvent"
+    prisma.$queryRaw<Array<{ at: Date; source: string; route: string | null; message: string }>>`
+      SELECT "occurredAt" AS at, source, route, message FROM "ErrorEvent"
       ORDER BY "occurredAt" DESC LIMIT 8`,
     prisma.$queryRaw<Array<{ runs: number; failed: number }>>`
       SELECT COUNT(*)::int AS runs,
@@ -660,13 +660,13 @@ function activityErrorsOf(d: ActivityData): ActivityErrors {
       key: `${r.at.toISOString()}:${i}`,
       cells: {
         when: T(r.at),
-        where: r.source,
+        where: r.route ? `${r.source} · ${r.route}` : r.source,
         what: r.message.slice(0, 70),
       },
     })),
     phoneRows: d.recent.slice(0, PHONE_ROWS).map((r, i) => ({
       key: `${r.at.toISOString()}:${i}`,
-      title: r.source,
+      title: r.route ? `${r.source} · ${r.route}` : r.source,
       detail: r.message.slice(0, 50),
       value: T(r.at),
       noteTone: "down" as const,

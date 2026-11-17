@@ -3,6 +3,7 @@
 import { useEffect } from "react"
 import { Failed } from "@/components/counter/state/failed"
 import { logger } from "@/lib/logger"
+import { reportClientError } from "@/lib/monitoring/client-error"
 
 /**
  * A whole Counter ROUTE failed, rather than one section in it.
@@ -64,6 +65,12 @@ export function RouteFailed({
       title,
       digest: error.digest,
       message: error.message,
+    })
+    reportClientError({
+      kind: "route",
+      message: `${title}: ${error.message}`,
+      stack: error.stack ?? null,
+      digest: error.digest ?? null,
     })
   }, [error, title])
 

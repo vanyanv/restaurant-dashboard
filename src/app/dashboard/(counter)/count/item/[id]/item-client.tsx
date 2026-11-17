@@ -99,7 +99,7 @@ function OneStore({ data, item, one }: { data: ItemView; item: Item; one: ItemOn
   const first = one.lines[0]
   const state = first?.state ?? "not_counted"
   return (
-    <div className="iv-stack">
+    <div className="inv-stack">
       <Link className="iv-back" href={href(`/dashboard/count/shelf?store=${one.store.id}`)}>‹ Shelf · {one.store.name}</Link>
       <div className="iv-title">
         <div className="iv-title__h">
@@ -110,11 +110,11 @@ function OneStore({ data, item, one }: { data: ItemView; item: Item; one: ItemOn
         {item.fullName !== item.name ? <span className="iv-quiet">{item.fullName}</span> : null}
       </div>
       <div className="iv-cols iv-cols--even">
-        <div className="iv-stack">
+        <div className="inv-stack">
           <Counted data={data} one={one} />
           <Since one={one} />
         </div>
-        <div className="iv-stack">
+        <div className="inv-stack">
           <Stores data={data} item={item} />
           <Ordering one={one} />
         </div>
@@ -228,7 +228,7 @@ function Since({ one }: { one: ItemOne }) {
         <b>Since the last count</b>
         <VerdictPill verdict={g.verdict} missing={r.missing} unit={r.unit} />
       </div>
-      <div className="iv-pad iv-stack">
+      <div className="iv-pad inv-stack">
         <TwoBars should={r.should} counted={r.counted} unit={r.unit} />
         <p className="iv-cover-t">
           {g.from} → {g.to}.{" "}
@@ -301,7 +301,7 @@ function AllStores({ data, item }: { data: ItemView; item: Item }) {
   const n = data.byStore.length
   const counted = data.byStore.filter((s) => s.why !== "not_counted").length
   return (
-    <div className="iv-stack">
+    <div className="inv-stack">
       <Link className="iv-back" href={href("/dashboard/count/shelf")}>‹ Shelf</Link>
       <div className="iv-title">
         <div className="iv-title__h"><h2>{item.name}</h2></div>
