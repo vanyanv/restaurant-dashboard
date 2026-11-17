@@ -1,6 +1,7 @@
 "use client"
 
-import { useCallback, useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useEffectEvent, useRef, useState } from "react"
+import { deletePhoto, loadPhotos, savePhoto } from "./offline-photos"
 import type { ActiveCheck, CrewItem, CrewMarkState, CrewView } from "@/lib/checks/crew"
 import { shortStoreName } from "@/lib/checks/names"
 
@@ -604,8 +605,12 @@ function Pin({
   )
 }
 
-/** A tick that could not reach the server, kept until the signal is back. */
-type Queued = { itemId: string; done: boolean; note?: string; seen?: string; photo?: Blob }
+/**
+ * A tick that could not reach the server, kept until the signal is back.
+ * `hasPhoto` marks a tick whose photo is kept in IndexedDB (`offline-photos`)
+ * rather than in localStorage; after a reload `photo` is filled back in from there.
+ */
+type Queued = { itemId: string; done: boolean; note?: string; seen?: string; photo?: Blob; hasPhoto?: boolean }
 /** In the last 15 minutes before a check closes itself, the header turns yellow and the phone buzzes once. */
 const CLOSING_SOON_MS = 15 * 60_000
 const FLUSH_MS = 5_000
@@ -623,8 +628,8 @@ function readQueue(key: string): Queued[] {
 }
 function writeQueue(key: string, q: Queued[]) {
   try {
-    // Photos stay in memory only; a reload keeps the ticks, not the pictures.
-    const plain = q.filter((x) => !x.photo)
+    // The photo itself goes to IndexedDB (see `keep`); localStorage only notes that there is one.
+    const plain = q.map(({ photo, ...rest }) => (photo || rest.hasPhoto ? { ...rest, hasPhoto: true } : rest))
     if (plain.length === 0) localStorage.removeItem(key)
     else localStorage.setItem(key, JSON.stringify(plain))
   } catch {}
@@ -659,6 +664,11 @@ function Checklist({
     Object.fromEntries(queue.current.map((q) => [q.itemId, q.done])),
   )
   const [queued, setQueued] = useState(queue.current.length)
+  /**
+   * False until photos kept from before a reload are back in the queue. A
+   * flush before then would send those ticks without their photos.
+   */
+  const photosBack = useRef(false)
   /** The task being flagged, with the note and mark it had when the sheet opened. */
   const [flagFor, setFlagFor] = useState<{ item: CrewItem; note: string; seen?: string } | null>(null)
   /** A done task someone tapped: shows who did it, and undo is a second, deliberate tap. */
@@ -741,7 +751,12 @@ function Checklist({
   const keep = (q: Queued) => {
     // The newest tap on a task replaces any older one still waiting.
     queue.current = [...queue.current.filter((x) => x.itemId !== q.itemId), q]
-    writeQueue(qKey, queue.current)
+    // Photo first, so a tick noted as having one always has one to find.
+    if (q.photo) void savePhoto(qKey, q.itemId, q.photo).then(() => writeQueue(qKey, queue.current))
+    else {
+      void deletePhoto(qKey, q.itemId)
+      writeQueue(qKey, queue.current)
+    }
     setQueued(queue.current.length)
   }
 
@@ -749,7 +764,7 @@ function Checklist({
   const flushing = useRef<Promise<void> | null>(null)
   const flush = useCallback((): Promise<void> => {
     if (flushing.current) return flushing.current
-    if (queue.current.length === 0) return Promise.resolve()
+    if (queue.current.length === 0 || !photosBack.current) return Promise.resolve()
     const run = (async () => {
       try {
         while (queue.current.length > 0) {
@@ -759,6 +774,7 @@ function Checklist({
           // By identity: a tap while this was in flight may have reordered the queue.
           queue.current = queue.current.filter((x) => x !== q)
           writeQueue(qKey, queue.current)
+          if (q.photo && !queue.current.some((x) => x.itemId === q.itemId)) void deletePhoto(qKey, q.itemId)
           setQueued(queue.current.length)
           // A newer tap on the same task may be waiting behind this one.
           if (!queue.current.some((x) => x.itemId === q.itemId)) clearPending(q.itemId)
@@ -771,6 +787,31 @@ function Checklist({
     return run
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [qKey])
+  // After a reload: put the kept photos back on their ticks, then let the queue send.
+  const restorePhotos = useEffectEvent(async () => {
+    const photos = await loadPhotos(qKey)
+    const lost: string[] = []
+    queue.current = queue.current.flatMap((q) => {
+      if (!q.hasPhoto || q.photo) return [q]
+      const photo = photos.get(q.itemId)
+      if (photo) return [{ ...q, photo }]
+      lost.push(q.itemId)
+      return []
+    })
+    // A photo the phone could not keep: drop its tick so the task asks for the photo again.
+    for (const id of lost) if (!queue.current.some((x) => x.itemId === id)) clearPending(id)
+    writeQueue(qKey, queue.current)
+    setQueued(queue.current.length)
+    photosBack.current = true
+    void flush()
+  })
+  useEffect(() => {
+    if (queue.current.some((q) => q.hasPhoto && !q.photo)) void restorePhotos()
+    else {
+      photosBack.current = true
+      void flush()
+    }
+  }, [flush])
   useEffect(() => {
     if (queued === 0) return
     const id = window.setInterval(() => void flush(), FLUSH_MS)
