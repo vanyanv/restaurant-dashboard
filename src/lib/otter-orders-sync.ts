@@ -316,6 +316,24 @@ async function runOrdersSyncInner(
         "discount" = EXCLUDED."discount",
         "total" = EXCLUDED."total",
         "syncedAt" = EXCLUDED."syncedAt"
+      -- Only rewrite an order that actually changed. Every 4-hour run re-reads
+      -- the whole window, and rewriting unchanged orders cost 934k row
+      -- versions for 117k orders in prod (pg_stat_user_tables, 2026-11-17):
+      -- dead rows to vacuum, and pages that never stay "all-visible", so
+      -- index-only reads fall back to the table. syncedAt therefore moves
+      -- only when an order is new or changed (see the staleness window in
+      -- src/lib/monitoring/staleness.ts).
+      WHERE ("OtterOrder"."externalDisplayId", "OtterOrder"."storeId", "OtterOrder"."otterStoreId",
+             "OtterOrder"."platform", "OtterOrder"."referenceTimeLocal", "OtterOrder"."fulfillmentMode",
+             "OtterOrder"."orderStatus", "OtterOrder"."acceptanceStatus", "OtterOrder"."subtotal",
+             "OtterOrder"."tax", "OtterOrder"."tip", "OtterOrder"."commission",
+             "OtterOrder"."discount", "OtterOrder"."total")
+        IS DISTINCT FROM
+            (EXCLUDED."externalDisplayId", EXCLUDED."storeId", EXCLUDED."otterStoreId",
+             EXCLUDED."platform", EXCLUDED."referenceTimeLocal", EXCLUDED."fulfillmentMode",
+             EXCLUDED."orderStatus", EXCLUDED."acceptanceStatus", EXCLUDED."subtotal",
+             EXCLUDED."tax", EXCLUDED."tip", EXCLUDED."commission",
+             EXCLUDED."discount", EXCLUDED."total")
     `)
   }
 
