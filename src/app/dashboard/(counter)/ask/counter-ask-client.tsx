@@ -632,7 +632,7 @@ export function CounterAskClient({
 
   // The newest turn scrolls into view when it is sent, smoothly unless the
   // reader asked for no motion. Nothing already on the page moves: the turn
-  // rises from the composer's side (counter-repairs.css, "the whole chat")
+  // rises from the composer's side (counter-components.css (repairs), "the whole chat")
   // and the page comes to it.
   const reduced = useReducedMotion()
   const newestRef = useRef<HTMLDivElement>(null)

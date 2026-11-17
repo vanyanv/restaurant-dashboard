@@ -58,7 +58,7 @@ describe("PageHead", () => {
     // delays and only `backwards` applies the `from` state during the delay —
     // `none` would flash each section at full opacity before animating it in.
     const repairs = readFileSync(
-      resolve(process.cwd(), "src/styles/counter-repairs.css"),
+      resolve(process.cwd(), "src/styles/counter-components.css"),
       "utf8",
     )
     const rule = repairs.replace(/\s+/g, " ")

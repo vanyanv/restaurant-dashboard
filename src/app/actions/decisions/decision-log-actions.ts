@@ -1,8 +1,10 @@
-"use server"
-
+// Server-only, not a server action: nothing in the browser calls these, so
+// they are plain functions and cannot be invoked from outside the server.
+// Browser saves go through `src/lib/counter/actions/`.
+import "server-only"
+import { getSession } from "@/lib/auth-scope"
 import { revalidatePath } from "next/cache"
-import { getServerSession } from "next-auth"
-import { authOptions, hasOwnerAccess } from "@/lib/auth"
+import { hasOwnerAccess } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { Prisma } from "@/generated/prisma/client"
 import { ymdUTC as ymd } from "@/lib/date-utils"
@@ -37,7 +39,7 @@ export interface DecisionRef {
 }
 
 async function authorize(storeId: string) {
-  const session = await getServerSession(authOptions)
+  const session = await getSession()
   if (!session?.user || !hasOwnerAccess(session.user.role)) {
     return { ok: false as const, error: "unauthorized" as const }
   }

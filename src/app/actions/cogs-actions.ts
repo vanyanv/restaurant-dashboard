@@ -1,8 +1,10 @@
-"use server"
-
+// Server-only, not a server action: nothing in the browser calls these, so
+// they are plain functions and cannot be invoked from outside the server.
+// Browser saves go through `src/lib/counter/actions/`.
+import "server-only"
+import { getSession } from "@/lib/auth-scope"
 import { revalidatePath } from "next/cache"
-import { getServerSession } from "next-auth"
-import { authOptions, hasOwnerAccess } from "@/lib/auth"
+import { hasOwnerAccess } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 
 export interface SetTargetInput {
@@ -18,7 +20,7 @@ export type SetTargetResult =
 export async function setStoreTargetCogsPct(
   input: SetTargetInput
 ): Promise<SetTargetResult> {
-  const session = await getServerSession(authOptions)
+  const session = await getSession()
   if (!session) return { error: "Not signed in" }
   if (!hasOwnerAccess(session.user.role)) return { error: "Forbidden" }
 

@@ -14,7 +14,7 @@ import { join } from "node:path"
 import { MDateSheet } from "@/components/counter/shell/m-date-sheet"
 import { COMPARISONS, MENU_PRESETS, comparisonRange } from "@/lib/counter/date-range"
 
-const SHEET = ["counter-components.css", "counter-repairs.css"]
+const SHEET = ["counter-components.css"]
   .map((f) => readFileSync(join(process.cwd(), "src/styles", f), "utf8"))
   .join("\n")
 

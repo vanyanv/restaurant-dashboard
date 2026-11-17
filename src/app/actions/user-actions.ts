@@ -1,10 +1,11 @@
-"use server"
-
+// Server-only, not a server action: nothing in the browser calls these, so
+// they are plain functions and cannot be invoked from outside the server.
+// Browser saves go through `src/lib/counter/actions/`.
+import "server-only"
+import { getSession } from "@/lib/auth-scope"
 import { z } from "zod"
 import bcrypt from "bcryptjs"
-import { getServerSession } from "next-auth"
 import { revalidatePath } from "next/cache"
-import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 
 export type ActionResult =
@@ -34,7 +35,7 @@ const profileSchema = z.object({
 
 export async function updateProfile(formData: FormData): Promise<ActionResult> {
   try {
-    const session = await getServerSession(authOptions)
+    const session = await getSession()
     if (!session?.user) return { error: "Unauthorized" }
 
     const data = profileSchema.parse({
@@ -79,7 +80,7 @@ const passwordSchema = z
 
 export async function changePassword(formData: FormData): Promise<ActionResult> {
   try {
-    const session = await getServerSession(authOptions)
+    const session = await getSession()
     if (!session?.user) return { error: "Unauthorized" }
 
     const data = passwordSchema.parse({
@@ -124,7 +125,7 @@ export async function updateNotificationPrefs(
   formData: FormData
 ): Promise<ActionResult> {
   try {
-    const session = await getServerSession(authOptions)
+    const session = await getSession()
     if (!session?.user) return { error: "Unauthorized" }
 
     const data = notificationSchema.parse({

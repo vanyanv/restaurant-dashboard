@@ -1,5 +1,7 @@
-"use server"
-
+// Server-only, not a server action: nothing in the browser calls these, so
+// they are plain functions and cannot be invoked from outside the server.
+// Browser saves go through `src/lib/counter/actions/`.
+import "server-only"
 import { startOfDayUTC as startOfDayUtc } from "@/lib/date-utils"
 // F23 — New-item launch trajectory. We classify a menu item as "newly
 // launched" when:

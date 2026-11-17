@@ -156,7 +156,7 @@ export function StoreSwitcher({
       >
         <span>
           {/* Keyed on the store: a change remounts the name, and the entry
-              fade in counter-repairs.css is the cross-fade (R4). */}
+              fade in counter-components.css (repairs) is the cross-fade (R4). */}
           <span className="nm" key={selected ? selected.id : "all"}>
             {selected ? selected.name : "All stores"}
           </span>

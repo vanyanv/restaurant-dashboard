@@ -1,5 +1,7 @@
-"use server"
-
+// Server-only, not a server action: nothing in the browser calls these, so
+// they are plain functions and cannot be invoked from outside the server.
+// Browser saves go through `src/lib/counter/actions/`.
+import "server-only"
 import { startOfDayUTC as startOfDayUtc } from "@/lib/date-utils"
 // F17 — Promotion ROI. We don't have a "Promotion" entity in the schema, so
 // we infer past promotional days from elevated daily discount share in

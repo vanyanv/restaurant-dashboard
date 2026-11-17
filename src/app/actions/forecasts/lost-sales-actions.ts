@@ -1,5 +1,7 @@
-"use server"
-
+// Server-only, not a server action: nothing in the browser calls these, so
+// they are plain functions and cannot be invoked from outside the server.
+// Browser saves go through `src/lib/counter/actions/`.
+import "server-only"
 import { startOfDayUTC as startOfDay, ymdUTC as ymd } from "@/lib/date-utils"
 // F18 — Lost-sale detection. An item is "86'd" when it sold consistently for
 // weeks and then drops to zero for ≥ minGapDays consecutive days. We treat

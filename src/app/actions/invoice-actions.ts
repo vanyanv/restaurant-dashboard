@@ -1,7 +1,9 @@
-"use server"
-
-import { getServerSession } from "next-auth"
-import { authOptions, hasOwnerAccess } from "@/lib/auth"
+// Server-only, not a server action: nothing in the browser calls these, so
+// they are plain functions and cannot be invoked from outside the server.
+// Browser saves go through `src/lib/counter/actions/`.
+import "server-only"
+import { getSession } from "@/lib/auth-scope"
+import { hasOwnerAccess } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { getAccountStoreRows } from "@/lib/account-stores"
 import { normalizeVendorName } from "@/lib/vendor-normalize"
@@ -37,7 +39,7 @@ export async function getInvoiceSummary(options?: {
   startDate?: string
   endDate?: string
 }): Promise<InvoiceKpis> {
-  const session = await getServerSession(authOptions)
+  const session = await getSession()
   if (!session?.user) {
     return {
       totalSpend: 0, invoiceCount: 0, avgInvoiceTotal: 0,
@@ -158,7 +160,7 @@ export async function getInvoiceList(filters?: {
   page?: number
   limit?: number
 }) {
-  const session = await getServerSession(authOptions)
+  const session = await getSession()
   if (!session?.user) return { invoices: [], total: 0, page: 1, totalPages: 0 }
 
   const {
@@ -243,7 +245,7 @@ export async function getProductAnalytics(options?: {
   startDate?: string
   endDate?: string
 }): Promise<ProductAnalytics> {
-  const session = await getServerSession(authOptions)
+  const session = await getSession()
   if (!session?.user) return { topProducts: [] }
 
   const { storeId, days, startDate, endDate } = options ?? {}
@@ -289,7 +291,7 @@ export async function getProductAnalytics(options?: {
 export async function getInvoiceStoreBreakdown(options?: {
   days?: number
 }): Promise<InvoiceBreakdownData> {
-  const session = await getServerSession(authOptions)
+  const session = await getSession()
   if (!session?.user) {
     return {
       storeRows: [],
@@ -456,7 +458,7 @@ export async function getInvoiceSpendTimeline(options: {
   endDate: string
   granularity: "day" | "week" | "month"
 }): Promise<SpendTimelineResult> {
-  const session = await getServerSession(authOptions)
+  const session = await getSession()
   if (!session?.user) {
     return {
       buckets: [],
@@ -602,7 +604,7 @@ export async function setInvoiceIsReturn(
   invoiceId: string,
   isReturn: boolean,
 ): Promise<{ ok: true } | { ok: false; reason: string }> {
-  const session = await getServerSession(authOptions)
+  const session = await getSession()
   if (!session?.user) return { ok: false, reason: "unauthenticated" }
   if (!hasOwnerAccess(session.user.role)) return { ok: false, reason: "forbidden" }
   const accountId = session.user.accountId
@@ -724,7 +726,7 @@ export async function setInvoiceReviewDecision(
   invoiceId: string,
   decision: "APPROVED" | "REJECTED" | "REVIEW",
 ): Promise<{ ok: true; status: string } | { ok: false; reason: string }> {
-  const session = await getServerSession(authOptions)
+  const session = await getSession()
   if (!session?.user) return { ok: false, reason: "unauthenticated" }
   if (!hasOwnerAccess(session.user.role)) return { ok: false, reason: "forbidden" }
   const accountId = session.user.accountId
@@ -764,7 +766,7 @@ export async function setInvoiceStore(
   invoiceId: string,
   storeId: string,
 ): Promise<{ ok: true; storeId: string } | { ok: false; reason: string }> {
-  const session = await getServerSession(authOptions)
+  const session = await getSession()
   if (!session?.user) return { ok: false, reason: "unauthenticated" }
   if (!hasOwnerAccess(session.user.role)) return { ok: false, reason: "forbidden" }
   const accountId = session.user.accountId

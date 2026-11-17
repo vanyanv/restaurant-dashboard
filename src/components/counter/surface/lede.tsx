@@ -8,7 +8,7 @@ import type { ReactNode } from "react"
  * prototype writes this element inline and disagrees with itself about its
  * margin and its line-height, and our port added a second spelling of the size
  * token on top. See the note above `.ct-lede` in
- * `src/styles/counter-repairs.css` — this deviates from the prototype on
+ * `src/styles/counter-components.css` (repairs) — this deviates from the prototype on
  * purpose.
  *
  * `--t-mid` and 1.55 are not props. A lede that wants a different size is a

@@ -1,5 +1,7 @@
-"use server"
-
+// Server-only, not a server action: nothing in the browser calls these, so
+// they are plain functions and cannot be invoked from outside the server.
+// Browser saves go through `src/lib/counter/actions/`.
+import "server-only"
 import { startOfDayUTC as startOfDay, ymdUTC as ymd } from "@/lib/date-utils"
 // Hourly labor optimization. Prefer the nightly BUSY_HOURS ML forecast
 // (ForecastHourlyOrders). Fall back to the deterministic daily-revenue ×

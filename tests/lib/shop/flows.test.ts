@@ -12,6 +12,9 @@ vi.mock("@/lib/auth", () => ({
   hasOwnerAccess: (role: string) => role === "OWNER" || role === "DEVELOPER",
 }))
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }))
+// The actions read the session through `getSession` in auth-scope, which
+// imports Prisma; these flows never touch the database.
+vi.mock("@/lib/prisma", () => ({ prisma: {} }))
 
 import { getServerSession } from "next-auth"
 import { revalidatePath } from "next/cache"

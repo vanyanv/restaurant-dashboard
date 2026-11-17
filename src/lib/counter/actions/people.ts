@@ -1,10 +1,9 @@
 "use server"
 
+import { getSession } from "@/lib/auth-scope"
 import { revalidatePath } from "next/cache"
-import { getServerSession } from "next-auth"
 import { z } from "zod"
 import { prisma } from "@/lib/prisma"
-import { authOptions } from "@/lib/auth"
 import { sendEmail } from "@/lib/checks/email"
 import {
   firstName,
@@ -36,7 +35,7 @@ const ROLE = z.enum(["OWNER", "DEVELOPER"])
 class Refused extends Error {}
 
 async function requireDeveloper(): Promise<{ userId: string; accountId: string; name: string }> {
-  const session = await getServerSession(authOptions)
+  const session = await getSession()
   if (!session?.user?.id) throw new Refused("You're signed out. Sign in again")
   if (session.user.role !== "DEVELOPER") throw new Refused("Only a developer can change who has access")
   return { userId: session.user.id, accountId: session.user.accountId, name: session.user.name || session.user.email }

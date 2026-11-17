@@ -142,7 +142,7 @@
 
   /* The 1px raise under a pressed segment — `.seg button[aria-pressed="true"]`
    * writes it as a literal (counter-components.css:155), one of the 35 the
-   * ported sheet inherited. It is named here because `counter-repairs.css`
+   * ported sheet inherited. It is named here because `counter-components.css (repairs)`
    * gives the same treatment to a `.seg` LINK (the monitoring tabs are eight
    * routes, not eight views of one document), and a repair that re-typed the
    * literal would make it 36.
@@ -233,7 +233,7 @@
    * and `--ct-raise` above as tokens this file authors outright rather than
    * inheriting from the prototype's ink/wash system. Measured: 7.244:1 in
    * light, 7.895:1 in dark, both against `--ct-signal`. See the repair at
-   * `src/styles/counter-repairs.css` (`.navbtn .badge`, `.loginmsg.is-warn
+   * `src/styles/counter-components.css` (repairs) (`.navbtn .badge`, `.loginmsg.is-warn
    * .fi`) for where this is consumed. */
   --ct-signal-ink-strong: light-dark(oklch(30% 0.06 70), oklch(30% 0.06 70));
 
@@ -308,7 +308,7 @@
   /* Ask's two-column split, mirrored from the prototype.
 
      `.askpage`'s grid is sized by these numbers in counter-components.css,
-     and `.dock` is offset by them in counter-repairs.css so the composer
+     and `.dock` is offset by them in counter-components.css (repairs) so the composer
      starts where the answer does. The dock is a SIBLING of that grid, not a
      child, so it cannot inherit the measurement — it has to be told, and
      until 38ed4814 it was not, which put the composer a rail's width to the

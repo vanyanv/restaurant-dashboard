@@ -336,7 +336,7 @@ export function AppShell({
        * reached one of those — from a phone page's own link, or after a "do
        * this on the desk" handoff — used to land on this shell with no bar at
        * all and no way back but the browser's. `.ct-deskbar` shows it at phone
-       * width only (counter-repairs.css), where it replaces the rail strip.
+       * width only (counter-components.css (repairs)), where it replaces the rail strip.
        */}
       <div className="ct-deskbar">
         <MTabs />

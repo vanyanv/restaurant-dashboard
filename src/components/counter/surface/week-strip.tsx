@@ -14,7 +14,7 @@
  *    here says what the day COST, never whether it passed.
  * 2. **`WeekPicker` is interactive.** It renders each `.wkd` as a `<button>`
  *    (ruling N-R10, with a `button.wkd` repair block in
- *    `src/styles/counter-repairs.css` for the declarations a `<button>` would
+ *    `src/styles/counter-components.css` (repairs) for the declarations a `<button>` would
  *    otherwise take from the UA sheet). The labour strip selects nothing — the
  *    prototype writes a plain `<div>` — so it stays a `<div>` and needs none of
  *    that repair.

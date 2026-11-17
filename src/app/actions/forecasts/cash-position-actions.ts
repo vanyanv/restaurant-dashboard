@@ -1,5 +1,8 @@
-"use server"
-
+// Server-only, not a server action: nothing in the browser calls these, so
+// they are plain functions and cannot be invoked from outside the server.
+// Browser saves go through `src/lib/counter/actions/`.
+import "server-only"
+import { getSession } from "@/lib/auth-scope"
 import { startOfDayUTC as startOfDay, ymdUTC as ymd } from "@/lib/date-utils"
 // F25 — Cash position forecast. Projects cash inflow vs outflow daily for
 // the next 14 days, derived from existing signals only:
@@ -42,9 +45,7 @@ import { startOfDayUTC as startOfDay, ymdUTC as ymd } from "@/lib/date-utils"
 //     horizon read as fixed costs and payables against nothing coming in,
 //     and the briefing announced a cash crisis that was a training failure.
 
-import { getServerSession } from "next-auth"
 import { Prisma } from "@/generated/prisma/client"
-import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { getAccountStores } from "@/lib/account-stores"
 import { monthlyCostForDays } from "@/lib/pnl"
@@ -102,7 +103,7 @@ export async function getCashPositionForecast(input: {
   horizonDays?: number
   asOf?: Date
 }): Promise<GetCashPositionResult | null> {
-  const session = (await getServerSession(authOptions)) as SessionLike | null
+  const session = (await getSession()) as SessionLike | null
   const user = session?.user ?? null
   if (!user) return null
 

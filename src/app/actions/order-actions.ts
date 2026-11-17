@@ -1,8 +1,9 @@
-"use server"
-
-import { getServerSession } from "next-auth"
+// Server-only, not a server action: nothing in the browser calls these, so
+// they are plain functions and cannot be invoked from outside the server.
+// Browser saves go through `src/lib/counter/actions/`.
+import "server-only"
+import { getSession } from "@/lib/auth-scope"
 import { unstable_cache } from "next/cache"
-import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { getAccountStoreRows } from "@/lib/account-stores"
 import type { Prisma } from "@/generated/prisma/client"
@@ -154,7 +155,7 @@ export type OrderListResponse = {
 export async function getOrdersList(
   filters: OrderListFilters = {}
 ): Promise<OrderListResponse> {
-  const session = await getServerSession(authOptions)
+  const session = await getSession()
   if (!session?.user) {
     return {
       rows: [],
@@ -465,7 +466,7 @@ export type OrderDetail = {
 export async function getOrderDetail(
   orderId: string
 ): Promise<OrderDetail | null> {
-  const session = await getServerSession(authOptions)
+  const session = await getSession()
   if (!session?.user) return null
 
   const order = await prisma.otterOrder.findFirst({
@@ -524,7 +525,7 @@ export async function getOrderDetail(
 export async function refetchOrderDetail(
   orderId: string
 ): Promise<{ ok: boolean; message?: string }> {
-  const session = await getServerSession(authOptions)
+  const session = await getSession()
   if (!session?.user) return { ok: false, message: "Unauthorized" }
 
   const order = await prisma.otterOrder.findFirst({

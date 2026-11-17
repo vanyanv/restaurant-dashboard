@@ -252,7 +252,7 @@ function TradingBody({ store }: { store: TradingStore }) {
       <span className="d">{store.comparison}</span>
       {/* `data-n` because the sheet's `.stfig` is a fixed three tracks and a
           fourth figure would wrap under the first — see the rule in
-          `counter-repairs.css`. */}
+          `counter-components.css (repairs)`. */}
       <dl className="stfig" data-n={store.kept == null ? 3 : 4}>
         <div>
           <dt>Orders</dt>

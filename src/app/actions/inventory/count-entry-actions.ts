@@ -1,6 +1,8 @@
-"use server"
-
-import { getSessionUser as requireSession } from "@/lib/auth-scope"
+// Server-only, not a server action: nothing in the browser calls these, so
+// they are plain functions and cannot be invoked from outside the server.
+// Browser saves go through `src/lib/counter/actions/`.
+import "server-only"
+import { getSessionUser } from "@/lib/auth-scope"
 import { prisma } from "@/lib/prisma"
 import { getAccountStoreRows } from "@/lib/account-stores"
 import { computeRunningOnHand } from "@/lib/inventory/running-on-hand"
@@ -24,7 +26,7 @@ export type StartOrResumeStockCountResult =
 export async function startOrResumeStockCount(input: {
   storeId: string
 }): Promise<StartOrResumeStockCountResult | null> {
-  const user = await requireSession()
+  const user = await getSessionUser()
   if (!user) return null
 
   const storeIds = await loadStoreIdsForAccount(user.accountId)
@@ -98,7 +100,7 @@ export type GetCountEntryDataResult =
 export async function getCountEntryData(input: {
   stockCountId: string
 }): Promise<GetCountEntryDataResult | null> {
-  const user = await requireSession()
+  const user = await getSessionUser()
   if (!user) return null
 
   const count = await prisma.stockCount.findUnique({

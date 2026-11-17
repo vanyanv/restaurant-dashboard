@@ -1,7 +1,6 @@
 "use server"
 
-import { getServerSession } from "next-auth"
-import { authOptions } from "@/lib/auth"
+import { getSession } from "@/lib/auth-scope"
 import { chatPrisma } from "@/lib/chat/prisma-chat"
 import {
   ConversationAccessError,
@@ -55,7 +54,7 @@ export async function renameAskThread(input: {
   id: string
   title: string
 }): Promise<Result<{ title: string }>> {
-  const session = await getServerSession(authOptions)
+  const session = await getSession()
   if (!session?.user) return { ok: false, error: "Not signed in" }
 
   const title = normalizeConversationTitle(input.title)
@@ -82,7 +81,7 @@ export async function renameAskThread(input: {
  * this; see `ThreadActions`.
  */
 export async function deleteAskThread(input: { id: string }): Promise<Result<object>> {
-  const session = await getServerSession(authOptions)
+  const session = await getSession()
   if (!session?.user) return { ok: false, error: "Not signed in" }
 
   try {
@@ -106,7 +105,7 @@ export async function deleteAskThread(input: { id: string }): Promise<Result<obj
  * above are: the rail is a client island and this is where its mutations go.
  */
 export async function deleteAllAskThreads(): Promise<Result<{ deleted: number }>> {
-  const session = await getServerSession(authOptions)
+  const session = await getSession()
   if (!session?.user) return { ok: false, error: "Not signed in" }
 
   try {
@@ -121,7 +120,7 @@ export async function forkAskThread(input: {
   id: string
   throughMessageId: string
 }): Promise<Result<{ id: string }>> {
-  const session = await getServerSession(authOptions)
+  const session = await getSession()
   if (!session?.user) return { ok: false, error: "Not signed in" }
 
   try {
@@ -142,7 +141,7 @@ export async function rateAskTurn(input: {
   chatTurnId: string
   feedback: AskFeedback | null
 }): Promise<Result<object>> {
-  const session = await getServerSession(authOptions)
+  const session = await getSession()
   if (!session?.user) return { ok: false, error: "Not signed in" }
   if (input.feedback !== null && !isAskFeedback(input.feedback)) {
     return { ok: false, error: "That is not a rating" }

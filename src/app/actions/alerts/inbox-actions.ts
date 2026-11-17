@@ -1,8 +1,8 @@
 "use server"
 
+import { getSession } from "@/lib/auth-scope"
 import { revalidatePath } from "next/cache"
-import { getServerSession } from "next-auth"
-import { authOptions, hasOwnerAccess } from "@/lib/auth"
+import { hasOwnerAccess } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { getAccountStoreRows } from "@/lib/account-stores"
 import { anomalyHorizon } from "@/lib/anomaly-window"
@@ -121,7 +121,7 @@ function emptyBySource(): Record<AlertSource, number> {
 export async function getAlertInbox(
   filters: AlertInboxFilters = {},
 ): Promise<AlertInboxResult> {
-  const session = await getServerSession(authOptions)
+  const session = await getSession()
   if (!session?.user || !hasOwnerAccess(session.user.role)) {
     return { ok: false, error: "unauthorized" }
   }
@@ -245,7 +245,7 @@ export type AlertActionResult =
   | { ok: false; error: "unauthorized" | "not_found" | "not_in_account" }
 
 async function resolveOwnedAlert(alertId: string) {
-  const session = await getServerSession(authOptions)
+  const session = await getSession()
   if (!session?.user || !hasOwnerAccess(session.user.role)) {
     return { ok: false as const, error: "unauthorized" as const }
   }
@@ -305,7 +305,7 @@ export async function dismissAlert(input: {
  */
 export async function getOpenAlertCount(): Promise<number | null> {
   try {
-    const session = await getServerSession(authOptions)
+    const session = await getSession()
     if (!session?.user || !hasOwnerAccess(session.user.role)) return null
     return await prisma.alert.count({
       where: {
@@ -363,7 +363,7 @@ const CLEAR_LIMIT = 1000
 export async function clearOpenAlerts(
   scope: ClearAlertsScope = {},
 ): Promise<ClearAlertsResult> {
-  const session = await getServerSession(authOptions)
+  const session = await getSession()
   if (!session?.user || !hasOwnerAccess(session.user.role)) {
     return { ok: false, error: "unauthorized" }
   }
@@ -416,7 +416,7 @@ export async function reopenAlerts(input: {
   ids: string[]
   at: string
 }): Promise<{ ok: true; reopened: number } | { ok: false; error: "unauthorized" | "invalid" }> {
-  const session = await getServerSession(authOptions)
+  const session = await getSession()
   if (!session?.user || !hasOwnerAccess(session.user.role)) {
     return { ok: false, error: "unauthorized" }
   }

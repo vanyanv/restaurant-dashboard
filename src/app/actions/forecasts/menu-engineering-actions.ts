@@ -1,5 +1,7 @@
-"use server"
-
+// Server-only, not a server action: nothing in the browser calls these, so
+// they are plain functions and cannot be invoked from outside the server.
+// Browser saves go through `src/lib/counter/actions/`.
+import "server-only"
 import { getItemEconomics, type MenuMargin } from "@/lib/counter/item-economics"
 import { startOfDayUTC as startOfDay } from "@/lib/date-utils"
 // F22 — Menu engineering classifier. Splits the menu into the four

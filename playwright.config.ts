@@ -86,6 +86,16 @@ export default defineConfig({
      * under prefers-reduced-motion, so the text it renders is final rather
      * than mid-tween. Our own motion is stilled for the same reason.
      */
+    /*
+     * The crew checks page at /checks/<code>: crew have no account, so no
+     * sign-in setup and no stored session. A phone, because that is the only
+     * thing crew use. See e2e/crew/crew-db.ts for the test data it writes.
+     */
+    {
+      name: "crew",
+      testDir: "./e2e/crew",
+      use: { ...devices["Pixel 7"] },
+    },
     {
       name: "fidelity",
       testDir: "./e2e/fidelity",

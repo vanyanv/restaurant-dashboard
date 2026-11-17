@@ -265,7 +265,7 @@ export function AskAnswerBody({
   return (
     <div
       // `is-cached`: an instant answer enters as one flat fade, not a
-      // narrated arrival — see counter-repairs.css, "an instant answer".
+      // narrated arrival — see counter-components.css (repairs), "an instant answer".
       className={`${className}${answer?.meta?.cached ? " is-cached" : ""}`}
       aria-live="polite"
       aria-busy={status === "asking"}

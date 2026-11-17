@@ -1,7 +1,8 @@
-"use server"
-
-import { getServerSession } from "next-auth"
-import { authOptions } from "@/lib/auth"
+// Server-only, not a server action: nothing in the browser calls these, so
+// they are plain functions and cannot be invoked from outside the server.
+// Browser saves go through `src/lib/counter/actions/`.
+import "server-only"
+import { getSession } from "@/lib/auth-scope"
 import { prisma } from "@/lib/prisma"
 import { parseOrderItems } from "@/lib/ratings/order-items"
 
@@ -78,7 +79,7 @@ export async function getRatingsSummary(input?: {
   windowDays?: number
 }): Promise<RatingsSummary | null> {
   try {
-    const session = await getServerSession(authOptions)
+    const session = await getSession()
     if (!session?.user) return null
 
     const windowDays = input?.windowDays ?? DEFAULT_WINDOW_DAYS

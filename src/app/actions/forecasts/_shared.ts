@@ -1,6 +1,5 @@
 import { cache } from "react"
-import { getServerSession } from "next-auth"
-import { authOptions } from "@/lib/auth"
+import { getSession } from "@/lib/auth-scope"
 import { getAccountStoreRows } from "@/lib/account-stores"
 
 interface SessionUser {
@@ -11,11 +10,9 @@ interface SessionLike {
   user?: SessionUser | null
 }
 
-export const getCachedSession = cache(
-  async (): Promise<SessionLike | null> => {
-    return (await getServerSession(authOptions)) as SessionLike | null
-  },
-)
+/** The session, through the app's one sign-in check (`getSession` in `@/lib/auth-scope`). */
+export const getCachedSession = async (): Promise<SessionLike | null> =>
+  (await getSession()) as SessionLike | null
 
 export interface StoreContext {
   storeIds: string[]
