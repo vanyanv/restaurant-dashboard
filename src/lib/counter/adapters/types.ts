@@ -2,6 +2,7 @@ import {
   empty, failed, notComputed, ready, stale,
   type EmptyReason, type SectionData,
 } from "@/lib/counter/section-data"
+import { reportServerError } from "@/lib/monitoring/server-error-hook"
 
 /**
  * What every Counter page adapter returns.
@@ -157,12 +158,20 @@ export function guardSection<T>(
   promise: Promise<SectionData<T>>,
   retryAction: string,
 ): Promise<SectionData<T>> {
-  return promise.catch((err: unknown) =>
-    failed<T>(
+  return promise.catch((err: unknown) => {
+    // The page still shows, with this section marked as failed — which is
+    // exactly why nobody used to hear about it. Record it in the error log.
+    reportServerError({
+      source: "section",
+      message: err instanceof Error ? err.message : String(err),
+      stack: err instanceof Error ? (err.stack ?? null) : null,
+      metadata: { section: retryAction },
+    })
+    return failed<T>(
       err instanceof Error ? err.message : "Something went wrong building this section",
       retryAction,
-    ),
-  )
+    )
+  })
 }
 
 /**

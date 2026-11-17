@@ -1,7 +1,19 @@
 import { prisma } from "@/lib/prisma"
 import { Prisma } from "@/generated/prisma/client"
 
-export type ErrorSource = "api" | "server-action" | "cron" | "client" | "alerter" | "cache" | "uncaught"
+export type ErrorSource =
+  | "api"
+  | "server-action"
+  | "cron"
+  | "client"
+  | "alerter"
+  | "cache"
+  | "uncaught"
+  /** A page failed to render on the server (Next's onRequestError). */
+  | "render"
+  /** One section of a page failed to load; the rest of the page still showed. */
+  | "section"
+  | "proxy"
 
 /**
  * Persist one error. Never throws; logs and swallows internal failures so the
