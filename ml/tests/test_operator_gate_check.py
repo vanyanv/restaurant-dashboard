@@ -95,3 +95,29 @@ def test_post_epoch_gate_does_not_mask_a_fully_reconciled_regression():
     """Once the new generation has its own observations, silence ends."""
     v = classify_coverage_row("Hollywood", 0.648, 7, 26, ENOUGH)
     assert v.counted and not v.accept_ok and "BROKEN" in v.line
+
+
+def test_post_epoch_coverage_judges_native_forecasts_only():
+    """Transfer rows are Hollywood's model scaled to a warming-up store. A
+    store set straight to `ready` kept 67 of them at 0.552 coverage and had
+    no native model, and Gate 3 called it BROKEN every day."""
+    from unittest.mock import MagicMock
+
+    from ml.evaluation.operator_gate_check import _post_epoch_coverage
+
+    conn = MagicMock()
+    cur = conn.cursor.return_value.__enter__.return_value
+    cur.fetchall.return_value = [("Chris N Eddys - Hollywood", 120, 0.8)]
+
+    out = _post_epoch_coverage(conn)
+
+    sql = cur.execute.call_args.args[0]
+    assert "\"forecastSource\" = 'native'" in sql
+    assert out == {"Chris N Eddys - Hollywood": (120, 0.8)}
+
+
+def test_store_with_no_native_rows_reads_warming_up():
+    # What Gate 3 does for such a store: epoch_n = 0 -> deferred, not judged.
+    v = classify_coverage_row("Van Nuys", 0.552, 2, 0, 0)
+    assert v.counted is False
+    assert "warming up" in v.line
