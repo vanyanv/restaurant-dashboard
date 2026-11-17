@@ -155,12 +155,13 @@ export function getInventoryItemSectionPromises(opts: {
           ])
           const row = pair?.rows.find((r) => r.ingredientId === ingredientId) ?? null
           const stock = draft.stock.find((r) => r.id === ingredientId) ?? null
-          // A stop's boxes, once each by name: "Cases: 27 lb each".
+          // A stop's boxes, once each by name and size: "Cases: 27 lb each". Two
+          // shelves can hold a box of the same name in two sizes; both are said.
           const sizes = new Map<string, string>()
           for (const s of stops) {
             for (const l of layersFor(s.layers, unit)) {
               if (l.per === 1) continue
-              sizes.set(l.label, l.per > 0 ? `${l.label}: ${showQty(l.per, unit).trim()} each` : `${l.label}: no size yet`)
+              sizes.set(`${l.label}|${l.per}`, l.per > 0 ? `${l.label}: ${showQty(l.per, unit).trim()} each` : `${l.label}: no size yet`)
             }
           }
           one = {

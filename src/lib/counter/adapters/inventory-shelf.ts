@@ -243,6 +243,30 @@ export function buildShelfLines(input: {
   const addsUp = (line: CountLine, r: { fits: Set<string>; sum: number }) =>
     r.fits.size > 0 && Math.abs(r.sum - line.qtyInRecipeUnit) <= Math.max(0.01, Math.abs(line.qtyInRecipeUnit) * 0.001)
 
+  /**
+   * The count before, read the same way: its boxes, at today's sizes, still
+   * add up to the quantity that count saved. When a stop's boxes were swapped
+   * since (3 Cases of 30 lb then, one "Bags" box of 5 lb now) the numbers
+   * still fit the new boxes by position, and would read "3 Bags". They no
+   * longer add up, so the saved total is shown instead, once.
+   */
+  const beforeAddsUp = new Map<string, boolean>()
+  if (input.previous) {
+    const sums = new Map<string, number>()
+    for (const it of items) {
+      const id = it.canonicalIngredientId
+      const b = input.previous.get(id)
+      if (!b) continue
+      const vals = stopValues(b, it.id)
+      const layers = layersOf(it)
+      if (valuesFit(layers, vals)) sums.set(id, (sums.get(id) ?? 0) + shelfTotal(layers, vals))
+    }
+    for (const [id, sum] of sums) {
+      const q = input.previous.get(id)!.qtyInRecipeUnit
+      beforeAddsUp.set(id, Math.abs(sum - q) <= Math.max(0.01, Math.abs(q) * 0.001))
+    }
+  }
+
   return items.map((it): ShelfLine => {
     const ing = it.canonicalIngredient
     const ingId = it.canonicalIngredientId
@@ -358,8 +382,11 @@ export function buildShelfLines(input: {
     if (before) {
       const vals = stopValues(before, it.id)
       const day = dayLabel(before.countedAt)
-      if (valuesFit(layers, vals)) last = { day, typed: typedOf(layers, vals) }
-      else if (before.breakdown == null && before.nativeUnit !== UNCONVERTED_UNIT && firstStop.get(ingId)?.id === it.id) {
+      const whole = before.nativeUnit !== UNCONVERTED_UNIT
+      // Today's box names are put on the saved numbers only while they are
+      // still the boxes that count was typed in (see `beforeAddsUp`).
+      if (valuesFit(layers, vals) && (!whole || beforeAddsUp.get(ingId))) last = { day, typed: typedOf(layers, vals) }
+      else if (whole && (before.breakdown == null || beforeAddsUp.get(ingId) === false) && firstStop.get(ingId)?.id === it.id) {
         last = { day, typed: showQty(before.qtyInRecipeUnit, unit).trim() }
       }
     }

@@ -41,7 +41,7 @@ import {
 } from "@/lib/counter/waste-reasons"
 import { WASTE_REASONS } from "@/lib/counter/count-layers"
 import { loadLoggedAdjustments } from "@/lib/counter/logged-waste"
-import { getCountReportSectionPromises, type GapRow } from "@/lib/counter/adapters/count"
+import { getCountReportSectionPromises, reportTotals, type GapRow } from "@/lib/counter/adapters/count"
 import { hasData } from "@/lib/counter/section-data"
 
 const asMock = (fn: unknown) => fn as ReturnType<typeof vi.fn>
@@ -202,12 +202,24 @@ describe("count report · rows add up to the totals", () => {
     // The fries entry is reported apart, not folded into a row's total.
     expect(d.offReportEntries).toBe(1)
     expect(d.offReportDollars).toBe(2)
+    expect(d.offReportUnpriced).toBe(0)
   })
 
   it("missing is shortages only, and overages are their own figure", async () => {
     const d = await report()
     expect(d.missingDollars).toBe(50) // 10 lb beef × $5
     expect(d.extraDollars).toBe(5) // 10 buns × $0.50
+    expect(d.extraUnpriced).toBe(0)
+  })
+
+  it("counts an overage on an item with no price, which the extra figure cannot hold", async () => {
+    const d = await report()
+    const over = { ...d.rows[0], missing: -4, missingDollars: null }
+    const short = { ...d.rows[0], missing: 4, missingDollars: null }
+    const t = reportTotals([over, short])
+    expect(t.extraDollars).toBe(0)
+    // The shortage with no price is the headline's to count, not this figure's.
+    expect(t.extraUnpriced).toBe(1)
   })
 
   it("reads every reason over the window the should-have walk subtracts", async () => {

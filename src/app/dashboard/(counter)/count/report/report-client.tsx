@@ -137,6 +137,12 @@ function changeVsBefore(change: GapChange, before: string): ReactNode {
 }
 
 /** One class kept apart, in words: never $0 for entries nobody can value. */
+/** What the entries on no row are worth: the priced ones, and how many have no price. Never $0.00 for an unknown. */
+function offReportValue(d: Pick<ReportData, "offReportEntries" | "offReportDollars" | "offReportUnpriced">): string {
+  if (d.offReportUnpriced >= d.offReportEntries) return "not valued yet"
+  return `${money(d.offReportDollars)}${d.offReportUnpriced > 0 ? `, ${d.offReportUnpriced} not valued` : ""}`
+}
+
 function apartSay(a: ReportData["apart"][number]): string {
   if (a.dollars === null) return `${a.label} not valued yet (${plural(a.entries, "entry", "entries")})`
   return `${a.label} ${money(a.dollars)}${a.unpriced > 0 ? `, ${a.unpriced} not valued` : ""}`
@@ -229,10 +235,13 @@ function Compared({ data, from, to }: { data: ReportData; from: string; to: stri
           <span className="iv-mono">Extra on the shelf</span>
           {!h || h.items === 0
             ? <strong className="txt">Nothing to compare</strong>
-            : h.missingDollars === null
+            : h.missingDollars === null || (data.extraDollars === 0 && data.extraUnpriced > 0)
               ? <strong className="txt">Not valued yet</strong>
               : <strong>{money(data.extraDollars)}</strong>}
-          <span>More counted than the numbers say, often a delivery whose invoice hasn&apos;t come in. Never netted against what went missing.</span>
+          <span>
+            More counted than the numbers say, often a delivery whose invoice hasn&apos;t come in. Never netted against what went missing.
+            {h && h.items > 0 && data.extraUnpriced > 0 ? ` ${plural(data.extraUnpriced, "item")} counted over with no price ${data.extraUnpriced === 1 ? "is" : "are"} not in the figure.` : ""}
+          </span>
         </div>
         <div className="iv-card iv-tile">
           <span className="iv-mono">Waste you logged</span>
@@ -263,7 +272,7 @@ function Compared({ data, from, to }: { data: ReportData; from: string; to: stri
           <summary>Show the working <span>One row per item: last count, delivered, sold, logged</span></summary>
           <Working data={data} />
           <p>
-            Every row adds across: last count + delivered − sales used − thrown out − theft and sent back = should have. The figures above are those rows summed{data.offReportEntries > 0 ? `; ${plural(data.offReportEntries, "more entry", "more entries")} (${money(data.offReportDollars)}) ${data.offReportEntries === 1 ? "was" : "were"} logged against items not compared, so ${data.offReportEntries === 1 ? "it is" : "they are"} on no row` : ""}. &quot;Sales used&quot; is every item sold times its recipe. Extras and &quot;no cheese&quot; changes aren&apos;t in it yet, so a small gap on cheese or sauce is expected. Shortages and extras are never netted against each other.
+            Every row adds across: last count + delivered − sales used − thrown out − theft and sent back = should have. The figures above are those rows summed{data.offReportEntries > 0 ? `; ${plural(data.offReportEntries, "more entry", "more entries")} (${offReportValue(data)}) ${data.offReportEntries === 1 ? "was" : "were"} logged against items not compared, so ${data.offReportEntries === 1 ? "it is" : "they are"} on no row` : ""}. &quot;Sales used&quot; is every item sold times its recipe. Extras and &quot;no cheese&quot; changes aren&apos;t in it yet, so a small gap on cheese or sauce is expected. Shortages and extras are never netted against each other.
           </p>
         </details>
       )}

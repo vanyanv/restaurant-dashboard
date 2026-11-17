@@ -388,6 +388,17 @@ describe("buildShelfLines", () => {
     })
     expect(unsized[0].last).toBeNull()
   })
+
+  it("never puts today's box name on a count typed in a different box", () => {
+    // Then: 3 Cases of 30 lb, saved as 90 lb. Since: the stop's one box is a 5 lb bag.
+    // The saved "3" still fits one box by position, and would read "3 Bags".
+    const bags = [{ label: "Bags", qty: 5, of: "lb", quarters: false, per: 5 }]
+    const [line] = build([item("fries", { layers: bags })], [counted("fries", 10, [2])], draft(), {
+      previous: [counted("fries", 90, [3], { countedAt: OLDER })],
+    })
+    expect(line.last?.typed).toContain("90")
+    expect(line.last?.typed).not.toContain("Bags")
+  })
 })
 
 describe("pickShelfView", () => {

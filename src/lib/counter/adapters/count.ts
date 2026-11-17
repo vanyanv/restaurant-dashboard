@@ -302,8 +302,11 @@ const loadAdjustmentLog = cache((accountId: string) =>
  * "Waste you logged" and the one-item page read too, over a rolling 7 days:
  * everything the waste log writes, plus "damaged" from Stock on hand. Theft
  * and "sent back" are never waste; they are returned under `apart`.
+ *
+ * Once per request and store, so the headline, the log, the comparison and
+ * the by-store bars all cut their 7 days at the same instant.
  */
-export async function loadStoreWaste(accountId: string, storeId: string): Promise<StoreWaste> {
+export const loadStoreWaste = cache(async (accountId: string, storeId: string): Promise<StoreWaste> => {
   const log = (await loadAdjustmentLog(accountId)).filter((r) => r.storeId === storeId)
   const now = Date.now()
   const weekStart = now - WASTE_WINDOW_DAYS * DAY_MS
@@ -330,7 +333,7 @@ export async function loadStoreWaste(accountId: string, storeId: string): Promis
     before: { entries: before.entries, valued: before.valued, unpriced: before.unpriced, dollars: before.dollars },
     apart: summarizeWaste(thisWeek.filter((r) => !isThrownOut(r.reason)).map((r) => ({ reason: r.reason, dollars: dollarsOf(r) }))).reasons,
   }
-}
+})
 
 /** Thrown out at one store, last 7 days. */
 export async function loadWeekWaste(accountId: string, storeId: string): Promise<WeekWaste> {
@@ -449,6 +452,8 @@ export type ReportData = {
   missingDollars: number
   /** Σ overages, as a positive figure — shown beside the shortages, never netted into them. */
   extraDollars: number
+  /** Rows counted over what the numbers say on an item with no price: an overage `extraDollars` cannot hold. */
+  extraUnpriced: number
   /** Σ of the rows' class dollars; rows add up to these exactly. */
   wasteDollars: number
   theftDollars: number
@@ -467,7 +472,9 @@ export type ReportData = {
   apart: GapApart[]
   /** Entries in the window on items not counted both times — not on any row. */
   offReportEntries: number
+  /** Σ of the priced ones; `offReportUnpriced` of the entries have no price and are not in it. */
   offReportDollars: number
+  offReportUnpriced: number
   orders: OrderRow[]
   /**
    * The picture the Report tab leads with. All three are null unless the
@@ -598,9 +605,9 @@ export async function loadReport(opts: {
     stores, store, counts,
     current: cur ? { id: cur.id, label: dayLabel(cur.countedAt) } : null,
     previous: prev ? { label: dayLabel(prev.countedAt) } : null,
-    rows: [], missingDollars: 0, extraDollars: 0, wasteDollars: 0, theftDollars: 0,
+    rows: [], missingDollars: 0, extraDollars: 0, extraUnpriced: 0, wasteDollars: 0, theftDollars: 0,
     returnDollars: 0, otherDollars: 0, wasteEntries: 0, thrownDollars: 0, thrownEntries: 0, thrownUnpriced: 0, apart: [], offReportEntries: 0,
-    offReportDollars: 0, orders, headline: null, coverage: null, before: null,
+    offReportDollars: 0, offReportUnpriced: 0, orders, headline: null, coverage: null, before: null,
   }
   if (!cur || !prev) return base
   if (!opts.picture) return { ...base, ...(await loadGap(accountId, store.id, cur, prev)) }
@@ -647,8 +654,8 @@ export function getCountReportSectionPromises(opts: { accountId: string; storeId
 
 type GapPart = Pick<
   ReportData,
-  | "rows" | "missingDollars" | "extraDollars" | "wasteDollars" | "theftDollars" | "returnDollars" | "otherDollars"
-  | "wasteEntries" | "thrownDollars" | "thrownEntries" | "thrownUnpriced" | "apart" | "offReportEntries" | "offReportDollars"
+  | "rows" | "missingDollars" | "extraDollars" | "extraUnpriced" | "wasteDollars" | "theftDollars" | "returnDollars" | "otherDollars"
+  | "wasteEntries" | "thrownDollars" | "thrownEntries" | "thrownUnpriced" | "apart" | "offReportEntries" | "offReportDollars" | "offReportUnpriced"
 >
 
 /**
@@ -736,9 +743,8 @@ export async function loadGap(
       })
     }
     rows.sort((a, b) => (b.missingDollars ?? 0) - (a.missingDollars ?? 0))
-    const off = sumAdjustments(
-      [...adjBy].filter(([id]) => !onRows.has(id)).flatMap(([, list]) => list),
-    )
+    const offEntries = [...adjBy].filter(([id]) => !onRows.has(id)).flatMap(([, list]) => list)
+    const off = sumAdjustments(offEntries)
     const onEntries = [...adjBy].filter(([id]) => onRows.has(id)).flatMap(([, list]) => list)
     const thrownOn = onEntries.filter((e) => isThrownOut(e.reason))
     const apartOf = (id: GapApart["id"]): GapApart => {
@@ -761,6 +767,7 @@ export async function loadGap(
       apart: [apartOf("shrink"), apartOf("return")],
       offReportEntries: Object.values(off.entries).reduce((t, n) => t + n, 0),
       offReportDollars: Object.values(off.dollars).reduce((t, n) => t + n, 0),
+      offReportUnpriced: offEntries.filter((e) => e.cost == null).length,
     }
 }
 
@@ -800,12 +807,13 @@ export async function loadLatestGap(accountId: string, storeId: string): Promise
  */
 export function reportTotals(rows: GapRow[]): Pick<
   ReportData,
-  "missingDollars" | "extraDollars" | "wasteDollars" | "thrownDollars" | "theftDollars" | "returnDollars" | "otherDollars"
+  "missingDollars" | "extraDollars" | "extraUnpriced" | "wasteDollars" | "thrownDollars" | "theftDollars" | "returnDollars" | "otherDollars"
 > {
   const sum = (f: (r: GapRow) => number) => rows.reduce((t, r) => t + f(r), 0)
   return {
     missingDollars: sum((r) => Math.max(0, r.missingDollars ?? 0)),
     extraDollars: sum((r) => Math.max(0, -(r.missingDollars ?? 0))),
+    extraUnpriced: rows.filter((r) => r.missing < 0 && r.missingDollars === null).length,
     wasteDollars: sum((r) => r.wasteDollars),
     thrownDollars: sum((r) => r.thrownDollars),
     theftDollars: sum((r) => r.theftDollars),

@@ -130,7 +130,7 @@ function OneStore({ data, one }: { data: WasteView; one: WasteOne }) {
             {one.apart.length > 0 && (
               <>
                 {" "}In the last 7 days:{" "}
-                {one.apart.map((a) => `${a.label} ${a.dollars === null ? "not valued yet" : money(a.dollars)} (${plural(a.entries, "entry", "entries")})`).join(", ")}.
+                {one.apart.map((a) => `${a.label} ${a.dollars === null ? "not valued yet" : money(a.dollars)} (${a.dollars !== null && a.unpriced > 0 ? `value of ${a.entries - a.unpriced} of ${a.entries} entries` : plural(a.entries, "entry", "entries")})`).join(", ")}.
               </>
             )}
           </p>
