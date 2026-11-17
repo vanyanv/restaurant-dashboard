@@ -254,6 +254,27 @@ async function compress(file: File): Promise<Blob> {
   return file
 }
 
+/**
+ * The owner's small copy of a photo: 640 px on the long edge, 30 to 60 KB,
+ * still sharp on a review card on a 3x phone screen, so a page of photos
+ * does not download every full one. Null when the phone cannot make one;
+ * the photo still goes up without it.
+ */
+async function thumbnail(photo: Blob): Promise<Blob | null> {
+  try {
+    const bmp = await createImageBitmap(photo)
+    const scale = Math.min(1, 640 / Math.max(bmp.width, bmp.height))
+    const canvas = document.createElement("canvas")
+    canvas.width = Math.max(1, Math.round(bmp.width * scale))
+    canvas.height = Math.max(1, Math.round(bmp.height * scale))
+    canvas.getContext("2d")!.drawImage(bmp, 0, 0, canvas.width, canvas.height)
+    bmp.close()
+    return await new Promise<Blob | null>((r) => canvas.toBlob(r, "image/jpeg", 0.7))
+  } catch {
+    return null
+  }
+}
+
 export function CrewCheckClient({ code, initial }: { code: string; initial: CrewView }) {
   const [view, setView] = useState<CrewView>(initial)
   const [lang, setLangState] = useState<Lang>("en")
@@ -696,7 +717,11 @@ function Checklist({
       form.set("done", q.done ? "1" : "0")
       if (q.note) form.set("note", q.note)
       if (q.seen) form.set("seen", q.seen)
-      if (q.photo) form.set("photo", q.photo, `${q.itemId}.jpg`)
+      if (q.photo) {
+        form.set("photo", q.photo, `${q.itemId}.jpg`)
+        const small = await thumbnail(q.photo)
+        if (small) form.set("thumb", small, `${q.itemId}.thumb.jpg`)
+      }
       const res = await fetch(`/api/checks/${encodeURIComponent(code)}/mark`, { method: "POST", body: form })
       const body = (await res.json().catch(() => ({}))) as { error?: string; view?: CrewView }
       // A gateway error with no answer from the app is the network's, not the app saying no.
