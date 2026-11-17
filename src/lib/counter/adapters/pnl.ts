@@ -35,6 +35,7 @@ import {
   awaitSections,
   classify,
   guardSection,
+  lazy,
   type StreamedSections,
 } from "@/lib/counter/adapters/types"
 import {
@@ -1165,6 +1166,14 @@ function emptyReasonFor(
 /* ── The entry point ──────────────────────────────────────────────────── */
 
 /**
+ * The sections the phone page shows. The phone page passes
+ * `chooseSections(sections, PHONE_PNL_SECTIONS)` to its client, so the loads only the
+ * desk reads never run on a phone.
+ */
+export const PHONE_PNL_SECTIONS = ["plain", "statement"] as const satisfies ReadonlyArray<keyof PnlSections>
+export type PhonePnlSections = Pick<PnlSections, (typeof PHONE_PNL_SECTIONS)[number]>
+
+/**
  * The P&L's seven sections, as seven promises.
  *
  * Task 3 of the streaming-architecture plan. The six loads still start
@@ -1194,17 +1203,17 @@ export function getPnlSectionPromises(input: PnlSectionsInput): StreamedSections
 
   /* ── The loads. Every one of them starts here; none is awaited here. ── */
 
-  const stmtP = classify(() => loadStatement({ range, storeId, granularity }), {
+  const stmtP = lazy(() => classify(() => loadStatement({ range, storeId, granularity }), {
     retryAction: "retryStatement",
-  })
+  }))
 
   // `loadComparisonStatement`, not `loadStatement(comparisonRange(...))`: a
   // `weekday` comparison is FOUR windows, and loading their contiguous hull as
   // one window read a single day against five and a half days of trade.
-  const cmpP = classify<Statement | null>(
+  const cmpP = lazy(() => classify<Statement | null>(
     () => loadComparisonStatement({ range, mode: comparisonId, storeId, granularity }),
     { retryAction: "retryComparison" },
-  )
+  ))
 
   /*
    * ONE query for all eight weeks, bucketed by the Monday boundaries this
@@ -1227,23 +1236,23 @@ export function getPnlSectionPromises(input: PnlSectionsInput): StreamedSections
    * knowingly. Pressing a week now costs one rollup that eight page loads no
    * longer pay for between them.
    */
-  const weeksP = classify(() => loadWeekStatements(windows, storeId), {
+  const weeksP = lazy(() => classify(() => loadWeekStatements(windows, storeId), {
     retryAction: "retryWeeks",
-  })
+  }))
 
-  const targetsP = classify(() => loadStripTargets(storeId, accountId), {
+  const targetsP = lazy(() => classify(() => loadStripTargets(storeId, accountId), {
     retryAction: "retryTargets",
-  })
+  }))
 
-  const filesP = classify(() => getStores(), { retryAction: "retryStores" })
+  const filesP = lazy(() => classify(() => getStores(), { retryAction: "retryStores" }))
 
   // Orders, and only orders: the rollup publishes no order count, and the
   // cascade's first line and the statement's first row both name one. Read
   // off the same `OtterDailySummary` rows the Overview's orders come from,
   // so the two pages cannot report different order counts for one range.
-  const channelsP = classify(() => loadChannelMix({ range, storeId, accountId }), {
+  const channelsP = lazy(() => classify(() => loadChannelMix({ range, storeId, accountId }), {
     retryAction: "retryOrders",
-  })
+  }))
 
   /*
    * The prior period of the same length, whatever comparison the date control
@@ -1253,7 +1262,7 @@ export function getPnlSectionPromises(input: PnlSectionsInput): StreamedSections
    */
   const priorWindow = comparisonWindows(range, "prev")?.[0] ?? null
   const priorP: Promise<SectionData<Statement | null>> =
-    comparisonId === "prev"
+    lazy(() => comparisonId === "prev"
       ? cmpP
       : classify<Statement | null>(
           () =>
@@ -1261,7 +1270,7 @@ export function getPnlSectionPromises(input: PnlSectionsInput): StreamedSections
               ? Promise.resolve(null)
               : loadStatement({ range: priorWindow, storeId, granularity }),
           { retryAction: "retryComparison" },
-        )
+        ))
 
   /*
    * Every day of the range, for "Day by day". A range of up to a month is
@@ -1269,33 +1278,33 @@ export function getPnlSectionPromises(input: PnlSectionsInput): StreamedSections
    * days and no second load is needed; past that the page asks for a week.
    */
   const dailyP: Promise<SectionData<Statement | null>> =
-    granularity === "daily" && dayCount(range) <= PLAIN_MAX_DAYS
+    lazy<SectionData<Statement | null>>(() => granularity === "daily" && dayCount(range) <= PLAIN_MAX_DAYS
       ? stmtP
-      : Promise.resolve(ready<Statement | null>(null))
+      : Promise.resolve(ready<Statement | null>(null)))
 
   /* ── The derivations, each over only the loads it reads. ── */
 
   // ONE decision about what this page is looking at, applied to every section
   // that reads the statement. A section is never left to work out for itself
   // whether zeroes are a reading.
-  const scopeP = Promise.all([stmtP, filesP]).then(([stmtSd, filesSd]) => {
+  const scopeP = lazy(() => Promise.all([stmtP, filesP]).then(([stmtSd, filesSd]) => {
     const files = dataOf(filesSd) ?? []
     return mapReadyTo(stmtSd, (s) => {
       const reason = emptyReasonFor(s, files, storeId)
       return reason === null ? ready(s) : empty<Statement>(reason)
     })
-  })
+  }))
 
-  const cmpCtxP = cmpP.then((cmpSd) => {
+  const cmpCtxP = lazy(() => cmpP.then((cmpSd) => {
     const cmpStatement = dataOf(cmpSd)
     return comparisonContext(
       comparisonId,
       cmpStatement && !cmpStatement.storeNotFound ? cmpStatement : null,
     )
-  })
+  }))
 
   return {
-    plain: guardSection(
+    plain: lazy(() => guardSection(
       Promise.all([scopeP, priorP, weeksP, dailyP, filesP]).then(
         ([scopeSd, priorSd, weeksSd, dailySd, filesSd]) =>
           mapReady(scopeSd, (statement) =>
@@ -1312,9 +1321,9 @@ export function getPnlSectionPromises(input: PnlSectionsInput): StreamedSections
           ),
       ),
       "retryStatement",
-    ),
+    )),
 
-    headline: guardSection(
+    headline: lazy(() => guardSection(
       Promise.all([scopeP, cmpCtxP, targetsP, weeksP]).then(
         ([scopeSd, cmp, targetsSd, weeksSd]) => {
           const targets = dataOf(targetsSd)
@@ -1334,19 +1343,19 @@ export function getPnlSectionPromises(input: PnlSectionsInput): StreamedSections
         },
       ),
       "retryStatement",
-    ),
+    )),
 
-    cascade: guardSection(
+    cascade: lazy(() => guardSection(
       Promise.all([scopeP, targetsP, channelsP]).then(([scopeSd, targetsSd, channelsSd]) =>
         mapReady(scopeSd, (p) => buildCascade(p, dataOf(targetsSd), dataOf(channelsSd))),
       ),
       "retryStatement",
-    ),
+    )),
 
     // The weeks are their own load, so they keep their own failure — but they
     // are still this page's statement over eight windows, so an account with
     // nothing to state has nothing to state weekly either.
-    weeks: guardSection(
+    weeks: lazy(() => guardSection(
       Promise.all([scopeP, weeksP, targetsP]).then(([scopeSd, weeksSd, targetsSd]) => {
         const targets = dataOf(targetsSd)
         return mapReadyTo(scopeSd, () =>
@@ -1357,9 +1366,9 @@ export function getPnlSectionPromises(input: PnlSectionsInput): StreamedSections
         )
       }),
       "retryWeeks",
-    ),
+    )),
 
-    statement: guardSection(
+    statement: lazy(() => guardSection(
       Promise.all([scopeP, cmpCtxP, targetsP, channelsP]).then(
         ([scopeSd, cmp, targetsSd, channelsSd]) =>
           mapReady(scopeSd, (p) =>
@@ -1367,17 +1376,17 @@ export function getPnlSectionPromises(input: PnlSectionsInput): StreamedSections
           ),
       ),
       "retryStatement",
-    ),
+    )),
 
     // NOT scoped: this section is the one that says which stores exist, so it
     // answers even when the selected store is not one of them. `allStores` is
     // the unfiltered half of the SAME rollup call — see `statement.ts`.
-    byStore: guardSection(
+    byStore: lazy(() => guardSection(
       Promise.all([filesP, stmtP]).then(([filesSd, stmtSd]) =>
         mapReady(filesSd, (f) => buildByStore(f, dataOf(stmtSd)?.allStores ?? [])),
       ),
       "retryStores",
-    ),
+    )),
 
     // Note 44. The panel splits every line into measured / prorated / a rate /
     // not yet posted, and that needs a per-line provenance model this schema
@@ -1385,13 +1394,13 @@ export function getPnlSectionPromises(input: PnlSectionsInput): StreamedSections
     // days Harri covered, and `getInvoiceSummary` reports invoices IN REVIEW,
     // which is not the same set as invoices whose food falls inside this range.
     // Half an answer drawn as a whole panel is exactly what note 44 is about.
-    trust: Promise.resolve(
+    trust: lazy(() => Promise.resolve(
       notComputed<never>(
         // Needs a per-line provenance model and an unposted-food query; neither exists.
         "Not available yet: which labor days come from Harri and which are spread " +
           "from a monthly figure.",
       ),
-    ),
+    )),
 
     // The gap bar names the causes of a food overshoot in POINTS. Nothing in
     // this schema attributes points of a food line to one ingredient: that
@@ -1400,12 +1409,12 @@ export function getPnlSectionPromises(input: PnlSectionsInput): StreamedSections
     // shares. The plan-versus-actual half is already on the page, in the strip's
     // food cell; a bar whose only segment is "everything else" would add a
     // picture of an explanation to it and no explanation.
-    foodCause: Promise.resolve(
+    foodCause: lazy(() => Promise.resolve(
       notComputed<never>(
         // Needs a cause-attribution model: each ingredient's share of spend beside its price move.
         "Not available yet: how much of the food-cost change each ingredient caused.",
       ),
-    ),
+    )),
   }
 }
 

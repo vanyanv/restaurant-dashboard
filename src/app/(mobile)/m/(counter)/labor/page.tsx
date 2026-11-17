@@ -2,8 +2,9 @@ import { getServerSession } from "next-auth"
 import { redirect } from "next/navigation"
 import { authOptions, hasOwnerAccess } from "@/lib/auth"
 import { readCounterParams } from "@/lib/counter/url-state"
-import { getLaborSectionPromises } from "@/lib/counter/adapters/labor"
+import { getLaborSectionPromises, PHONE_LABOR_SECTIONS } from "@/lib/counter/adapters/labor"
 import { CounterPhoneLaborClient } from "./counter-phone-labor-client"
+import { chooseSections } from "@/lib/counter/adapters/types"
 import { counterToday } from "@/lib/counter/today"
 
 export const dynamic = "force-dynamic"
@@ -61,12 +62,15 @@ export default async function MobileLaborPage({
   // NOT AWAITED — one promise per section, each unwrapped inside its own
   // Suspense boundary by `Section`. There is no `comparisonId` in this call:
   // `LaborSectionsInput` has no such field, the same as the desk page.
-  const sections = getLaborSectionPromises({
-    range: counterParams.range,
-    storeId: counterParams.storeId,
-    accountId: session.user.accountId,
-    today,
-  })
+  const sections = chooseSections(
+    getLaborSectionPromises({
+      range: counterParams.range,
+      storeId: counterParams.storeId,
+      accountId: session.user.accountId,
+      today,
+    }),
+    PHONE_LABOR_SECTIONS,
+  )
 
   return (
     <>

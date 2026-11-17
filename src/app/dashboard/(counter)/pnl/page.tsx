@@ -6,6 +6,7 @@ import { getPnlSectionPromises } from "@/lib/counter/adapters/pnl"
 import { getStoreFixedSectionPromises } from "@/lib/counter/adapters/pnl-store"
 import { getOverviewStores } from "@/lib/counter/adapters/overview"
 import { CounterPnlClient } from "./counter-pnl-client"
+import { chooseSections } from "@/lib/counter/adapters/types"
 import { counterToday } from "@/lib/counter/today"
 
 /**
@@ -56,13 +57,15 @@ export default async function PnlPage({
   // Suspense boundary by `Section`, so the strip and the statement no longer
   // sit behind the eight trailing weeks. Started before the store list so the
   // two are concurrent.
-  const sections = getPnlSectionPromises({
-    range: counterParams.range,
-    comparisonId: counterParams.comparisonId,
-    storeId: counterParams.storeId,
-    accountId: session.user.accountId,
-    today,
-  })
+  const sections = chooseSections(
+    getPnlSectionPromises({
+      range: counterParams.range,
+      comparisonId: counterParams.comparisonId,
+      storeId: counterParams.storeId,
+      accountId: session.user.accountId,
+      today,
+    }),
+  )
 
   /*
    * `P.pnlstore`'s two store-only sections — the fixed costs this store

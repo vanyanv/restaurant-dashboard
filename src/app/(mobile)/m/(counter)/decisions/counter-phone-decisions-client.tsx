@@ -1,5 +1,6 @@
 "use client"
 
+import type { PhoneDecisionsSections } from "@/lib/counter/adapters/decisions"
 import { businessQueryDate } from "@/lib/counter/business-date"
 
 import { useMemo, useState, useTransition } from "react"
@@ -161,7 +162,7 @@ export function CounterPhoneDecisionsClient({
   /** The query string as PLAIN TEXT — a `URLSearchParams` loses its prototype crossing the RSC boundary. */
   params: string
   today: Date
-  sections: SectionSources<DecisionsSections>
+  sections: SectionSources<PhoneDecisionsSections>
 }) {
   const params = useMemo(() => new URLSearchParams(paramsString), [paramsString])
   // Read for the same reason `/m/orders` reads its filters: the params this

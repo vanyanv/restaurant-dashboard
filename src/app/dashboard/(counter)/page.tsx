@@ -6,6 +6,7 @@ import { getOverviewSectionPromises, getOverviewStores } from "@/lib/counter/ada
 import { getShellStatus } from "@/lib/counter/adapters/shell-status"
 import { CounterOverviewClient } from "./counter-overview-client"
 import { counterToday } from "@/lib/counter/today"
+import { chooseSections } from "@/lib/counter/adapters/types"
 
 /**
  * Counter Overview — the first Counter page (Plan 7). A page composes
@@ -56,18 +57,20 @@ export default async function DashboardPage({
    * Started BEFORE the store list is awaited, so the two are concurrent — the
    * sequential `await` pair here was defect 5 in the spec.
    */
-  const sections = getOverviewSectionPromises({
-    range: counterParams.range,
-    // The comparison is part of the range (spec §5.3), so the adapter needs it
-    // to load the second rollup the dashed line and every delta are read
-    // against. Without it nothing on the page may claim a comparison.
-    comparisonId: counterParams.comparisonId,
-    storeId: counterParams.storeId,
-    accountId: session.user.accountId,
-    // The alert queue's "days open" is a business-date count. Taking its own
-    // clock would leave it on UTC, and unpinnable by COUNTER_TODAY.
-    today,
-  })
+  const sections = chooseSections(
+    getOverviewSectionPromises({
+      range: counterParams.range,
+      // The comparison is part of the range (spec §5.3), so the adapter needs it
+      // to load the second rollup the dashed line and every delta are read
+      // against. Without it nothing on the page may claim a comparison.
+      comparisonId: counterParams.comparisonId,
+      storeId: counterParams.storeId,
+      accountId: session.user.accountId,
+      // The alert queue's "days open" is a business-date count. Taking its own
+      // clock would leave it on UTC, and unpinnable by COUNTER_TODAY.
+      today,
+    }),
+  )
 
   // The rail's switcher is the LAYOUT's now; this list is for the page's own
   // content — the dispatch line's store lifecycle. `getOverviewStores` is
