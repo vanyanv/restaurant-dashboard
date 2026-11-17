@@ -2,10 +2,11 @@ import { getServerSession } from "next-auth"
 import { notFound, redirect } from "next/navigation"
 import { authOptions, hasOwnerAccess } from "@/lib/auth"
 import { readCounterParams, writeCounterParams } from "@/lib/counter/url-state"
-import { getStoreLaborSectionPromises } from "@/lib/counter/adapters/labor"
+import { getStoreLaborSectionPromises, PHONE_STORE_LABOR_SECTIONS } from "@/lib/counter/adapters/labor"
 import { getOverviewStores } from "@/lib/counter/adapters/overview"
 import { CounterPhoneStoreLaborClient } from "./counter-phone-store-labor-client"
 import { counterToday } from "@/lib/counter/today"
+import { chooseSections } from "@/lib/counter/adapters/types"
 
 /**
  * One store's Labor — the phone. Sibling of
@@ -100,14 +101,17 @@ export default async function MobileStoreLaborPage({
   //
   // There is no `comparisonId` in this call: `LaborSectionsInput` has no such
   // field, the same as every other Labor route.
-  const sections = getStoreLaborSectionPromises({
-    range: counterParams.range,
-    // The PATH's store, never `counterParams.storeId` — the query string has
-    // already been reconciled above.
-    storeId,
-    accountId: session.user.accountId,
-    today,
-  })
+  const sections = chooseSections(
+    getStoreLaborSectionPromises({
+      range: counterParams.range,
+      // The PATH's store, never `counterParams.storeId` — the query string has
+      // already been reconciled above.
+      storeId,
+      accountId: session.user.accountId,
+      today,
+    }),
+    PHONE_STORE_LABOR_SECTIONS,
+  )
 
   const stores = await storesP
   if (!stores.some((s) => s.id === storeId)) notFound()

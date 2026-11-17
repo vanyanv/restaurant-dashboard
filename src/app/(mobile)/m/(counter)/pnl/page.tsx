@@ -2,10 +2,11 @@ import { getServerSession } from "next-auth"
 import { redirect } from "next/navigation"
 import { authOptions, hasOwnerAccess } from "@/lib/auth"
 import { readCounterParams } from "@/lib/counter/url-state"
-import { getPnlSectionPromises } from "@/lib/counter/adapters/pnl"
+import { getPnlSectionPromises, PHONE_PNL_SECTIONS } from "@/lib/counter/adapters/pnl"
 import { getStoreFixedSectionPromises } from "@/lib/counter/adapters/pnl-store"
 import { CounterPhonePnlClient } from "./counter-phone-pnl-client"
 import { counterToday } from "@/lib/counter/today"
+import { chooseSections } from "@/lib/counter/adapters/types"
 
 export const dynamic = "force-dynamic"
 
@@ -57,13 +58,16 @@ export default async function MobilePnlPage({
 
   // NOT AWAITED — one promise per section, each unwrapped inside its own
   // Suspense boundary by `Section`. See the desk page's note.
-  const sections = getPnlSectionPromises({
-    range: counterParams.range,
-    comparisonId: counterParams.comparisonId,
-    storeId: counterParams.storeId,
-    accountId: session.user.accountId,
-    today,
-  })
+  const sections = chooseSections(
+    getPnlSectionPromises({
+      range: counterParams.range,
+      comparisonId: counterParams.comparisonId,
+      storeId: counterParams.storeId,
+      accountId: session.user.accountId,
+      today,
+    }),
+    PHONE_PNL_SECTIONS,
+  )
 
   /*
    * `P.pnlstore`'s fixed-cost section, started only when a store is SELECTED

@@ -2,8 +2,9 @@ import { getServerSession } from "next-auth"
 import { redirect } from "next/navigation"
 import { authOptions, hasOwnerAccess } from "@/lib/auth"
 import { readCounterParams } from "@/lib/counter/url-state"
-import { getDecisionsSectionPromises } from "@/lib/counter/adapters/decisions"
+import { getDecisionsSectionPromises, PHONE_DECISIONS_SECTIONS } from "@/lib/counter/adapters/decisions"
 import { CounterPhoneDecisionsClient } from "./counter-phone-decisions-client"
+import { chooseSections } from "@/lib/counter/adapters/types"
 import { counterToday } from "@/lib/counter/today"
 
 export const dynamic = "force-dynamic"
@@ -66,11 +67,14 @@ export default async function MobileDecisionsPage({
   // NOT AWAITED — one promise per section, each unwrapped inside its own
   // Suspense boundary by `Section`. THE SAME CALL, WITH THE SAME ARGUMENTS,
   // as the desk.
-  const sections = getDecisionsSectionPromises({
-    storeId: counterParams.storeId ?? undefined,
-    day: counterParams.day ?? undefined,
-    accountId: session.user.accountId,
-  })
+  const sections = chooseSections(
+    getDecisionsSectionPromises({
+      storeId: counterParams.storeId ?? undefined,
+      day: counterParams.day ?? undefined,
+      accountId: session.user.accountId,
+    }),
+    PHONE_DECISIONS_SECTIONS,
+  )
 
   return (
     <>

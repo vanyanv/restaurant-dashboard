@@ -1,5 +1,6 @@
 "use client"
 
+import type { PhoneLaborSections } from "@/lib/counter/adapters/labor"
 import Link from "next/link"
 import { useMemo } from "react"
 import { Chart, MList, MStrip, Section, useCounterTransition, SubNav } from "@/components/counter"
@@ -93,7 +94,7 @@ export function CounterPhoneLaborClient({
   /** The query string as PLAIN TEXT — a `URLSearchParams` loses its prototype crossing the RSC boundary. */
   params: string
   today: Date
-  sections: SectionSources<LaborSections>
+  sections: SectionSources<PhoneLaborSections>
 }) {
   const params = useMemo(() => new URLSearchParams(paramsString), [paramsString])
   const counterParams = useMemo(() => readCounterParams(params, today), [params, today])

@@ -6,6 +6,7 @@ import { getLaborSectionPromises } from "@/lib/counter/adapters/labor"
 import { getOverviewStores } from "@/lib/counter/adapters/overview"
 import { CounterLaborClient } from "./counter-labor-client"
 import { counterToday } from "@/lib/counter/today"
+import { chooseSections } from "@/lib/counter/adapters/types"
 
 /**
  * Counter Labor, the group page — what the hours cost, against the schedule the
@@ -80,15 +81,17 @@ export default async function LaborPage({
   // `LaborSectionsInput` has no such field. Nothing on this page is drawn
   // against a comparison window, which is why the subtitle in the island does
   // not name one either.
-  const sections = getLaborSectionPromises({
-    range: counterParams.range,
-    storeId: counterParams.storeId,
-    accountId: session.user.accountId,
-    // The SAME `today` the params reader and the island get. Only the week
-    // strip's `is-today` reads it: the cell marked is the reader's actual day
-    // when the range contains it, and no cell at all when it does not.
-    today,
-  })
+  const sections = chooseSections(
+    getLaborSectionPromises({
+      range: counterParams.range,
+      storeId: counterParams.storeId,
+      accountId: session.user.accountId,
+      // The SAME `today` the params reader and the island get. Only the week
+      // strip's `is-today` reads it: the cell marked is the reader's actual day
+      // when the range contains it, and no cell at all when it does not.
+      today,
+    }),
+  )
 
   // The switcher's list. Shared with the Overview rather than re-queried, so
   // the rail cannot offer one page a store the other does not have.

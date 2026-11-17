@@ -44,6 +44,7 @@ import {
   awaitSections,
   classify,
   guardSection,
+  lazy,
   type StreamedSections,
 } from "@/lib/counter/adapters/types"
 import {
@@ -1229,6 +1230,14 @@ function buildInvoiceLines(k: InvoiceKpis): MoneyLine[] {
 /* ── The entry point ──────────────────────────────────────────────────── */
 
 /**
+ * The sections the phone page shows. The phone page passes
+ * `chooseSections(sections, PHONE_OVERVIEW_SECTIONS)` to its client, so the loads only the
+ * desk reads never run on a phone.
+ */
+export const PHONE_OVERVIEW_SECTIONS = ["sales", "verdict", "strip", "moving", "salesChart", "splhChart", "stores", "needsYou"] as const satisfies ReadonlyArray<keyof OverviewSections>
+export type PhoneOverviewSections = Pick<OverviewSections, (typeof PHONE_OVERVIEW_SECTIONS)[number]>
+
+/**
  * The Overview's fifteen sections, as fifteen promises.
  *
  * Task 3 of the streaming-architecture plan, and the page this matters most
@@ -1265,30 +1274,30 @@ export function getOverviewSectionPromises(
 
   /* ── The loads. Every one of them starts here; none is awaited here. ── */
 
-  const storeFilesP = classify(() => getStores(), { retryAction: "retryStores" })
+  const storeFilesP = lazy(() => classify(() => getStores(), { retryAction: "retryStores" }))
 
-  const stmtP = classify(() => loadStatement({ range, storeId, granularity }), {
+  const stmtP = lazy(() => classify(() => loadStatement({ range, storeId, granularity }), {
     retryAction: "retrySales",
-  })
+  }))
 
   // `loadComparisonStatement`, not `loadStatement(comparisonRange(...))`: a
   // `weekday` comparison is FOUR windows, and loading their contiguous hull as
   // one window read a single day against five and a half days of trade.
-  const cmpStmtP = classify<Statement | null>(
+  const cmpStmtP = lazy(() => classify<Statement | null>(
     () => loadComparisonStatement({ range, mode: comparisonId, storeId, granularity }),
     { retryAction: "retryComparison" },
-  )
+  ))
 
-  const channelsP = classify(() => loadChannelMix({ range, storeId, accountId }), {
+  const channelsP = lazy(() => classify(() => loadChannelMix({ range, storeId, accountId }), {
     retryAction: "retryChannels",
     isEmpty: (rows) => rows.length === 0,
-  })
+  }))
 
-  const targetsP = classify(() => loadStripTargets(storeId, accountId), {
+  const targetsP = lazy(() => classify(() => loadStripTargets(storeId, accountId), {
     retryAction: "retryTargets",
-  })
+  }))
 
-  const splhP = classify(() => getSplhSeries(bucket === "day" ? "day" : "week", bounds), {
+  const splhP = lazy(() => classify(() => getSplhSeries(bucket === "day" ? "day" : "week", bounds), {
     retryAction: "retrySplh",
     /*
      * NO SERIES AT ALL means the labour sync has not written a row for this
@@ -1305,7 +1314,7 @@ export function getOverviewSectionPromises(
      */
     isEmpty: (series) => series.length === 0,
     emptyReason: "no_labor_synced",
-  })
+  }))
 
   /*
    * The published schedule, and the hours actually worked against it.
@@ -1322,17 +1331,17 @@ export function getOverviewSectionPromises(
    * this load wait on the P&L rollup, which is the slowest thing on the page
    * and the whole reason Task 3 unpicked the awaits.
    */
-  const laborP = classify(
+  const laborP = lazy(() => classify(
     () => loadLaborWeek({ range, storeId, accountId, salesByDay: new Map<string, number>(), salesByStoreDay: new Map() }),
     { retryAction: "retryLabor", isEmpty: (d) => d.days.every((x) => x.actualHours === 0) },
-  )
+  ))
 
   /*
    * What feeds the figures, and how fresh each one is. One grouped query,
    * cached a minute alongside the shell's own status — it sits under the fold
    * on a page that already makes a dozen round trips.
    */
-  const feedsP = storeFilesP.then((storeFilesSd) =>
+  const feedsP = lazy(() => storeFilesP.then((storeFilesSd) =>
     classify(
       () =>
         getFeedHealth({
@@ -1341,9 +1350,9 @@ export function getOverviewSectionPromises(
         }),
       { retryAction: "retryFeeds" },
     ),
-  )
+  ))
 
-  const invoicesP = classify<InvoiceKpis>(
+  const invoicesP = lazy(() => classify<InvoiceKpis>(
     () =>
       getInvoiceSummary({
         storeId: storeId ?? undefined,
@@ -1361,11 +1370,11 @@ export function getOverviewSectionPromises(
       isEmpty: (k) => k.invoiceCount === 0,
       emptyReason: "nothing_received",
     },
-  )
+  ))
 
   // NOT owed. `getAlertInbox` has been in the tree since F21 — the previous
   // adapter reported it as unbuilt work against code that already existed.
-  const queueP = classify(
+  const queueP = lazy(() => classify(
     async () => {
       const result = await getAlertInbox({ storeId })
       if (!result.ok) throw new Error("You do not have access to the alert inbox")
@@ -1386,9 +1395,9 @@ export function getOverviewSectionPromises(
       isEmpty: (d) => d.alerts.length === 0,
       emptyReason: "all_clear",
     },
-  )
+  ))
 
-  const ratingsP = classify(
+  const ratingsP = lazy(() => classify(
     async () => {
       const summary = await getRatingsSummary({ storeId })
       // Never throws by contract — it returns null for "not signed in" and
@@ -1402,7 +1411,7 @@ export function getOverviewSectionPromises(
       return summary
     },
     { retryAction: "retryRatings", isEmpty: (r) => r.count === 0, emptyReason: "no_reviews" },
-  )
+  ))
 
   /*
    * The one loader that takes another loader's answer as an INPUT: a store
@@ -1412,7 +1421,7 @@ export function getOverviewSectionPromises(
    * and this is now the only thing waiting behind it. Before Task 3 every
    * other load on this page did too.
    */
-  const perStoreMixP = storeFilesP.then((storeFilesSd) => {
+  const perStoreMixP = lazy(() => storeFilesP.then((storeFilesSd) => {
     const operationalIds = (dataOf(storeFilesSd) ?? [])
       .filter(isOperational)
       .map((s) => s.id)
@@ -1443,7 +1452,7 @@ export function getOverviewSectionPromises(
       },
       { retryAction: "retryStoreChannels" },
     )
-  })
+  }))
 
   /* ── The derivations, each over only the loads it reads. ── */
 
@@ -1451,22 +1460,22 @@ export function getOverviewSectionPromises(
   // nothing here" — never a silent fall back to the whole account, which is a
   // page answering a question nobody asked. `loadStatement` reports it rather
   // than the adapter re-deriving it from `perStore`.
-  const scopeP = stmtP.then((stmtSd) =>
+  const scopeP = lazy(() => stmtP.then((stmtSd) =>
     mapReadyTo(stmtSd, (s) => (s.storeNotFound ? empty<Statement>("no_match") : ready(s))),
-  )
+  ))
 
-  const cmpP = cmpStmtP.then((cmpStmtSd) => {
+  const cmpP = lazy(() => cmpStmtP.then((cmpStmtSd) => {
     const cmpStatement = dataOf(cmpStmtSd)
     return comparisonContext(
       comparisonId,
       cmpStatement && !cmpStatement.storeNotFound ? cmpStatement : null,
     )
-  })
+  }))
 
   // SPLH is a RATIO, so the account-wide series is total net over total hours
   // per day, not the mean of the per-store ratios. `foldSplhSeries` is the one
   // function that does that; the raw per-store series stays for the cards.
-  const splhPointsP = splhP.then((splhSd) => mapReady(splhSd, (series) => foldSplhSeries(series)))
+  const splhPointsP = lazy(() => splhP.then((splhSd) => mapReady(splhSd, (series) => foldSplhSeries(series))))
 
   /*
    * The second lead figure, derived ONCE and read by four sections — the lead
@@ -1477,19 +1486,19 @@ export function getOverviewSectionPromises(
    * depend on it then render the designed `no_labor_synced` state instead of a
    * quotient with no denominator.
    */
-  const leadP = Promise.all([splhPointsP, laborP]).then(([splhPoints, laborSd]) =>
+  const leadP = lazy(() => Promise.all([splhPointsP, laborP]).then(([splhPoints, laborSd]) =>
     splhLead({
       points: dataOf(splhPoints) ?? [],
       days: dataOf(laborSd)?.days ?? [],
     }),
-  )
+  ))
 
   /*
    * The head figure's reading, derived ONCE. `sales` renders it and the
    * verdict writes a sentence about it — two callers of `comparisonPhrase`
    * over one figure is how a page ends up wording one comparison two ways.
    */
-  const salesP = Promise.all([scopeP, cmpP, channelsP]).then(([scopeSd, cmp, channelsSd]) =>
+  const salesP = lazy(() => Promise.all([scopeP, cmpP, channelsP]).then(([scopeSd, cmp, channelsSd]) =>
     mapReady(scopeSd, (p): SalesReading => {
       const reading = comparisonPhrase(p.grossSales, cmp, cmp.scope?.grossSales ?? null)
       const mix = dataOf(channelsSd)
@@ -1516,17 +1525,17 @@ export function getOverviewSectionPromises(
         comparisonTone: reading.tone,
       }
     }),
-  )
+  ))
 
-  const stripP = Promise.all([scopeP, channelsP, targetsP]).then(
+  const stripP = lazy(() => Promise.all([scopeP, channelsP, targetsP]).then(
     ([scopeSd, channelsSd, targetsSd]) =>
       mapReady(scopeSd, (p) => buildStrip(p, dataOf(channelsSd), dataOf(targetsSd))),
-  )
+  ))
 
   return {
-    sales: guardSection(salesP, "retrySales"),
+    sales: lazy(() => guardSection(salesP, "retrySales")),
 
-    splh: guardSection(
+    splh: lazy(() => guardSection(
       Promise.all([splhPointsP, leadP]).then(([splhPoints, lead]) =>
         mapReadyTo(splhPoints, (points) => {
           /*
@@ -1603,11 +1612,11 @@ export function getOverviewSectionPromises(
         }),
       ),
       "retrySplh",
-    ),
+    )),
 
-    strip: guardSection(stripP, "retrySales"),
+    strip: lazy(() => guardSection(stripP, "retrySales")),
 
-    verdict: guardSection(
+    verdict: lazy(() => guardSection(
       Promise.all([stripP, leadP, salesP]).then(([strip, lead, salesSd]) =>
         mapReadyTo(strip, (cells) => {
           const sales = dataOf(salesSd)
@@ -1619,9 +1628,9 @@ export function getOverviewSectionPromises(
         }),
       ),
       "retrySales",
-    ),
+    )),
 
-    moving: guardSection(
+    moving: lazy(() => guardSection(
       Promise.all([scopeP, cmpP, invoicesP, splhPointsP]).then(
         ([scopeSd, cmp, invoicesSd, splhPoints]) => {
           const foldedPoints = dataOf(splhPoints) ?? []
@@ -1633,7 +1642,7 @@ export function getOverviewSectionPromises(
         },
       ),
       "retrySales",
-    ),
+    )),
 
     /*
      * `queueP` classifies an EMPTY INBOX as empty, and that verdict is now
@@ -1642,23 +1651,23 @@ export function getOverviewSectionPromises(
      * show. `mapReadyTo` re-decides it over the combined list — the derived
      * items and the inbox together — and only then calls it all clear.
      */
-    needsYou: guardSection(
+    needsYou: lazy(() => guardSection(
       Promise.all([queueP, leadP]).then(([queueSd, lead]) => {
         const items = buildQueue(dataOf(queueSd)?.alerts ?? [], today, lead)
         if (items.length > 0) return ready(items)
         return mapReadyTo(queueSd, () => empty<QueueEntry[]>("all_clear"))
       }),
       "retryNeedsYou",
-    ),
+    )),
 
-    salesChart: guardSection(
+    salesChart: lazy(() => guardSection(
       Promise.all([scopeP, cmpP]).then(([scopeSd, cmp]) =>
         mapReady(scopeSd, (p) => buildSalesChart(p, cmp, range)),
       ),
       "retrySales",
-    ),
+    )),
 
-    splhChart: guardSection(
+    splhChart: lazy(() => guardSection(
       splhPointsP.then((splhPoints) =>
         mapReadyTo(splhPoints, (points) => {
           // The same gate as the lead figure above it, for the same reason: a
@@ -1668,9 +1677,9 @@ export function getOverviewSectionPromises(
         }),
       ),
       "retrySplh",
-    ),
+    )),
 
-    stores: guardSection(
+    stores: lazy(() => guardSection(
       Promise.all([storeFilesP, stmtP, cmpStmtP, cmpP, perStoreMixP, splhP]).then(
         ([storeFilesSd, stmtSd, cmpStmtSd, cmp, perStoreMixSd, splhSd]) =>
           mapReady(storeFilesSd, (files) =>
@@ -1688,9 +1697,9 @@ export function getOverviewSectionPromises(
           ),
       ),
       "retryStores",
-    ),
+    )),
 
-    comparison: guardSection(
+    comparison: lazy(() => guardSection(
       Promise.all([scopeP, cmpP]).then(([scopeSd, cmp]) =>
         mapReadyTo(scopeSd, (p) => {
           // Switched off, or the comparison rollup did not load: nothing to
@@ -1700,16 +1709,16 @@ export function getOverviewSectionPromises(
         }),
       ),
       "retryComparison",
-    ),
+    )),
 
-    channels: guardSection(channelsP, "retryChannels"),
+    channels: lazy(() => guardSection(channelsP, "retryChannels")),
 
-    invoices: guardSection(
+    invoices: lazy(() => guardSection(
       invoicesP.then((invoicesSd) => mapReady(invoicesSd, buildInvoiceLines)),
       "retryInvoices",
-    ),
+    )),
 
-    feeds: guardSection(
+    feeds: lazy(() => guardSection(
       feedsP.then((feedsSd) =>
         mapReady(feedsSd, (lines): MoneyLine[] =>
           lines.map((f) => ({
@@ -1723,9 +1732,9 @@ export function getOverviewSectionPromises(
         ),
       ),
       "retryFeeds",
-    ),
+    )),
 
-    ratings: guardSection(
+    ratings: lazy(() => guardSection(
       ratingsP.then((ratingsSd) =>
         mapReadyTo(ratingsSd, (r) => {
           // `isEmpty` already caught a window with no reviews; a null average
@@ -1741,7 +1750,7 @@ export function getOverviewSectionPromises(
         }),
       ),
       "retryRatings",
-    ),
+    )),
   }
 }
 

@@ -6,6 +6,7 @@ import { getDecisionsSectionPromises } from "@/lib/counter/adapters/decisions"
 import { getOverviewStores } from "@/lib/counter/adapters/overview"
 import { CounterDecisionsClient } from "./counter-decisions-client"
 import { counterToday } from "@/lib/counter/today"
+import { chooseSections } from "@/lib/counter/adapters/types"
 
 /**
  * Counter Needs-you — "The week ahead", the desk surface (`P.decisions.desk`,
@@ -61,13 +62,15 @@ export default async function DecisionsPage({
   // Suspense boundary by `Section` (ruling N-R13 and N-R15: the promises entry
   // point means this route needs no `AWAITED_SECTIONS_ALLOWED` exemption).
   // Started before the store list so the two are concurrent.
-  const sections = getDecisionsSectionPromises({
-    storeId: counterParams.storeId ?? undefined,
-    // Straight off the URL, and the SAME key the phone reads. A day pressed
-    // on the desk and a link opened on a phone land on one day.
-    day: counterParams.day ?? undefined,
-    accountId: session.user.accountId,
-  })
+  const sections = chooseSections(
+    getDecisionsSectionPromises({
+      storeId: counterParams.storeId ?? undefined,
+      // Straight off the URL, and the SAME key the phone reads. A day pressed
+      // on the desk and a link opened on a phone land on one day.
+      day: counterParams.day ?? undefined,
+      accountId: session.user.accountId,
+    }),
+  )
 
   // The rail's switcher is the LAYOUT's; this list is for the page's own
   // content — the store the sub-line names. `getOverviewStores` is `cache()`d,
