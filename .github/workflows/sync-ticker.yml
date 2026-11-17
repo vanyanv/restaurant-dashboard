@@ -45,11 +45,13 @@ jobs:
           set -u
           end=$(( $(date +%s) + 340 * 60 ))
           last="${LAST:-}"
+          pending=""   # targets for the current hour not yet accepted by GitHub
           dispatch() {
             if gh workflow run "$1" --ref main; then
               echo "$(date -u +%FT%TZ) dispatched $1"
             else
-              echo "::warning::$(date -u +%FT%TZ) could not dispatch $1"
+              echo "::warning::$(date -u +%FT%TZ) could not dispatch $1, retrying next minute"
+              return 1
             fi
           }
           while [ "$(date +%s)" -lt "$end" ]; do
@@ -57,17 +59,34 @@ jobs:
             if [ "$key" != "$last" ]; then
               last=$key
               h=$((10#$(date -u +%H)))
+              pending=""
               # Same hours as otter-hourly-sync.yml's cron (trading hours, LA).
               if [ "$h" -ge 17 ] || [ "$h" -le 10 ]; then
-                dispatch otter-hourly-sync.yml
+                pending="$pending otter-hourly-sync.yml"
               fi
               # Same cadence as otter-sync.yml and otter-orders-sync.yml.
               if [ $((h % 4)) -eq 0 ]; then
-                dispatch otter-sync.yml
-                dispatch otter-orders-sync.yml
+                pending="$pending otter-sync.yml otter-orders-sync.yml"
               fi
             fi
+            # A failed dispatch stays pending and is retried each minute for the
+            # rest of the hour; one that went through is never sent twice.
+            still=""
+            for wf in $pending; do
+              dispatch "$wf" || still="$still $wf"
+            done
+            pending=$still
             sleep 60
           done
-          gh workflow run sync-ticker.yml --ref main -f last="$last"
-          echo "handed off (last=$last)"
+          # Hand off. Retried so one failed request doesn't end the chain and
+          # leave it to the unreliable backup schedule.
+          for attempt in 1 2 3 4 5; do
+            if gh workflow run sync-ticker.yml --ref main -f last="$last"; then
+              echo "handed off (last=$last)"
+              exit 0
+            fi
+            echo "::warning::hand-off attempt $attempt failed"
+            sleep $((attempt * 30))
+          done
+          echo "::error::could not hand off; the backup schedule will restart the chain"
+          exit 1
