@@ -26,7 +26,6 @@
 .iv-decide{display:flex;flex-wrap:wrap;gap:10px 16px;align-items:center;justify-content:space-between;padding:12px 16px;
   border-radius:var(--r);background:var(--surface);border:1px solid var(--line-strong)}
 .iv-decide--bad{border-color:var(--bad)}
-.iv-decide .btnrow{margin:0}
 .iv-decide .ct-note{flex-basis:100%;margin:0}
 .iv-decide__state{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
 
@@ -40,9 +39,6 @@
 .iv-panels{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:16px 24px}
 .iv-panels > div{display:grid;gap:6px;align-content:start;min-width:0}
 
-@media (max-width:700px){
-  .iv-decide .btn{min-height:44px;flex:1}
-}
 
 /* ── This week (/dashboard/invoices) ─────────────────────────────────── */
 
