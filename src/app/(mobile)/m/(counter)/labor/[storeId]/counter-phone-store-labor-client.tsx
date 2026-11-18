@@ -1,5 +1,7 @@
 "use client"
 
+import { Fold } from "@/components/counter/ui"
+import { LaborPlainView } from "@/app/dashboard/(counter)/labor/labor-plain-ui"
 import type { PhoneStoreLaborSections } from "@/lib/counter/adapters/labor"
 import { useMemo } from "react"
 import {
@@ -122,6 +124,15 @@ export function CounterPhoneStoreLaborClient({
         <p className="msub">{windowLabel}</p>
       </div>
 
+      {/* Labor made plain (owner's go, 2026-11-18; mock
+          https://claude.ai/artifact/Sr98ngzuijqUUhPbJNJAv4). Every figure
+          below is folded underneath, unchanged. */}
+      <Section bare title="Labor in a sentence" data={sections.plain} pending={pending}>
+        {(p) => <LaborPlainView p={p} />}
+      </Section>
+
+      <Fold summary="Every figure, as before">
+
       {/* Two cells: Labor % · Leak — `h.phoneCells`, the store arm of
           `buildHeadline`, never a slice of `h.cells` (which carries four:
           Hourly labor, Hours, Sales / labor hour, Leak, and loses the Leak
@@ -147,6 +158,7 @@ export function CounterPhoneStoreLaborClient({
       <Section title="By role" meta={(r) => r.meta} data={sections.roles} pending={pending}>
         {(r) => <MList rows={r.phoneRows} />}
       </Section>
+      </Fold>
     </>
   )
 }

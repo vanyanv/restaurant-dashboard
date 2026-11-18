@@ -1,5 +1,7 @@
 "use client"
 
+import { Fold } from "@/components/counter/ui"
+import { LaborPlainView } from "@/app/dashboard/(counter)/labor/labor-plain-ui"
 import { Fragment, useCallback, useMemo } from "react"
 import { usePathname, useRouter } from "next/navigation"
 import {
@@ -301,6 +303,15 @@ export function CounterLaborClient({
           only once a store is picked, which is the design's own sequence. */}
       <SubNav items={storeViewTabs("/dashboard/labor", counterParams.storeId, paramsString)} label="Labor" />
 
+      {/* Labor made plain (owner's go, 2026-11-18; mock
+          https://claude.ai/artifact/Sr98ngzuijqUUhPbJNJAv4). Every figure
+          below is folded underneath, unchanged. */}
+      <Section bare title="Labor in a sentence" data={sections.plain} pending={pending}>
+        {(p) => <LaborPlainView p={p} />}
+      </Section>
+
+      <Fold summary="Every figure, the schedule, roles and the trend">
+
       {/* One figure and the verdict beside it — `.headline`, no `--duo`. Both
           halves read the same `headline` section, so a week that failed to load
           says so once in each place rather than printing half a headline. */}
@@ -480,6 +491,7 @@ export function CounterLaborClient({
           </>
         )}
       </Section>
+      </Fold>
     </>
   )
 }
