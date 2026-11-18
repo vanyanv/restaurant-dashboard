@@ -46,6 +46,24 @@ describe("buildAlertsPlain", () => {
     expect(p.serious[0].why).toBe("3 times since Nov 1")
   })
 
+  it("says serious alerts and the problems behind them apart, and says when not all loaded", () => {
+    const p = buildAlertsPlain(alerts({ counts: { open: 12, critical: 5 } }))
+    expect(p.sentence).toContain("5 look serious; they come from one problem, listed first.")
+    expect(p.seriousPartial).toBe(true)
+    expect(buildAlertsPlain(alerts()).seriousPartial).toBe(false)
+  })
+
+  it("counts what runs out with the shelf's own number, lists only rows past the line, and words hours", () => {
+    const rows = [
+      { key: "a", name: "Fries", store: null, outLabel: "Thu open", qty: "", href: "/x", tagTone: "bad" },
+      { key: "b", name: "Rolls", store: null, outLabel: "Sat close", qty: "", href: "/y", tagTone: "warn" },
+    ]
+    const p = buildDecisionsPlain(decisions({ runOut: { hot: 1, rows }, laborGapHours: -1, vsPrior: 0.0001 }))
+    expect(p.runOut.map((r) => r.name)).toEqual(["Fries"])
+    expect(p.statuses.map((s) => s.text)).toEqual(expect.arrayContaining(["1 running out before delivery", "Schedule short 1 hour"]))
+    expect(p.sentence.startsWith("This week should sell about $112,400, level with last week.")).toBe(true)
+  })
+
   it("says when the groups are counted from a partial page", () => {
     const p = buildAlertsPlain(alerts({ counts: { open: 144, critical: 1 } }))
     expect(p.groups[0].why).toBe("Counted from the 8 most serious of 144 open alerts.")
@@ -66,7 +84,9 @@ const decisions = (over: Partial<DecisionsPlainInput> = {}): DecisionsPlainInput
   accuracy: { inside: 24, sample: 30 },
   laborGapHours: -11,
   laborShort: true,
+  runOutNote: null,
   runOut: {
+    hot: 1,
     rows: [
       { key: "f", name: "Fries", store: "Van Nuys", outLabel: "Thu 11/20 lunch", qty: "2 cases", href: "/dashboard/count/item/f", tagTone: "bad" },
       { key: "r", name: "Rolls", store: "Hollywood", outLabel: "Mon 11/24 close", qty: "", href: "/dashboard/count/item/r", tagTone: "good" },
@@ -110,12 +130,12 @@ describe("buildDecisionsPlain", () => {
 
   it("never invents a forecast, and says when run-outs cannot be known", () => {
     const p = buildDecisionsPlain(
-      decisions({ total: null, vsPrior: null, vsText: "no comparison set", runOut: null, calls: [], accuracy: { inside: null, sample: 0 } }),
+      decisions({ total: null, vsPrior: null, vsText: "no comparison set", runOut: null, runOutNote: "Pick one store to see what runs out", calls: [], accuracy: { inside: null, sample: 0 } }),
     )
     expect(p.sentence).toBe("No forecast has been made for this week yet. No decision needs you this week.")
     expect(p.total).toBeNull()
     expect(p.vsTone).toBe("flat")
-    expect(p.statuses.map((s) => s.text)).toContain("Run-outs need one store picked and a shelf count")
+    expect(p.statuses.map((s) => s.text)).toContain("Pick one store to see what runs out")
     expect(p.statuses.map((s) => s.text)).toContain("Forecast accuracy not measured yet")
   })
 })

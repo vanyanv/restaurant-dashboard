@@ -32,7 +32,8 @@ const DECISIONS = buildDecisionsPlain({
   accuracy: { inside: 24, sample: 30 },
   laborGapHours: 0,
   laborShort: false,
-  runOut: { rows: [{ key: "f", name: "Fries", store: "Van Nuys", outLabel: "Thu 11/20 lunch", qty: "2 cases", href: "/dashboard/count/item/f", tagTone: "bad" }] },
+  runOutNote: null,
+  runOut: { hot: 1, rows: [{ key: "f", name: "Fries", store: "Van Nuys", outLabel: "Thu 11/20 lunch", qty: "2 cases", href: "/dashboard/count/item/f", tagTone: "bad" }] },
   calls: [{ key: "c1", title: "Add a closer on Saturday", why: "Short 11 hours.", lead: "$420", unit: "/wk", note: "decays daily", act: "Open labor", href: "/dashboard/labor" }],
 })
 

@@ -36,6 +36,8 @@ export interface AlertsPlain {
   serious: AlertsPlainSerious[]
   /** Serious conditions not listed, past the first few. */
   seriousMore: number
+  /** Some serious alerts were not loaded, so the list is not all of them. */
+  seriousPartial: boolean
   groups: AlertsPlainGroup[]
   open: number
 }
@@ -81,7 +83,12 @@ export function buildAlertsPlain(input: AlertsPlainInput): AlertsPlain {
     parts.push("Nothing is open. Every alert has been dealt with.")
   } else {
     parts.push(`${count(open)} ${open === 1 ? "alert is" : "alerts are"} open.`)
-    if (critical > 0) {
+    const conditions = input.serious.length
+    if (critical > 0 && conditions > 0 && conditions < critical) {
+      parts.push(
+        `${count(critical)} look serious; they come from ${conditions === 1 ? "one problem" : `${count(conditions)} problems`}, listed first.`,
+      )
+    } else if (critical > 0) {
       parts.push(critical === 1 ? "One looks serious and is listed first." : `${count(critical)} look serious and are listed first.`)
     } else {
       parts.push(open === 1 ? "It is not serious." : "None of them look serious.")
@@ -104,6 +111,7 @@ export function buildAlertsPlain(input: AlertsPlainInput): AlertsPlain {
     statuses,
     serious,
     seriousMore: Math.max(0, input.serious.length - SERIOUS_SHOWN),
+    seriousPartial: input.openRows.filter((a) => a.severity === "CRITICAL").length < critical,
     groups,
     open,
   }

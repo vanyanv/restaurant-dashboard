@@ -833,7 +833,8 @@ export async function getAlertsSections(input: AlertsQuery = {}): Promise<Alerts
       const open = d.alerts.filter((a) => a.status === "OPEN")
       return buildAlertsPlain({
         openRows: open,
-        serious: buildRows(open.filter((a) => a.severity === "CRITICAL"), today),
+        // The list's own fold, so each row's id is the one the list opens.
+        serious: buildRows(open, today).filter((r) => r.severity === "CRITICAL"),
         counts: { open: d.counts.open, critical: d.counts.critical },
         closed: closedAlerts(d.alerts).length,
       })

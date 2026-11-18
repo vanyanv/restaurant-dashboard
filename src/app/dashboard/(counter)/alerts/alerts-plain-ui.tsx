@@ -1,5 +1,6 @@
 "use client"
 
+import { useSearchParams } from "next/navigation"
 import { useSurfaceHref } from "@/components/counter"
 import {
   Answer,
@@ -24,7 +25,10 @@ import type { AlertsPlain } from "@/lib/counter/alerts-plain"
  * keeps the store and segment in the URL and unfolds the list.
  */
 export function AlertsPlainView({ p, onOpen }: { p: AlertsPlain; onOpen: (id: string) => void }) {
-  const href = useSurfaceHref()
+  const surfaceHref = useSurfaceHref()
+  // A one-store page sends its store along, so "Open labor" stays on that store.
+  const store = useSearchParams()?.get("store") ?? null
+  const href = (path: string) => surfaceHref(store ? `${path}?store=${encodeURIComponent(store)}` : path)
   return (
     <div className="cu-stack">
       <Card label="Alerts in a sentence">
@@ -54,6 +58,9 @@ export function AlertsPlainView({ p, onOpen }: { p: AlertsPlain; onOpen: (id: st
             <p className="cu-card__cap">
               {plural(p.seriousMore, "more serious alert", "more serious alerts")} in the list below
             </p>
+          ) : null}
+          {p.seriousPartial ? (
+            <p className="cu-card__cap">Not every serious alert loaded; the full list is below</p>
           ) : null}
         </Card>
       ) : null}

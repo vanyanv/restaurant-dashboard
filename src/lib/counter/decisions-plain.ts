@@ -58,8 +58,9 @@ export interface DecisionsPlainInput {
   /** Scheduled − needed hours across the week; negative is short. Null when not computed. */
   laborGapHours: number | null
   laborShort: boolean
-  /** The shelf's rows, or null when it could not be read (no store picked, no counts). */
+  /** The shelf's rows and its own "before delivery" count, or null when it could not be read. */
   runOut: {
+    hot: number
     rows: ReadonlyArray<{
       key: string
       name: string
@@ -70,6 +71,8 @@ export interface DecisionsPlainInput {
       tagTone: string
     }>
   } | null
+  /** Why the shelf could not be read, in words, when `runOut` is null. */
+  runOutNote: string | null
   calls: ReadonlyArray<{
     key: string
     title: string
@@ -88,7 +91,9 @@ export const RUN_OUT_SHOWN = 4
 const pctWords = (v: number) => `${(Math.abs(v) * 100).toFixed(1).replace(/\.0$/, "")}%`
 
 export function buildDecisionsPlain(input: DecisionsPlainInput): DecisionsPlain {
-  const hot = (input.runOut?.rows ?? []).filter((r) => r.tagTone !== "good")
+  // Past the reorder line, the shelf's own "before delivery" rows; its count is the shelf's too.
+  const hot = (input.runOut?.rows ?? []).filter((r) => r.tagTone === "bad")
+  const hotCount = input.runOut?.hot ?? 0
   const runOut = hot.slice(0, RUN_OUT_SHOWN).map((r) => ({
     key: r.key,
     name: r.name,
@@ -114,7 +119,7 @@ export function buildDecisionsPlain(input: DecisionsPlainInput): DecisionsPlain 
     const change =
       input.vsPrior === null
         ? ""
-        : input.vsPrior === 0
+        : Math.abs(input.vsPrior) < 0.0005
           ? ", level with last week"
           : `, ${input.vsPrior > 0 ? "up" : "down"} ${pctWords(input.vsPrior)} on last week`
     parts.push(`This week should sell about ${money(input.total)}${change}.`)
@@ -128,9 +133,11 @@ export function buildDecisionsPlain(input: DecisionsPlainInput): DecisionsPlain 
   else parts.push("No decision needs you this week.")
 
   const statuses: DecisionsPlain["statuses"] = []
-  if (hot.length > 0) statuses.push({ tone: "bad", text: `${count(hot.length)} running out before delivery` })
-  if (input.laborShort && input.laborGapHours !== null) {
-    statuses.push({ tone: "warn", text: `Schedule short ${count(Math.abs(input.laborGapHours))} hours` })
+  if (hotCount > 0) statuses.push({ tone: "bad", text: `${count(hotCount)} running out before delivery` })
+  if (input.laborShort && input.laborGapHours !== null && input.laborGapHours !== 0) {
+    const h = Math.abs(input.laborGapHours)
+    const n = Number.isInteger(h) ? count(h) : h.toFixed(1)
+    statuses.push({ tone: "warn", text: `Schedule short ${n} ${h === 1 ? "hour" : "hours"}` })
   }
   const { inside, sample } = input.accuracy
   if (inside !== null && sample > 0) {
@@ -141,13 +148,13 @@ export function buildDecisionsPlain(input: DecisionsPlainInput): DecisionsPlain 
   } else {
     statuses.push({ tone: "warn", text: "Forecast accuracy not measured yet" })
   }
-  if (input.runOut === null) statuses.push({ tone: "warn", text: "Run-outs need one store picked and a shelf count" })
+  if (input.runOut === null && input.runOutNote) statuses.push({ tone: "warn", text: input.runOutNote })
 
   return {
     sentence: parts.join(" "),
     total: input.total,
     vs: input.vsText,
-    vsTone: input.vsPrior === null || input.vsPrior === 0 ? "flat" : input.vsPrior > 0 ? "up" : "down",
+    vsTone: input.vsPrior === null || Math.abs(input.vsPrior) < 0.0005 ? "flat" : input.vsPrior > 0 ? "up" : "down",
     sub:
       inside !== null && sample > 0
         ? `Recent forecasts landed in range on ${count(inside)} of ${count(sample)} days`

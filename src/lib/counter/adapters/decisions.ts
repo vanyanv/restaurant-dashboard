@@ -1818,6 +1818,15 @@ export function getDecisionsSectionPromises(
           laborGapHours: gap.hours,
           laborShort: gap.status === "short",
           runOut: dataOf(runSd),
+          // Said in words, never as "nothing runs out".
+          runOutNote:
+            runSd.status === "not_computed"
+              ? "Pick one store to see what runs out"
+              : runSd.status === "empty"
+                ? "Count the shelf to see what runs out"
+                : runSd.status === "failed"
+                  ? "The shelf did not load, so run-outs are unknown"
+                  : null,
           calls: buildQueueSection(view).items,
         }))
       }),

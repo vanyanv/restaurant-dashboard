@@ -530,7 +530,13 @@ export function CounterAlertsClient({
           https://claude.ai/artifact/Sr98ngzuijqUUhPbJNJAv4). The list it opens
           is folded underneath and unfolds when an alert is picked. */}
       <Section bare title="Alerts in a sentence" data={sections.plain} pending={pending}>
-        {(p) => <AlertsPlainView p={p} onOpen={(id) => selectAlert(id)} />}
+        {(p) => (
+          <AlertsPlainView
+            p={p}
+            // A serious alert is open, so it shows in the Open list with no filter on.
+            onOpen={(id) => push({ alert: id, segment: "open" as AlertSegment, severities: [], sources: [], search: "" })}
+          />
+        )}
       </Section>
 
       <Fold summary="Every alert, one by one, with the figures and filters" defaultOpen={selectedAlert !== null}>
