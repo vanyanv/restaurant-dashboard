@@ -1,3 +1,4 @@
+import { buildCogsPlain, type CogsPlain } from "@/lib/counter/cogs-plain"
 import { getStores } from "@/app/actions/store/crud-actions"
 import {
   HISTORY_DAYS,
@@ -320,6 +321,8 @@ export interface WorstSection {
 
 /** The group page — `/dashboard/cogs` and `/m/cogs`. */
 export interface CogsSections {
+  /** The page made plain: the share against plan, what rose, what is missing. */
+  plain: SectionData<CogsPlain>
   headline: SectionData<CogsHeadline>
   plan: SectionData<PlanSection>
   moved: SectionData<MovedSection>
@@ -329,6 +332,8 @@ export interface CogsSections {
 
 /** The store page — `/dashboard/cogs/[storeId]` and `/m/cogs/[storeId]`. */
 export interface StoreCogsSections {
+  /** One store's food cost made plain, from the same builder. */
+  plain: SectionData<CogsPlain>
   headline: SectionData<CogsHeadline>
   plan: SectionData<PlanSection>
   moved: SectionData<MovedSection>
@@ -1429,6 +1434,36 @@ function headlineSection(
   )
 }
 
+/**
+ * The page made plain, on either route: the headline's own window and invoice
+ * backlog, and "What moved"'s own rows. A backlog or a price history that did
+ * not load leaves its clause out, never a zero.
+ */
+function plainSection(
+  cogsSd: SectionData<CogsData>,
+  invoiceSd: SectionData<UnpostedInvoices>,
+  movedSd: SectionData<PriceMove[]>,
+): SectionData<CogsPlain> {
+  const invoices = dataOf(invoiceSd)
+  const moves = dataOf(movedSd)
+  return cogsSection(cogsSd, NO_COGS_OWED, (d) =>
+    buildCogsPlain({
+      cost: d.window.cost,
+      sales: d.window.sales,
+      foodPct: d.window.foodPct,
+      plan: d.window.plan,
+      againstPlan: d.window.againstPlan,
+      partialLines: d.window.partialLines,
+      unmappedLines: d.window.unmappedLines,
+      invoices: invoices === null ? null : { count: invoices.count, total: invoices.total },
+      moves:
+        moves === null
+          ? null
+          : movedRows(moves).map(({ row, now, then, change }) => ({ key: row.id, name: row.name, then, now, change })),
+    }),
+  )
+}
+
 /** The plan chart, on either route. */
 function planSection(
   cogsSd: SectionData<CogsData>,
@@ -1470,6 +1505,13 @@ export function getCogsSectionPromises(
   const { scopeP, cogsP, invoicesP, movedP, wasteP } = loadEverything(input)
 
   return {
+    plain: guardSection(
+      Promise.all([cogsP, invoicesP, scopeP, movedP]).then(([cogsSd, invoiceSd, scopeSd, sd]) =>
+        plainSection(cogsSd, invoiceSd, gate(scopeSd, sd)),
+      ),
+      "retryCogs",
+    ),
+
     headline: guardSection(
       Promise.all([cogsP, invoicesP, wasteP]).then(([cogsSd, invoiceSd, wasteSd]) =>
         headlineSection(cogsSd, invoiceSd, wasteSd, false),
@@ -1552,6 +1594,13 @@ export function getStoreCogsSectionPromises(
   const { scopeP, cogsP, invoicesP, movedP, wasteP } = loadEverything(input)
 
   return {
+    plain: guardSection(
+      Promise.all([cogsP, invoicesP, scopeP, movedP]).then(([cogsSd, invoiceSd, scopeSd, sd]) =>
+        plainSection(cogsSd, invoiceSd, gate(scopeSd, sd)),
+      ),
+      "retryCogs",
+    ),
+
     headline: guardSection(
       Promise.all([cogsP, invoicesP, wasteP]).then(([cogsSd, invoiceSd, wasteSd]) =>
         headlineSection(cogsSd, invoiceSd, wasteSd, true),

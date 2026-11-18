@@ -1,5 +1,7 @@
 "use client"
 
+import { Fold } from "@/components/counter/ui"
+import { CogsPlainView } from "@/app/dashboard/(counter)/cogs/cogs-plain-ui"
 import { useMemo } from "react"
 import {
   Chart,
@@ -91,6 +93,15 @@ export function CounterPhoneStoreCogsClient({
         <p className="msub">{windowLabel}</p>
       </div>
 
+      {/* Food cost made plain (owner's go, 2026-11-18; mock
+          https://claude.ai/artifact/Sr98ngzuijqUUhPbJNJAv4). Every figure
+          below is folded underneath, unchanged. */}
+      <Section bare title="Food cost in a sentence" data={sections.plain} pending={pending}>
+        {(p) => <CogsPlainView p={p} />}
+      </Section>
+
+      <Fold summary="Every figure, as before">
+
       {/* `h.phoneCells` — two, and NOT a slice of the desk's four. */}
       <Section bare title="The figures" data={sections.headline} pending={pending}>
         {(h) => <MStrip cells={h.phoneCells} />}
@@ -107,6 +118,7 @@ export function CounterPhoneStoreCogsClient({
       >
         {(p) => <Chart {...p.phoneChart} fmt={PCT} />}
       </Section>
+      </Fold>
     </>
   )
 }

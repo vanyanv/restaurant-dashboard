@@ -1,5 +1,7 @@
 "use client"
 
+import { Fold } from "@/components/counter/ui"
+import { CogsPlainView } from "@/app/dashboard/(counter)/cogs/cogs-plain-ui"
 import { useCallback, useMemo } from "react"
 import { usePathname, useRouter } from "next/navigation"
 import {
@@ -184,6 +186,15 @@ export function CounterStoreCogsClient({
           is about. */}
       <SubNav items={storeViewTabs("/dashboard/cogs", storeId, paramsString, [{ label: "Theoretical vs actual", href: "/dashboard/operations/product-usage" }], "Cost")} label="COGS" />
 
+      {/* Food cost made plain (owner's go, 2026-11-18; mock
+          https://claude.ai/artifact/Sr98ngzuijqUUhPbJNJAv4). Every figure
+          below is folded underneath, unchanged. */}
+      <Section bare title="Food cost in a sentence" data={sections.plain} pending={pending}>
+        {(p) => <CogsPlainView p={p} />}
+      </Section>
+
+      <Fold summary="Every figure, the plan, what moved and the worst margins">
+
       {/* The store note and the strip are ONE section, because the note is a
           statement about the figures beside it — a page that could show one
           without the other would print a claim about numbers that failed to
@@ -261,6 +272,7 @@ export function CounterStoreCogsClient({
           )}
         </Section>
       </div>
+      </Fold>
     </>
   )
 }
