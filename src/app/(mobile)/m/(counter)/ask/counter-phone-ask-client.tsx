@@ -1,5 +1,6 @@
 "use client"
 
+import { Fold } from "@/components/counter/ui"
 import { useCallback, useEffect, useMemo, useRef, useState, useLayoutEffect } from "react"
 import { usePathname, useRouter } from "next/navigation"
 import {
@@ -557,6 +558,7 @@ export function CounterPhoneAskClient({
           <Section bare quietWhenEmpty quietWhenFailed title="Recent" data={sections.conversations}>
             {(items) =>
               items.length === 0 ? null : (
+                <Fold summary={`Recent conversations · ${Math.min(items.length, 4)}`}>
                 <div className="recent">
                   <span className="k">Pick up where you left off</span>
                   {items.slice(0, 4).map((c) => (
@@ -569,6 +571,7 @@ export function CounterPhoneAskClient({
                   ))}
                   <div>{threadsButton}</div>
                 </div>
+                </Fold>
               )
             }
           </Section>
