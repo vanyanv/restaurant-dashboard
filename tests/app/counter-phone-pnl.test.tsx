@@ -217,7 +217,7 @@ describe("Counter P&L — the phone", () => {
 
   it("makes a week bar move THIS page's range", () => {
     const { container } = renderPhone()
-    const bars = container.querySelectorAll(".pl-wk button")
+    const bars = container.querySelectorAll(".cu-weeks__bars button")
     expect(bars).toHaveLength(8)
     fireEvent.click(bars[5])
     const w = WEEKS[5]

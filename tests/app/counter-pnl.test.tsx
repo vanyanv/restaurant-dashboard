@@ -202,9 +202,9 @@ describe("Counter P&L", () => {
 
   it("presses a week bar and moves the range to that week", () => {
     const { container } = render(<CounterPnlClient {...base} sections={sections} />)
-    const bars = container.querySelectorAll(".pl-wk button")
+    const bars = container.querySelectorAll(".cu-weeks__bars button")
     expect(bars).toHaveLength(8)
-    expect(bars[7].querySelector(".pl-bar")?.className).toContain("is-part")
+    expect(bars[7].querySelector(".cu-weeks__bar")?.className).toContain("is-part")
     fireEvent.click(bars[2])
     const w = WEEKS[2]
     const iso = (d: Date) =>
@@ -219,9 +219,9 @@ describe("Counter P&L", () => {
     const { container } = render(
       <CounterPnlClient {...base} params={`from=${iso(w.start)}&to=${iso(w.end)}`} sections={sections} />,
     )
-    const on = container.querySelectorAll('.pl-wk button[aria-pressed="true"]')
+    const on = container.querySelectorAll('.cu-weeks__bars button[aria-pressed="true"]')
     expect(on).toHaveLength(1)
-    expect(on[0]).toBe(container.querySelectorAll(".pl-wk button")[3])
+    expect(on[0]).toBe(container.querySelectorAll(".cu-weeks__bars button")[3])
   })
 
   it("opens a day into its lines and its stores, marking an incomplete one 'at most'", () => {

@@ -49,6 +49,7 @@ function CounterOverviewClient(props: React.ComponentProps<typeof OverviewIsland
 const USER = { name: "Chris Karimian", role: "Owner" }
 import { ready, failed, notComputed, empty } from "@/lib/counter/section-data"
 import type { OverviewSections } from "@/lib/counter/adapters/overview"
+import { OVERVIEW_PLAIN } from "./fixtures/overview-plain"
 
 const base = {
   // A plain query string, not a URLSearchParams instance — see the
@@ -69,6 +70,7 @@ const base = {
 }
 
 const sections: OverviewSections = {
+  plain: ready(OVERVIEW_PLAIN),
   sales: ready({
     grossSales: 7468,
     series: [7100, 7300, 7468],
@@ -156,7 +158,7 @@ function landmarks(container: HTMLElement): string[] {
     "chan__row", "cbar", "ch", "drill", "tbl", "blt", "sp", "band",
     "sec__head", "sec__body", "btnrow", "btn", "empty", "moneyline",
   ]
-  const main = container.querySelector("main#ct-main") as HTMLElement
+  const main = (container.querySelector("main#ct-main") as HTMLElement | null) ?? container
   return Array.from(main.querySelectorAll("*"))
     .map((el) => CLASSES.filter((c) => el.classList.contains(c)).join("."))
     .filter((s) => s !== "")
@@ -183,47 +185,49 @@ describe("Counter Overview", () => {
     )
   })
 
-  it("composes the page in the prototype's order, with five blocks OUTSIDE any section", () => {
-    // This is the whole task, as one assertion. The head block, the strip, the
-    // moving band, the ask bar and the comparison drill sit at page level —
-    // above and between the six sections — and everything below the split is
-    // in the order `P.overview.desk()` writes it.
+  it("answers first, made plain, and folds the old page underneath it", () => {
+    // The Overview made plain (owner's go, 2026-11-18): the sentence and the
+    // figures, where sales came from, Needs you, the ask bar, then everything
+    // the page said before in one fold.
     const { container } = render(<CounterOverviewClient {...base} sections={sections} />)
     const main = container.querySelector("main#ct-main") as HTMLElement
     const kids = [...main.children].map((c) => c.className.split(" ")[0])
+    expect(kids).toEqual(["pagehead", "dispatch", "cu-stack", "chan", "cu-card", "askbar", "cu-fold"])
+    const stack = main.querySelector(".cu-stack") as HTMLElement
+    expect(stack.querySelector(".cu-answer")?.textContent).toContain("Hollywood sold $7,468")
+    expect(stack.querySelectorAll(".cu-weeks__bars button")).toHaveLength(2)
+    expect(stack.querySelector(".cu-weeks__bars button[aria-pressed='true']")).toBeNull()
+    expect(within(stack).getByText("Every cost on file")).toBeTruthy()
+    // Needs you is folded by default (owner, 2026-11-03).
+    const needs = main.querySelector("details.cu-needs") as HTMLDetailsElement
+    expect(needs.open).toBe(false)
+    expect(needs.textContent).toContain("12 menu items sold far above or below normal")
+  })
+
+  it("keeps the old page whole inside the fold, in the prototype's order", () => {
+    const { container } = render(<CounterOverviewClient {...base} sections={sections} />)
+    const fold = container.querySelector("main#ct-main > .cu-fold") as HTMLDetailsElement
+    expect(fold.open).toBe(false)
+    const inner = fold.querySelector(".cu-fold__in") as HTMLElement
+    const kids = [...inner.children].map((c) => c.className.split(" ")[0])
     expect(kids).toEqual([
-      "pagehead",
-      "dispatch",
       "headline",
       "strip",
       "moving",
-      "askbar",
       "split",
       "drill",
-      "sec", // what needs you
+      "sec", // every alert, one by one
       "sec", // per-store ledger
       "tri",
     ])
-    for (const cls of [".headline", ".strip", ".moving", ".askbar", ".drill"]) {
-      expect(main.querySelector(cls)!.closest(".sec")).toBeNull()
+    for (const cls of [".headline", ".strip", ".moving", ".drill"]) {
+      expect(inner.querySelector(cls)!.closest(".sec")).toBeNull()
     }
-  })
-
-  it("renders the landmark sequence the fidelity gate reads, and renders it in order", () => {
-    const { container } = render(<CounterOverviewClient {...base} sections={sections} />)
-    const seq = landmarks(container)
-    // The head block first, then the strip, then the moving band — never a
-    // `.sec` before any of them.
-    expect(seq.indexOf("dispatch")).toBeLessThan(seq.indexOf("headline"))
+    const seq = landmarks(inner)
     expect(seq.indexOf("headline")).toBeLessThan(seq.indexOf("strip"))
     expect(seq.indexOf("strip")).toBeLessThan(seq.indexOf("moving"))
-    expect(seq.indexOf("moving")).toBeLessThan(seq.indexOf("askbar"))
-    expect(seq.indexOf("askbar")).toBeLessThan(seq.indexOf("sec"))
-    // The drill sits between the chart pair and the queue.
     expect(seq.indexOf("drill")).toBeLessThan(seq.lastIndexOf("queue"))
-    // And the cards come before their drawers' panels.
-    expect(seq.lastIndexOf("stcard")).toBeLessThan(seq.indexOf("chan"))
-    // Nothing is rendered as a grey "empty" box on a page with data.
+    expect(seq.lastIndexOf("stcard")).toBeLessThan(seq.lastIndexOf("chan"))
     expect(seq).not.toContain("empty")
   })
 
@@ -331,9 +335,10 @@ describe("Counter Overview", () => {
     const { container } = render(<CounterOverviewClient {...base} sections={sections} />)
     expect(container.querySelectorAll(".stores > .stcard")).toHaveLength(2)
     expect(container.querySelectorAll(".stores > .ldrawer")).toHaveLength(2)
-    expect(container.querySelectorAll(".chan")).toHaveLength(2)
+    // Two store panels, plus the page-level "where sales came from".
+    expect(container.querySelectorAll(".stores .chan")).toHaveLength(2)
     // Hollywood's panel has channel rows; Glendale's has none and says why.
-    expect(container.querySelectorAll(".chan__row")).toHaveLength(1)
+    expect(container.querySelectorAll(".stores .chan__row")).toHaveLength(1)
     expect(screen.getByText("Glendale is not trading yet")).toBeTruthy()
   })
 

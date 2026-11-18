@@ -102,6 +102,10 @@ export interface PlainStore {
   kept: number
   keptPct: number | null
   keptChange: number | null
+  /** Sales against the same store's prior period, or null with no prior sales. */
+  salesChange: number | null
+  /** Days this store sold with no Harri labor reading. */
+  laborMissingDays: number
   food: number | null
   labor: number | null
   fees: number | null
@@ -466,6 +470,8 @@ export function buildPlain(input: PlainInput): PnlPlain {
             kept: st.bottomLine,
             keptPct: share(st.bottomLine, st.grossSales),
             keptChange: p && p.grossSales > 0 ? st.bottomLine - p.bottomLine : null,
+            salesChange: p && p.grossSales > 0 ? st.grossSales - p.grossSales : null,
+            laborMissingDays: st.laborMissingDays,
             food: share(st.cogsValue, st.grossSales),
             labor: share(st.laborValue, st.grossSales),
             fees: share(st.commissions, st.grossSales),

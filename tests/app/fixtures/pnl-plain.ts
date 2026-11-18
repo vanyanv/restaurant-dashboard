@@ -58,8 +58,8 @@ return {
     },
   ],
   stores: [
-    { storeId: storeIds[0], name: "Hollywood", sales: 47_977, kept: 15_786, keptPct: 0.329, keptChange: -698, food: 0.24, labor: 0.23, fees: 0.14, atMost: false, flags: [] },
-    { storeId: storeIds[1], name: "Glendale", sales: 9_681, kept: 3_629, keptPct: 0.375, keptChange: null, food: 0.27, labor: 0.1, fees: 0.04, atMost: true, flags: ["2 days of labor missing"] },
+    { storeId: storeIds[0], name: "Hollywood", sales: 47_977, kept: 15_786, keptPct: 0.329, keptChange: -698, salesChange: 2_100, laborMissingDays: 0, food: 0.24, labor: 0.23, fees: 0.14, atMost: false, flags: [] },
+    { storeId: storeIds[1], name: "Glendale", sales: 9_681, kept: 3_629, keptPct: 0.375, keptChange: null, salesChange: null, laborMissingDays: 2, food: 0.27, labor: 0.1, fees: 0.04, atMost: true, flags: ["2 days of labor missing"] },
   ],
 }
 }

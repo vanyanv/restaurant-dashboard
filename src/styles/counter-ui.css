@@ -189,6 +189,29 @@ a.cu-tile:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .cu-tile--tone-warn .cu-tile__value{color:var(--warn)}
 .cu-tile--tone-bad .cu-tile__value{color:var(--bad)}
 
+/* ---- WeekBars: the last weeks, tap one to open it ---- */
+/* A page's answer blocks, stacked at one gap. */
+.cu-stack{display:grid;gap:16px;min-width:0}
+.cu-weeks{container-type:inline-size}
+.cu-weeks__top{display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap}
+.cu-weeks__title{font-family:var(--mono);font-size:var(--t-micro);color:var(--ink-3);letter-spacing:.06em;text-transform:uppercase}
+.cu-weeks__key{display:flex;gap:12px;flex-wrap:wrap;font-size:var(--t-cap);color:var(--ink-3)}
+.cu-weeks__key i{display:inline-block;width:10px;height:10px;border-radius:2px;vertical-align:-1px;margin-right:4px;background:var(--good)}
+.cu-weeks__key i.is-part,.cu-weeks__bar.is-part{background:repeating-linear-gradient(135deg,var(--good) 0 4px,transparent 4px 7px);border:1px solid var(--good)}
+.cu-weeks__bars{display:grid;gap:6px;align-items:end;height:150px}
+.cu-weeks__bars button{border:0;background:none;padding:0;cursor:pointer;display:flex;flex-direction:column;justify-content:flex-end;align-items:stretch;gap:4px;height:100%;font:inherit;color:inherit;border-radius:var(--r-sm);min-width:0}
+.cu-weeks__bars button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.cu-weeks__top-n{font-size:var(--t-cap);font-weight:600;text-align:center;color:var(--ink-2);font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:clip}
+.cu-weeks__bar{background:var(--good);border-radius:3px 3px 0 0;opacity:.45;min-height:3px}
+.cu-weeks__bars button[aria-pressed="true"] .cu-weeks__bar{opacity:1}
+.cu-weeks__bars button[aria-pressed="true"] .cu-weeks__top-n{color:var(--ink)}
+.cu-weeks__lbl{font-family:var(--mono);font-size:var(--t-micro);color:var(--ink-3);text-align:center;border-top:1px solid var(--line);padding-top:4px}
+.cu-weeks__bars button[aria-pressed="true"] .cu-weeks__lbl{color:var(--ink);font-weight:500;border-top:2px solid var(--ink)}
+@container (max-width:520px){
+  .cu-weeks__bars{height:120px;gap:3px}
+  .cu-weeks__top-n{font-size:var(--t-micro)}
+}
+
 /* ---- /dashboard/blocks, the catalogue page (not a block) ---- */
 .cu-cat__page{display:grid;gap:32px;padding-bottom:48px}
 .cu-cat{display:grid;gap:10px}

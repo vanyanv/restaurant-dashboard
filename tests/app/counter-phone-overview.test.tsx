@@ -28,6 +28,7 @@ import { PhoneShell } from "@/components/counter"
 import { CounterPhoneOverviewClient } from "@/app/(mobile)/m/(counter)/counter-phone-overview-client"
 import { ready, notComputed } from "@/lib/counter/section-data"
 import type { OverviewSections } from "@/lib/counter/adapters/overview"
+import { OVERVIEW_PLAIN } from "./fixtures/overview-plain"
 
 const STORES = [
   { id: "hollywood", name: "Hollywood", stage: "trading" as const },
@@ -35,6 +36,7 @@ const STORES = [
 ]
 
 const sections: OverviewSections = {
+  plain: ready(OVERVIEW_PLAIN),
   sales: ready({
     grossSales: 7468,
     series: [11895, 7468],
@@ -187,7 +189,32 @@ describe("Counter Overview — the phone", () => {
     expect(found).toEqual([])
   })
 
-  it("still leads with the phone's own head block, and the fall reads as a fall", () => {
+  it("leads with the Overview made plain, stacked, and folds the old phone page under it", () => {
+    const { container } = renderPhone()
+    const scroll = container.querySelector(".mscroll")!
+    const stack = scroll.querySelector(".cu-stack")!
+    const fold = scroll.querySelector(".cu-fold") as HTMLDetailsElement
+    // The answer comes before the fold, and the old head block is inside it.
+    expect(stack.compareDocumentPosition(fold) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(fold.open).toBe(false)
+    expect(fold.querySelector(".mhead")).not.toBeNull()
+    expect(stack.querySelector(".cu-answer")!.textContent).toContain("Hollywood sold $7,468")
+    // The P&L button stays on the phone.
+    expect(stack.querySelector<HTMLAnchorElement>("a[href^='/m/pnl']")).not.toBeNull()
+    // Needs you, folded, ahead of the old page.
+    const needs = scroll.querySelector("details.cu-needs") as HTMLDetailsElement
+    expect(needs.open).toBe(false)
+    expect(needs.compareDocumentPosition(fold) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
+  it("tapping a week bar writes the range the date sheet writes", () => {
+    const { container } = renderPhone()
+    fireEvent.click(container.querySelectorAll(".cu-weeks__bars button")[0])
+    expect(push).toHaveBeenCalledTimes(1)
+    expect(String(push.mock.calls[0][0])).toBe("/m?from=2026-08-10&to=2026-08-16")
+  })
+
+  it("still keeps the phone's own head block, and the fall reads as a fall", () => {
     const { container } = renderPhone()
     const head = container.querySelector(".mhead")!
     expect(head.querySelector(".v")!.textContent).toBe("$7,468")
