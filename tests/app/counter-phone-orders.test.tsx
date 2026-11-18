@@ -39,6 +39,7 @@ vi.mock("next/navigation", () => ({
 
 import { PhoneShell } from "@/components/counter"
 import { CounterPhoneOrdersClient } from "@/app/(mobile)/m/(counter)/orders/counter-phone-orders-client"
+import { ORDERS_PLAIN } from "./fixtures/orders-plain"
 import { ready, failed } from "@/lib/counter/section-data"
 import type { OrdersList, OrdersSections } from "@/lib/counter/adapters/orders"
 
@@ -113,6 +114,7 @@ const BY_HOUR = {
 }
 
 const sections = (over: Partial<OrdersSections> = {}): OrdersSections => ({
+  plain: ready(ORDERS_PLAIN),
   strip: ready(STRIP),
   list: ready(list()),
   byHour: ready(BY_HOUR),
@@ -212,7 +214,8 @@ describe("Counter Orders — the phone", () => {
     // `nextCursor` is on the fixture. The window above is what changes how
     // much is in the list — the same call the desk made.
     const { container } = renderPhone()
-    expect(container.textContent).not.toContain("More")
+    // "More orders than the comparison" is a status in the plain answer, not a pager.
+    expect(container.textContent).not.toMatch(/More(?! orders than)/)
     expect(container.textContent).not.toContain("Next")
   })
 

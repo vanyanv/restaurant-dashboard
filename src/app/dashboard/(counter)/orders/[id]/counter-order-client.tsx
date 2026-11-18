@@ -1,5 +1,7 @@
 "use client"
 
+import { Fold } from "@/components/counter/ui"
+import { OrderPlainView } from "../orders-plain-ui"
 import { type ReactNode } from "react"
 import {
   Kv,
@@ -138,6 +140,14 @@ export function CounterOrderClient({
         sub={head?.sub}
       />
 
+      {/* The order made plain (owner's go, 2026-11-18; mock
+          https://claude.ai/artifact/Sr98ngzuijqUUhPbJNJAv4). The items, the
+          timeline and the platform detail are folded underneath. */}
+      <Section bare title="This order in a sentence" data={sections.plain}>
+        {(p) => <OrderPlainView p={p} />}
+      </Section>
+
+      <Fold summary="Every line, the timeline and the platform detail">
       {/* Page level, above the first `.sec`, exactly as `strip([...])` is
           written in `P.order.desk()`. Ruling O-R2: no cell here is judged
           against anything, because nothing in this schema publishes a
@@ -203,6 +213,7 @@ export function CounterOrderClient({
           {(items) => <Queue items={items} />}
         </Section>
       </div>
+      </Fold>
     </>
   )
 }

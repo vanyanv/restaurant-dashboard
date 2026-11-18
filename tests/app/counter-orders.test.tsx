@@ -50,6 +50,7 @@ function CounterOrdersClient(props: React.ComponentProps<typeof OrdersIsland>) {
 
 /** The rail's account row — the layout's now, not the page's. */
 const USER = { name: "Chris Karimian", role: "Owner" }
+import { ORDERS_PLAIN } from "./fixtures/orders-plain"
 import { ready, empty, failed, loading } from "@/lib/counter/section-data"
 import type { OrdersList, OrdersSections } from "@/lib/counter/adapters/orders"
 
@@ -131,6 +132,7 @@ const BY_HOUR = {
 }
 
 const sections = (over: Partial<OrdersSections> = {}): OrdersSections => ({
+  plain: ready(ORDERS_PLAIN),
   strip: ready([
     { label: "Orders", value: "187", delta: "▲ 5.1%" },
     { label: "Net sales", value: "$4,912", delta: "▲ 8.4%" },
@@ -143,15 +145,23 @@ const sections = (over: Partial<OrdersSections> = {}): OrdersSections => ({
   ...over,
 })
 
+/** The old page, folded under the plain answer. */
+const folded = (c: HTMLElement) => main(c).querySelector(":scope > .cu-fold > .cu-fold__in") as HTMLElement
+
 beforeEach(() => push.mockClear())
 afterEach(() => vi.useRealTimers())
 
 describe("the orders desk composition", () => {
   it("composes the page in the prototype's order, with the strip OUTSIDE any section", () => {
     const { container } = render(<CounterOrdersClient {...base} sections={sections()} />)
-    const kids = [...main(container).children].map((c) => c.className.split(" ")[0])
-    expect(kids).toEqual([
+    // The plain answer leads; the old page is folded beneath it, unchanged.
+    expect([...main(container).children].map((c) => c.className.split(" ")[0])).toEqual([
       "pagehead",
+      "cu-stack",
+      "cu-fold",
+    ])
+    const kids = [...folded(container).children].map((c) => c.className.split(" ")[0])
+    expect(kids).toEqual([
       "strip", // page level — `strip([...])` precedes the first `<div class="sec">`
       "sec", // the filters and the table
       "sec", // orders by hour
@@ -166,7 +176,7 @@ describe("the orders desk composition", () => {
    */
   it("gives the list section no head, and the hour section one", () => {
     const { container } = render(<CounterOrdersClient {...base} sections={sections()} />)
-    const secs = main(container).querySelectorAll(":scope > .sec")
+    const secs = folded(container).querySelectorAll(":scope > .sec")
     expect(secs).toHaveLength(2)
     expect(secs[0].querySelector(".sec__head")).toBeNull()
     expect(secs[0].querySelector(".filters")).not.toBeNull()
@@ -468,7 +478,7 @@ describe("the filters, which live in the URL", () => {
 describe("the page furniture the adapter does not carry", () => {
   it("closes the hour section with the sentence and the way to the page it names", () => {
     const { container } = render(<CounterOrdersClient {...base} sections={sections()} />)
-    const sec = main(container).querySelectorAll(":scope > .sec")[1]
+    const sec = folded(container).querySelectorAll(":scope > .sec")[1]
     expect(sec.querySelector("p.mono")!.textContent).toBe(
       "This is the list. The shape of it — which channel, which hour, which way it is moving — is one page over.",
     )
@@ -533,7 +543,7 @@ describe("the states this page never renders itself", () => {
     const { container } = render(
       <CounterOrdersClient {...base} sections={sections({ list: loading() })} />,
     )
-    expect(main(container).querySelectorAll(":scope > .sec")).toHaveLength(2)
+    expect(folded(container).querySelectorAll(":scope > .sec")).toHaveLength(2)
     expect(container.querySelector(".filters")).toBeNull()
   })
 
@@ -541,7 +551,7 @@ describe("the states this page never renders itself", () => {
     const { container } = render(
       <CounterOrdersClient {...base} sections={sections({ byHour: empty("no_match") })} />,
     )
-    const sec = main(container).querySelectorAll(":scope > .sec")[1]
+    const sec = folded(container).querySelectorAll(":scope > .sec")[1]
     expect(sec.querySelector(".sec__head h3")!.textContent).toBe("Orders by hour")
     expect(sec.querySelector(".empty")).not.toBeNull()
     expect(sec.querySelector(".ch")).toBeNull()

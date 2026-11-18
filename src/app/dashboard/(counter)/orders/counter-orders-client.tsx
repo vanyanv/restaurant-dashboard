@@ -1,5 +1,7 @@
 "use client"
 
+import { Fold } from "@/components/counter/ui"
+import { OrdersPlainView } from "./orders-plain-ui"
 import Link from "next/link"
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, useLayoutEffect } from "react"
 import { usePathname, useRouter } from "next/navigation"
@@ -380,6 +382,14 @@ export function CounterOrdersClient({
         />
       </PageHead>
 
+      {/* The page made plain (owner's go, 2026-11-18; mock
+          https://claude.ai/artifact/Sr98ngzuijqUUhPbJNJAv4). The figures, the
+          filters and every order are folded underneath, unchanged. */}
+      <Section bare title="Orders in a sentence" data={sections.plain} pending={pending}>
+        {(p) => <OrdersPlainView p={p} />}
+      </Section>
+
+      <Fold summary="Every order, with the figures, filters and orders by hour">
       {/* Page level, above the first `.sec`, exactly as `strip([...])` is
           written in `P.orders.desk()`. Ruling O-R2: no cell here is judged
           against anything, because nothing in this schema publishes a
@@ -435,6 +445,7 @@ export function CounterOrdersClient({
           </>
         )}
       </Section>
+      </Fold>
     </>
   )
 }
