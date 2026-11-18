@@ -228,4 +228,18 @@ describe("getAlertsSections", () => {
     expect(list.rows[0].title).toBe("Nothing closed in the last 30 days")
     expect(list.rows[0].severityLabel).toBeUndefined()
   })
+
+  it("makes the page plain from the open alerts, with the database's counts", async () => {
+    vi.mocked(getAlertInbox).mockResolvedValue({ ok: true, data: INBOX as never })
+    const s = await getAlertsSections({ segment: "muted", today: TODAY })
+    const p = dataOf(s.plain)!
+    // The segment and filters do not narrow the answer: it is what is open.
+    expect(p.open).toBe(77)
+    expect(p.sentence.startsWith("77 alerts are open. 40 look serious; they come from 2 problems, listed first.")).toBe(true)
+    expect(p.seriousPartial).toBe(true)
+    // The two serious open rows loaded, each with its own button.
+    expect(p.serious).toHaveLength(2)
+    expect(p.serious.every((x) => x.href.startsWith("/dashboard/alerts?alert="))).toBe(true)
+    expect(p.statuses.map((x) => x.text)).toEqual(["40 serious", "37 to glance at", "10 closed recently"])
+  })
 })

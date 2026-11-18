@@ -1,5 +1,7 @@
 "use client"
 
+import { Fold } from "@/components/counter/ui"
+import { AlertsPlainView } from "./alerts-plain-ui"
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition, useLayoutEffect } from "react"
 import { usePathname, useRouter } from "next/navigation"
 import {
@@ -524,6 +526,20 @@ export function CounterAlertsClient({
           links to; `.seg` is not a fidelity landmark, so it changes no count. */}
       <SubNav items={ALERT_TABS} label="Alerts" />
 
+      {/* The page made plain (owner's go, 2026-11-18; mock
+          https://claude.ai/artifact/Sr98ngzuijqUUhPbJNJAv4). The list it opens
+          is folded underneath and unfolds when an alert is picked. */}
+      <Section bare title="Alerts in a sentence" data={sections.plain} pending={pending}>
+        {(p) => (
+          <AlertsPlainView
+            p={p}
+            // A serious alert is open, so it shows in the Open list with no filter on.
+            onOpen={(id) => push({ alert: id, segment: "open" as AlertSegment, severities: [], sources: [], search: "" })}
+          />
+        )}
+      </Section>
+
+      <Fold summary="Every alert, one by one, with the figures and filters" defaultOpen={selectedAlert !== null}>
       <Section bare title="The figures" data={sections.strip} pending={pending}>
         {(cells) => <Strip cells={cells.map(figureOf)} />}
       </Section>
@@ -595,6 +611,7 @@ export function CounterAlertsClient({
           />
         )}
       </Section>
+      </Fold>
     </>
   )
 }

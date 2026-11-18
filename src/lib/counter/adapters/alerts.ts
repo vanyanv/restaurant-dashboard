@@ -17,6 +17,7 @@ import { plural } from "@/lib/counter/format"
 import { median } from "@/lib/counter/median"
 import { classify } from "@/lib/counter/adapters/types"
 import { mapReady, type SectionData } from "@/lib/counter/section-data"
+import { buildAlertsPlain, type AlertsPlain } from "@/lib/counter/alerts-plain"
 import type { ChartSeries } from "@/lib/counter/chart-geometry"
 import type { DeltaTone } from "@/components/counter/surface/figure"
 import type { PillSeverity, TagTone } from "@/components/counter"
@@ -239,6 +240,8 @@ export interface PhoneAlertsHead {
 }
 
 export interface AlertsSections {
+  /** The page made plain: the sentence, the serious ones, the rest in groups. Open alerts only. */
+  plain: SectionData<AlertsPlain>
   strip: SectionData<AlertStripCell[]>
   filters: SectionData<AlertsFilters>
   table: SectionData<AlertsRow[]>
@@ -826,6 +829,16 @@ export async function getAlertsSections(input: AlertsQuery = {}): Promise<Alerts
   })
 
   return {
+    plain: mapReady(view, ({ inbox: d }) => {
+      const open = d.alerts.filter((a) => a.status === "OPEN")
+      return buildAlertsPlain({
+        openRows: open,
+        // The list's own fold, so each row's id is the one the list opens.
+        serious: buildRows(open, today).filter((r) => r.severity === "CRITICAL"),
+        counts: { open: d.counts.open, critical: d.counts.critical },
+        closed: closedAlerts(d.alerts).length,
+      })
+    }),
     strip: mapReady(view, (v) => buildStrip(v.inbox)),
     filters: mapReady(view, (v) =>
       buildFilters(

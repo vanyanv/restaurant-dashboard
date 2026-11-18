@@ -1,5 +1,6 @@
 import type { PnlPlain, PlainWeek } from "@/lib/counter/pnl-plain"
 import { money, plural } from "@/lib/counter/format"
+import { alertGroupWords, countByTarget } from "@/lib/counter/alert-groups"
 
 /**
  * The Overview "made plain" (owner's go, 2026-11-18; mock
@@ -78,18 +79,6 @@ const inWords = (n: number) => WORDS[n] ?? String(n)
 
 const share = (part: number, whole: number) => (whole > 0 ? part / whole : null)
 const pctWords = (v: number) => `${(Math.abs(v) * 100).toFixed(1).replace(/\.0$/, "")}%`
-
-/** What each alert target is, in words, and where it is dealt with. */
-const ALERT_GROUP: Record<string, { one: string; many: string; label: string }> = {
-  MENU_ITEM: { one: "menu item sold far above or below normal", many: "menu items sold far above or below normal", label: "Review items" },
-  REVENUE: { one: "day with unusual sales", many: "days with unusual sales", label: "See the days" },
-  LABOR: { one: "labor alert", many: "labor alerts", label: "Open alerts" },
-  REFUNDS: { one: "unusual refund", many: "unusual refunds", label: "Open alerts" },
-  INGREDIENT: { one: "ingredient alert", many: "ingredient alerts", label: "Open alerts" },
-  PRICE: { one: "price change", many: "price changes", label: "Open alerts" },
-  PRODUCT: { one: "new or changed product", many: "new or changed products", label: "Open alerts" },
-  STORE_CHECK: { one: "store check alert", many: "store check alerts", label: "Open alerts" },
-}
 
 export function buildOverviewPlain(input: OverviewPlainInput): OverviewPlain {
   const { pnl: p } = input
@@ -180,12 +169,10 @@ export function buildOverviewPlain(input: OverviewPlainInput): OverviewPlain {
       action: { label: "Open alerts", href: "/dashboard/alerts" },
     })
   } else if (input.alerts.rows.length > 0) {
-    const byTarget = new Map<string, number>()
-    for (const a of input.alerts.rows) byTarget.set(a.target, (byTarget.get(a.target) ?? 0) + 1)
-    const groups = [...byTarget].sort((a, b) => b[1] - a[1])
+    const groups = countByTarget(input.alerts.rows)
     const partial = input.alerts.open > input.alerts.rows.length
     groups.forEach(([target, n]) => {
-      const g = ALERT_GROUP[target] ?? { one: "other alert", many: "other alerts", label: "Open alerts" }
+      const g = alertGroupWords(target)
       needs.push({
         key: `alerts-${target}`,
         tone: "warn",

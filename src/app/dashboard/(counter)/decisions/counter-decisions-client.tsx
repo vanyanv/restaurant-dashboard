@@ -1,6 +1,8 @@
 "use client"
 
 import { businessQueryDate } from "@/lib/counter/business-date"
+import { Fold } from "@/components/counter/ui"
+import { DecisionsPlainView } from "./decisions-plain-ui"
 
 import { Fragment, useCallback, useMemo, useState, useTransition } from "react"
 import { usePathname, useRouter } from "next/navigation"
@@ -341,6 +343,14 @@ export function CounterDecisionsClient({
           links to; `.seg` is not a fidelity landmark, so it changes no count. */}
       <SubNav items={ALERT_TABS} label="Alerts" />
 
+      {/* The page made plain (owner's go, 2026-11-18; mock
+          https://claude.ai/artifact/Sr98ngzuijqUUhPbJNJAv4). Everything the
+          page said before is folded underneath, unchanged. */}
+      <Section bare title="The week ahead" data={sections.plain} pending={pending}>
+        {(p) => <DecisionsPlainView p={p} />}
+      </Section>
+
+      <Fold summary="Every figure, as before: the forecast, each day, accuracy, the shelf and the ledger">
       {/* One figure and the verdict beside it — `.headline`, no `--duo`.
           Both halves read the same `head` section, so a week that failed to
           load says so once in each place rather than printing half a
@@ -541,6 +551,7 @@ export function CounterDecisionsClient({
           {(q) => <Queue items={queueItems(q.items)} />}
         </Section>
       </div>
+      </Fold>
     </>
   )
 }
