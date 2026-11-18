@@ -12,6 +12,7 @@ import { biggestShort, gapVerdict, type GapChange, type GapCoverage, type GapHea
 import { barShares } from "@/lib/counter/waste-picture"
 import { CountHead, money } from "../count-ui"
 import { Bars, Hero, ItemLink, TwoBars, VerdictPill, q, type BarRow } from "../picture-ui"
+import { Answer, Status } from "@/components/counter/ui"
 
 /**
  * Inventory — Report. The picture first: what went missing between two
@@ -73,7 +74,7 @@ function OneStore({ data }: { data: ReportData }) {
       {!data.current || !data.previous ? (
         <section className="iv-card iv-lead" aria-label="Went missing">
           <div className="iv-lead__n iv-lead__n--text"><strong>Needs two counts</strong></div>
-          <p className="iv-say">
+          <Answer>
             {!data.current
               ? `${data.store.name} has no finished count yet.`
               : data.counts.length > 1
@@ -84,7 +85,7 @@ function OneStore({ data }: { data: ReportData }) {
                 ? "The first count is the starting point. The second one shows what should have been there and what went missing."
                 : "It is the starting point. The next finished count is compared against it, and this page fills in. Until then there is no dollar figure here."}
             </small>
-          </p>
+          </Answer>
           <Link className="iv-btn iv-btn--ink" href={walk}>Count {data.store.name}</Link>
         </section>
       ) : (
@@ -221,7 +222,7 @@ function Compared({ data, from, to }: { data: ReportData; from: string; to: stri
                 <li className="iv-it">
                   <div className="iv-it__h">
                     <b>{off.length > 0 ? `${plural(matching, "more item")}` : plural(matching, "item")}</b>
-                    <span className="inv-pill inv-pill--good">{matching === 1 ? "Matches" : "Match"}</span>
+                    <Status tone="good">{matching === 1 ? "Matches" : "Match"}</Status>
                   </div>
                   <p className="iv-it__x">Counted within 5% of what the numbers say. They are in the working below.</p>
                 </li>

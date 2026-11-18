@@ -183,7 +183,6 @@
 /* The count: phone start (sections), one item, Before you finish, and the
    desk sheet. The phone and the sheet share one state; which one shows is
    only a matter of width. */
-.cw__say{margin:0;font-size:16px;line-height:1.4;font-weight:600}
 .cw__mono--bad{color:var(--bad)}
 .cw__foot--col{flex-direction:column}
 .cw__foot--col>.cw__btn{flex:none}

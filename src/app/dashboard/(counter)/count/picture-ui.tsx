@@ -7,6 +7,7 @@ import { fmtQty } from "@/lib/counter/count-layers"
 import { gapBars, type GapVerdict } from "@/lib/counter/gap-picture"
 import type { MoneyChange } from "@/lib/counter/waste-picture"
 import { money } from "./count-ui"
+import { Status, type StatusTone } from "@/components/counter/ui"
 
 /**
  * The pieces the Waste tab, the Report tab and the one-item page draw their
@@ -110,14 +111,14 @@ export function TwoBars({ should, counted, unit }: { should: number; counted: nu
   )
 }
 
-const VERDICT_PILL: Record<GapVerdict, string> = { match: "good", short: "warn", extra: "mute" }
+const VERDICT_PILL: Record<GapVerdict, StatusTone> = { match: "good", short: "warn", extra: "off" }
 
 /** "Matches" / "12 lb short" / "3 lb extra". */
 export function VerdictPill({ verdict, missing, unit }: { verdict: GapVerdict; missing: number; unit: string }) {
   return (
-    <span className={`inv-pill inv-pill--${VERDICT_PILL[verdict]}`}>
+    <Status tone={VERDICT_PILL[verdict]}>
       {verdict === "match" ? "Matches" : verdict === "short" ? `${q(missing)} ${unit} short` : `${q(-missing)} ${unit} extra`}
-    </span>
+    </Status>
   )
 }
 

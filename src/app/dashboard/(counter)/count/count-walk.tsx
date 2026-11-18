@@ -9,6 +9,7 @@ import type { WalkData, WalkItem } from "@/lib/counter/adapters/count"
 import { COUNT_AREAS, describeShelf, fmtQty, hasAnyValue, shelfTotal, showQty, unconverted, type Layer } from "@/lib/counter/count-layers"
 import { money, OutcomeLine, type Outcome } from "./count-ui"
 import { clearDraft, readDraft, writeDraft } from "@/components/counter/keep/use-draft"
+import { Answer } from "@/components/counter/ui"
 
 /**
  * The count, in the owner's walk order: the six sections of their Inventory
@@ -386,7 +387,7 @@ export function CountWalk({ data, base }: { data: WalkData; base: "/dashboard/co
           <h2 className="cw__h">{data.store.name}</h2>
           {data.stores.length > 1 && <Link className="cw__link" href={`${base}/walk`}>Change store</Link>}
         </div>
-        <p className="cw__say">
+        <Answer>
           {countId
             ? done === items.length
               ? "Everything is counted. Look it over and finish."
@@ -394,7 +395,7 @@ export function CountWalk({ data, base }: { data: WalkData; base: "/dashboard/co
             : `${items.length} items to count, in ${sections.length} sections.`}
           {" "}
           {data.lastFinished ? `Last full count ${data.lastFinished}.` : "This is the first count for this store."}
-        </p>
+        </Answer>
         <div className="cw__bar" aria-hidden="true"><i style={{ width: `${Math.round((done / items.length) * 100)}%` }} /></div>
       </div>
 

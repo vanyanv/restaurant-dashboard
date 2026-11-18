@@ -10,6 +10,7 @@ import { ALL_STORES, needsOrderNow, shelfCoverage } from "@/lib/counter/shelf-st
 import { CountHead, StoreSwitch, money } from "../count-ui"
 import { ItemLink } from "../picture-ui"
 import { DaysBar, Fresh, Legend, MiniMap, NotYet, PinnedActions, ShelfMap, StatePill, freshSay, linesIn } from "../shelf-ui"
+import { Answer, Status } from "@/components/counter/ui"
 
 /**
  * Inventory — Shelf. The shelf map, then the last count line by line in the
@@ -85,7 +86,7 @@ function OneShelf({ data, shelf }: { data: ShelfData; shelf: StoreShelf }) {
       <div className="iv iv--shelf">
         <section className="iv-card iv-lead" aria-label="Shelf">
           <div className="iv-lead__n iv-lead__n--text"><strong>No count list yet</strong></div>
-          <p className="iv-say">Pick what you count and how it comes in, once, and it is here every week.</p>
+          <Answer>Pick what you count and how it comes in, once, and it is here every week.</Answer>
           <Link className="iv-btn iv-btn--primary" href={href("/dashboard/count/setup")}>Set up the count list</Link>
         </section>
       </div>
@@ -219,10 +220,10 @@ function AllShelves({ data }: { data: ShelfData }) {
     </PinnedActions>
     <div className="iv-c">
     <div className="iv iv--all">
-      <p className="iv-say">
+      <Answer>
         {n} shelves, one block per line.
         <small>Blocks are in your sheet&apos;s order, section by section.</small>
-      </p>
+      </Answer>
       <div className="iv-card"><Legend /></div>
       <div className="iv-stores">
         {data.shelves.map((s) => (
@@ -230,10 +231,10 @@ function AllShelves({ data }: { data: ShelfData }) {
             <div className="iv-store__h">
               <b>{s.name}</b>
               {!s.lastCount
-                ? <span className="inv-pill inv-pill--mute">Not counted</span>
+                ? <Status tone="off">Not counted</Status>
                 : s.lastCount.stale
-                  ? <span className="inv-pill inv-pill--warn">Old count</span>
-                  : <span className="inv-pill inv-pill--good">Fresh</span>}
+                  ? <Status tone="warn">Old count</Status>
+                  : <Status tone="good">Fresh</Status>}
             </div>
             {s.lines.length > 0 ? <MiniMap shelf={s} areas={data.areas} /> : <p className="iv-quiet">No count list yet.</p>}
             <p className="iv-store__m">
