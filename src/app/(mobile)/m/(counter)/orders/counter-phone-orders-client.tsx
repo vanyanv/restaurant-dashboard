@@ -1,5 +1,7 @@
 "use client"
 
+import { Fold } from "@/components/counter/ui"
+import { OrdersPlainView } from "@/app/dashboard/(counter)/orders/orders-plain-ui"
 import { Suspense, use } from "react"
 import { MList, MStrip, Section, useCounterTransition, type MListRow } from "@/components/counter"
 import { dataOf, isPendingSource, type SectionSource } from "@/lib/counter/section-data"
@@ -102,6 +104,12 @@ export function CounterPhoneOrdersClient({
         </Suspense>
       </div>
 
+      {/* The page made plain, the same view the desk shows. */}
+      <Section bare title="Orders in a sentence" data={sections.plain} pending={pending}>
+        {(p) => <OrdersPlainView p={p} />}
+      </Section>
+
+      <Fold summary="Every figure, as before">
       {/* Two cells, chosen by NAME out of the adapter's five. Nothing here
           is judged — ruling O-R2 — so no cell carries a reference and the
           phone draws no bullet and no band. */}
@@ -124,6 +132,7 @@ export function CounterPhoneOrdersClient({
       >
         {(l) => <MList rows={l.rows.slice(0, PHONE_ROWS).map(toListRow)} />}
       </Section>
+      </Fold>
     </>
   )
 }

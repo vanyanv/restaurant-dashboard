@@ -1,3 +1,4 @@
+import { buildOrderPlain, buildOrdersPlain, type OrderPlain, type OrdersPlain } from "@/lib/counter/orders-plain"
 import { getOrderDetail, getOrdersList, type OrderDetail, type OrderListResponse } from "@/app/actions/order-actions"
 import { getHourlyPatternsForRange } from "@/app/actions/hourly-orders-actions"
 import { batchRecipeCosts } from "@/lib/recipe-cost-batch"
@@ -225,6 +226,8 @@ export interface OrdersSectionsInput {
 }
 
 export interface OrdersSections {
+  /** The page made plain: the sentence, the count against the comparison, the latest orders. */
+  plain: SectionData<OrdersPlain>
   /** `strip([...])` line 4854. Five cells, none of them judged — ruling O-R2. */
   strip: SectionData<StripCell[]>
   /** The filter bar and the table, one section: the count is the table's own. */
@@ -333,6 +336,8 @@ export interface OrderSectionsInput {
 }
 
 export interface OrderSections {
+  /** One order made plain: what the guest paid and what is left after fees and food. */
+  plain: SectionData<OrderPlain>
   /** Line 6574. Five cells, none of them judged — ruling O-R2. */
   strip: SectionData<StripCell[]>
   /** `sec('Items', …)` line 6580 — the lines table with its total row. */
@@ -503,6 +508,31 @@ function marginFigure(keep: number, cost: number | null): string {
  * the page as if it were the range, and would get quieter the further a reader
  * scrolled. The action grew its own aggregate for exactly this.
  */
+/** The range made plain, from the same totals and comparison the strip reads. */
+export function buildOrdersPlainFrom(
+  now: OrderListResponse,
+  then: OrderListResponse | null,
+  cmp: ComparisonContext,
+  rows: OrdersRow[],
+): OrdersPlain {
+  const priced = now.totals.thirdPartyWithFees + now.totals.thirdPartyEstimatedCount
+  // A prior range with no orders is no baseline: say nothing rather than "level".
+  const vs = cmp.on && then !== null && then.totalCount > 0 ? comparisonPhrase(now.totalCount, cmp, then.totalCount) : null
+  return buildOrdersPlain({
+    orders: now.totalCount,
+    netSales: now.totals.netSales,
+    ticket: now.totalCount > 0 ? now.totals.netSales / now.totalCount : null,
+    fees: now.totals.commission,
+    thirdPartyCount: now.totals.thirdPartyCount,
+    thirdPartyNetSales: now.totals.thirdPartyNetSales,
+    estimatedPct: priced > 0 ? Math.round((now.totals.thirdPartyEstimatedCount / priced) * 100) : 0,
+    unpriced: now.totals.thirdPartyUnknownCount,
+    undrained: now.undrainedCount,
+    vs: vs ? { text: vs.text, tone: vs.tone ?? "is-up" } : null,
+    latest: rows,
+  })
+}
+
 export function buildOrdersStrip(
   now: OrderListResponse,
   then: OrderListResponse | null,
@@ -1454,6 +1484,20 @@ export function getOrdersSectionPromises(
   )
 
   return {
+    plain: guardSection(
+      Promise.all([listP, cmpP]).then(([listSd, cmpSd]) => {
+        const cmpList = dataOf(cmpSd)
+        const cmp: ComparisonContext = {
+          ...comparisonContext(comparisonId, null),
+          on: comparisonId !== "none" && cmpList !== null,
+        }
+        return mapReady(listSd, (res) =>
+          buildOrdersPlainFrom(res, cmpList, cmp, buildOrdersList(res, { search, channels, range }).rows),
+        )
+      }),
+      "retryOrders",
+    ),
+
     // The strip is the one section that waits on TWO loads, and it always did:
     // its deltas are this range read against the prior one.
     strip: guardSection(
@@ -1583,6 +1627,19 @@ export async function getOrderSections(input: OrderSectionsInput): Promise<Order
     mapReadyTo(loaded, (v) => (v === null ? empty<T>("no_match") : ready(f(v))))
 
   return {
+    plain: on(({ order, costs }) => {
+      const m = orderMoney(order, costs)
+      return buildOrderPlain({
+        platform: PLATFORM_LABEL[order.platform] ?? order.platform,
+        house: channelOf(order.platform)?.id === "house",
+        ticket: m.ticket,
+        commission: m.commission,
+        rate: m.rate,
+        keep: m.keep,
+        cost: m.cost,
+        uncosted: m.uncosted,
+      })
+    }),
     head: on(({ order }) => buildOrderHead(order)),
     strip: on(({ order, costs }) => buildOrderStrip(order, costs)),
     items: on(({ order, costs }) => buildOrderItems(order, costs)),

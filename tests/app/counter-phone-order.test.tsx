@@ -53,6 +53,7 @@ vi.mock("@/lib/auth", () => ({ authOptions: {} }))
 import { PhoneShell } from "@/components/counter"
 import { CounterPhoneOrderClient } from "@/app/(mobile)/m/(counter)/orders/[id]/counter-phone-order-client"
 import MobileOrderDetailPage from "@/app/(mobile)/m/(counter)/orders/[id]/page"
+import { ORDER_PLAIN } from "./fixtures/orders-plain"
 import { ready, empty, failed } from "@/lib/counter/section-data"
 import type { OrderItems, OrderKeep, OrderSections } from "@/lib/counter/adapters/orders"
 import type { KvRow, QueueItem } from "@/components/counter"
@@ -192,6 +193,7 @@ const NEEDS: QueueItem[] = [
 ]
 
 const sections = (over: Partial<OrderSections> = {}): OrderSections => ({
+  plain: ready(ORDER_PLAIN),
   head: ready(HEAD),
   strip: ready(STRIP),
   items: ready(ITEMS),
