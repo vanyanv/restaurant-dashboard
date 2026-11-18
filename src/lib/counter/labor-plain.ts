@@ -56,7 +56,12 @@ export function buildLaborPlain(o: LaborPlainInput): LaborPlain {
   const statuses: LaborPlain["statuses"] = []
   const missing = o.missingStoreDays > 0
 
-  if (o.laborPct === null) {
+  // No share because the days that sold have no labor reading: the cost and
+  // hours here are not a reading, so neither they nor the schedule are said.
+  const noReading = o.laborPct === null && missing
+  if (noReading) {
+    parts.push("No labor is on file for the days that sold, so there is no labor share yet.")
+  } else if (o.laborPct === null) {
     parts.push(`Labor cost ${money(o.cost)} for ${h(o.hours)}, with no sales in this range to set it against.`)
   } else {
     // The share is taken on the sales of the days that HAVE labor (rated
@@ -66,7 +71,9 @@ export function buildLaborPlain(o: LaborPlainInput): LaborPlain {
     )
   }
 
-  if (o.scheduledHours === null) {
+  if (noReading) {
+    // Nothing worked to read against a schedule.
+  } else if (o.scheduledHours === null) {
     parts.push("No schedule was published, so the hours are not read against a plan.")
     statuses.push({ tone: "warn", text: "No schedule published" })
   } else {
@@ -100,9 +107,9 @@ export function buildLaborPlain(o: LaborPlainInput): LaborPlain {
   }
 
   const lines: LaborPlain["lines"] = [
-    { key: "hours", label: "Hours worked", value: hoursText(o.hours) },
+    { key: "hours", label: "Hours worked", value: noReading ? "not on file" : hoursText(o.hours) },
     { key: "scheduled", label: "Hours published", value: o.scheduledHours === null ? "no schedule" : hoursText(o.scheduledHours) },
-    { key: "cost", label: "Labor cost", value: money(o.cost) },
+    { key: "cost", label: "Labor cost", value: noReading ? "not on file" : money(o.cost) },
     { key: "splh", label: "Sales per labor hour", value: o.splh === null ? "—" : money(o.splh, { cents: true }) },
   ]
 
@@ -111,7 +118,7 @@ export function buildLaborPlain(o: LaborPlainInput): LaborPlain {
     big: {
       label: "Labor, share of sales",
       value: o.laborPct === null ? null : pct(o.laborPct, { scaled: true }),
-      sub: money(o.cost),
+      sub: noReading ? "" : money(o.cost),
       missing: missing ? `labor missing on ${plural(o.missingStoreDays, "store-day")}` : undefined,
     },
     vs,

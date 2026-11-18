@@ -35,6 +35,15 @@ describe("buildLaborPlain", () => {
     expect(p.statuses.map((s) => s.text)).toEqual(["No schedule published", "Labor missing on 2 store-days"])
   })
 
+  it("says no labor is on file rather than $0 when the days that sold have no reading", () => {
+    const p = buildLaborPlain(week({ laborPct: null, cost: 0, hours: 0, missingStoreDays: 7, prior: null }))
+    expect(p.sentence).toBe(
+      "No labor is on file for the days that sold, so there is no labor share yet. 7 store-days are missing labor, so the total cost is higher.",
+    )
+    expect(p.big).toMatchObject({ value: null, sub: "" })
+    expect(p.statuses.map((s) => s.text)).toEqual(["Labor missing on 7 store-days"])
+  })
+
   it("names the clock leak, and has no share without sales", () => {
     const p = buildLaborPlain(week({ laborPct: null, leak: { hours: 6.5, cost: 120 } }))
     expect(p.big.value).toBeNull()
