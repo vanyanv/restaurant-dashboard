@@ -1,6 +1,9 @@
 "use client"
 
 import { useMemo, useState, useTransition } from "react"
+import { Fold } from "@/components/counter/ui"
+import { AlertsPlainView } from "@/app/dashboard/(counter)/alerts/alerts-plain-ui"
+import { writeCounterParams } from "@/lib/counter/url-state"
 import {
   MList,
   Section,
@@ -280,6 +283,22 @@ export function CounterPhoneAlertsClient({
         )}
       </Section>
 
+      {/* The page made plain, the same block the desk renders (mock
+          https://claude.ai/artifact/Sr98ngzuijqUUhPbJNJAv4). The lists are
+          folded underneath and unfold when an alert is picked. */}
+      <Section bare title="Alerts in a sentence" data={sections.plain} pending={pending}>
+        {(p) => (
+          <AlertsPlainView
+            p={p}
+            onOpen={(id) => {
+              const qs = writeCounterParams(params, { alert: id }).toString()
+              router.push(qs ? `/m/alerts?${qs}` : "/m/alerts", { scroll: false })
+            }}
+          />
+        )}
+      </Section>
+
+      <Fold summary="Every alert, one by one" defaultOpen={selectedAlert !== null}>
       <Section title="Open" meta={(l) => l.meta} data={sections.phoneOpen} pending={pending}>
         {(l) => (
           <>
@@ -313,6 +332,7 @@ export function CounterPhoneAlertsClient({
       >
         {(l) => <MList rows={l.rows.map(listRow)} />}
       </Section>
+      </Fold>
     </>
   )
 }

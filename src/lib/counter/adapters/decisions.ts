@@ -21,6 +21,7 @@ import {
   weekStartUTC,
 } from "@/lib/counter/week-window"
 import { count, delta, deltaSign, money, pct } from "@/lib/counter/format"
+import { buildDecisionsPlain, type DecisionsPlain } from "@/lib/counter/decisions-plain"
 import { mergeAttributions, type Attribution } from "@/lib/decisions/attribution"
 import { parseAttribution } from "@/lib/decisions/attribution"
 import { loadRunOut, type RunOut } from "@/lib/counter/run-out"
@@ -332,6 +333,8 @@ export interface PhoneQueue {
 }
 
 export interface DecisionsSections {
+  /** The page made plain: the sentence, expected sales, run-outs and the first calls. */
+  plain: SectionData<DecisionsPlain>
   head: SectionData<DecisionsHead>
   strip: SectionData<StripCell[]>
   briefing: SectionData<BriefingLine[]>
@@ -1626,7 +1629,7 @@ function deadlineWords(a: DecisionAction): string {
  * `chooseSections(sections, PHONE_DECISIONS_SECTIONS)` to its client, so the loads only the
  * desk reads never run on a phone.
  */
-export const PHONE_DECISIONS_SECTIONS = ["head", "week", "phoneQueue", "phoneRunOut"] as const satisfies ReadonlyArray<keyof DecisionsSections>
+export const PHONE_DECISIONS_SECTIONS = ["plain", "head", "week", "phoneQueue", "phoneRunOut"] as const satisfies ReadonlyArray<keyof DecisionsSections>
 export type PhoneDecisionsSections = Pick<DecisionsSections, (typeof PHONE_DECISIONS_SECTIONS)[number]>
 
 /**
@@ -1799,6 +1802,27 @@ export function getDecisionsSectionPromises(
   ): Promise<SectionData<T>> => withWeek((view, settled) => f(view, buildDecisionsWeek(view, settled)))
 
   return {
+    plain: lazy(() => guardSection(
+      Promise.all([viewP, settledP, runOutP]).then(([sd, settled, runSd]) => {
+        if (sd.status !== "ready" && sd.status !== "stale") {
+          return mapReady(sd, () => undefined as never)
+        }
+        const view = sd.data
+        const week = buildDecisionsWeek(view, settled)
+        const gap = view.vitals.laborGap
+        return ready(buildDecisionsPlain({
+          total: weekTotal(week),
+          vsPrior: view.vitals.weekForecast.vsPriorWeek,
+          vsText: weekDelta(view).text,
+          accuracy: insideOf(view),
+          laborGapHours: gap.hours,
+          laborShort: gap.status === "short",
+          runOut: dataOf(runSd),
+          calls: buildQueueSection(view).items,
+        }))
+      }),
+      "retryDecisions",
+    )),
     head: lazy(() => withWeekDays((view, week) => ready(buildDecisionsHead(view, week)))),
     strip: lazy(() => withWeekDays((view, week) => ready(buildDecisionsStrip(view, week)))),
     /*

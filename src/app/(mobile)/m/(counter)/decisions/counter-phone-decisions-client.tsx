@@ -2,6 +2,8 @@
 
 import type { PhoneDecisionsSections } from "@/lib/counter/adapters/decisions"
 import { businessQueryDate } from "@/lib/counter/business-date"
+import { Fold } from "@/components/counter/ui"
+import { DecisionsPlainView } from "@/app/dashboard/(counter)/decisions/decisions-plain-ui"
 
 import { useMemo, useState, useTransition } from "react"
 import {
@@ -204,6 +206,14 @@ export function CounterPhoneDecisionsClient({
         <p className="msub">{window}</p>
       </div>
 
+      {/* The page made plain, the same block the desk renders (mock
+          https://claude.ai/artifact/Sr98ngzuijqUUhPbJNJAv4). The rest is
+          folded underneath, unchanged. */}
+      <Section bare title="The week ahead" data={sections.plain} pending={pending}>
+        {(p) => <DecisionsPlainView p={p} />}
+      </Section>
+
+      <Fold summary="Every figure, as before">
       {/* TWO cells, built in the adapter rather than sliced off the desk's
           four: a slice picks by POSITION out of a list whose length depends
           on the data. Both are the same figures the desk prints. */}
@@ -255,6 +265,7 @@ export function CounterPhoneDecisionsClient({
       <Section bare title="Commit the first one" data={sections.phoneQueue} pending={pending}>
         {(q) => (q.first === null ? null : <PhoneCommitFirst first={q.first} />)}
       </Section>
+      </Fold>
     </>
   )
 }

@@ -23,15 +23,19 @@ export function Card({
   as: Tag = "div",
   className,
   label,
+  caption,
 }: {
   children: ReactNode
   as?: "div" | "section" | "article" | "li"
   className?: string
   /** Names a `section` card for a screen reader. */
   label?: string
+  /** A small visible heading over the card's content: "Serious", "Running out". */
+  caption?: ReactNode
 }) {
   return (
     <Tag className={`cu-card${className ? ` ${className}` : ""}`} aria-label={label}>
+      {caption ? <p className="cu-card__cap">{caption}</p> : null}
       {children}
     </Tag>
   )

@@ -192,6 +192,7 @@ a.cu-tile:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 /* ---- WeekBars: the last weeks, tap one to open it ---- */
 /* A page's answer blocks, stacked at one gap. */
 .cu-stack{display:grid;gap:16px;min-width:0}
+.cu-card__cap{margin:0;font-family:var(--mono);font-size:var(--t-micro);letter-spacing:.07em;text-transform:uppercase;color:var(--ink-3)}
 .cu-weeks{container-type:inline-size}
 .cu-weeks__top{display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap}
 .cu-weeks__title{font-family:var(--mono);font-size:var(--t-micro);color:var(--ink-3);letter-spacing:.06em;text-transform:uppercase}
