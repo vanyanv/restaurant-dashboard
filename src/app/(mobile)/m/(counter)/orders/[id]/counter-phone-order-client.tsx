@@ -1,5 +1,7 @@
 "use client"
 
+import { Fold } from "@/components/counter/ui"
+import { OrderPlainView } from "@/app/dashboard/(counter)/orders/orders-plain-ui"
 import {
   MList,
   MoneyLines,
@@ -126,6 +128,12 @@ export function CounterPhoneOrderClient({
         {head?.sub ? <p className="msub">{head.sub}</p> : null}
       </div>
 
+      {/* The order made plain, the same view the desk shows. */}
+      <Section bare title="This order in a sentence" data={sections.plain}>
+        {(p) => <OrderPlainView p={p} />}
+      </Section>
+
+      <Fold summary="Every figure, as before">
       {/* Two cells, chosen by NAME out of the adapter's five. Nothing here is
           judged — ruling O-R2 — so no cell carries a reference and the phone
           draws no bullet and no band. */}
@@ -150,6 +158,7 @@ export function CounterPhoneOrderClient({
       {note ? (
         <Note>{note}</Note>
       ) : null}
+      </Fold>
     </>
   )
 }

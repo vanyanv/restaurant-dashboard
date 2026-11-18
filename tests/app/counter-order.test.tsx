@@ -66,6 +66,7 @@ vi.mock("@/lib/auth", () => ({ authOptions: {} }))
 import { AppShell } from "@/components/counter"
 import { CounterOrderClient } from "@/app/dashboard/(counter)/orders/[id]/counter-order-client"
 import OrderPage from "@/app/dashboard/(counter)/orders/[id]/page"
+import { ORDER_PLAIN } from "./fixtures/orders-plain"
 import { ready, empty, failed, loading } from "@/lib/counter/section-data"
 import type { OrderItems, OrderKeep, OrderSections } from "@/lib/counter/adapters/orders"
 import type { KvRow, QueueItem } from "@/components/counter"
@@ -221,6 +222,7 @@ const NEEDS: QueueItem[] = [
 ]
 
 const sections = (over: Partial<OrderSections> = {}): OrderSections => ({
+  plain: ready(ORDER_PLAIN),
   head: ready(HEAD),
   strip: ready(STRIP),
   items: ready(ITEMS),
