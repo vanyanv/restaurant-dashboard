@@ -1,5 +1,7 @@
 "use client"
 
+import { Fold } from "@/components/counter/ui"
+import { AnalyticsPlainView } from "@/app/dashboard/(counter)/analytics/analytics-plain-ui"
 import { useMemo } from "react"
 import {
   Chart,
@@ -128,6 +130,15 @@ export function CounterPhoneStoreAnalyticsClient({
         <p className="msub">{windowLabel}</p>
       </div>
 
+      {/* Analytics made plain (owner's go, 2026-11-18; mock
+          https://claude.ai/artifact/Sr98ngzuijqUUhPbJNJAv4). Every figure
+          below is folded underneath, unchanged. */}
+      <Section bare title="Where sales came from" data={sections.plain} pending={pending}>
+        {(p) => <AnalyticsPlainView p={p} />}
+      </Section>
+
+      <Fold summary="Every figure, as before">
+
       {/* Two cells: Net sales · Food cost — `h.phoneCells`, never a slice of
           `h.cells` (which carries four: Net sales, Orders, Avg ticket, Food
           cost, and only when an order count exists at all). */}
@@ -145,6 +156,7 @@ export function CounterPhoneStoreAnalyticsClient({
       <Section title="The day book" meta="newest first" data={sections.dayBook} pending={pending}>
         {(b) => <MList rows={b.phoneRows.map(toDayRow)} />}
       </Section>
+      </Fold>
     </>
   )
 }

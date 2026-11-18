@@ -1,4 +1,5 @@
 import { getStores } from "@/app/actions/store/crud-actions"
+import { buildAnalyticsPlain, type AnalyticsPlain } from "@/lib/counter/analytics-plain"
 import { getMenuEngineering } from "@/app/actions/forecasts/menu-engineering-actions"
 import type { MenuEngineeringData } from "@/app/actions/forecasts/menu-engineering-actions"
 import { prisma } from "@/lib/prisma"
@@ -272,6 +273,8 @@ export interface AnalyticsSectionsInput {
 
 /** The group page — `/dashboard/analytics` and `/m/analytics`. */
 export interface AnalyticsSections {
+  /** The page made plain: sales against the comparison, the best day, the apps' share. */
+  plain: SectionData<AnalyticsPlain>
   headline: SectionData<AnalyticsHeadline>
   mix: SectionData<MixSection>
   weekday: SectionData<WeekdaySection>
@@ -370,6 +373,8 @@ export interface TopItems {
 
 /** The store page — `/dashboard/analytics/[storeId]` and `/m/analytics/[storeId]`. */
 export interface StoreAnalyticsSections {
+  /** One store's analytics made plain, from the same builder. */
+  plain: SectionData<AnalyticsPlain>
   headline: SectionData<StoreHeadline>
   sales: SectionData<SalesSection>
   service: SectionData<ServiceSection>
@@ -1376,6 +1381,13 @@ export function getAnalyticsSectionPromises(
   })
 
   return {
+    plain: guardSection(
+      Promise.all([seriesP, cmpCtxP]).then(([seriesSd, cmp]) =>
+        mapReady(seriesSd, (s) => plainOf(s.daily, s.series, cmp, range)),
+      ),
+      "retryStatement",
+    ),
+
     headline: guardSection(
       Promise.all([seriesP, cmpCtxP]).then(([seriesSd, cmp]) =>
         mapReady(seriesSd, (s) => ({
@@ -1550,6 +1562,16 @@ export function getStoreAnalyticsSectionPromises(
   )
 
   return {
+    plain: guardSection(
+      Promise.all([scopeP, foldedP, cmpCtxP]).then(([scopeSd, foldedSd, cmp]) => {
+        const folded = dataOf(foldedSd)
+        return mapReady(scopeSd, (daily) =>
+          plainOf(daily, channelSeries(folded ?? daily), cmp, range),
+        )
+      }),
+      "retryStatement",
+    ),
+
     headline: guardSection(
       Promise.all([scopeP, ordersP, cmpCtxP]).then(([scopeSd, ordersSd, cmp]) =>
         mapReady(scopeSd, (p) => {
@@ -1636,6 +1658,31 @@ export async function getStoreAnalyticsSections(
  * the reader's day and not to a UTC instant that may sit on the other side of
  * a midnight.
  */
+/**
+ * The page made plain, on either route: the strip's sales and comparison, the
+ * mix's channel series and the weekday panel's best day, read once more.
+ * The comparison is left out when its window took in nothing (or less), so
+ * the sentence never reads "(nothing in the prior period to compare)".
+ */
+function plainOf(daily: Statement, series: ChannelSeries, cmp: ComparisonContext, range: DateRange): AnalyticsPlain {
+  const base = cmp.scope?.grossSales ?? null
+  const reading = cmp.on && base !== null && base > 0 ? comparisonPhrase(daily.grossSales, cmp, base) : null
+  const week = weekdaysOf(daily, range)
+  const best = week.best === null ? null : week.readings[week.best]
+  return buildAnalyticsPlain({
+    sales: daily.grossSales,
+    vs: reading ? { text: reading.text, tone: reading.tone ?? "is-up" } : null,
+    marketplaceShare: series.marketplaceShare,
+    commission: series.commission,
+    channelTotal: series.total,
+    channels: series.bands.map((b) => ({ name: b.name, total: b.total })),
+    best:
+      best === null || best.average === null
+        ? null
+        : { name: best.name, average: best.average, averaged: week.readings.some((r) => r.days > 1) },
+  })
+}
+
 function weekdaysOf(daily: Statement, range: DateRange): DayOfWeekProfile {
   const net = rowValues(daily.rows, TOTAL_SALES_CODE) ?? []
   return dayOfWeekProfile(

@@ -1,5 +1,7 @@
 "use client"
 
+import { Fold } from "@/components/counter/ui"
+import { AnalyticsPlainView } from "@/app/dashboard/(counter)/analytics/analytics-plain-ui"
 import { useCallback, useMemo } from "react"
 import { usePathname, useRouter } from "next/navigation"
 import {
@@ -268,6 +270,15 @@ export function CounterStoreAnalyticsClient({
           is about. */}
       <SubNav items={storeViewTabs("/dashboard/analytics", storeId, paramsString)} label="Analytics" />
 
+      {/* Analytics made plain (owner's go, 2026-11-18; mock
+          https://claude.ai/artifact/Sr98ngzuijqUUhPbJNJAv4). Every figure
+          below is folded underneath, unchanged. */}
+      <Section bare title="Where sales came from" data={sections.plain} pending={pending}>
+        {(p) => <AnalyticsPlainView p={p} />}
+      </Section>
+
+      <Fold summary="Every figure, the day book, the statement and the menu">
+
       {/* The prototype's `storeNote()` and its strip, in one block above the
           first `.sec`. The note is the adapter's — it states what this route
           adds to the group page, and it is one sentence rather than a second
@@ -376,6 +387,7 @@ export function CounterStoreAnalyticsClient({
           {(c) => <Table columns={CATEGORY_COLUMNS} rows={categoryRows(c)} />}
         </Section>
       </div>
+      </Fold>
     </>
   )
 }
