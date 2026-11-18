@@ -22,7 +22,9 @@ import { loadLeakLedger, type LeakLedger } from "@/lib/counter/labor-leaks"
 import { salesByDayOf, salesByStoreDayOf } from "@/lib/counter/labor-figures"
 import { loadScheduleGap, loadStaffingCurve, type StaffingCurve } from "@/lib/counter/staffing-curve"
 import { count, money, pct, plural, points } from "@/lib/counter/format"
+import { buildLaborPlain, type LaborPlain } from "@/lib/counter/labor-plain"
 import {
+  dayCount,
   isoDay,
   rangeLabel,
   toQueryBounds,
@@ -322,6 +324,8 @@ export interface TrendSection {
 
 /** The group page — `/dashboard/labor` and `/m/labor`. */
 export interface LaborSections {
+  /** The page made plain: the share of sales, the schedule, what is missing, last week. */
+  plain: SectionData<LaborPlain>
   headline: SectionData<LaborHeadline>
   week: SectionData<LaborWeekStrip>
   schedule: SectionData<ScheduleSection>
@@ -334,6 +338,8 @@ export interface LaborSections {
 
 /** The store page — `/dashboard/labor/[storeId]` and `/m/labor/[storeId]`. */
 export interface StoreLaborSections {
+  /** One store's labor made plain, from the same builders. */
+  plain: SectionData<LaborPlain>
   headline: SectionData<LaborHeadline>
   schedule: SectionData<ScheduleSection>
   roles: SectionData<RolesSection>
@@ -1553,6 +1559,36 @@ function headlineSection(
   )
 }
 
+/**
+ * The page made plain, on either route. It reads the headline's own week and
+ * ledger; the trend only lends last week's share, and only when the range is
+ * exactly one Monday-to-Sunday week, so "vs week of" always names a real week.
+ * A trend that failed or has not loaded leaves no comparison, never a guess.
+ */
+function plainSection(
+  laborSd: SectionData<LaborData>,
+  leakSd: SectionData<LeakLedger>,
+  trendSd: SectionData<LaborTrendWeek[]>,
+  range: DateRange,
+): SectionData<LaborPlain> {
+  const weeks = dataOf(trendSd) ?? []
+  const at = dayCount(range) === 7 ? weeks.findIndex((w) => w.key === isoDay(range.start)) : -1
+  const before = at > 0 ? weeks[at - 1] : null
+  const ledger = dataOf(leakSd)
+  return laborSection(laborSd, NO_HARRI_OWED, (d) =>
+    buildLaborPlain({
+      laborPct: d.week.laborPct,
+      cost: d.week.cost,
+      hours: d.week.actualHours,
+      scheduledHours: d.week.scheduledHours,
+      missingStoreDays: d.week.missingStoreDays,
+      splh: d.week.splh,
+      leak: ledger === null ? null : { hours: ledger.leakedHours, cost: ledger.leakedCost },
+      prior: before === null || before.isPartial ? null : { label: before.label, laborPct: before.laborPct },
+    }),
+  )
+}
+
 /** The leak section, on either route. */
 function leaksSection(
   laborSd: SectionData<LaborData>,
@@ -1615,7 +1651,7 @@ function trendSection(sd: SectionData<LaborTrendWeek[]>): SectionData<TrendSecti
  * `chooseSections(sections, PHONE_LABOR_SECTIONS)` to its client, so the loads only the
  * desk reads never run on a phone.
  */
-export const PHONE_LABOR_SECTIONS = ["headline", "decision", "schedule", "roles"] as const satisfies ReadonlyArray<keyof LaborSections>
+export const PHONE_LABOR_SECTIONS = ["plain", "headline", "decision", "schedule", "roles"] as const satisfies ReadonlyArray<keyof LaborSections>
 export type PhoneLaborSections = Pick<LaborSections, (typeof PHONE_LABOR_SECTIONS)[number]>
 
 /**
@@ -1640,6 +1676,13 @@ export function getLaborSectionPromises(
   }).format(nextDay)
 
   return {
+    plain: lazy(() => guardSection(
+      Promise.all([laborP, leaksP, scopeP, trendLoadP]).then(([laborSd, leakSd, scopeSd, trendSd]) =>
+        plainSection(laborSd, leakSd, gate(scopeSd, trendSd), range),
+      ),
+      "retryLabor",
+    )),
+
     headline: lazy(() => guardSection(
       Promise.all([laborP, leaksP]).then(([laborSd, leakSd]) =>
         headlineSection(laborSd, leakSd, false),
@@ -1722,7 +1765,7 @@ export async function getLaborSections(input: LaborSectionsInput): Promise<Labor
  * `chooseSections(sections, PHONE_STORE_LABOR_SECTIONS)` to its client, so the loads only the
  * desk reads never run on a phone.
  */
-export const PHONE_STORE_LABOR_SECTIONS = ["headline", "schedule", "roles"] as const satisfies ReadonlyArray<keyof StoreLaborSections>
+export const PHONE_STORE_LABOR_SECTIONS = ["plain", "headline", "schedule", "roles"] as const satisfies ReadonlyArray<keyof StoreLaborSections>
 export type PhoneStoreLaborSections = Pick<StoreLaborSections, (typeof PHONE_STORE_LABOR_SECTIONS)[number]>
 
 /**
@@ -1742,6 +1785,13 @@ export function getStoreLaborSectionPromises(
   const { laborP, leaksP, trendLoadP, scopeP } = loadEverything(input)
 
   return {
+    plain: lazy(() => guardSection(
+      Promise.all([laborP, leaksP, scopeP, trendLoadP]).then(([laborSd, leakSd, scopeSd, trendSd]) =>
+        plainSection(laborSd, leakSd, gate(scopeSd, trendSd), range),
+      ),
+      "retryLabor",
+    )),
+
     headline: lazy(() => guardSection(
       Promise.all([laborP, leaksP]).then(([laborSd, leakSd]) =>
         headlineSection(laborSd, leakSd, true),

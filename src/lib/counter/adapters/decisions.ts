@@ -1803,7 +1803,9 @@ export function getDecisionsSectionPromises(
 
   return {
     plain: lazy(() => guardSection(
-      Promise.all([viewP, settledP, runOutP]).then(([sd, settled, runSd]) => {
+      // The shelf guarded on its own, so a shelf that throws reaches the
+      // `failed` wording below instead of failing the whole answer.
+      Promise.all([viewP, settledP, guardSection(runOutP, "retryDecisions")]).then(([sd, settled, runSd]) => {
         if (sd.status !== "ready" && sd.status !== "stale") {
           return mapReady(sd, () => undefined as never)
         }

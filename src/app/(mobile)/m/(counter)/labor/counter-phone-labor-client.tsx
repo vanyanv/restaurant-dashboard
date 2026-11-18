@@ -1,5 +1,7 @@
 "use client"
 
+import { Fold } from "@/components/counter/ui"
+import { LaborPlainView } from "@/app/dashboard/(counter)/labor/labor-plain-ui"
 import type { PhoneLaborSections } from "@/lib/counter/adapters/labor"
 import Link from "next/link"
 import { useMemo } from "react"
@@ -129,6 +131,15 @@ export function CounterPhoneLaborClient({
         <p className="msub">{windowLabel}</p>
       </div>
 
+      {/* Labor made plain (owner's go, 2026-11-18; mock
+          https://claude.ai/artifact/Sr98ngzuijqUUhPbJNJAv4). Every figure
+          below is folded underneath, unchanged. */}
+      <Section bare title="Labor in a sentence" data={sections.plain} pending={pending}>
+        {(p) => <LaborPlainView p={p} />}
+      </Section>
+
+      <Fold summary="Every figure, as before">
+
       {/* Two cells: Hourly labor, SPLH. `h.phoneCells`, never a slice of
           `h.cells` — see the file note above. */}
       <Section bare title="The figures" data={sections.headline} pending={pending}>
@@ -168,6 +179,7 @@ export function CounterPhoneLaborClient({
           )
         }
       </Section>
+      </Fold>
     </>
   )
 }

@@ -1,5 +1,7 @@
 "use client"
 
+import { Fold } from "@/components/counter/ui"
+import { AnalyticsPlainView } from "@/app/dashboard/(counter)/analytics/analytics-plain-ui"
 import { useCallback, useMemo } from "react"
 import { usePathname, useRouter } from "next/navigation"
 import {
@@ -186,6 +188,15 @@ export function CounterAnalyticsClient({
           only once a store is picked, which is the design's own sequence. */}
       <SubNav items={storeViewTabs("/dashboard/analytics", counterParams.storeId, paramsString)} label="Analytics" />
 
+      {/* Analytics made plain (owner's go, 2026-11-18; mock
+          https://claude.ai/artifact/Sr98ngzuijqUUhPbJNJAv4). Every figure
+          below is folded underneath, unchanged. */}
+      <Section bare title="Where sales came from" data={sections.plain} pending={pending}>
+        {(p) => <AnalyticsPlainView p={p} />}
+      </Section>
+
+      <Fold summary="Every figure, the mix, the weekdays and the service hours">
+
       {/* Page level, above the first `.sec`, as `P.analytics.desk()` writes it.
           Three cells (A-R3). The second carries a quiet `Bullet` — `Figure`
           draws it from the cell's own `reference`, so the page does not have
@@ -279,6 +290,7 @@ export function CounterAnalyticsClient({
           )}
         </Section>
       </div>
+      </Fold>
     </>
   )
 }

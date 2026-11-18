@@ -130,7 +130,7 @@ export function buildDecisionsPlain(input: DecisionsPlainInput): DecisionsPlain 
     parts.push(`${first.name}${where} runs out ${first.when}${first.qty ? ` unless you bring in ${first.qty}` : ""}.`)
   }
   if (calls.length > 0) parts.push(`The first call: ${lowerFirst(calls[0].title)}.`)
-  else parts.push("No decision needs you this week.")
+  else parts.push("No calls are waiting this week.")
 
   const statuses: DecisionsPlain["statuses"] = []
   if (hotCount > 0) statuses.push({ tone: "bad", text: `${count(hotCount)} running out before delivery` })

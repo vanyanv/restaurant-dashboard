@@ -1,5 +1,7 @@
 "use client"
 
+import { Fold } from "@/components/counter/ui"
+import { LaborPlainView } from "@/app/dashboard/(counter)/labor/labor-plain-ui"
 import { useCallback, useMemo } from "react"
 import { usePathname, useRouter } from "next/navigation"
 import {
@@ -299,6 +301,15 @@ export function CounterStoreLaborClient({
           is about. */}
       <SubNav items={storeViewTabs("/dashboard/labor", storeId, paramsString)} label="Labor" />
 
+      {/* Labor made plain (owner's go, 2026-11-18; mock
+          https://claude.ai/artifact/Sr98ngzuijqUUhPbJNJAv4). Every figure
+          below is folded underneath, unchanged. */}
+      <Section bare title="Labor in a sentence" data={sections.plain} pending={pending}>
+        {(p) => <LaborPlainView p={p} />}
+      </Section>
+
+      <Fold summary="Every figure, the schedule, roles and the trend">
+
       {/* The prototype's `storeNote()` and its strip, in one block above the
           first `.sec`. The note is the adapter's — it states what this route
           adds to the group page, and it is one sentence rather than a second
@@ -422,6 +433,7 @@ export function CounterStoreLaborClient({
           </>
         )}
       </Section>
+      </Fold>
     </>
   )
 }

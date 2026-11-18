@@ -1,5 +1,7 @@
 "use client"
 
+import { Fold } from "@/components/counter/ui"
+import { CogsPlainView } from "@/app/dashboard/(counter)/cogs/cogs-plain-ui"
 import { useCallback, useMemo } from "react"
 import { usePathname, useRouter } from "next/navigation"
 import {
@@ -234,6 +236,15 @@ export function CounterCogsClient({
           only once a store is picked, which is the design's own sequence. */}
       <SubNav items={storeViewTabs("/dashboard/cogs", counterParams.storeId, paramsString, [{ label: "Theoretical vs actual", href: "/dashboard/operations/product-usage" }], "Cost")} label="COGS" />
 
+      {/* Food cost made plain (owner's go, 2026-11-18; mock
+          https://claude.ai/artifact/Sr98ngzuijqUUhPbJNJAv4). Every figure
+          below is folded underneath, unchanged. */}
+      <Section bare title="Food cost in a sentence" data={sections.plain} pending={pending}>
+        {(p) => <CogsPlainView p={p} />}
+      </Section>
+
+      <Fold summary="Every figure, the plan, what moved and the items">
+
       {/* Page level, above the first `.sec`, exactly as `strip([...])` is
           written in `P.cogs.desk()`. Four cells on the group route (C-R3, C-R4). */}
       <Section bare title="The figures" data={sections.headline} pending={pending}>
@@ -339,6 +350,7 @@ export function CounterCogsClient({
           </>
         )}
       </Section>
+      </Fold>
     </>
   )
 }
