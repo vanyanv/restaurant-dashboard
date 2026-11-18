@@ -13,6 +13,7 @@ import {
   Statuses,
   StoreCard,
   StoreCardGrid,
+  WeekBars,
   type StatusTone,
 } from "@/components/counter/ui"
 import { money, pct } from "@/lib/counter/format"
@@ -55,7 +56,6 @@ export function PlainHero({
   range: DateRange
   onWeek: (range: DateRange) => void
 }) {
-  const max = Math.max(1, ...p.weeks.map((w) => Math.max(0, w.kept)))
   const v = p.vsPrior
   return (
     <div className="pl-hero">
@@ -85,47 +85,25 @@ export function PlainHero({
         {p.sentence ? <Answer>{p.sentence}</Answer> : null}
       </Card>
 
-      {p.weeks.length > 0 ? (
-        <div className="pl-card pl-weeks">
-          <div className="pl-weeks__top">
-            <span className="pl-cap">Last {p.weeks.length} weeks · tap a week</span>
-            <span className="pl-key">
-              <span>
-                <i />
-                complete
-              </span>
-              <span>
-                <i className="is-part" />
-                labor missing, true number lower
-              </span>
-            </span>
-          </div>
-          <div className="pl-wk">
-            {p.weeks.map((w) => {
-              const on = isSelected(w.window, range)
-              return (
-                <button
-                  key={w.window.start}
-                  type="button"
-                  aria-pressed={on}
-                  aria-label={`Week of ${w.label}: kept ${w.atMost ? "at most " : ""}${money(w.kept)}`}
-                  onClick={() => {
-                    const r = readWeekWindow(w.window)
-                    onWeek({ start: r.start, end: r.end })
-                  }}
-                >
-                  <span className="pl-wk__pct">{w.sales > 0 ? pct(w.keptPct) : "—"}</span>
-                  <span
-                    className={`pl-bar${w.atMost ? " is-part" : ""}`}
-                    style={{ height: w.sales > 0 ? `${Math.max(2, (Math.max(0, w.kept) / max) * 100)}%` : 0 }}
-                  />
-                  <span className="pl-wk__lbl">{w.label}</span>
-                </button>
-              )
-            })}
-          </div>
-        </div>
-      ) : null}
+      <WeekBars
+        title={`Last ${p.weeks.length} weeks · tap a week`}
+        partialLabel="labor missing, true number lower"
+        weeks={p.weeks.map((w) => ({
+          key: w.window.start,
+          label: w.label,
+          value: w.kept,
+          top: w.sales > 0 ? pct(w.keptPct) : "—",
+          partial: w.atMost,
+          selected: isSelected(w.window, range),
+          ariaLabel: `Week of ${w.label}: kept ${w.atMost ? "at most " : ""}${money(w.kept)}`,
+        }))}
+        onPick={(key) => {
+          const w = p.weeks.find((x) => x.window.start === key)
+          if (!w) return
+          const r = readWeekWindow(w.window)
+          onWeek({ start: r.start, end: r.end })
+        }}
+      />
     </div>
   )
 }

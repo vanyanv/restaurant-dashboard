@@ -18,6 +18,7 @@ import {
   Fold,
   NeedsYou,
   Rows,
+  WeekBars,
   Tile,
   Tiles,
   Status,
@@ -132,6 +133,29 @@ describe("shared blocks", () => {
   it("Fold is a closed details by default", () => {
     const { container } = render(<Fold summary="Show every number">x</Fold>)
     expect(container.querySelector("details")?.open).toBe(false)
+  })
+
+  it("WeekBars: tallest bar is full height, nothing drawn for a negative week, a tap reports the key", () => {
+    const onPick = vi.fn()
+    const { container } = render(
+      <WeekBars
+        title="Weeks"
+        partialLabel="labor missing"
+        onPick={onPick}
+        weeks={[
+          { key: "a", label: "8/10", value: 50, top: "$50", ariaLabel: "a" },
+          { key: "b", label: "8/17", value: 100, top: "$100", partial: true, selected: true, ariaLabel: "b" },
+          { key: "c", label: "8/24", value: -20, top: "-$20", ariaLabel: "c" },
+        ]}
+      />,
+    )
+    const bars = [...container.querySelectorAll<HTMLElement>(".cu-weeks__bar")]
+    expect(bars.map((b) => b.style.height)).toEqual(["50%", "100%", "0px"])
+    expect(bars[1].classList.contains("is-part")).toBe(true)
+    expect(screen.getByRole("button", { name: "b" }).getAttribute("aria-pressed")).toBe("true")
+    fireEvent.click(screen.getByRole("button", { name: "a" }))
+    expect(onPick).toHaveBeenCalledWith("a")
+    expect(container.querySelector(".cu-weeks__key")?.textContent).toContain("labor missing")
   })
 
   it("the stylesheet uses only tokens: no colour literals", () => {

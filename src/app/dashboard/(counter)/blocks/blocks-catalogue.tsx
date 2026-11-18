@@ -17,6 +17,7 @@ import {
   Tabs,
   Tile,
   Tiles,
+  WeekBars,
   type RowsColumn,
 } from "@/components/counter/ui"
 
@@ -159,6 +160,36 @@ export function BlocksCatalogue() {
       <Both name="Fold" replaces=".iv-fold .rs-fold .ck-logfold .ckp-more" note="Everything that isn't the answer, folded at the bottom.">
         <Fold summary="Show every number">The full statement sits here, folded away.</Fold>
       </Both>
+
+      <Both name="WeekBars" replaces=".pl-weeks .pl-wk" note="The last weeks as bars that pick the week. A hatched bar is an at-most figure.">
+        <CatWeeks />
+      </Both>
     </div>
+  )
+}
+
+const WEEKS = [
+  { key: "10/12", value: 98_200, partial: false },
+  { key: "10/19", value: 99_730, partial: false },
+  { key: "10/26", value: 109_607, partial: true },
+]
+
+function CatWeeks() {
+  const [picked, setPicked] = useState("10/26")
+  return (
+    <WeekBars
+      title="Sales, last 3 weeks · tap a week"
+      partialLabel="labor missing"
+      weeks={WEEKS.map((w) => ({
+        key: w.key,
+        label: w.key,
+        value: w.value,
+        top: `$${(w.value / 1000).toFixed(1)}k`,
+        partial: w.partial,
+        selected: w.key === picked,
+        ariaLabel: `Week of ${w.key}`,
+      }))}
+      onPick={setPicked}
+    />
   )
 }

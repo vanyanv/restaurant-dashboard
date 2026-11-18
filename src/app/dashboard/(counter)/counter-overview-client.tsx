@@ -33,6 +33,8 @@ import {
 import {
   AskBar,
 } from "@/components/counter/ask"
+import { Fold } from "@/components/counter/ui"
+import { OverviewHero, OverviewNeeds, OverviewStatuses, OverviewStores } from "./overview-plain-ui"
 import { readCounterParams, writeCounterParams } from "@/lib/counter/url-state"
 import {
   bucketFor,
@@ -395,6 +397,48 @@ export function CounterOverviewClient({
         scope={scope}
       />
 
+      {/* The Overview made plain (owner's go, 2026-11-18; mock
+          https://claude.ai/artifact/8ZrnRsGAYWc2WV6tg6wb5D): the sentence, sales
+          and kept with the eight weeks as the week picker, status in words, one
+          card per store, where the sales came from, and Needs you in a few
+          groups. Every figure is the P&L's own. What the page said before is
+          folded underneath, unchanged. */}
+      <Section bare title="How the period went" data={sections.plain} pending={pending}>
+        {(o) => (
+          <div className="cu-stack">
+            <OverviewHero o={o} range={range} onWeek={(r) => push({ range: r })} />
+            <OverviewStatuses o={o} />
+            <OverviewStores o={o} onStore={(id) => push({ storeId: id })} />
+          </div>
+        )}
+      </Section>
+
+      <Section bare title="Where sales came from" data={sections.channels} pending={pending}>
+        {(mix) => (
+          <ChannelRows
+            caption={`Where ${storeName === "all stores" ? "the" : `${storeName}'s`} sales came from · ${windowLabel}`}
+            rows={mix.map((c) => ({ id: c.channel, net: c.net, orders: c.orders, commission: c.commission, ticket: c.ticket }))}
+            footer={mix.length === 0 ? "No channel readings for this range." : undefined}
+          />
+        )}
+      </Section>
+
+      <Section bare title="Needs you" data={sections.plain} pending={pending}>
+        {(o) => <OverviewNeeds o={o} />}
+      </Section>
+
+      {/* Not a section in the prototype either, and it carries no state: a
+          store that is not trading is still a store you can ask about. */}
+      <AskBar
+        placeholder={`Ask anything about ${storeName}, ${windowLabel} or any range…`}
+        suggestions={[
+          "Why is food cost where it is?",
+          comparing ? `What changed vs ${cmpName}?` : "What changed over this range?",
+          "Which channel is costing the most to sell through?",
+        ]}
+      />
+
+      <Fold summary="Every figure, as before: the strip, the charts, every alert, the store ledger and the feeds">
       {/* Note 30, as two figures and a verdict: net sales says whether the day
           happened, sales per labor hour says whether it was worth having.
           Three sections, one block — they come from three rollups that fail
@@ -485,17 +529,6 @@ export function CounterOverviewClient({
       <Section bare title="Still moving" data={sections.moving} pending={pending}>
         {(cells) => <Moving cells={cells} />}
       </Section>
-
-      {/* Not a section in the prototype either, and it carries no state: a
-          store that is not trading is still a store you can ask about. */}
-      <AskBar
-        placeholder={`Ask anything about ${storeName}, ${windowLabel} or any range…`}
-        suggestions={[
-          "Why is food cost where it is?",
-          comparing ? `What changed vs ${cmpName}?` : "What changed over this range?",
-          "Which channel is costing the most to sell through?",
-        ]}
-      />
 
       {/* The two lead figures, as trends. Both are sections, so both carry all
           six states rather than only the one somebody remembered. */}
@@ -698,6 +731,7 @@ export function CounterOverviewClient({
           )}
         </Section>
       </div>
+      </Fold>
     </>
   )
 }

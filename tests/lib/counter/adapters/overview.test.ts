@@ -30,6 +30,12 @@ vi.mock("@/lib/counter/targets", () => ({ loadStripTargets: vi.fn() }))
  */
 vi.mock("@/lib/counter/labor-week", () => ({ loadLaborWeek: vi.fn() }))
 vi.mock("@/lib/counter/adapters/feed-health", () => ({ getFeedHealth: vi.fn() }))
+/*
+ * The Overview made plain reads the P&L adapter's own `plain` section, so its
+ * money is the P&L's. Mocked at that boundary: the counts below are about the
+ * Overview's own rollups, and the P&L adapter has its own suite.
+ */
+vi.mock("@/lib/counter/adapters/pnl", () => ({ getPnlSectionPromises: vi.fn() }))
 
 import { getStores } from "@/app/actions/store/crud-actions"
 import { getAllStoresPnL } from "@/app/actions/store/pnl-actions"
@@ -42,7 +48,10 @@ import { loadChannelMix, loadChannelMixByStore } from "@/lib/counter/channel-mix
 import { loadStripTargets } from "@/lib/counter/targets"
 import { loadLaborWeek } from "@/lib/counter/labor-week"
 import { getFeedHealth } from "@/lib/counter/adapters/feed-health"
-import { toQueryBounds } from "@/lib/counter/date-range"
+import { getPnlSectionPromises } from "@/lib/counter/adapters/pnl"
+import { ready as readySection } from "@/lib/counter/section-data"
+import { plainFixture } from "../../../app/fixtures/pnl-plain"
+import { toQueryBounds, trailingWeeks } from "@/lib/counter/date-range"
 import { PRIME_CEILING_PCT } from "@/lib/counter/prime-cost"
 import { dataOf, hasData } from "@/lib/counter/section-data"
 import {
@@ -225,12 +234,17 @@ function happyPath() {
     ]) as never,
   )
   vi.mocked(loadStripTargets).mockResolvedValue(NO_TARGETS as never)
+  vi.mocked(getPnlSectionPromises).mockReturnValue({
+    plain: Promise.resolve(readySection(PNL_PLAIN)),
+  } as never)
   // No Harri rows is this database's actual state, and the state the SPLH
   // lead's `no_labor_synced` branch is for. A test that wants the schedule
   // half overrides it.
   vi.mocked(loadLaborWeek).mockResolvedValue({ days: [], roles: [], overtimeCost: 0 } as never)
   vi.mocked(getFeedHealth).mockResolvedValue([] as never)
 }
+
+const PNL_PLAIN = plainFixture(trailingWeeks(new Date(2026, 7, 19), 8), ["holly", "glendale"])
 
 const load = (over: Partial<Parameters<typeof getOverviewSections>[0]> = {}) =>
   getOverviewSections({ range, storeId: null, accountId, ...over })
@@ -823,5 +837,31 @@ describe("the alert queue's days open", () => {
     // 11am LA on the same Wednesday: UTC is still the 19th too.
     const s = await load({ today: new Date("2026-08-19T18:00:00.000Z") })
     expect(dataOf(s.needsYou)?.[0].lead).toBe("today")
+  })
+
+  it("builds the plain Overview from the P&L's own section, the store mix and the inbox", async () => {
+    vi.mocked(getAlertInbox).mockResolvedValue(
+      inbox([alert(), alert({ id: "a2", target: "MENU_ITEM" }), alert({ id: "a3", target: "MENU_ITEM" })]) as never,
+    )
+    const s = await load({ comparisonId: "prev" })
+    expect(vi.mocked(getPnlSectionPromises)).toHaveBeenCalledWith(
+      expect.objectContaining({ storeId: null, accountId, comparisonId: "prev" }),
+    )
+    const o = dataOf(s.plain)!
+    expect(o.sales).toBe(PNL_PLAIN.sales)
+    expect(o.kept).toBe(PNL_PLAIN.kept)
+    // Only Hollywood is trading, so the sentence counts one store.
+    expect(o.sentence.startsWith("Your store sold $84,102")).toBe(true)
+    // Orders are the store's channel mix, summed: 160 + 80 + 60.
+    expect(o.stores.find((x) => x.storeId === "holly")!.orders).toBe(300)
+    expect(o.needs.filter((n) => n.key.startsWith("alerts-")).map((n) => n.what)).toEqual([
+      "2 menu items sold far above or below normal",
+      "1 ingredient alert",
+    ])
+  })
+
+  it("names the single store the page is scoped to", async () => {
+    const s = await load({ storeId: "holly" })
+    expect(dataOf(s.plain)!.sentence.startsWith("Hollywood sold")).toBe(true)
   })
 })

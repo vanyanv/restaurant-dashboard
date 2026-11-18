@@ -24,3 +24,4 @@ export { NeedsYou, NeedsYouList, NeedsYouItem, Notice, type NeedsYouGroup } from
 export { Tabs, type TabItem } from "./tabs"
 export { Fold } from "./fold"
 export { Tile, Tiles, type TileTone } from "./tile"
+export { WeekBars, type WeekBar } from "./week-bars"

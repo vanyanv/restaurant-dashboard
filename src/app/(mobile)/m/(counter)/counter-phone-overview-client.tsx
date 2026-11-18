@@ -2,7 +2,8 @@
 
 import type { PhoneOverviewSections } from "@/lib/counter/adapters/overview"
 import Link from "next/link"
-import { useMemo } from "react"
+import { useCallback, useMemo } from "react"
+import { usePathname, useRouter } from "next/navigation"
 import {
   ChannelRows,
   Chart,
@@ -20,7 +21,14 @@ import {
 import {
   AskSheet,
 } from "@/components/counter/ask"
-import { readCounterParams } from "@/lib/counter/url-state"
+import { Fold } from "@/components/counter/ui"
+import { readCounterParams, writeCounterParams } from "@/lib/counter/url-state"
+import {
+  OverviewHero,
+  OverviewNeeds,
+  OverviewStatuses,
+  OverviewStores,
+} from "@/app/dashboard/(counter)/overview-plain-ui"
 import { ASK_PHONE_ROUTE, askHref } from "@/lib/counter/ask-context"
 import { dayCount, rangeLabel, rangeSubtitle, rangeTitle } from "@/lib/counter/date-range"
 import { count, money } from "@/lib/counter/format"
@@ -118,7 +126,21 @@ export function CounterPhoneOverviewClient({
    * the last good figures instead of a blank `loading.tsx`. See
    * `counter-transition.tsx`.
    */
-  const { pending } = useCounterTransition()
+  const { pending, startTransition } = useCounterTransition()
+  const router = useRouter()
+  const pathname = usePathname()
+
+  /* The week bars and the store cards pick a week or a store: the same three
+     parameters the shell's own date sheet and store picker write. */
+  const push = useCallback(
+    (next: Parameters<typeof writeCounterParams>[1]) => {
+      const qs = writeCounterParams(params, next).toString()
+      startTransition(() => {
+        router.push(qs ? `${pathname}?${qs}` : pathname, { scroll: false })
+      })
+    },
+    [params, pathname, router, startTransition],
+  )
 
   const { range, comparisonId } = counterParams
   const selectedStore = stores.find((s) => s.id === counterParams.storeId) ?? null
@@ -239,6 +261,44 @@ return (
         </p>
       </div>
 
+      {/* The Overview made plain, stacked: the same blocks the desk renders,
+          in the same order (mock https://claude.ai/artifact/8ZrnRsGAYWc2WV6tg6wb5D).
+          What the phone said before is folded underneath, unchanged. */}
+      <Section bare title="How the period went" data={sections.plain} pending={pending}>
+        {(o) => (
+          <div className="cu-stack">
+            <OverviewHero o={o} range={range} onWeek={(r) => push({ range: r })} />
+            <OverviewStatuses o={o} />
+            <OverviewStores o={o} onStore={(id) => push({ storeId: id })} />
+          </div>
+        )}
+      </Section>
+
+      <Section bare title="Where sales came from" data={sections.channels} pending={pending}>
+        {(mix) => (
+          <ChannelRows
+            caption={`Where sales came from · ${windowLabel}`}
+            rows={mix.map((c) => ({ id: c.channel, net: c.net, orders: c.orders, commission: c.commission, ticket: c.ticket }))}
+            footer={mix.length === 0 ? "No channel readings for this range." : undefined}
+          />
+        )}
+      </Section>
+
+      <Section bare title="Needs you" data={sections.plain} pending={pending}>
+        {(o) => <OverviewNeeds o={o} />}
+      </Section>
+
+      {/*
+        No state: a store that is not trading is still a store you can ask
+        about. It points at Ask with the store and the window carried.
+      */}
+      <AskSheet
+        prompt={`Ask about ${days === 1 ? "today" : "this range"}`}
+        href={askHref({ question: "", params, origin: "/m", route: ASK_PHONE_ROUTE })}
+        suggestions={askSuggestions}
+      />
+
+      <Fold summary="Every figure, as before">
       {/* The whole head block, as one figure and one sentence. Two sections
           that fail independently: the figure is the sales rollup, the sentence
           is the verdict derived across every figure on the page. */}
@@ -270,26 +330,6 @@ return (
           />
         )}
       </Section>
-
-      {/*
-        No state: a store that is not trading is still a store you can ask
-        about, which is why the prototype prints this in every state.
-
-        IT POINTS AT ASK NOW. Until `/m/ask` existed, the row and both chips
-        opened `/m/chat` — the editorial thread — and none of them carried its
-        own question, so three controls had one destination and the chip that
-        said "Why is food cost where it is?" landed on an empty box. Each href
-        is built by `askHref`, the one builder the desk's "Open in Ask" and
-        `PhoneShell`'s `[data-askabout]` delegation also use, so the store and
-        the window travel with the question and the answer is a link.
-      */}
-      <AskSheet
-        prompt={`Ask about ${days === 1 ? "today" : "this range"}`}
-        // No question: the row opens Ask's own "nothing asked yet" state,
-        // which names the scope and offers three starters.
-        href={askHref({ question: "", params, origin: "/m", route: ASK_PHONE_ROUTE })}
-        suggestions={askSuggestions}
-      />
 
       <Section bare title="The figures" data={sections.strip} pending={pending}>
         {(cells) => <MStrip cells={cells} />}
@@ -340,6 +380,7 @@ return (
       >
         {(items) => <MList rows={items.map(toListRow)} />}
       </Section>
+      </Fold>
     </>
   )
 }

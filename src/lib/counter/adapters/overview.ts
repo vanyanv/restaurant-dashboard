@@ -3,6 +3,9 @@ import { getStores } from "@/app/actions/store/crud-actions"
 import { getInvoiceSummary } from "@/app/actions/invoice-actions"
 import { getSplhSeries } from "@/app/actions/splh-actions"
 import { getAlertInbox } from "@/app/actions/alerts/inbox-actions"
+import { getPnlSectionPromises } from "@/lib/counter/adapters/pnl"
+import { buildOverviewPlain, type OverviewPlain } from "@/lib/counter/overview-plain"
+import { shortStoreName } from "@/lib/checks/names"
 import { getRatingsSummary } from "@/app/actions/ratings/ratings-actions"
 import type { InvoiceKpis } from "@/types/invoice"
 import type { LifecycleStage } from "@/generated/prisma/enums"
@@ -373,6 +376,13 @@ export interface OverviewSectionsInput {
 }
 
 export interface OverviewSections {
+  /**
+   * The page "made plain" (`overview-plain.ts`): the sentence, sales against
+   * the period before, the kept figure, status in words, one card per store
+   * and Needs you in groups. Every money figure in it is the P&L's own
+   * reading for the same range, so the two pages cannot disagree.
+   */
+  plain: SectionData<OverviewPlain>
   /** Note 30: net sales says whether the day happened. */
   /**
    * Note 30: net sales says whether the day happened.
@@ -1234,7 +1244,7 @@ function buildInvoiceLines(k: InvoiceKpis): MoneyLine[] {
  * `chooseSections(sections, PHONE_OVERVIEW_SECTIONS)` to its client, so the loads only the
  * desk reads never run on a phone.
  */
-export const PHONE_OVERVIEW_SECTIONS = ["sales", "verdict", "strip", "moving", "salesChart", "splhChart", "stores", "needsYou"] as const satisfies ReadonlyArray<keyof OverviewSections>
+export const PHONE_OVERVIEW_SECTIONS = ["plain", "channels", "sales", "verdict", "strip", "moving", "salesChart", "splhChart", "stores", "needsYou"] as const satisfies ReadonlyArray<keyof OverviewSections>
 export type PhoneOverviewSections = Pick<OverviewSections, (typeof PHONE_OVERVIEW_SECTIONS)[number]>
 
 /**
@@ -1275,6 +1285,13 @@ export function getOverviewSectionPromises(
   /* ── The loads. Every one of them starts here; none is awaited here. ── */
 
   const storeFilesP = lazy(() => classify(() => getStores(), { retryAction: "retryStores" }))
+
+  // The P&L's own "made plain" reading for this range, scope and account —
+  // the same function the P&L page renders, so the kept figure, the eight
+  // weeks and every store's sales are one calculation, not two. Started only
+  // when the plain section is asked for.
+  const pnlPlainP = () =>
+    getPnlSectionPromises({ range, storeId, accountId, comparisonId: "prev", today }).plain
 
   const stmtP = lazy(() => classify(() => loadStatement({ range, storeId, granularity }), {
     retryAction: "retrySales",
@@ -1712,6 +1729,28 @@ export function getOverviewSectionPromises(
     )),
 
     channels: lazy(() => guardSection(channelsP, "retryChannels")),
+
+    plain: lazy(() => guardSection(
+      Promise.all([pnlPlainP(), storeFilesP, perStoreMixP, queueP]).then(
+        ([pnlSd, storeFilesSd, perStoreMixSd, queueSd]) =>
+          mapReady(pnlSd, (pnl) => {
+            const files = (dataOf(storeFilesSd) ?? []).filter(isOperational)
+            const mix = dataOf(perStoreMixSd)
+            const inbox = dataOf(queueSd)
+            const scoped = storeId === null ? null : files.find((f) => f.id === storeId) ?? null
+            return buildOverviewPlain({
+              pnl,
+              storesInScope: storeId === null ? files.length : 1,
+              storeName: scoped ? shortStoreName(scoped.name) : null,
+              orders: mix
+                ? Object.fromEntries([...mix].map(([id, rows]) => [id, rows.reduce((t, c) => t + c.orders, 0)]))
+                : null,
+              alerts: inbox ? { rows: inbox.alerts, open: inbox.counts.open } : null,
+            })
+          }),
+      ),
+      "retrySales",
+    )),
 
     invoices: lazy(() => guardSection(
       invoicesP.then((invoicesSd) => mapReady(invoicesSd, buildInvoiceLines)),
