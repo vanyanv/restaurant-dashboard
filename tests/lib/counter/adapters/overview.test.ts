@@ -850,8 +850,8 @@ describe("the alert queue's days open", () => {
     const o = dataOf(s.plain)!
     expect(o.sales).toBe(PNL_PLAIN.sales)
     expect(o.kept).toBe(PNL_PLAIN.kept)
-    // Only Hollywood is trading, so the sentence counts one store.
-    expect(o.sentence.startsWith("Your store sold $84,102")).toBe(true)
+    // Counted from the stores that sold, which are the cards under it.
+    expect(o.sentence.startsWith("Your two stores sold $84,102")).toBe(true)
     // Orders are the store's channel mix, summed: 160 + 80 + 60.
     expect(o.stores.find((x) => x.storeId === "holly")!.orders).toBe(300)
     expect(o.needs.filter((n) => n.key.startsWith("alerts-")).map((n) => n.what)).toEqual([
@@ -860,8 +860,13 @@ describe("the alert queue's days open", () => {
     ])
   })
 
-  it("names the single store the page is scoped to", async () => {
+  it("names the single store the page is scoped to, and counts only its alerts", async () => {
+    vi.mocked(getAlertInbox).mockResolvedValue(
+      inbox([alert(), alert({ id: "a2", storeId: "glendale", target: "MENU_ITEM" })]) as never,
+    )
     const s = await load({ storeId: "holly" })
-    expect(dataOf(s.plain)!.sentence.startsWith("Hollywood sold")).toBe(true)
+    const o = dataOf(s.plain)!
+    expect(o.sentence.startsWith("Hollywood sold")).toBe(true)
+    expect(o.needs.filter((n) => n.key.startsWith("alerts-")).map((n) => n.what)).toEqual(["1 ingredient alert"])
   })
 })

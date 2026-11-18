@@ -60,12 +60,11 @@ export interface OverviewPlain {
 /** An open alert, as much of it as the grouping reads. */
 export interface OverviewAlert {
   target: string
+  storeId: string
 }
 
 export interface OverviewPlainInput {
   pnl: PnlPlain
-  /** How many stores are in scope: 1 for a single store. */
-  storesInScope: number
   /** The single store's name when the page is scoped to one. */
   storeName: string | null
   /** Orders per store id, or null when they did not load. */
@@ -103,7 +102,8 @@ export function buildOverviewPlain(input: OverviewPlainInput): OverviewPlain {
     name: s.name,
     sales: s.sales,
     salesChangePct: s.salesChange === null ? null : share(s.salesChange, s.sales - s.salesChange),
-    orders: input.orders ? (input.orders[s.storeId] ?? 0) : null,
+    // A store the mix has no reading for is unknown, not zero orders.
+    orders: input.orders && Object.hasOwn(input.orders, s.storeId) ? input.orders[s.storeId] : null,
     laborPct: s.laborMissingDays > 0 ? null : s.labor,
     laborMissingDays: s.laborMissingDays,
   }))
@@ -113,8 +113,11 @@ export function buildOverviewPlain(input: OverviewPlainInput): OverviewPlain {
   if (p.sales <= 0) {
     parts.push("No sales came in for this period yet.")
   } else {
+    // Counted from the stores that sold, which are the cards under it.
+    const selling = stores.filter((s) => s.sales > 0).length
     const who =
-      input.storeName ?? (input.storesInScope === 1 ? "Your store" : `Your ${inWords(input.storesInScope)} stores`)
+      input.storeName ??
+      (selling === 1 ? "Your store" : selling > 1 ? `Your ${inWords(selling)} stores` : "Your stores")
     const change = salesVs
       ? `, ${salesVs.amount >= 0 ? "up" : "down"} ${money(Math.abs(salesVs.amount))}${
           salesVs.pct === null ? "" : ` (${pctWords(salesVs.pct)})`
@@ -128,9 +131,10 @@ export function buildOverviewPlain(input: OverviewPlainInput): OverviewPlain {
 
     const compared = stores.filter((s) => s.salesChangePct !== null)
     const slipped = compared.filter((s) => (s.salesChangePct ?? 0) < 0)
+    const grew = compared.filter((s) => (s.salesChangePct ?? 0) > 0)
     if (compared.length > 1 && salesVs) {
       if (slipped.length === 1) parts.push(`${slipped[0].name} was the one store that sold less.`)
-      else if (slipped.length === 0) parts.push("Every store sold more.")
+      else if (slipped.length === 0) parts.push(grew.length === compared.length ? "Every store sold more." : "No store sold less.")
       else if (slipped.length < compared.length) parts.push(`${listNames(slipped.map((s) => s.name))} sold less.`)
       else parts.push("Every store sold less.")
     }
@@ -166,21 +170,30 @@ export function buildOverviewPlain(input: OverviewPlainInput): OverviewPlain {
     why: t.items.join(" "),
     action: t.action,
   }))
-  if (input.alerts && input.alerts.rows.length > 0) {
+  if (input.alerts === null) {
+    // Never an empty Needs you that reads as all clear.
+    needs.push({
+      key: "alerts-unread",
+      tone: "warn",
+      what: "Alerts did not load",
+      why: "Open the alerts page to see what is waiting.",
+      action: { label: "Open alerts", href: "/dashboard/alerts" },
+    })
+  } else if (input.alerts.rows.length > 0) {
     const byTarget = new Map<string, number>()
     for (const a of input.alerts.rows) byTarget.set(a.target, (byTarget.get(a.target) ?? 0) + 1)
     const groups = [...byTarget].sort((a, b) => b[1] - a[1])
     const partial = input.alerts.open > input.alerts.rows.length
-    groups.forEach(([target, n], i) => {
+    groups.forEach(([target, n]) => {
       const g = ALERT_GROUP[target] ?? { one: "other alert", many: "other alerts", label: "Open alerts" }
       needs.push({
         key: `alerts-${target}`,
         tone: "warn",
         what: `${n} ${n === 1 ? g.one : g.many}`,
-        why:
-          partial && i === 0
-            ? `Counted from the newest ${input.alerts!.rows.length} of ${input.alerts!.open} open alerts.`
-            : null,
+        // The inbox loads the most serious first, so a partial page is said on every group.
+        why: partial
+          ? `Counted from the ${input.alerts!.rows.length} most serious of ${input.alerts!.open} open alerts.`
+          : null,
         action: { label: g.label, href: "/dashboard/alerts" },
       })
     })

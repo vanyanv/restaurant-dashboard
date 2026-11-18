@@ -7,14 +7,13 @@ const WEEKS = trailingWeeks(new Date("2026-08-25T12:00:00"), 8)
 
 const input = (over: Partial<OverviewPlainInput> = {}): OverviewPlainInput => ({
   pnl: plainFixture(WEEKS),
-  storesInScope: 2,
   storeName: null,
   orders: { hollywood: 1_500, glendale: 400 },
   alerts: {
     rows: [
-      ...Array.from({ length: 5 }, () => ({ target: "MENU_ITEM" })),
-      { target: "REVENUE" },
-      { target: "REVENUE" },
+      ...Array.from({ length: 5 }, () => ({ target: "MENU_ITEM", storeId: "hollywood" })),
+      { target: "REVENUE", storeId: "hollywood" },
+      { target: "REVENUE", storeId: "hollywood" },
     ],
     open: 7,
   },
@@ -47,7 +46,7 @@ describe("buildOverviewPlain", () => {
   })
 
   it("names a single store and never says a store count", () => {
-    const o = buildOverviewPlain(input({ storesInScope: 1, storeName: "Hollywood" }))
+    const o = buildOverviewPlain(input({ storeName: "Hollywood" }))
     expect(o.sentence.startsWith("Hollywood sold $84,102")).toBe(true)
   })
 
@@ -90,10 +89,22 @@ describe("buildOverviewPlain", () => {
     expect(o.needs[2].why).toBeNull()
   })
 
+  it("says no store sold less when one was flat, never that every store sold more", () => {
+    const pnl = plainFixture(WEEKS)
+    pnl.stores[1] = { ...pnl.stores[1], salesChange: 0 }
+    expect(buildOverviewPlain(input({ pnl })).sentence).toContain("No store sold less.")
+  })
+
+  it("reads an order count it does not have as unknown, and alerts that did not load as a to-do", () => {
+    const o = buildOverviewPlain(input({ orders: { hollywood: 1_500 }, alerts: null }))
+    expect(o.stores.find((s) => s.name === "Glendale")!.orders).toBeNull()
+    expect(o.needs.at(-1)!.what).toBe("Alerts did not load")
+  })
+
   it("says when the alert groups are counted from a partial page", () => {
-    const o = buildOverviewPlain(input({ alerts: { rows: [{ target: "PRICE" }], open: 140 } }))
+    const o = buildOverviewPlain(input({ alerts: { rows: [{ target: "PRICE", storeId: "glendale" }], open: 140 } }))
     const g = o.needs.find((n) => n.key === "alerts-PRICE")!
     expect(g.what).toBe("1 price change")
-    expect(g.why).toBe("Counted from the newest 1 of 140 open alerts.")
+    expect(g.why).toBe("Counted from the 1 most serious of 140 open alerts.")
   })
 })

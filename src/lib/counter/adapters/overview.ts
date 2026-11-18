@@ -1734,18 +1734,27 @@ export function getOverviewSectionPromises(
       Promise.all([pnlPlainP(), storeFilesP, perStoreMixP, queueP]).then(
         ([pnlSd, storeFilesSd, perStoreMixSd, queueSd]) =>
           mapReady(pnlSd, (pnl) => {
-            const files = (dataOf(storeFilesSd) ?? []).filter(isOperational)
+            const files = dataOf(storeFilesSd) ?? []
             const mix = dataOf(perStoreMixSd)
             const inbox = dataOf(queueSd)
             const scoped = storeId === null ? null : files.find((f) => f.id === storeId) ?? null
+            // The inbox widens a store it does not know to the whole account;
+            // a one-store page counts that store's alerts and no others.
+            const alertRows = inbox
+              ? storeId === null
+                ? inbox.alerts
+                : inbox.alerts.filter((a) => a.storeId === storeId)
+              : null
             return buildOverviewPlain({
               pnl,
-              storesInScope: storeId === null ? files.length : 1,
               storeName: scoped ? shortStoreName(scoped.name) : null,
               orders: mix
                 ? Object.fromEntries([...mix].map(([id, rows]) => [id, rows.reduce((t, c) => t + c.orders, 0)]))
                 : null,
-              alerts: inbox ? { rows: inbox.alerts, open: inbox.counts.open } : null,
+              alerts:
+                inbox && alertRows
+                  ? { rows: alertRows, open: storeId === null ? inbox.counts.open : alertRows.length }
+                  : null,
             })
           }),
       ),
