@@ -163,6 +163,18 @@ describe("shared blocks", () => {
     expect(body).not.toMatch(/#[0-9a-f]{3,8}\b|rgb\(|hsl\(|oklch\(/i)
   })
 
+  it("every width-query block also sets its own width, so a flex or grid parent can't shrink it to 0", () => {
+    // A container-type element has no content width; in a flex row it collapsed
+    // to 0 and pushed the invoice buttons off the screen (2026-11-18).
+    const body = CSS.replace(/\/\*[\s\S]*?\*\//g, "")
+    const containers = [...body.matchAll(/(\.cu-[\w-]+)\{[^}]*container-type:inline-size/g)].map((m) => m[1])
+    expect(containers.length).toBeGreaterThan(0)
+    const guard = body.match(/([^{}]+)\{width:100%;min-width:0\}/)
+    expect(guard).not.toBeNull()
+    const guarded = guard![1].split(",").map((s) => s.trim())
+    for (const c of containers) expect(guarded).toContain(c)
+  })
+
   it("Tile: a link when it goes somewhere, red when bad, number coloured by tone", () => {
     const { container } = render(
       <Tiles>

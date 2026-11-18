@@ -51,6 +51,12 @@ a.cu-status:focus-visible,button.cu-status:focus-visible{outline:2px solid var(-
 .cu-btn--quiet{background:none;border-color:transparent;color:var(--ink-2);text-decoration:underline;text-underline-offset:3px;padding:0 6px}
 .cu-btn--quiet:hover{background:none;border-color:transparent;color:var(--ink)}
 @media (pointer:coarse){.cu-btn{min-height:44px}}
+/* Every block that answers to its own width (container-type) must also say how
+   wide it is. A query container has no width of its own content, so inside a
+   flex row or an auto grid track it shrinks to 0 and its buttons spill off the
+   screen (the invoice decision bar, 2026-11-18). width:100% makes it take the
+   line instead. */
+.cu-btnrow,.cu-bigs,.cu-stores,.cu-rows,.cu-needs__list,.cu-tabs,.cu-weeks{width:100%;min-width:0}
 .cu-btnrow{container-type:inline-size}
 .cu-btnrow__in{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
 @container (max-width:520px){
