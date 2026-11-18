@@ -84,10 +84,14 @@ export function buildAlertsPlain(input: AlertsPlainInput): AlertsPlain {
   } else {
     parts.push(`${count(open)} ${open === 1 ? "alert is" : "alerts are"} open.`)
     const conditions = input.serious.length
-    if (critical > 0 && conditions > 0 && conditions < critical) {
-      parts.push(
-        `${count(critical)} look serious; they come from ${conditions === 1 ? "one problem" : `${count(conditions)} problems`}, listed first.`,
-      )
+    const loaded = input.openRows.filter((a) => a.severity === "CRITICAL").length
+    const problems = conditions === 1 ? "one problem" : `${count(conditions)} problems`
+    if (critical > 0 && conditions > 0 && loaded < critical) {
+      // Not every serious alert loaded, so the problem count covers only the
+      // ones that did; claiming all of them come from it would be a guess.
+      parts.push(`${count(critical)} look serious; the ${count(loaded)} loaded so far ${loaded === 1 ? "comes" : "come"} from ${problems}, listed first.`)
+    } else if (critical > 0 && conditions > 0 && conditions < critical) {
+      parts.push(`${count(critical)} look serious; they come from ${problems}, listed first.`)
     } else if (critical > 0) {
       parts.push(critical === 1 ? "One looks serious and is listed first." : `${count(critical)} look serious and are listed first.`)
     } else {
@@ -100,6 +104,7 @@ export function buildAlertsPlain(input: AlertsPlainInput): AlertsPlain {
     }
   }
 
+  const loadedCritical = input.openRows.filter((a) => a.severity === "CRITICAL").length
   const statuses: AlertsPlain["statuses"] = []
   if (critical > 0) statuses.push({ tone: "bad", text: `${count(critical)} serious` })
   if (rest > 0) statuses.push({ tone: "warn", text: `${count(rest)} to glance at` })
@@ -111,7 +116,7 @@ export function buildAlertsPlain(input: AlertsPlainInput): AlertsPlain {
     statuses,
     serious,
     seriousMore: Math.max(0, input.serious.length - SERIOUS_SHOWN),
-    seriousPartial: input.openRows.filter((a) => a.severity === "CRITICAL").length < critical,
+    seriousPartial: loadedCritical < critical,
     groups,
     open,
   }

@@ -298,7 +298,8 @@ export function CounterPhoneAlertsClient({
         )}
       </Section>
 
-      <Fold summary="Every alert, one by one" defaultOpen={selectedAlert !== null}>
+      {/* Keyed on the selection so each newly opened alert opens the fold again. */}
+      <Fold key={selectedAlert ?? "none"} summary="Every alert, one by one" defaultOpen={selectedAlert !== null}>
       <Section title="Open" meta={(l) => l.meta} data={sections.phoneOpen} pending={pending}>
         {(l) => (
           <>

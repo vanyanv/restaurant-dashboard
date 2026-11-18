@@ -235,7 +235,7 @@ describe("getAlertsSections", () => {
     const p = dataOf(s.plain)!
     // The segment and filters do not narrow the answer: it is what is open.
     expect(p.open).toBe(77)
-    expect(p.sentence.startsWith("77 alerts are open. 40 look serious; they come from 2 problems, listed first.")).toBe(true)
+    expect(p.sentence.startsWith("77 alerts are open. 40 look serious; the 2 loaded so far come from 2 problems, listed first.")).toBe(true)
     expect(p.seriousPartial).toBe(true)
     // The two serious open rows loaded, each with its own button.
     expect(p.serious).toHaveLength(2)

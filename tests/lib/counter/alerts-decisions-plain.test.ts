@@ -48,7 +48,7 @@ describe("buildAlertsPlain", () => {
 
   it("says serious alerts and the problems behind them apart, and says when not all loaded", () => {
     const p = buildAlertsPlain(alerts({ counts: { open: 12, critical: 5 } }))
-    expect(p.sentence).toContain("5 look serious; they come from one problem, listed first.")
+    expect(p.sentence).toContain("5 look serious; the 1 loaded so far comes from one problem, listed first.")
     expect(p.seriousPartial).toBe(true)
     expect(buildAlertsPlain(alerts()).seriousPartial).toBe(false)
   })
@@ -132,7 +132,7 @@ describe("buildDecisionsPlain", () => {
     const p = buildDecisionsPlain(
       decisions({ total: null, vsPrior: null, vsText: "no comparison set", runOut: null, runOutNote: "Pick one store to see what runs out", calls: [], accuracy: { inside: null, sample: 0 } }),
     )
-    expect(p.sentence).toBe("No forecast has been made for this week yet. No decision needs you this week.")
+    expect(p.sentence).toBe("No forecast has been made for this week yet. No calls are waiting this week.")
     expect(p.total).toBeNull()
     expect(p.vsTone).toBe("flat")
     expect(p.statuses.map((s) => s.text)).toContain("Pick one store to see what runs out")

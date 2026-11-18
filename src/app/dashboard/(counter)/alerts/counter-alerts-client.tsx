@@ -539,7 +539,8 @@ export function CounterAlertsClient({
         )}
       </Section>
 
-      <Fold summary="Every alert, one by one, with the figures and filters" defaultOpen={selectedAlert !== null}>
+      {/* Keyed on the selection so each newly opened alert opens the fold again. */}
+      <Fold key={selectedAlert ?? "none"} summary="Every alert, one by one, with the figures and filters" defaultOpen={selectedAlert !== null}>
       <Section bare title="The figures" data={sections.strip} pending={pending}>
         {(cells) => <Strip cells={cells.map(figureOf)} />}
       </Section>
