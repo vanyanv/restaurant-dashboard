@@ -47,11 +47,20 @@ import { hasData } from "@/lib/counter/section-data"
 const asMock = (fn: unknown) => fn as ReturnType<typeof vi.fn>
 
 describe("thrown out", () => {
-  it("is one set: the waste log's five reasons plus damaged", () => {
+  it("is one set: the waste log's kitchen reasons plus damaged", () => {
     expect([...THROWN_OUT_REASON_IDS].sort()).toEqual(["BURNT", "DAMAGE", "DROPPED", "EXPIRY", "OTHER", "REMAKE"])
     for (const id of THROWN_OUT_REASON_IDS) expect(isThrownOut(id)).toBe(true)
-    // Everything the waste log's form writes is thrown out.
-    for (const r of WASTE_LOG_REASONS) expect(isThrownOut(r.id)).toBe(true)
+    // The waste log's form writes every thrown-out reason, plus theft and sent back.
+    const log = WASTE_LOG_REASONS.map((r) => r.id)
+    for (const id of THROWN_OUT_REASON_IDS) expect(log).toContain(id)
+    expect(log.filter((id) => !isThrownOut(id)).sort()).toEqual(["SUPPLIER_RETURN", "THEFT"])
+  })
+
+  it("logs theft and sent back on the Waste tab under the adjust form's stored values and labels", () => {
+    for (const id of ["THEFT", "SUPPLIER_RETURN"] as const) {
+      expect(WASTE_LOG_REASONS.find((r) => r.id === id)?.label).toBe(ADJUST_FORM_REASONS.find((r) => r.id === id)?.label)
+      expect(isThrownOut(id)).toBe(false)
+    }
   })
 
   it("never takes in theft or what was sent back, or a reason it does not know", () => {
@@ -94,7 +103,7 @@ describe("the reason taxonomy", () => {
   })
 
   it("keeps the stored values each form already writes", () => {
-    expect(WASTE_REASONS.map((r) => r.id)).toEqual(["DROPPED", "EXPIRY", "BURNT", "REMAKE", "DAMAGE", "OTHER"])
+    expect(WASTE_REASONS.map((r) => r.id)).toEqual(["DROPPED", "EXPIRY", "BURNT", "REMAKE", "DAMAGE", "THEFT", "SUPPLIER_RETURN", "OTHER"])
     expect(ADJUST_FORM_REASONS.map((r) => r.id).sort()).toEqual(
       ["DAMAGE", "EXPIRY", "OTHER", "SUPPLIER_RETURN", "THEFT"],
     )

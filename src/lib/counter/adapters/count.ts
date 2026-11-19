@@ -274,6 +274,13 @@ export type StoreWaste = {
   before: Pick<WasteSummary, "entries" | "valued" | "unpriced" | "dollars">
   /** Logged in the last 7 days under a reason that is not thrown out (theft, sent back). Never in `week`. */
   apart: ApartFigure[]
+  /**
+   * Every entry of the last 7 days, newest first: thrown out AND kept apart,
+   * for the Waste tab's "What was logged" list, so a theft or a send-back
+   * logged by mistake can be undone. `week.list` stays thrown-out only and
+   * adds up to the headline.
+   */
+  logged: WasteEntry[]
 }
 
 const WASTE_WINDOW_DAYS = 7
@@ -319,7 +326,7 @@ export const loadStoreWaste = cache(async (accountId: string, storeId: string): 
   const before = summarizeWaste(
     log.filter((r) => r.occurredAt.getTime() < weekStart && isThrownOut(r.reason)).map((r) => ({ reason: r.reason, dollars: dollarsOf(r) })),
   )
-  const list: WasteEntry[] = wasted.map((r) => ({
+  const entry = (r: (typeof log)[number]): WasteEntry => ({
     id: r.id,
     name: plainName(r.canonicalIngredient.name),
     amount: showQty(r.qty, r.canonicalIngredient.recipeUnit ?? "").trim(),
@@ -327,11 +334,13 @@ export const loadStoreWaste = cache(async (accountId: string, storeId: string): 
     when: r.occurredAt.toLocaleString("en-US", { weekday: "short", hour: "numeric", minute: "2-digit", timeZone: "America/Los_Angeles" }),
     dollars: dollarsOf(r),
     note: r.note,
-  }))
+  })
+  const list = wasted.map(entry)
   return {
     week: { ...summarizeWaste(wasted.map((r) => ({ reason: r.reason, dollars: dollarsOf(r) }))), list },
     before: { entries: before.entries, valued: before.valued, unpriced: before.unpriced, dollars: before.dollars },
     apart: summarizeWaste(thisWeek.filter((r) => !isThrownOut(r.reason)).map((r) => ({ reason: r.reason, dollars: dollarsOf(r) }))).reasons,
+    logged: thisWeek.map(entry),
   }
 })
 

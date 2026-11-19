@@ -26,7 +26,7 @@ import {
   shelfTotal,
   valuesFit,
 } from "@/lib/counter/count-layers"
-import { THROWN_OUT_REASON_IDS } from "@/lib/counter/waste-reasons"
+import { THROWN_OUT_REASON_IDS, type AdjustmentReason } from "@/lib/counter/waste-reasons"
 
 /**
  * The owner's write path for the weekly count, the waste log and the count
@@ -245,7 +245,7 @@ export async function logWaste(input: z.input<typeof WasteInput>): Promise<Actio
         storeId: store.id,
         canonicalIngredientId: ing.id,
         qty: v.qty,
-        reason: v.reason as "DROPPED" | "EXPIRY" | "BURNT" | "REMAKE" | "DAMAGE" | "OTHER",
+        reason: v.reason as AdjustmentReason,
         note: v.note || null,
         occurredAt: new Date(),
         createdByUserId: owner.id,
@@ -261,14 +261,16 @@ export async function logWaste(input: z.input<typeof WasteInput>): Promise<Actio
 
 /**
  * Takes back a waste entry logged by mistake (last 7 days only). Any entry the
- * Waste tab lists can be taken back: the set is `THROWN_OUT_REASON_IDS`, the
- * one its log is read with.
+ * Waste tab lists can be taken back: everything thrown out, plus theft and
+ * sent back, which its "What was logged" list shows beside them.
  */
+const UNDOABLE_REASON_IDS: AdjustmentReason[] = [...THROWN_OUT_REASON_IDS, "THEFT", "SUPPLIER_RETURN"]
+
 export async function deleteWaste(id: string): Promise<ActionResult> {
   try {
     const owner = await requireOwner()
     const row = await prisma.inventoryAdjustment.findFirst({
-      where: { id, store: { accountId: owner.accountId }, reason: { in: THROWN_OUT_REASON_IDS }, occurredAt: { gte: new Date(Date.now() - 7 * DAY_MS) } },
+      where: { id, store: { accountId: owner.accountId }, reason: { in: UNDOABLE_REASON_IDS }, occurredAt: { gte: new Date(Date.now() - 7 * DAY_MS) } },
       select: { id: true },
     })
     if (!row) return { ok: false, error: "That entry can't be removed any more" }

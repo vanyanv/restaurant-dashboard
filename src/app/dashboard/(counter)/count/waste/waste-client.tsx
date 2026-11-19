@@ -142,7 +142,7 @@ function OneStore({ data, one }: { data: WasteView; one: WasteOne }) {
             <b>What was logged</b>
             <span className="iv-mono">last 7 days</span>
           </div>
-          <WasteEntries entries={one.recent} />
+          <WasteEntries entries={one.logged} />
         </section>
         {n > 1 && (
           <section className="iv-card" aria-label={`The ${n} stores`}>
@@ -214,7 +214,7 @@ function LogMode({ one, back }: { one: WasteOne; back: string }) {
               <b>What was logged</b>
               <span className="iv-mono">last 7 days</span>
             </div>
-            <WasteEntries entries={one.recent} />
+            <WasteEntries entries={one.logged} />
           </section>
         </div>
       </div>

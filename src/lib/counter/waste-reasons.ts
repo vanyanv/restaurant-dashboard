@@ -82,11 +82,16 @@ function pick<const T extends readonly AdjustmentReason[]>(ids: T) {
 }
 
 /**
- * The Count & waste log's quick-pick: kitchen waste, plus Damaged and Other.
- * Damaged was only on "Stock on hand"'s adjust form, which folded into
- * Inventory; it is thrown out by `THROWN_OUT_REASONS`, so the Waste tab lists it.
+ * The Count & waste log's quick-pick: kitchen waste, Damaged and Other, then
+ * Theft and Sent back. The last three used to be only on "Stock on hand"'s
+ * adjust form, which folded into Inventory, and they are stored exactly as
+ * that form stored them (an `InventoryAdjustment` with that reason).
+ *
+ * NOT every reason here is thrown out. Damaged is (`THROWN_OUT_REASONS`);
+ * Theft and Sent back are not, so they stay out of every waste total and come
+ * back under the Waste tab's and the Report's "kept apart" figures instead.
  */
-export const WASTE_LOG_REASONS = pick(["DROPPED", "EXPIRY", "BURNT", "REMAKE", "DAMAGE", "OTHER"] as const)
+export const WASTE_LOG_REASONS = pick(["DROPPED", "EXPIRY", "BURNT", "REMAKE", "DAMAGE", "OTHER", "THEFT", "SUPPLIER_RETURN"] as const)
 
 /** Inventory's "Adjust on hand": stock that left for a reason other than the line. */
 export const ADJUST_FORM_REASONS = pick([
