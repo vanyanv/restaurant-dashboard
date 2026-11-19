@@ -33,8 +33,7 @@ import {
 } from "@/lib/counter/actions/recipe"
 import type { SectionSources } from "@/lib/counter/adapters/types"
 import { DishPhoto } from "./dish-photo"
-import { RecipePlainView } from "./recipe-plain-ui"
-import { Fold } from "@/components/counter/ui"
+import { Fold } from "@/components/counter/ui/fold"
 import { ingredientPhoto } from "@/lib/counter/ingredient-photos"
 import { photoFrame } from "@/lib/counter/menu-photos"
 import type {
@@ -53,6 +52,15 @@ import { useLeaveGuard } from "@/components/counter/keep/use-leave-guard"
  * (`/m/recipes/[id]/edit`) inside the phone bundle budget.
  */
 const Chart = dynamic(() => import("@/components/counter/surface/chart").then((m) => m.Chart), {
+  loading: () => null,
+})
+
+/**
+ * The plain answer at the top. Loaded on its own so the phone edit page,
+ * which renders this client with `editing` and never shows it, stays inside
+ * the phone bundle budget. Server rendering stays on.
+ */
+const RecipePlainView = dynamic(() => import("./recipe-plain-ui").then((m) => m.RecipePlainView), {
   loading: () => null,
 })
 
