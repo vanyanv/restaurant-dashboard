@@ -326,3 +326,8 @@ a.cu-tile:active,a.cu-card:active,button.cu-card:active{transform:translateY(1px
   animation:cu-grow-x calc(var(--ct-dur-rise)*2) var(--ease) both;animation-delay:calc(var(--i,0)*var(--ct-dur-step))}
 @keyframes cu-grow-x{from{transform:scaleX(0)}}
 .cu-hbars__v{font-variant-numeric:tabular-nums;font-weight:600;text-align:end}
+
+/* ---- Four groups, two across on a wide container (Menu profit) ---- */
+.cu-quad{container-type:inline-size;width:100%;min-width:0;display:grid;gap:12px}
+@container (min-width:520px){.cu-quad{grid-template-columns:1fr 1fr}}
+.cu-quad__names{margin:0 0 8px;font-weight:600;line-height:1.4}

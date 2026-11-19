@@ -3,6 +3,7 @@ import {
   type MenuEngineeringData,
   type MenuEngineeringRow,
 } from "@/app/actions/forecasts/menu-engineering-actions"
+import { buildProfitPlain, type ProfitPlain } from "@/lib/counter/menu-profit-plain"
 import { count, money, pct } from "@/lib/counter/format"
 import { dayCount, type DateRange } from "@/lib/counter/date-range"
 import { loadStatement } from "@/lib/counter/statement"
@@ -139,6 +140,8 @@ export interface LedgerSection {
 }
 
 export interface MenuProfitSections {
+  /** The page made plain (`menu-profit-plain.ts`): the four corners, in words. */
+  plain: SectionData<ProfitPlain>
   headline: SectionData<MenuProfitHeadline>
   matrix: SectionData<MatrixSection>
   opportunities: SectionData<OpportunitySection>
@@ -564,6 +567,10 @@ export function getMenuProfitSectionPromises(
   )
 
   return {
+    plain: guardSection(
+      dataP.then((sd) => mapReady(sd, (d) => buildProfitPlain(d.me!))),
+      "retryMenuProfit",
+    ),
     headline: guardSection(
       dataP.then((sd) => mapReady(sd, (d) => headlineOf(d.me!, d.totalSales, d.foodCost))),
       "retryMenuProfit",
