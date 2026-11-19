@@ -314,3 +314,15 @@ a.cu-tile:active,a.cu-card:active,button.cu-card:active{transform:translateY(1px
 /* ---- A chip-filtered list: the chips, then the list rising in again ---- */
 .cu-chips{margin-bottom:10px}
 .cu-filtered{animation:ct-entry var(--ct-dur-rise) var(--ease) both}
+
+/* ---- Horizontal bars: one figure per line (kept per plate, by channel) ----
+   The bar is a full-width track scaled to its share, so it grows by transform. */
+.cu-hbars{display:grid;gap:10px;margin:0;padding:0;list-style:none}
+.cu-hbars li{display:grid;grid-template-columns:minmax(90px,140px) minmax(0,1fr) auto;align-items:center;gap:10px}
+.cu-hbars__name{font-weight:600;display:grid;line-height:1.25}
+.cu-hbars__name small{font-family:var(--mono);font-size:var(--t-micro);font-weight:400;color:var(--ink-3)}
+.cu-hbars__track{height:10px;border-radius:999px;background:var(--sunk);overflow:hidden}
+.cu-hbars__bar{display:block;height:100%;border-radius:inherit;background:var(--tint,var(--ink));transform-origin:left;transform:scaleX(var(--s,0));
+  animation:cu-grow-x calc(var(--ct-dur-rise)*2) var(--ease) both;animation-delay:calc(var(--i,0)*var(--ct-dur-step))}
+@keyframes cu-grow-x{from{transform:scaleX(0)}}
+.cu-hbars__v{font-variant-numeric:tabular-nums;font-weight:600;text-align:end}
