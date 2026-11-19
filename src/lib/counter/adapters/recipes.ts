@@ -85,7 +85,22 @@ export interface RecipeRecent {
   meta: string
 }
 
+/** The page made plain (owner's go, 2026-11-19; mock screen 7). */
+export interface RecipesPlain {
+  sentence: string
+  big: { label: string; value: string; sub: string }
+  needs: Array<{ key: string; what: string; why: string; act: string; href: string }>
+  /** Sellable recipes, most sold first. */
+  rows: Array<{ key: string; name: string; detail: string; cost: string; href: string; tone: "good" | "warn" | "bad" }>
+  /** Sellable recipes not shown in `rows`. */
+  more: number
+  components: number
+  categories: string[]
+}
+
 export interface RecipesSections {
+  /** The page made plain: how much of food cost rests on unchecked or $0 recipes. */
+  plain: SectionData<RecipesPlain>
   headline: SectionData<RecipeHeadline>
   catalogue: SectionData<RecipeCatalogue>
   work: SectionData<RecipeWork>
@@ -102,7 +117,7 @@ export interface RecipesInput {
 
 /* -- loading ---------------------------------------------------------- */
 
-interface RecipeRow {
+export interface RecipeRow {
   id: string
   name: string
   category: string
@@ -133,7 +148,7 @@ interface RecipeRow {
   partialDays: number
 }
 
-interface RecipeData {
+export interface RecipeData {
   rows: RecipeRow[]
   addedRecently: number
   rangeLabel: string
@@ -584,6 +599,84 @@ function componentsOf(d: RecipeData): RecipeComponents {
   }
 }
 
+/** Rows the plain list shows. */
+const PLAIN_ROWS = 8
+
+/** Exported for its test only; the page reads it through the `plain` section. */
+export function plainOf(d: RecipeData): RecipesPlain {
+  const total = d.rows.length
+  const confirmed = d.rows.filter((r) => r.confirmed).length
+  const sellable = d.rows.filter((r) => r.sellable)
+  const unconfirmed = sellable.filter((r) => !r.confirmed).sort((a, b) => b.revenue - a.revenue)
+  const unconfirmedRevenue = unconfirmed.reduce((t, r) => t + r.revenue, 0)
+  const zero = sellable.filter(costsNothing).sort((a, b) => b.revenue - a.revenue)
+  const isAre = (n: number) => (n === 1 ? "is" : "are")
+
+  const parts = [`${plural(total, "recipe")}.`]
+  parts.push(confirmed === total ? `All ${isAre(2)} confirmed.` : `${count(confirmed)} ${isAre(confirmed)} confirmed.`)
+  if (unconfirmed.length > 0) {
+    parts.push(
+      `${count(unconfirmed.length)} sold ${unconfirmed.length === 1 ? "isn't" : "aren't"} confirmed yet but ${isAre(unconfirmed.length)} costing real plates` +
+        (unconfirmedRevenue > 0 ? `, ${money(unconfirmedRevenue)} of sales over ${d.rangeLabel}.` : "."),
+    )
+  }
+  if (zero.length > 0) {
+    parts.push(
+      `${plural(zero.length, "recipe")} cost${zero.length === 1 ? "s" : ""} $0 because no line on ${zero.length === 1 ? "it" : "them"} has a price.`,
+    )
+  }
+
+  const needs: RecipesPlain["needs"] = []
+  if (zero.length > 0) {
+    needs.push({
+      key: "zero",
+      what: `${plural(zero.length, "recipe")} cost${zero.length === 1 ? "s" : ""} $0, no line has a price`,
+      why: `"${zero[0].name}" leads them. Its food cost is not counted until a line is priced.`,
+      act: "Fix",
+      href: `/dashboard/recipes/${zero[0].id}`,
+    })
+  }
+  if (unconfirmed.length > 0) {
+    needs.push({
+      key: "confirm",
+      what: `${plural(unconfirmed.length, "recipe")} to confirm`,
+      why: `"${unconfirmed[0].name}" sells the most of them. Confirming changes no figure; it records that someone read the lines.`,
+      act: "Confirm",
+      href: `/dashboard/recipes/${unconfirmed[0].id}`,
+    })
+  }
+
+  const ordered = [...sellable].sort((a, b) => b.revenue - a.revenue || a.name.localeCompare(b.name))
+  const shown = ordered.slice(0, PLAIN_ROWS)
+
+  return {
+    sentence: parts.join(" "),
+    big: {
+      label: "Confirmed",
+      value: `${count(confirmed)} of ${count(total)}`,
+      sub:
+        total - confirmed === 0
+          ? "every recipe is confirmed"
+          : `${count(total - confirmed)} unconfirmed` + (unconfirmedRevenue > 0 ? ` · on ${money(unconfirmedRevenue)} of sales` : ""),
+    },
+    needs,
+    rows: shown.map((r) => {
+      const z = costsNothing(r)
+      return {
+        key: r.id,
+        name: r.name,
+        detail: `${r.category} · ${r.confirmed ? "confirmed" : "not confirmed"}`,
+        cost: z ? "$0, no price" : costCell(r),
+        href: `/dashboard/recipes/${r.id}`,
+        tone: z ? "bad" : r.confirmed ? "good" : "warn",
+      }
+    }),
+    more: ordered.length - shown.length,
+    components: d.rows.filter((r) => r.usedIn > 0).length,
+    categories: [...new Set(d.rows.map((r) => r.category).filter(Boolean))].sort(),
+  }
+}
+
 /** The phone's list: what is wrong first, then what sells. */
 function recentOf(d: RecipeData): RecipeRecent {
   const sellable = d.rows.filter((r) => r.sellable)
@@ -635,6 +728,7 @@ export function getRecipesSectionPromises(
     guardSection(dataP.then((sd) => mapReady(sd, f)), "retryRecipes")
 
   return {
+    plain: s(plainOf),
     headline: s(headlineOf),
     catalogue: s(catalogueOf),
     work: s(workOf),
