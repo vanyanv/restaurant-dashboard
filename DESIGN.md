@@ -408,6 +408,30 @@ later once the effect confirms a real `no-preference` client. See
 including the post-fix real-browser run showing 0 console errors under both
 media settings.
 
+### Motion in the shared blocks (2026-11-19)
+
+The shared blocks (`@/components/counter/ui`, `counter-ui.css`) carry their
+own motion, so a page built from them gets it with no page code:
+
+- **Duration tokens** in `counter.css`: `--ct-dur-tap` (80ms, a press),
+  `--ct-dur-quick` (160ms, a colour change), `--ct-dur-rise` (220ms, a block
+  arriving), `--ct-dur-step` (36ms between blocks), `--ct-dur-leave` (260ms, a
+  done row leaving). One `prefers-reduced-motion` rule sets them all to 0, so
+  the CSS needs no per-rule media query. A test fails if a token is missed.
+- **Arrival:** `.cu-stack` children rise in reading order; status pills pop
+  in after the sentence; `BigNumber` counts up to its text (first render is
+  the exact text, so hydration is safe) and flashes once when a sync changes
+  it; week bars grow from the baseline; folds slide open.
+- **Taps:** buttons press in. `useAct()` gives each tap a key: the tapped
+  `Button` shows `state="busy"` (keeps its label, adds a working mark, blocks
+  a second tap), then `state="done"` with a tick and the done words fixed at
+  the tap. A failure returns the action's error code for the page to word.
+- **Instant results:** `useLeaving()` slides a finished Needs you row out
+  (`NeedsYouItem leaving`). Mark it in `optimistic` to show the result before
+  the save answers (React restores it if the save fails); anything that
+  writes money or the books waits for the answer and marks it in `onDone`.
+  `Notice onUndo` offers the way back where one exists.
+
 ## Shell
 
 `AppShell` (`src/components/counter/shell/app-shell.tsx`) is the frame every

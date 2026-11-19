@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -18,7 +18,7 @@ import type {
   InvoicesSections,
 } from "@/lib/counter/adapters/invoices";
 import type { PriceSections } from "@/lib/counter/adapters/prices";
-import { confirmInvoiceStore } from "@/lib/counter/actions/invoice";
+import { confirmInvoiceStore, resolveInvoiceReview } from "@/lib/counter/actions/invoice";
 import {
   Answer,
   Button,
@@ -30,6 +30,8 @@ import {
   Notice,
   Status,
   Statuses,
+  useAct,
+  useLeaving,
 } from "@/components/counter/ui";
 import { InvoicesHead, useScoped } from "./invoices-ui";
 
@@ -233,16 +235,26 @@ function Needs({ week }: { week: InvoiceWeek }) {
   const scoped = useScoped();
   // Held here, not in the task: a saved task leaves the list on refresh, and
   // its own confirmation would leave with it.
-  const [notes, setNotes] = useState<
-    Array<{ tone: "good" | "bad"; text: string }>
-  >([]);
-  const note = (tone: "good" | "bad", text: string) =>
-    setNotes((n) => [...n.slice(-2), { tone, text }]);
+  const [notes, setNotes] = useState<Array<Note>>([]);
+  const leaving = useLeaving();
+  const note = (n: Note) => setNotes((all) => [...all.slice(-2), n]);
   const banner =
     notes.length > 0 ? (
       <div className="iv-notes" role="status">
         {notes.map((x, i) => (
-          <Notice key={i} tone={x.tone}>
+          <Notice
+            key={i}
+            tone={x.tone}
+            onUndo={
+              x.undo
+                ? () => {
+                    const undo = x.undo!;
+                    setNotes((all) => all.filter((y) => y !== x));
+                    undo();
+                  }
+                : undefined
+            }
+          >
             {x.text}
           </Notice>
         ))}
@@ -269,6 +281,7 @@ function Needs({ week }: { week: InvoiceWeek }) {
             item={it}
             stores={week.stores}
             onNote={note}
+            leaving={leaving}
           />
         ))}
         {week.unlinked ? (
@@ -306,50 +319,71 @@ const SAVE_ERRORS: Record<string, string> = {
     "doesn't add up, so it can't be approved here. Open it to fix.",
 };
 
+type Note = { tone: "good" | "bad"; text: string; undo?: () => void };
+
 function Task({
   n,
   item,
   stores,
   onNote,
+  leaving,
 }: {
   n: number;
   item: DeskItem;
   stores: InvoiceWeek["stores"];
-  onNote: (tone: "good" | "bad", text: string) => void;
+  onNote: (note: Note) => void;
+  leaving: ReturnType<typeof useLeaving>;
 }) {
+  void n;
   const surface = useSurfaceHref();
   const router = useRouter();
-  const [saving, startSaving] = useTransition();
+  const { act, stateOf, doneOf, busy: saving } = useAct();
   const [error, setError] = useState<string | null>(null);
-  const [done, setDone] = useState<string | null>(null);
   const [picking, setPicking] = useState(false);
   const others = stores.filter((s) => s.id !== item.confirmStore?.storeId);
   const [moveTo, setMoveTo] = useState(others[0]?.id ?? "");
+  const label = `${item.vendor} #${item.number}`;
 
-  const save = (storeId: string, name: string) => {
+  // Approving puts the invoice into food cost, so the row waits for the save
+  // before it leaves (no optimistic hide); then it slides out and the note
+  // above the list offers Undo, which puts the invoice back in review.
+  const save = (key: string, storeId: string, name: string) => {
     setError(null);
-    startSaving(async () => {
-      const result = await confirmInvoiceStore(item.key, storeId);
-      const label = `${item.vendor} #${item.number}`;
-      if (!result.ok) {
-        const known = SAVE_ERRORS[result.error];
+    act(key, () => confirmInvoiceStore(item.key, storeId), {
+      done: `Saved to ${name}`,
+      onDone: () => {
+        leaving.keep(item.key);
+        onNote({
+          tone: "good",
+          text: `${label} saved to ${name} and approved.`,
+          undo: () =>
+            act("undo", () => resolveInvoiceReview(item.key, "REVIEW"), {
+              onDone: () => {
+                leaving.restore(item.key);
+                onNote({ tone: "good", text: `${label} is back in review.` });
+                router.refresh();
+              },
+              onFailed: () => onNote({ tone: "bad", text: `${label} could not be put back in review. Open it to change it.` }),
+            }),
+        });
+        router.refresh();
+      },
+      onFailed: (code) => {
+        const known = SAVE_ERRORS[code];
         if (known) {
-          onNote("bad", `${label} ${known}`);
+          onNote({ tone: "bad", text: `${label} ${known}` });
           router.refresh();
         } else {
           setError("That didn't save. Try again, or open the invoice.");
         }
-        return;
-      }
-      setDone(`Saved to ${name} and approved.`);
-      onNote("good", `${label} saved to ${name} and approved.`);
-      router.refresh();
+      },
     });
   };
 
   return (
     <NeedsYouItem
       bad={item.glyph === "miss"}
+      leaving={leaving.isLeaving(item.key)}
       what={
         <>
           {item.reason} {item.vendor} #{item.number}, {item.total}
@@ -361,19 +395,19 @@ function Task({
         </>
       }
     >
-      {done ? (
-        <Notice tone="good">{done}</Notice>
-      ) : item.confirmStore ? (
+      {item.confirmStore ? (
         <>
           <ButtonRow>
             <Button
               variant="primary"
+              state={stateOf("yes")}
+              doneLabel={doneOf("yes")}
               disabled={saving}
               onClick={() =>
-                save(item.confirmStore!.storeId, item.confirmStore!.storeName)
+                save("yes", item.confirmStore!.storeId, item.confirmStore!.storeName)
               }
             >
-              {saving ? "Saving…" : `Yes, ${item.confirmStore.storeName}`}
+              {`Yes, ${item.confirmStore.storeName}`}
             </Button>
             {others.length > 0 ? (
               <Button
@@ -404,9 +438,12 @@ function Task({
               </select>
               <Button
                 variant="primary"
+                state={stateOf("move")}
+                doneLabel={doneOf("move")}
                 disabled={saving || !moveTo}
                 onClick={() =>
                   save(
+                    "move",
                     moveTo,
                     others.find((s) => s.id === moveTo)?.name ?? "that store",
                   )

@@ -63,15 +63,22 @@ export function NeedsYouItem({
   what,
   why,
   bad,
+  leaving,
   children,
 }: {
   what: ReactNode
   why?: ReactNode
   bad?: boolean
+  /** The fix was just tapped: the row slides away (see `useLeaving`). */
+  leaving?: boolean
   children?: ReactNode
 }) {
   return (
-    <li className={`cu-needs__g${bad ? " cu-needs__g--bad" : ""}`}>
+    <li
+      className={`cu-needs__g${bad ? " cu-needs__g--bad" : ""}${leaving ? " is-leaving" : ""}`}
+      aria-hidden={leaving || undefined}
+      inert={leaving || undefined}
+    >
       <span className="cu-needs__what">{what}</span>
       {why ? <div className="cu-needs__why">{why}</div> : null}
       {children ? <div className="cu-needs__act">{children}</div> : null}
@@ -79,12 +86,28 @@ export function NeedsYouItem({
   )
 }
 
-/** The line a fix leaves behind: "✓ Saved to Glendale" or what went wrong. */
-export function Notice({ tone, children }: { tone: "good" | "bad"; children: ReactNode }) {
+/**
+ * The line a fix leaves behind: "✓ Saved to Glendale" or what went wrong.
+ * `onUndo` adds an Undo right after it, for a fix that has a way back.
+ */
+export function Notice({
+  tone,
+  children,
+  onUndo,
+}: {
+  tone: "good" | "bad"
+  children: ReactNode
+  onUndo?: () => void
+}) {
   return (
     <span className={`cu-notice cu-notice--${tone}`} role={tone === "bad" ? "alert" : "status"}>
       {tone === "good" ? "✓ " : null}
       {children}
+      {onUndo ? (
+        <button type="button" className="cu-notice__undo" onClick={onUndo}>
+          Undo
+        </button>
+      ) : null}
     </span>
   )
 }

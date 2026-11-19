@@ -7,7 +7,7 @@
 import { describe, it, expect, vi } from "vitest"
 import { readFileSync, readdirSync } from "node:fs"
 import { join } from "node:path"
-import { render, screen, fireEvent } from "@testing-library/react"
+import { render, screen, fireEvent, renderHook, act as rtlAct } from "@testing-library/react"
 import {
   Answer,
   BigNumber,
@@ -24,7 +24,10 @@ import {
   Status,
   StoreCard,
   Tabs,
+  useAct,
+  DONE_MS,
 } from "@/components/counter/ui"
+import { splitFigure } from "@/components/counter/ui/big-number"
 
 const UI = join(process.cwd(), "src/components/counter/ui")
 const CSS = readFileSync(join(process.cwd(), "src/styles/counter-ui.css"), "utf8")
@@ -189,4 +192,65 @@ describe("shared blocks", () => {
     expect(b.tagName).toBe("DIV")
     expect(b.className).toBe("cu-tile cu-tile--tone-bad")
   })
+
+  it("motion reads only duration tokens, and reduced motion zeroes every one of them", () => {
+    const tokens = readFileSync(join(process.cwd(), "src/styles/counter.css"), "utf8")
+    const declared = [...tokens.matchAll(/(--ct-dur-[a-z]+):\s*\d+ms/g)].map((m) => m[1])
+    expect(new Set(declared).size).toBeGreaterThanOrEqual(5)
+    const reduced = tokens.match(/@media \(prefers-reduced-motion: reduce\) \{\s*:root \{([^}]*)\}/)
+    expect(reduced).not.toBeNull()
+    for (const t of new Set(declared)) expect(reduced![1]).toContain(`${t}: 0ms`)
+    // The Motion section of the blocks' stylesheet times nothing with a raw
+    // number except the spinner's turn and the one-off changed flash.
+    const motion = CSS.slice(CSS.indexOf("/* ---- Motion ----")).replace(/\/\*[\s\S]*?\*\//g, "")
+    const raw = [...motion.matchAll(/(?:animation|transition)[^;{}]*?\b(\d*\.?\d+m?s)\b/g)].map((m) => m[1])
+    expect(raw.filter((d) => !["7s", ".7s", "1.3s", "3s"].includes(d))).toEqual([])
+  })
+
+  it("Button shows working and done states, and a working button can't be tapped twice", () => {
+    const onClick = vi.fn()
+    const { rerender } = render(<Button state="busy" onClick={onClick}>Approve</Button>)
+    const b = screen.getByRole("button")
+    expect(b).toHaveProperty("disabled", true)
+    expect(b.getAttribute("aria-busy")).toBe("true")
+    expect(b.dataset.state).toBe("busy")
+    expect(b.textContent).toBe("Approve")
+    rerender(<Button state="done" doneLabel="Approved" onClick={onClick}>Approve</Button>)
+    expect(screen.getByRole("button").textContent).toBe("✓ Approved")
+    rerender(<Button state="idle" onClick={onClick}>Approve</Button>)
+    expect(screen.getByRole("button").dataset.state).toBeUndefined()
+  })
+
+  it("useAct: busy, then done with the words fixed at the tap, then idle; a failure keeps its error", async () => {
+    vi.useFakeTimers()
+    const { result } = renderHook(() => useAct())
+    let resolve!: (v: { ok: true }) => void
+    rtlAct(() => {
+      result.current.act("a", () => new Promise((r) => (resolve = r)), { done: "Saved" })
+    })
+    expect(result.current.stateOf("a")).toBe("busy")
+    expect(result.current.stateOf("b")).toBe("idle")
+    await rtlAct(async () => resolve({ ok: true }))
+    expect(result.current.stateOf("a")).toBe("done")
+    expect(result.current.doneOf("a")).toBe("Saved")
+    rtlAct(() => vi.advanceTimersByTime(DONE_MS))
+    expect(result.current.stateOf("a")).toBe("idle")
+    await rtlAct(async () => {
+      result.current.act("b", async () => ({ ok: false as const, error: "forbidden" }))
+    })
+    expect(result.current.stateOf("b")).toBe("failed")
+    expect(result.current.error).toBe("forbidden")
+    vi.useRealTimers()
+  })
+
+  it("BigNumber's count-up splits a figure without changing what it ends on", () => {
+    expect(splitFigure("$1,302.50")).toEqual({ before: "$", value: 1302.5, decimals: 2, after: "" })
+    expect(splitFigure("62 of 65")).toEqual({ before: "", value: 62, decimals: 0, after: " of 65" })
+    expect(splitFigure("−$260")?.before).toBe("−$")
+    expect(splitFigure("—")).toBeNull()
+    // First render is the exact text (hydration-safe).
+    render(<BigNumber label="Kept" value="$71.20" />)
+    expect(screen.getByText("$71.20")).toBeTruthy()
+  })
 })
+

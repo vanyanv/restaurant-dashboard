@@ -41,9 +41,9 @@ a.cu-status:focus-visible,button.cu-status:focus-visible{outline:2px solid var(-
 .cu-btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:36px;padding:0 16px;border-radius:var(--r);
   border:1px solid var(--line-strong);background:var(--surface);color:var(--ink);font:inherit;font-size:var(--t-body);font-weight:600;line-height:1;
   text-decoration:none;cursor:pointer;white-space:nowrap;
-  transition:background-color .16s var(--ease),border-color .16s var(--ease),color .16s var(--ease)}
+  transition:background-color var(--ct-dur-quick) var(--ease),border-color var(--ct-dur-quick) var(--ease),color var(--ct-dur-quick) var(--ease),transform var(--ct-dur-tap) ease-out,opacity var(--ct-dur-quick) var(--ease)}
 .cu-btn:hover{background:var(--sunk);border-color:var(--ink-3)}
-.cu-btn:active{transform:translateY(1px)}
+.cu-btn:active:not([disabled]){transform:translateY(1px) scale(.98)}
 .cu-btn:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .cu-btn[disabled]{opacity:.5;cursor:not-allowed;transform:none}
 .cu-btn--primary{background:var(--accent);border-color:var(--accent);color:var(--surface)}
@@ -238,3 +238,64 @@ a.cu-tile:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .cu-cat__menuhost{position:relative;display:flex;justify-content:space-between;gap:8px}
 .cu-cat__menu{position:absolute;right:-24px;top:-30px;padding:4px 8px;border:1px solid var(--line-strong);border-radius:var(--r-sm);background:var(--surface);font-size:var(--t-cap);white-space:nowrap;z-index:1}
 .cu-cat__frame--desk .cu-cat__body:has(.cu-cat__menu){padding-top:40px}
+
+/* ---- Motion ----
+   Every duration is a --ct-dur-* token (counter.css), and every token is 0
+   under prefers-reduced-motion, so nothing here needs its own media query.
+   Timings follow DESIGN.md's Motion table: blocks rise 36ms apart, done
+   inside a third of a second; nothing slow, nothing that waits on a scroll.
+   The page is complete at rest: every animation ends on the resting state. */
+
+/* A page's answer blocks rise in reading order. Past the eighth they arrive
+   with the eighth; they are below the fold on a phone anyway. */
+.cu-stack>*{animation:ct-entry var(--ct-dur-rise) var(--ease) both}
+.cu-stack>:nth-child(2){animation-delay:calc(var(--ct-dur-step)*1)}
+.cu-stack>:nth-child(3){animation-delay:calc(var(--ct-dur-step)*2)}
+.cu-stack>:nth-child(4){animation-delay:calc(var(--ct-dur-step)*3)}
+.cu-stack>:nth-child(5){animation-delay:calc(var(--ct-dur-step)*4)}
+.cu-stack>:nth-child(6){animation-delay:calc(var(--ct-dur-step)*5)}
+.cu-stack>:nth-child(7){animation-delay:calc(var(--ct-dur-step)*6)}
+.cu-stack>:nth-child(n+8){animation-delay:calc(var(--ct-dur-step)*7)}
+
+/* Status pills pop in after the sentence; a changed figure flashes once. */
+@keyframes cu-pop{from{opacity:0;transform:scale(.92)}to{opacity:1;transform:none}}
+.cu-statuses>.cu-status{animation:cu-pop var(--ct-dur-rise) var(--ease) both;animation-delay:calc(var(--ct-dur-step)*3)}
+@keyframes cu-flash{from{background:var(--good-wash)}to{background:transparent}}
+.cu-big__value.is-changed{animation:cu-flash 1.3s var(--ease);border-radius:var(--r-sm)}
+
+/* Folds and Needs you slide open instead of jumping (browsers without
+   ::details-content simply open at once). */
+.cu-fold,.cu-needs{interpolate-size:allow-keywords}
+.cu-fold::details-content,.cu-needs::details-content{block-size:0;overflow:hidden;
+  transition:block-size var(--ct-dur-rise) var(--ease),content-visibility var(--ct-dur-rise) allow-discrete}
+.cu-fold[open]::details-content,.cu-needs[open]::details-content{block-size:auto}
+
+/* Week bars grow from the baseline, one after another. */
+.cu-weeks__bar{transform-origin:bottom;animation:ct-bar-grow calc(var(--ct-dur-rise)*2) var(--ease) both;animation-delay:calc(var(--i,0)*var(--ct-dur-step)*.72)}
+.cu-weeks__bar{transition:opacity var(--ct-dur-quick) var(--ease)}
+
+/* Tabs and tiles answer the tap. */
+.cu-tab{transition:background-color var(--ct-dur-quick) var(--ease),color var(--ct-dur-quick) var(--ease),box-shadow var(--ct-dur-quick) var(--ease),transform var(--ct-dur-tap) ease-out}
+.cu-tab:active{transform:scale(.97)}
+a.cu-tile,a.cu-card,button.cu-card{transition:border-color var(--ct-dur-quick) var(--ease),transform var(--ct-dur-tap) ease-out}
+a.cu-tile:active,a.cu-card:active,button.cu-card:active{transform:translateY(1px)}
+
+/* A button reports what its tap did, on itself: working, then done. The
+   label stays in the button while it works, so the button never changes
+   width under the finger. */
+@keyframes cu-spin{to{transform:rotate(360deg)}}
+.cu-btn[data-state="busy"]{cursor:progress;opacity:.85}
+.cu-btn[data-state="busy"]::before{content:"";flex:none;width:12px;height:12px;border-radius:50%;border:2px solid currentColor;border-right-color:transparent;
+  animation:cu-spin .7s linear infinite}
+@media (prefers-reduced-motion:reduce){.cu-btn[data-state="busy"]::before{animation:none;border-right-color:currentColor;opacity:.5}}
+.cu-btn[data-state="done"]{background:var(--good);border-color:var(--good);color:var(--surface);animation:cu-pop var(--ct-dur-rise) var(--ease)}
+.cu-btn--quiet[data-state="done"]{background:none;border-color:transparent;color:var(--good)}
+
+/* A Needs you row that was just done slides away; it stays in the page
+   (hidden from screen readers) until the refreshed list drops it. */
+@keyframes cu-leave{from{opacity:1;transform:none;max-height:240px}to{opacity:0;transform:translateX(16px);max-height:0;padding-block:0;border-width:0}}
+.cu-needs__g.is-leaving{overflow:hidden;pointer-events:none;animation:cu-leave var(--ct-dur-leave) var(--ease) forwards}
+@keyframes cu-arrive{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+.cu-notice{animation:cu-arrive var(--ct-dur-rise) var(--ease) both}
+.cu-notice__undo{margin-left:8px;padding:0;border:0;background:none;font:inherit;font-weight:600;color:inherit;text-decoration:underline;text-underline-offset:3px;cursor:pointer}
+.cu-notice__undo:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
