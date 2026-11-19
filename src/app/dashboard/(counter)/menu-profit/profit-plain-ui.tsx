@@ -26,6 +26,7 @@ export function ProfitPlainView({ p }: { p: ProfitPlain }) {
         ))}
       </Statuses>
       <div className="cu-quad">
+        <div className="cu-quad__in">
         {p.groups.map((g) => (
           <Card key={g.key} caption={g.title}>
             <p className="cu-quad__names">
@@ -35,6 +36,7 @@ export function ProfitPlainView({ p }: { p: ProfitPlain }) {
             <Status tone={g.tone}>{g.hint}</Status>
           </Card>
         ))}
+        </div>
       </div>
     </div>
   )

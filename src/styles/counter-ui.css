@@ -56,7 +56,7 @@ a.cu-status:focus-visible,button.cu-status:focus-visible{outline:2px solid var(-
    flex row or an auto grid track it shrinks to 0 and its buttons spill off the
    screen (the invoice decision bar, 2026-11-18). width:100% makes it take the
    line instead. */
-.cu-btnrow,.cu-bigs,.cu-stores,.cu-rows,.cu-needs__list,.cu-tabs,.cu-weeks{width:100%;min-width:0}
+.cu-btnrow,.cu-bigs,.cu-stores,.cu-rows,.cu-needs__list,.cu-tabs,.cu-weeks,.cu-quad{width:100%;min-width:0}
 .cu-btnrow{container-type:inline-size}
 .cu-btnrow__in{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
 @container (max-width:520px){
@@ -328,6 +328,7 @@ a.cu-tile:active,a.cu-card:active,button.cu-card:active{transform:translateY(1px
 .cu-hbars__v{font-variant-numeric:tabular-nums;font-weight:600;text-align:end}
 
 /* ---- Four groups, two across on a wide container (Menu profit) ---- */
-.cu-quad{container-type:inline-size;width:100%;min-width:0;display:grid;gap:12px}
-@container (min-width:520px){.cu-quad{grid-template-columns:1fr 1fr}}
+.cu-quad{container-type:inline-size}
+.cu-quad__in{display:grid;gap:12px}
+@container (min-width:520px){.cu-quad__in{grid-template-columns:1fr 1fr}}
 .cu-quad__names{margin:0 0 8px;font-weight:600;line-height:1.4}
