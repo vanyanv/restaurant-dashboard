@@ -1050,7 +1050,12 @@ export function plainOf(d: Loaded): RecipePlain {
   const zero = d.emptyWalk && Math.abs(d.totalCost) < 0.005
   const margin = marginOf(d)
   const missing = d.lines.filter((l) => l.missingCost)
-  const ranked = [...d.lines].sort((a, b) => b.lineCost - a.lineCost)
+  // Lines are priced for the whole batch; a serving takes its share, so every
+  // figure here is per serving like the total beside it. Yield 1 is unchanged.
+  const per = d.servingSize > 1 ? 1 / d.servingSize : 1
+  const ranked = [...d.lines]
+    .map((l) => ({ ...l, quantity: l.quantity * per, lineCost: l.lineCost * per }))
+    .sort((a, b) => b.lineCost - a.lineCost)
   const top = ranked.find((l) => !l.missingCost && l.lineCost > 0) ?? null
 
   const parts: string[] = []
@@ -1063,7 +1068,8 @@ export function plainOf(d: Loaded): RecipePlain {
   } else {
     let s = `One costs ${missing.length > 0 && !d.overrideApplied ? "at least " : ""}${unitCost(d.totalCost)} today`
     if (d.price !== null && margin !== null) {
-      s += ` and sold for ${unitCost(d.price)} over ${d.rangeLabel}, so it kept ${pct(margin, { scaled: true })} after food.`
+      s += `. Over ${d.rangeLabel} it sold for ${unitCost(d.price)} and kept ${pct(margin, { scaled: true })} after the food cost booked then` +
+        (d.bookedPlate != null ? ` (${unitCost(d.bookedPlate)} a plate).` : ".")
     } else {
       s += d.soldQty === 0 ? `. It did not sell over ${d.rangeLabel}.` : "."
     }

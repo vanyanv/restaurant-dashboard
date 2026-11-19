@@ -35,6 +35,8 @@ const loaded = (o: Partial<Loaded>): Loaded =>
     price: null,
     margin: null,
     rangeLabel: "Nov 9 – 15",
+    servingSize: 1,
+    bookedPlate: null,
     ...o,
   }) as Loaded
 
@@ -52,6 +54,7 @@ describe("one recipe made plain", () => {
         totalCost: 2.37,
         price: 7.99,
         margin: 70.3,
+        bookedPlate: 2.37,
         soldQty: 400,
         trend: [
           { date: "2026-10-29", cost: 2.17, qty: 10, partial: false },
@@ -61,7 +64,7 @@ describe("one recipe made plain", () => {
       }),
     )
     expect(p.sentence).toBe(
-      "One costs $2.37 today and sold for $7.99 over Nov 9 – 15, so it kept 70.3% after food. Ground Beef is $1.31 of it.",
+      "One costs $2.37 today. Over Nov 9 – 15 it sold for $7.99 and kept 70.3% after the food cost booked then ($2.37 a plate). Ground Beef is $1.31 of it.",
     )
     expect(p.lines.map((l) => l.label)).toEqual([
       "Ground Beef · 1.5 oz",
@@ -84,6 +87,11 @@ describe("one recipe made plain", () => {
     expect(p.big.value).toBe("$0.00")
     expect(p.lines[0]).toMatchObject({ value: "no price", missing: true })
     expect(p.statuses.map((s) => s.text)).toEqual(["Costs $0", "Not confirmed"])
+  })
+
+  it("a batch recipe shows each line per serving, like its total", () => {
+    const p = plainOf(loaded({ servingSize: 24, lines: [line("beef", 48, "oz", 48)], totalCost: 2 }))
+    expect(p.lines[0]).toMatchObject({ label: "Beef · 2 oz", value: "$2.00" })
   })
 
   it("an unpriced line makes the cost a floor", () => {

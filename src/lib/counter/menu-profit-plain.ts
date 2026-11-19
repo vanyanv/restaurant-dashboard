@@ -57,7 +57,7 @@ export function buildProfitPlain(d: MenuEngineeringData): ProfitPlain {
   parts.push(
     food === null
       ? "Nothing on the menu is costed in this range, so there is no food cost to read."
-      : `Food cost was ${pct(food, { scaled: true })} of menu sales, after deals.`,
+      : `Food cost was ${pct(food, { scaled: true })} of costed menu sales, after deals.`,
   )
   const star = groups[0].names[0]
   const plow = groups[1].names[0]

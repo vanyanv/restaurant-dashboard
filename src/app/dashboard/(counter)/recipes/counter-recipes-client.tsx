@@ -198,7 +198,7 @@ function NewRecipe({ categories }: { categories: string[] }) {
     start(async () => {
       const result = await createRecipe({ itemName: name, category })
       if (result.ok && result.recipeId) {
-        router.push(`/dashboard/recipes/${result.recipeId}`)
+        router.push(`/dashboard/recipes/${result.recipeId}?new=1`)
         return
       }
       setError(result.error ?? "Could not create that recipe.")

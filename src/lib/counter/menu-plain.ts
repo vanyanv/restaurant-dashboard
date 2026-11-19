@@ -60,6 +60,9 @@ export function buildMenuPlain(o: MenuPlainInput): MenuPlain {
   const kept = o.menu.marginPct
   const costed = o.items.filter((i) => i.marginDollars !== null && i.costed !== null)
   const notCosted = o.items.filter((i) => i.costed === null && i.units > 0)
+  // Booked a cost but has no kept figure (nothing collected, or a $0 cost):
+  // never ranked, but named, so every sold item is in one list or another.
+  const noKept = o.items.filter((i) => i.costed !== null && i.marginDollars === null && i.units > 0)
 
   // The kept share and its move.
   let vs: MenuPlain["vs"] = null
@@ -109,10 +112,11 @@ export function buildMenuPlain(o: MenuPlainInput): MenuPlain {
 
   // Status in words.
   statuses.push({
-    tone: notCosted.length === 0 ? "good" : "warn",
+    tone: notCosted.length === 0 && noKept.length === 0 ? "good" : "warn",
     text: `${count(costed.length)} of ${count(o.items.length)} items costed`,
   })
   if (notCosted.length > 0) statuses.push({ tone: "warn", text: `${count(notCosted.length)} sold, not costed` })
+  if (noKept.length > 0) statuses.push({ tone: "warn", text: `${count(noKept.length)} sold, no kept figure` })
   if (o.unmappedModifiers > 0) statuses.push({ tone: "warn", text: `${plural(o.unmappedModifiers, "modifier")} not costed` })
 
   const needs: MenuPlain["needs"] = []

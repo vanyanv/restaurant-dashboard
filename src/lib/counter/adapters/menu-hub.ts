@@ -175,7 +175,7 @@ async function loadMenuCounts(input: MenuHubInput): Promise<MenuCounts> {
           const b = toQueryBounds(w)
           return getItemEconomics({ accountId, storeIds, startDate: b.startDate, endDate: b.endDate })
         }),
-      )
+      ).catch(() => null) // A failed earlier window drops the comparison, never today's figures.
     : Promise.resolve(null)
 
   const [sold, mods, mappedItems, mappedMods, economics, beforeAll] = await Promise.all([

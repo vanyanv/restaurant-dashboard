@@ -39,7 +39,7 @@ describe("buildProfitPlain", () => {
     const p = buildProfitPlain(
       data([row("Combo #1", "STAR", 900), row("Slider", "STAR", 1300), row("Milkshake", "PLOWHORSE", 700), row("Double", "PUZZLE", 90), row("Triple", "DOG", 4)]),
     )
-    expect(p.sentence).toBe("Food cost was 28.8% of menu sales, after deals. Push Slider, which sells a lot and keeps a lot. Look at Milkshake, which sells a lot but keeps little.")
+    expect(p.sentence).toBe("Food cost was 28.8% of costed menu sales, after deals. Push Slider, which sells a lot and keeps a lot. Look at Milkshake, which sells a lot but keeps little.")
     expect(p.groups.map((g) => [g.title, g.names])).toEqual([
       ["Keep selling", ["Slider", "Combo #1"]],
       ["Look at price", ["Milkshake"]],

@@ -55,7 +55,7 @@ export function buildCatalogPlain(list: CatalogList, proposals: CatalogProposals
   const matches = toLink.filter((l) => l.match).length
 
   const parts: string[] = []
-  if (unlinked.length === 0) parts.push("Every register item that sold is linked to a recipe, so all of it is costed.")
+  if (unlinked.length === 0) parts.push("Every register item that sold is linked to a recipe.")
   else {
     parts.push(
       `${plural(unlinked.length, "register item")} ${unlinked.length === 1 ? "isn't" : "aren't"} linked to a recipe, so what ${unlinked.length === 1 ? "it sells isn't" : "they sell isn't"} costed.`,

@@ -40,7 +40,7 @@ describe("recipes made plain", () => {
       ]),
     )
     expect(p.sentence).toBe(
-      "4 recipes. 2 are confirmed. 2 sold aren't confirmed yet but are costing real plates, $3,200 of sales over Nov 9 – 15. 1 recipe costs $0 because no line on it has a price.",
+      "4 recipes. 2 are confirmed. 2 that sold aren't confirmed yet but are costing real plates, $3,200 of sales over Nov 9 – 15. 1 recipe costs $0 because no line on it has a price.",
     )
     expect(p.big).toEqual({ label: "Confirmed", value: "2 of 4", sub: "2 unconfirmed · on $3,200 of sales" })
     expect(p.needs.map((n) => [n.key, n.act, n.href])).toEqual([

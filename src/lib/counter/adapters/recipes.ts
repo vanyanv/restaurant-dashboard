@@ -614,11 +614,14 @@ export function plainOf(d: RecipeData): RecipesPlain {
 
   const parts = [`${plural(total, "recipe")}.`]
   parts.push(confirmed === total ? `All ${isAre(2)} confirmed.` : `${count(confirmed)} ${isAre(confirmed)} confirmed.`)
-  if (unconfirmed.length > 0) {
+  const unconfirmedSold = unconfirmed.filter((r) => r.soldQty > 0).length
+  if (unconfirmedSold > 0) {
     parts.push(
-      `${count(unconfirmed.length)} sold ${unconfirmed.length === 1 ? "isn't" : "aren't"} confirmed yet but ${isAre(unconfirmed.length)} costing real plates` +
+      `${count(unconfirmedSold)} that sold ${unconfirmedSold === 1 ? "isn't" : "aren't"} confirmed yet but ${isAre(unconfirmedSold)} costing real plates` +
         (unconfirmedRevenue > 0 ? `, ${money(unconfirmedRevenue)} of sales over ${d.rangeLabel}.` : "."),
     )
+  } else if (unconfirmed.length > 0) {
+    parts.push(`${count(unconfirmed.length)} on the menu ${unconfirmed.length === 1 ? "isn't" : "aren't"} confirmed yet and did not sell over ${d.rangeLabel}.`)
   }
   if (zero.length > 0) {
     parts.push(
