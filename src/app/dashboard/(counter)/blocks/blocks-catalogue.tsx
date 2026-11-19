@@ -18,6 +18,12 @@ import {
   Tile,
   Tiles,
   WeekBars,
+  NeedsYouItem,
+  NeedsYouList,
+  Notice,
+  useAct,
+  useLeaving,
+  type ActResult,
   type RowsColumn,
 } from "@/components/counter/ui"
 
@@ -64,6 +70,40 @@ function Both({ name, replaces, note, children }: { name: string; replaces: stri
   )
 }
 
+/** A pretend save, so the catalogue shows a tap from start to finish. */
+const pretend = (ms: number, ok = true): Promise<ActResult> =>
+  new Promise((r) => setTimeout(() => r(ok ? { ok: true } : { ok: false, error: "network" }), ms))
+
+function TapDemo() {
+  const { act, stateOf, doneOf, busy, error } = useAct()
+  const leaving = useLeaving()
+  const [note, setNote] = useState<string | null>(null)
+  return (
+    <>
+      <ButtonRow>
+        <Button variant="primary" state={stateOf("ok")} doneLabel={doneOf("ok")} disabled={busy}
+          onClick={() => act("ok", () => pretend(600), { done: "Approved" })}>
+          Approve
+        </Button>
+        <Button state={stateOf("bad")} disabled={busy} onClick={() => act("bad", () => pretend(600, false))}>
+          A save that fails
+        </Button>
+      </ButtonRow>
+      {error ? <Notice tone="bad">That didn&apos;t save. Try again.</Notice> : null}
+      <NeedsYouList>
+        <NeedsYouItem what="Link Fryer oil 35 lb" why="Reached no ingredient" leaving={leaving.isLeaving("oil")}>
+          <Button variant="primary" state={stateOf("link")} doneLabel={doneOf("link")} disabled={busy}
+            onClick={() => act("link", () => pretend(500), { done: "Linked", optimistic: () => leaving.mark("oil"),
+              onDone: () => { leaving.keep("oil"); setNote("Fryer oil linked.") } })}>
+            Yes, link
+          </Button>
+        </NeedsYouItem>
+      </NeedsYouList>
+      {note ? <Notice tone="good" onUndo={() => { leaving.restore("oil"); setNote(null) }}>{note}</Notice> : null}
+    </>
+  )
+}
+
 export function BlocksCatalogue() {
   const [period, setPeriod] = useState("week")
   return (
@@ -100,6 +140,10 @@ export function BlocksCatalogue() {
           <Button>Different store</Button>
           <Button variant="quiet">Undo</Button>
         </ButtonRow>
+      </Both>
+
+      <Both name="Tap feedback" replaces="Saving… labels" note="useAct: the tapped button works, then shows a tick; a done row slides away with Undo. All motion stops under reduced motion.">
+        <TapDemo />
       </Both>
 
       <Both name="Card" replaces=".pl-card .iv-card .iv-tile .mi-card .sh-tile .ck-tile" note="Layout-contained, so a change inside it doesn't re-lay-out the page; a menu still shows past its edge.">

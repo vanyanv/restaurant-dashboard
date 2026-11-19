@@ -305,6 +305,18 @@
 
   --ct-ease: cubic-bezier(0.22, 1, 0.36, 1);
 
+  /* Motion tokens: how long each kind of movement takes. The shared blocks
+     (counter-ui.css) read only these, and they all drop to 0 under
+     prefers-reduced-motion (below), so honouring that setting is one rule.
+     tap: a button pressing in. quick: a colour or state change. rise: a block
+     arriving. step: the gap between blocks arriving in reading order.
+     leave: a done row sliding away. */
+  --ct-dur-tap:   80ms;
+  --ct-dur-quick: 160ms;
+  --ct-dur-rise:  220ms;
+  --ct-dur-step:  36ms;
+  --ct-dur-leave: 260ms;
+
   /* Ask's two-column split, mirrored from the prototype.
 
      `.askpage`'s grid is sized by these numbers in counter-components.css,
@@ -415,6 +427,10 @@
 /* Bars grow from the baseline. Paired with a custom `shape` on the Bar,
  * because Recharts animates a whole bar series on one shared timer and the
  * design calls for each bar to arrive 26ms after the one before it. */
+@media (prefers-reduced-motion: reduce) {
+  :root { --ct-dur-tap: 0ms; --ct-dur-quick: 0ms; --ct-dur-rise: 0ms; --ct-dur-step: 0ms; --ct-dur-leave: 0ms; }
+}
+
 @keyframes ct-bar-grow {
   from { transform: scaleY(0); }
   to   { transform: scaleY(1); }

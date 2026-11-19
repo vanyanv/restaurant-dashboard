@@ -18,8 +18,7 @@ import type { SectionSources } from "@/lib/counter/adapters/types"
 import type { InvoiceCheck, InvoiceLines, InvoiceSections } from "@/lib/counter/adapters/invoice"
 import { markInvoiceReturn, resolveInvoiceReview } from "@/lib/counter/actions/invoice"
 import { useRouter } from "next/navigation"
-import { Button, ButtonRow, Status, type StatusTone } from "@/components/counter/ui"
-import { useState, useTransition } from "react"
+import { Button, ButtonRow, Status, useAct, type StatusTone } from "@/components/counter/ui"
 import { InvoiceGlyph, Tiles, type InvoiceGlyphKind } from "../invoices-ui"
 
 /**
@@ -120,6 +119,13 @@ const STATUS_PILL: Record<string, { word: string; tone: StatusTone }> = {
  * every status offers a way forward and a way back, and an owner who changes
  * their mind reaches for the control they used the first time.
  */
+/** What a decided button says for a moment after it saved. */
+const DONE_WORDS: Record<"APPROVED" | "REJECTED" | "REVIEW", string> = {
+  APPROVED: "Approved and posted",
+  REJECTED: "Rejected",
+  REVIEW: "Back in review",
+}
+
 function ReviewDecision({
   invoiceId,
   status,
@@ -132,26 +138,16 @@ function ReviewDecision({
   reconciles: boolean
 }) {
   const router = useRouter()
-  const [saving, startSaving] = useTransition()
-  const [error, setError] = useState<string | null>(null)
+  const { act, stateOf, doneOf, busy: saving, error } = useAct()
 
-  const run = (work: () => Promise<{ ok: true } | { ok: false; error: string }>) => {
-    setError(null)
-    startSaving(async () => {
-      const result = await work()
-      if (!result.ok) {
-        setError(result.error)
-        return
-      }
-      // The status is read by the section that just wrote it, and by the review
-      // counts on Invoices and Operations. Refresh rather than patch local
-      // state so none of them can disagree with the row just decided.
-      router.refresh()
-    })
-  }
+  // The status is read by the section that just wrote it, and by the review
+  // counts on Invoices and Operations. Refresh rather than patch local state
+  // so none of them can disagree with the row just decided.
+  const run = (key: string, done: string, work: () => Promise<{ ok: true } | { ok: false; error: string }>) =>
+    act(key, work, { done, onDone: () => router.refresh() })
 
-  const decide = (to: "APPROVED" | "REJECTED" | "REVIEW") =>
-    run(() => resolveInvoiceReview(invoiceId, to))
+  const decide = (key: string, to: "APPROVED" | "REJECTED" | "REVIEW") =>
+    run(key, DONE_WORDS[to], () => resolveInvoiceReview(invoiceId, to))
 
   /** The affirmative move available from where this invoice stands. */
   const primary =
@@ -176,18 +172,32 @@ function ReviewDecision({
       <ButtonRow>
         <Button
           variant="primary"
+          state={stateOf("primary")}
+          doneLabel={doneOf("primary")}
           disabled={saving || blocked}
-          onClick={() => decide(primary.to)}
+          onClick={() => decide("primary", primary.to)}
         >
-          {saving ? "Saving…" : primary.label}
+          {primary.label}
         </Button>
         <Button
+          state={stateOf("credit")}
+          doneLabel={doneOf("credit")}
           disabled={saving}
-          onClick={() => run(() => markInvoiceReturn(invoiceId, !isReturn))}
+          onClick={() =>
+            run("credit", isReturn ? "Recorded as a bill" : "Recorded as a credit", () =>
+              markInvoiceReturn(invoiceId, !isReturn),
+            )
+          }
         >
           {isReturn ? "This is a bill, not a credit" : "Record as a credit"}
         </Button>
-        <Button variant="quiet" disabled={saving} onClick={() => decide(quiet.to)}>
+        <Button
+          variant="quiet"
+          state={stateOf("quiet")}
+          doneLabel={doneOf("quiet")}
+          disabled={saving}
+          onClick={() => decide("quiet", quiet.to)}
+        >
           {quiet.label}
         </Button>
       </ButtonRow>

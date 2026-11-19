@@ -1,6 +1,6 @@
 "use client"
 
-import type { ReactNode } from "react"
+import type { CSSProperties, ReactNode } from "react"
 
 /**
  * The last weeks as bars that double as the week picker: tap a bar to open
@@ -55,12 +55,12 @@ export function WeekBars({
         ) : null}
       </div>
       <div className="cu-weeks__bars" style={{ gridTemplateColumns: `repeat(${weeks.length},minmax(0,1fr))` }}>
-        {weeks.map((w) => (
+        {weeks.map((w, i) => (
           <button key={w.key} type="button" aria-pressed={Boolean(w.selected)} aria-label={w.ariaLabel} onClick={() => onPick(w.key)}>
             <span className="cu-weeks__top-n">{w.top}</span>
             <span
               className={`cu-weeks__bar${w.partial ? " is-part" : ""}`}
-              style={{ height: w.value > 0 ? `${Math.max(2, (w.value / max) * 100)}%` : 0 }}
+              style={{ height: w.value > 0 ? `${Math.max(2, (w.value / max) * 100)}%` : 0, "--i": i } as CSSProperties}
             />
             <span className="cu-weeks__lbl">{w.label}</span>
           </button>

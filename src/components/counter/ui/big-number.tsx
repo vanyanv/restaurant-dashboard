@@ -1,4 +1,8 @@
+"use client"
+
 import type { ReactNode } from "react"
+import { useChanged } from "@/components/counter/motion/use-changed"
+import { useCountUp } from "@/components/counter/motion/use-count-up"
 
 export type VsTone = "up" | "down" | "flat"
 
@@ -29,11 +33,13 @@ export type BigNumberProps = {
  */
 export function BigNumber({ label, value, sub, vs, missing, atMost }: BigNumberProps) {
   const comparisons = vs === undefined ? [] : Array.isArray(vs) ? vs : [vs]
+  const counted = useCountUpText(value ?? "")
+  const changed = useChanged(value)
   return (
     <div className="cu-big">
       <span className="cu-big__label">{label}</span>
-      <span className="cu-big__value">
-        {value === null ? "—" : atMost ? `≤ ${value}` : value}
+      <span className={`cu-big__value${changed ? " is-changed" : ""}`}>
+        {value === null ? "—" : atMost ? `≤ ${counted}` : counted}
         {sub ? <small className="cu-big__sub">{sub}</small> : null}
       </span>
       {comparisons.length > 0 || missing ? (
@@ -59,4 +65,39 @@ export function BigNumbers({ children }: { children: ReactNode }) {
       <div className="cu-bigs__in">{children}</div>
     </div>
   )
+}
+
+const NUMBER = /\d[\d,]*(\.\d+)?/
+
+/**
+ * Splits a formatted figure ("$71.20", "28.8%", "62 of 65") into the first
+ * number and the words around it.
+ */
+export function splitFigure(text: string): { before: string; value: number; decimals: number; after: string } | null {
+  const m = NUMBER.exec(text)
+  if (!m) return null
+  const value = Number(m[0].replace(/,/g, ""))
+  if (!Number.isFinite(value)) return null
+  return {
+    before: text.slice(0, m.index),
+    value,
+    decimals: m[1] ? m[1].length - 1 : 0,
+    after: text.slice(m.index + m[0].length),
+  }
+}
+
+/**
+ * The figure counts up to what it says, and always ends on the exact text it
+ * was given (useCountUp lands on the value; the last frame is the original
+ * string, so "$1,302.50" never ends as "$1,302.5"). Off under reduced motion.
+ */
+function useCountUpText(text: string): string {
+  const parts = splitFigure(text)
+  const shown = useCountUp(parts?.value ?? 0)
+  if (!parts || shown === parts.value) return text
+  const n = shown.toLocaleString("en-US", {
+    minimumFractionDigits: parts.decimals,
+    maximumFractionDigits: parts.decimals,
+  })
+  return `${parts.before}${n}${parts.after}`
 }

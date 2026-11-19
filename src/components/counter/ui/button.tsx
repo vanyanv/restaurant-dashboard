@@ -1,5 +1,6 @@
 import Link from "next/link"
 import type { ButtonHTMLAttributes, ReactNode } from "react"
+import type { ActState } from "./act"
 
 export type ButtonVariant = "primary" | "plain" | "quiet"
 
@@ -19,9 +20,36 @@ export function Button({
   variant = "plain",
   className,
   type = "button",
+  state,
+  doneLabel,
+  disabled,
+  children,
   ...rest
-}: ButtonHTMLAttributes<HTMLButtonElement> & { variant?: ButtonVariant }) {
-  return <button {...rest} type={type} className={cls(variant, className)} />
+}: ButtonHTMLAttributes<HTMLButtonElement> & {
+  variant?: ButtonVariant
+  /**
+   * What the tap is doing, from `useAct`: "busy" keeps the label and adds a
+   * small working mark (and blocks a second tap); "done" turns the button
+   * green with a tick for a moment. Leave it out for an ordinary button.
+   */
+  state?: ActState
+  /** The words a done button shows, e.g. "Approved". Defaults to its own label. */
+  doneLabel?: ReactNode
+}) {
+  const busy = state === "busy"
+  const done = state === "done"
+  return (
+    <button
+      {...rest}
+      type={type}
+      disabled={disabled || busy}
+      aria-busy={busy || undefined}
+      data-state={busy || done ? state : undefined}
+      className={cls(variant, className)}
+    >
+      {done ? <>✓ {doneLabel ?? children}</> : children}
+    </button>
+  )
 }
 
 export function ButtonLink({
