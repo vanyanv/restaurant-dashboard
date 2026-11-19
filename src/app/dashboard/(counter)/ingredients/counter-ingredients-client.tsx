@@ -250,14 +250,14 @@ function InboxRow({
             onChange={(e) => setNewName(e.target.value)}
           />
         ) : null}
-        <button
+        <button aria-busy={saving || undefined}
           className="btn"
           type="button"
           style={{ padding: "5px 11px" }}
           disabled={saving}
           onClick={accept}
         >
-          {saving ? "…" : "Accept"}
+          Accept
         </button>
       </span>
       <Link

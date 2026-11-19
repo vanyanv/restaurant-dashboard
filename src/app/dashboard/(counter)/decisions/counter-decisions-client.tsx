@@ -216,14 +216,14 @@ function QueueDecision({ item }: { item: DecisionQueueItem }) {
    */
   return (
     <>
-      <button
+      <button aria-busy={saving || undefined}
         className="do"
         type="button"
         style={{ marginLeft: 13 }}
         disabled={saving}
         onClick={() => record("commit")}
       >
-        {saving ? "…" : "I did this"}
+        I did this
       </button>
       <button
         className="do"

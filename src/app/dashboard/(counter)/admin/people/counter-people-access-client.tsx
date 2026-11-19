@@ -68,7 +68,7 @@ function sentence(c: PeopleAccessData["counts"]): React.ReactNode {
       {c.waiting > 0 ? ` ${c.waiting} ${c.waiting === 1 ? "is invited and hasn't" : "are invited and haven't"} signed up yet.` : null}
       {c.ran_out > 0 ? (
         <>
-          {" "}
+           
           <b>
             {c.ran_out} sign-up {c.ran_out === 1 ? "link" : "links"} ran out
           </b>
@@ -348,8 +348,8 @@ function InviteForm({
         </label>
       </fieldset>
       <div className="pp-row">
-        <button type="submit" className="btn btn--primary" disabled={busy || !email.trim()}>
-          {busy ? "Sending…" : emailReady ? "Email the invite" : "Make the link"}
+        <button aria-busy={busy || undefined} type="submit" className="btn btn--primary" disabled={busy || !email.trim()}>
+          {emailReady ? "Email the invite" : "Make the link"}
         </button>
         {emailReady ? (
           <button

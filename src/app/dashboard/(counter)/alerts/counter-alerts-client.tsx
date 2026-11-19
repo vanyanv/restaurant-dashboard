@@ -251,17 +251,16 @@ function AlertDecision({
           </label>
           <div className="btnrow" style={{ marginTop: 9 }}>
             <button
+              aria-busy={saving || undefined}
               className="btn btn--primary"
               type="button"
               disabled={saving}
               onClick={() => close("acknowledge")}
             >
-              {saving
-                ? "Saving…"
-                : // The COUNT is on the button, so nobody presses Dismiss on a
-                  // row reading "14 times since Aug 17" without being told that
-                  // is fourteen alerts.
-                  `${why.trim() ? "Acknowledge with this reason" : "Acknowledge"}${
+              {/* The COUNT is on the button, so nobody presses Dismiss on a
+                  row reading "14 times since Aug 17" without being told that
+                  is fourteen alerts. */}
+              {`${why.trim() ? "Acknowledge with this reason" : "Acknowledge"}${
                     alert.ids.length > 1 ? ` (${alert.ids.length})` : ""
                   }`}
             </button>

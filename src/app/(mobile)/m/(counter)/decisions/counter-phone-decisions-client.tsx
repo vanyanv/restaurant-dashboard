@@ -143,13 +143,13 @@ function PhoneCommitFirst({ first }: { first: NonNullable<PhoneQueue["first"]> }
 
   return (
     <>
-      <button
+      <button aria-busy={saving || undefined}
         className="mbtn mbtn--primary"
         type="button"
         disabled={saving}
         onClick={commit}
       >
-        {saving ? "Saving…" : "Commit the first one"}
+        Commit the first one
       </button>
       {said ? <p className="msub">{said}</p> : null}
     </>

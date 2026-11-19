@@ -136,8 +136,8 @@ function Editor({ data }: { data: ChecklistsData }) {
           <button type="button" className="btn" onClick={copy} disabled={busy}>
             Copy to other stores
           </button>
-          <button type="button" className="btn btn--primary" onClick={save} disabled={busy || !dirty[kind]}>
-            {busy ? "Saving…" : dirty[kind] ? "Save changes" : "Saved"}
+          <button aria-busy={busy || undefined} type="button" className="btn btn--primary" onClick={save} disabled={busy || !dirty[kind]}>
+            {dirty[kind] ? "Save changes" : "Saved"}
           </button>
         </div>
       </div>

@@ -135,13 +135,13 @@ function CostForm({ cost }: { cost: IngredientCost }) {
       </label>
 
       <div className="btnrow" style={{ marginTop: 11 }}>
-        <button
+        <button aria-busy={saving || undefined}
           className="btn btn--primary"
           type="button"
           disabled={saving}
           onClick={() => save(locked)}
         >
-          {saving ? "Saving…" : "Save this price"}
+          Save this price
         </button>
         {/* Saves in the same call, so the owner never types a correction and
             then loses it to a sync because they forgot a second button. */}

@@ -219,13 +219,13 @@ function Proposals({ data }: { data: CatalogProposals }) {
       ) : null}
       <div className="sec__body">
         <div className="btnrow">
-          <button
+          <button aria-busy={busy || undefined}
             className="btn btn--primary"
             type="button"
             disabled={busy || picked === null}
             onClick={() => decide("accept")}
           >
-            {busy ? "Saving…" : "Accept this mapping"}
+            Accept this mapping
           </button>
           <button
             className="btn"

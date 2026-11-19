@@ -108,13 +108,13 @@ export function OrderRow({ o, href }: { o: OrderLine; href: string }) {
             </button>
           )}
           {o.next === "ready" && (
-            <button type="button" className="btn btn--primary" disabled={busy} onClick={() => run(() => markOrderReady({ orderId: o.id }))}>
-              {busy ? "Saving…" : NEXT_STEP_LABEL.ready}
+            <button aria-busy={busy || undefined} type="button" className="btn btn--primary" disabled={busy} onClick={() => run(() => markOrderReady({ orderId: o.id }))}>
+              {NEXT_STEP_LABEL.ready}
             </button>
           )}
           {o.next === "picked_up" && (
-            <button type="button" className="btn btn--primary" disabled={busy} onClick={() => run(() => markOrderPickedUp({ orderId: o.id }))}>
-              {busy ? "Saving…" : NEXT_STEP_LABEL.picked_up}
+            <button aria-busy={busy || undefined} type="button" className="btn btn--primary" disabled={busy} onClick={() => run(() => markOrderPickedUp({ orderId: o.id }))}>
+              {NEXT_STEP_LABEL.picked_up}
             </button>
           )}
         </span>
@@ -217,8 +217,8 @@ export function ShipForm({ orderId, onDone }: { orderId: string; onDone?: () => 
             </button>
           </>
         )}
-        <button type="submit" className="btn btn--primary" disabled={busy || tracking.trim().length === 0}>
-          {busy ? "Saving…" : "Mark shipped"}
+        <button aria-busy={busy || undefined} type="submit" className="btn btn--primary" disabled={busy || tracking.trim().length === 0}>
+          Mark shipped
         </button>
       </div>
       <span className="ck-meta">
@@ -254,8 +254,8 @@ export function RefundForm({ orderId, hasEdition, onDone }: { orderId: string; h
         </label>
       )}
       <div className="row">
-        <button type="submit" className="btn btn--primary" disabled={busy}>
-          {busy ? "Saving…" : "Mark refunded"}
+        <button aria-busy={busy || undefined} type="submit" className="btn btn--primary" disabled={busy}>
+          Mark refunded
         </button>
         {onDone && (
           <button type="button" className="btn btn--quiet" onClick={onDone}>
