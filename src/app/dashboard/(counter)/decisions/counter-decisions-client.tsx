@@ -1,10 +1,10 @@
 "use client"
 
 import { businessQueryDate } from "@/lib/counter/business-date"
-import { Fold } from "@/components/counter/ui"
+import { Fold, useAct } from "@/components/counter/ui"
 import { DecisionsPlainView } from "./decisions-plain-ui"
 
-import { Fragment, useCallback, useMemo, useState, useTransition } from "react"
+import { Fragment, useCallback, useMemo, useState } from "react"
 import { usePathname, useRouter } from "next/navigation"
 import {
   Attribution,
@@ -174,32 +174,40 @@ function ledgerRows(rows: LedgerRow[]): Row[] {
  */
 function QueueDecision({ item }: { item: DecisionQueueItem }) {
   const router = useRouter()
-  const [saving, startSaving] = useTransition()
+  const { act, stateOf, busy: saving } = useAct()
   const [failed, setFailed] = useState(false)
 
   const record = (outcome: "commit" | "dismiss") => {
     setFailed(false)
-    startSaving(async () => {
-      const result = await recordDecision(
-        {
-          storeId: item.ref.storeId,
-          opportunityType: item.ref.type,
-          opportunityTitle: item.ref.title,
-          opportunityAsOf: item.ref.asOf,
-          predictedImpactUsdPerWeek: item.ref.impactUsdPerWeek,
-          predictedImpactP10: item.ref.p10,
-          predictedImpactP90: item.ref.p90,
-        },
-        outcome,
-      )
-      if (!result.ok) {
-        setFailed(true)
-        return
-      }
-      // The ledger, the accuracy panel and this queue all read `DecisionLog`.
-      // Refresh so the row the owner just wrote appears in all three.
-      router.refresh()
-    })
+    act(
+      outcome,
+      () =>
+        recordDecision(
+          {
+            storeId: item.ref.storeId,
+            opportunityType: item.ref.type,
+            opportunityTitle: item.ref.title,
+            opportunityAsOf: item.ref.asOf,
+            predictedImpactUsdPerWeek: item.ref.impactUsdPerWeek,
+            predictedImpactP10: item.ref.p10,
+            predictedImpactP90: item.ref.p90,
+          },
+          outcome,
+        ),
+      {
+        // The ledger, the accuracy panel and this queue all read `DecisionLog`.
+        // Refresh so the row the owner just wrote appears in all three.
+        onDone: () => router.refresh(),
+        onFailed: () => setFailed(true),
+      },
+    )
+  }
+  const marks = (k: "commit" | "dismiss") => {
+    const st = stateOf(k)
+    return {
+      "aria-busy": st === "busy" || undefined,
+      "data-state": st === "busy" || st === "done" ? st : undefined,
+    }
   }
 
   /*
@@ -216,23 +224,25 @@ function QueueDecision({ item }: { item: DecisionQueueItem }) {
    */
   return (
     <>
-      <button aria-busy={saving || undefined}
+      <button
+        {...marks("commit")}
         className="do"
         type="button"
         style={{ marginLeft: 13 }}
         disabled={saving}
         onClick={() => record("commit")}
       >
-        I did this
+        {stateOf("commit") === "done" ? "✓ Recorded" : "I did this"}
       </button>
       <button
+        {...marks("dismiss")}
         className="do"
         type="button"
         style={{ marginLeft: 13 }}
         disabled={saving}
         onClick={() => record("dismiss")}
       >
-        Skip
+        {stateOf("dismiss") === "done" ? "✓ Skipped" : "Skip"}
       </button>
       {failed ? <span className="k"> did not save</span> : null}
     </>
