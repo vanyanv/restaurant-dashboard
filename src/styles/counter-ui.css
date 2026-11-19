@@ -310,3 +310,7 @@ a.cu-tile:active,a.cu-card:active,button.cu-card:active{transform:translateY(1px
 .cu-fresh__go[data-state="done"]{color:var(--good);text-decoration:none}
 .cu-fresh__go[disabled]{cursor:progress}
 .cu-fresh__go:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:2px}
+
+/* ---- A chip-filtered list: the chips, then the list rising in again ---- */
+.cu-chips{margin-bottom:10px}
+.cu-filtered{animation:ct-entry var(--ct-dur-rise) var(--ease) both}
