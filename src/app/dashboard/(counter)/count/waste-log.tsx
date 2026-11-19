@@ -164,8 +164,8 @@ export function WasteLog({ data, base }: { data: WasteData; base: "/dashboard/co
       <OutcomeLine outcome={outcome} />
       <div className="cw__foot cw__foot--stick cw-item-foot">
         <Link className="cw__btn" href={`${base}/walk?store=${data.store.id}`}>Back to the count</Link>
-        <button type="button" className="cw__btn cw__btn--primary" disabled={busy} onClick={save}>
-          {busy ? "Saving…" : "Save waste"}
+        <button aria-busy={busy || undefined} type="button" className="cw__btn cw__btn--primary" disabled={busy} onClick={save}>
+          Save waste
         </button>
       </div>
 

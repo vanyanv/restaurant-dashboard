@@ -254,7 +254,7 @@ export function ClosedToggle({ storeId, day, closed }: { storeId: string; day: s
   const [outcome, setOutcome] = useState<Outcome>(null)
   return (
     <span className="ck-row">
-      <button
+      <button aria-busy={busy || undefined}
         type="button"
         className="ck-link"
         disabled={busy}
@@ -265,7 +265,7 @@ export function ClosedToggle({ storeId, day, closed }: { storeId: string; day: s
           })
         }
       >
-        {busy ? "Saving…" : closed ? "Closed today · reopen" : "Mark closed today"}
+        {closed ? "Closed today · reopen" : "Mark closed today"}
       </button>
       <OutcomeLine outcome={outcome} />
     </span>

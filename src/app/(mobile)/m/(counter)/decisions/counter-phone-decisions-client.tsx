@@ -1,11 +1,12 @@
 "use client"
 
+import { useAct } from "@/components/counter/ui"
 import type { PhoneDecisionsSections } from "@/lib/counter/adapters/decisions"
 import { businessQueryDate } from "@/lib/counter/business-date"
 import { Fold } from "@/components/counter/ui"
 import { DecisionsPlainView } from "@/app/dashboard/(counter)/decisions/decisions-plain-ui"
 
-import { useMemo, useState, useTransition } from "react"
+import { useMemo, useState } from "react"
 import {
   Chart,
   MList,
@@ -115,41 +116,42 @@ import type { SectionSources } from "@/lib/counter/adapters/types"
  */
 function PhoneCommitFirst({ first }: { first: NonNullable<PhoneQueue["first"]> }) {
   const router = useRouter()
-  const [saving, startSaving] = useTransition()
+  const { act, stateOf } = useAct()
   const [said, setSaid] = useState<string | null>(null)
+  const state = stateOf("commit")
 
   const commit = () => {
     setSaid(null)
-    startSaving(async () => {
-      const result = await recordDecision(
-        {
-          storeId: first.ref.storeId,
-          opportunityType: first.ref.type,
-          opportunityTitle: first.ref.title,
-          opportunityAsOf: first.ref.asOf,
-          predictedImpactUsdPerWeek: first.ref.impactUsdPerWeek,
-          predictedImpactP10: first.ref.p10,
-          predictedImpactP90: first.ref.p90,
-        },
-        "commit",
-      )
-      if (!result.ok) {
-        setSaid("That did not save.")
-        return
-      }
-      router.refresh()
-    })
+    act(
+      "commit",
+      () =>
+        recordDecision(
+          {
+            storeId: first.ref.storeId,
+            opportunityType: first.ref.type,
+            opportunityTitle: first.ref.title,
+            opportunityAsOf: first.ref.asOf,
+            predictedImpactUsdPerWeek: first.ref.impactUsdPerWeek,
+            predictedImpactP10: first.ref.p10,
+            predictedImpactP90: first.ref.p90,
+          },
+          "commit",
+        ),
+      { onDone: () => router.refresh(), onFailed: () => setSaid("That did not save.") },
+    )
   }
 
   return (
     <>
       <button
+        aria-busy={state === "busy" || undefined}
+        data-state={state === "busy" || state === "done" ? state : undefined}
         className="mbtn mbtn--primary"
         type="button"
-        disabled={saving}
+        disabled={state === "busy"}
         onClick={commit}
       >
-        {saving ? "Saving…" : "Commit the first one"}
+        {state === "done" ? "✓ Committed" : "Commit the first one"}
       </button>
       {said ? <p className="msub">{said}</p> : null}
     </>

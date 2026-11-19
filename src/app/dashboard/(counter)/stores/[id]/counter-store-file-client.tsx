@@ -417,8 +417,8 @@ function StoreFileForm({
       </Section>
 
       <div className="btnrow storefile__save">
-        <button className="btn btn--primary" type="button" disabled={saving} onClick={save}>
-          {saving ? "Saving…" : "Save changes"}
+        <button aria-busy={saving || undefined} className="btn btn--primary" type="button" disabled={saving} onClick={save}>
+          Save changes
         </button>
       </div>
 
@@ -633,7 +633,7 @@ function ExpenseEditor({
               {l.frequency === "MONTHLY"
                 ? "Monthly"
                 : `${l.frequency === "WEEKLY" ? "Weekly" : "Yearly"} ${money(l.amount)}`}
-              {" · tap to change"}
+               · tap to change
             </span>
           </span>
           <span className="setrow__val">{money(l.monthly)}/mo</span>
@@ -681,8 +681,8 @@ function ExpenseEditor({
           </select>
         </div>
         <div className="btnrow">
-          <button className="btn" type="button" disabled={saving} onClick={submit}>
-            {saving ? "Saving…" : selected ? "Save this cost" : "Add it"}
+          <button aria-busy={saving || undefined} className="btn" type="button" disabled={saving} onClick={submit}>
+            {selected ? "Save this cost" : "Add it"}
           </button>
           {selected ? (
             <button className="btn" type="button" disabled={saving} onClick={remove}>

@@ -181,13 +181,13 @@ function AccountControls({ data }: { data: SettingsAccount }) {
             onChange={(e) => setConfirm(e.target.value)}
           />
           <div className="btnrow">
-            <button
+            <button aria-busy={saving || undefined}
               className="btn btn--primary"
               type="button"
               disabled={saving}
               onClick={submitPassword}
             >
-              {saving ? "Saving…" : "Change the password"}
+              Change the password
             </button>
           </div>
         </div>

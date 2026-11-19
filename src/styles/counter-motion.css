@@ -1,0 +1,50 @@
+/*
+ * The motion layer for every screen that is not built from the shared blocks
+ * yet (the shared blocks carry their own, in counter-ui.css).
+ *
+ * Same rules as the blocks: one easing curve, the --ct-dur-* tokens from
+ * counter.css, and every token is 0 under prefers-reduced-motion, so nothing
+ * here needs its own media query except the spinner's turn. Styling only:
+ * no markup, no landmark the fidelity gate counts, and every animation ends
+ * on the element's resting state.
+ *
+ * A page opts a button into working/done feedback by setting
+ * data-state="busy" | "done" on it (useAct's stateOf gives the value; see
+ * actButton in src/components/counter/ui/act.ts). Any button with
+ * aria-busy="true" gets the working mark too.
+ */
+
+/* ---- Presses: everything you can tap answers the finger ---- */
+:is(.seg button,.seg a,.mtab,.storeopt,.chip:is(a,button),.wkd,.padk,.ckc__btn,.ckb__more,.ckc__row,.do,.linkact,.tile:is(a,button),.card:is(a,button),.qitem a,.mlist a){
+  transition:background-color var(--ct-dur-quick) var(--ct-ease),border-color var(--ct-dur-quick) var(--ct-ease),color var(--ct-dur-quick) var(--ct-ease),box-shadow var(--ct-dur-quick) var(--ct-ease),opacity var(--ct-dur-quick) var(--ct-ease),transform var(--ct-dur-tap) ease-out
+}
+:is(.seg button,.seg a,.mtab,.chip:is(a,button),.storeopt,.wkd,.do,.linkact):active:not([disabled]){transform:scale(.97);transition-duration:0s}
+:is(.ckc__btn,.ckb__more,.ckc__row,.tile:is(a,button),.card:is(a,button),.qitem a,.mlist a):active:not([disabled]){transform:translateY(1px) scale(.995);transition-duration:0s}
+
+/* ---- Working, then done, on the button that was tapped ---- */
+@keyframes ct-spin{to{transform:rotate(360deg)}}
+@keyframes ct-pop{from{opacity:.4;transform:scale(.92)}to{opacity:1;transform:none}}
+:is(.btn,.mbtn,.do,.qbtn,.sug,.ckc__btn,.linkact)[data-state="busy"],
+button[aria-busy="true"]:not(.cu-btn){cursor:progress;opacity:.85}
+:is(.btn,.mbtn,.do,.qbtn,.sug,.ckc__btn,.linkact)[data-state="busy"]::before,
+button[aria-busy="true"]:not(.cu-btn)::before{content:"";display:inline-block;flex:none;width:12px;height:12px;margin-right:6px;vertical-align:-2px;
+  border-radius:50%;border:2px solid currentColor;border-right-color:transparent;animation:ct-spin .7s linear infinite}
+@media (prefers-reduced-motion:reduce){
+  :is(.btn,.mbtn,.do,.qbtn,.sug,.ckc__btn,.linkact)[data-state="busy"]::before,
+  button[aria-busy="true"]:not(.cu-btn)::before{animation:none;border-right-color:currentColor;opacity:.5}
+}
+:is(.btn,.mbtn,.ckc__btn)[data-state="done"]{background:var(--good);border-color:var(--good);color:var(--surface);animation:ct-pop var(--ct-dur-rise) var(--ct-ease)}
+:is(.btn--quiet,.do,.qbtn,.sug,.linkact)[data-state="done"]{background:none;border-color:transparent;color:var(--good);animation:ct-pop var(--ct-dur-rise) var(--ct-ease)}
+
+/* ---- A tick draws in when a task is ticked (store checks, crew page) ---- */
+.ckc__row.done .ck{animation:ct-pop var(--ct-dur-rise) var(--ct-ease)}
+
+/* ---- Every fold in the app slides open instead of jumping ----
+   Browsers without ::details-content open at once, as before. */
+.ct-root details{interpolate-size:allow-keywords}
+.ct-root details::details-content{block-size:0;overflow:hidden;transition:block-size var(--ct-dur-rise) var(--ct-ease),content-visibility var(--ct-dur-rise) allow-discrete}
+.ct-root details[open]::details-content{block-size:auto}
+
+/* ---- Lines that just arrived (a saved note, an error) ease in ---- */
+@keyframes ct-arrive{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+:is(.ct-note,.note,.msub)[role="status"],:is(.ct-note,.note,.msub)[role="alert"],[role="alert"]:not(.cu-notice){animation:ct-arrive var(--ct-dur-rise) var(--ct-ease) both}

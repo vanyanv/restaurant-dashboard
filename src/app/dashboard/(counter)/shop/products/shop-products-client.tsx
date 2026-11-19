@@ -152,8 +152,8 @@ function Stock({ productId, stock }: { productId: string; stock: StockView }) {
         onChange={(e) => setValue(e.target.value.replace(/\D/g, "").slice(0, 6))}
       />
       {changed && (
-        <button type="submit" className="btn" disabled={busy}>
-          {busy ? "…" : "Save"}
+        <button aria-busy={busy || undefined} type="submit" className="btn" disabled={busy}>
+          Save
         </button>
       )}
       <OutcomeLine outcome={outcome} />
@@ -299,8 +299,8 @@ function Editor({ p, onClose }: { p: ProductEdit; onClose: () => void }) {
           <textarea className="ck-input" value={v.description} onChange={set("description")} maxLength={4000} />
         </label>
         <div className="ck-row">
-          <button type="submit" className="btn btn--primary" disabled={!dirty || badPrice || save.busy}>
-            {save.busy ? "Saving…" : "Save"}
+          <button aria-busy={save.busy || undefined} type="submit" className="btn btn--primary" disabled={!dirty || badPrice || save.busy}>
+            Save
           </button>
           <OutcomeLine outcome={badPrice ? { ok: false, text: "Price is dollars and cents, like 32.00" } : save.outcome} />
         </div>

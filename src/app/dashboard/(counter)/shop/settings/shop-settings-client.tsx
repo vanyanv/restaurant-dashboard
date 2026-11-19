@@ -152,8 +152,8 @@ function Form({ s }: { s: SettingsData }) {
       </label>
 
       <div className="ck-row">
-        <button type="submit" className="btn btn--primary" disabled={busy || bad !== null}>
-          {busy ? "Saving…" : "Save settings"}
+        <button aria-busy={busy || undefined} type="submit" className="btn btn--primary" disabled={busy || bad !== null}>
+          Save settings
         </button>
         <OutcomeLine outcome={bad ? { ok: false, text: bad } : outcome} />
       </div>

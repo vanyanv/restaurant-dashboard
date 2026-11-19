@@ -176,8 +176,8 @@ function PhotoCard({ p, onOpen, onReviewed }: { p: CellView["markPhotos"][number
               onChange={(e) => setNote(e.target.value)}
             />
             <span className="ck-row">
-              <button type="button" className="btn btn--primary" disabled={busy} onClick={() => send("redo")}>
-                {busy ? "Sending…" : "Send it back"}
+              <button aria-busy={busy || undefined} type="button" className="btn btn--primary" disabled={busy} onClick={() => send("redo")}>
+                Send it back
               </button>
               <button type="button" className="btn btn--quiet" disabled={busy} onClick={() => setAsking(false)}>
                 Cancel
@@ -482,8 +482,8 @@ export function PhotoViewer({ cell, caption }: { cell: CellView; caption: string
         </>
       )}
       {rest.length > 0 && (
-        <button type="button" className="btn btn--quiet" disabled={busy} onClick={allRest}>
-          {busy ? "Saving…" : p.review === null ? `All ${rest.length + 1} left look good` : `All ${rest.length} left look good`}
+        <button aria-busy={busy || undefined} type="button" className="btn btn--quiet" disabled={busy} onClick={allRest}>
+          {p.review === null ? `All ${rest.length + 1} left look good` : `All ${rest.length} left look good`}
         </button>
       )}
       <OutcomeLine outcome={outcome} />

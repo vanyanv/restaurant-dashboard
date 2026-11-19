@@ -81,8 +81,8 @@ function Crew({ data }: { data: CrewData }) {
         </div>
         <div className="ck-row">
           <OutcomeLine outcome={outcome} />
-          <button type="button" className="btn" disabled={busy} onClick={() => run(() => syncStoreCrew({ storeId: data.store.id }))}>
-            {busy ? "Working…" : "Sync from Harri"}
+          <button aria-busy={busy || undefined} type="button" className="btn" disabled={busy} onClick={() => run(() => syncStoreCrew({ storeId: data.store.id }))}>
+            Sync from Harri
           </button>
           <button type="button" className="btn" onClick={() => setShowAll((v) => !v)}>
             {showAll ? "Hide all PINs" : "Show all PINs"}
@@ -309,8 +309,8 @@ function CrewForm({
         <input className="ck-input ck-pin" inputMode="numeric" pattern="\d{4}" value={v.pin} onChange={set("pin")} />
       </label>
       <span className="ck-row">
-        <button type="submit" className="btn btn--primary" disabled={busy}>
-          {busy ? "Saving…" : submitLabel}
+        <button aria-busy={busy || undefined} type="submit" className="btn btn--primary" disabled={busy}>
+          {submitLabel}
         </button>
         <button type="button" className="btn btn--quiet" onClick={onCancel}>
           Cancel

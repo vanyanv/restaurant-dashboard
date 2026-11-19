@@ -149,13 +149,13 @@ export function OrderDrawer({ o, onClose }: { o: OrderView; onClose: () => void 
 
       {o.next === "ship" && <ShipForm orderId={o.id} />}
       {o.next === "ready" && (
-        <button type="button" className="btn btn--primary" disabled={busy} onClick={() => run(() => markOrderReady({ orderId: o.id }))}>
-          {busy ? "Saving…" : NEXT_STEP_LABEL.ready}
+        <button aria-busy={busy || undefined} type="button" className="btn btn--primary" disabled={busy} onClick={() => run(() => markOrderReady({ orderId: o.id }))}>
+          {NEXT_STEP_LABEL.ready}
         </button>
       )}
       {o.next === "picked_up" && (
-        <button type="button" className="btn btn--primary" disabled={busy} onClick={() => run(() => markOrderPickedUp({ orderId: o.id }))}>
-          {busy ? "Saving…" : NEXT_STEP_LABEL.picked_up}
+        <button aria-busy={busy || undefined} type="button" className="btn btn--primary" disabled={busy} onClick={() => run(() => markOrderPickedUp({ orderId: o.id }))}>
+          {NEXT_STEP_LABEL.picked_up}
         </button>
       )}
       <OutcomeLine outcome={outcome} />

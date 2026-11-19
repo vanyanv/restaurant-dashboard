@@ -368,8 +368,8 @@ export function CountWalk({ data, base }: { data: WalkData; base: "/dashboard/co
         )}
         <OutcomeLine outcome={outcome} />
         <div className="cw__foot cw__foot--stick">
-          <button type="button" className="cw__btn cw__btn--primary" disabled={busy || !countId || done === 0} onClick={finish}>
-            {busy ? "Saving…" : "Finish count"}
+          <button aria-busy={busy || undefined} type="button" className="cw__btn cw__btn--primary" disabled={busy || !countId || done === 0} onClick={finish}>
+            Finish count
           </button>
         </div>
       </div>
@@ -393,7 +393,7 @@ export function CountWalk({ data, base }: { data: WalkData; base: "/dashboard/co
               ? "Everything is counted. Look it over and finish."
               : `${done} of ${items.length} counted.${resumeName ? ` Next up: ${resumeName} in ${resumeArea}.` : ""}`
             : `${items.length} items to count, in ${sections.length} sections.`}
-          {" "}
+           
           {data.lastFinished ? `Last full count ${data.lastFinished}.` : "This is the first count for this store."}
         </Answer>
         <div className="cw__bar" aria-hidden="true"><i style={{ width: `${Math.round((done / items.length) * 100)}%` }} /></div>
@@ -564,8 +564,8 @@ function ItemScreen({
         <button type="button" className="cw__btn" disabled={busy} onClick={() => onSave(it.layers.map(() => 0))}>
           None here
         </button>
-        <button type="button" className="cw__btn cw__btn--primary" disabled={busy || empty} onClick={save}>
-          {busy ? "Saving…" : "Save · next"}
+        <button aria-busy={busy || undefined} type="button" className="cw__btn cw__btn--primary" disabled={busy || empty} onClick={save}>
+          Save · next
         </button>
       </div>
     </div>

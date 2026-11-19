@@ -989,13 +989,13 @@ function Builder({
       })}
 
       <div className="btnrow" style={{ marginTop: 12 }}>
-        <button
+        <button aria-busy={saving || undefined}
           type="button"
           className="btn btn--primary"
           disabled={saving || !dirty}
           onClick={save}
         >
-          {saving ? "Saving…" : dirty ? "Save recipe" : "Saved"}
+          {dirty ? "Save recipe" : "Saved"}
         </button>
         {/* A BUTTON in both states, where this used to swap to a `<Tag>`.
             The design draws a control here and the control is what says

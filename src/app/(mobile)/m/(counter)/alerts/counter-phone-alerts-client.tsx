@@ -146,6 +146,7 @@ function PhoneAlertDecision({
       <p className="mlede">{alert.title}</p>
       <p className="msub">{alert.detail}</p>
       <button
+        aria-busy={saving || undefined}
         className="mbtn mbtn--primary"
         type="button"
         disabled={saving}
@@ -156,9 +157,7 @@ function PhoneAlertDecision({
           * "14 times since Aug 17" closes fourteen alerts, and the button that
           * does it says so before it is pressed rather than after.
           */}
-        {saving
-          ? "Saving…"
-          : alert.ids.length > 1
+        {alert.ids.length > 1
             ? `Acknowledge all ${alert.ids.length}`
             : "Acknowledge"}
       </button>

@@ -192,8 +192,8 @@ function ReportEmails({ emails, ready }: { emails: string[]; ready: boolean }) {
         <input className="ck-input" type="text" inputMode="email" autoComplete="off" value={text} onChange={(e) => setText(e.target.value)} />
       </label>
       <div className="ck-row">
-        <button type="button" className="btn btn--primary" disabled={busy || text === emails.join(", ")} onClick={save}>
-          {busy ? "Saving…" : "Save"}
+        <button aria-busy={busy || undefined} type="button" className="btn btn--primary" disabled={busy || text === emails.join(", ")} onClick={save}>
+          Save
         </button>
         <OutcomeLine outcome={outcome} />
       </div>
