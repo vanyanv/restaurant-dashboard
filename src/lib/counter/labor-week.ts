@@ -391,7 +391,11 @@ export function laborWeek(
 
   const missingStoreDays = sum(days.map((d) => d.missingStoreDays))
 
-  const compared = days.filter((d) => d.compare !== null)
+  const p = opts.provisional
+  const isProvisional = (key: string) => p !== undefined && key >= p.from && key <= p.today
+  // A provisional day can carry part-day hours against its full schedule, so
+  // it never feeds the worked-vs-scheduled comparison.
+  const compared = days.filter((d) => d.compare !== null && !isProvisional(d.key))
   const compare =
     compared.length === 0
       ? null
@@ -400,9 +404,7 @@ export function laborWeek(
           scheduledHours: sum(compared.map((d) => d.compare!.scheduledHours)),
         }
   const awaiting = days.filter((d) => d.awaitingStoreDays > 0)
-  const p = opts.provisional
-  const provisionalDays =
-    p === undefined ? [] : days.filter((d) => d.key >= p.from && d.key <= p.today).map((d) => d.label)
+  const provisionalDays = days.filter((d) => isProvisional(d.key)).map((d) => d.label)
 
   return {
     days,
@@ -425,14 +427,14 @@ export function laborWeek(
  * Harri's provisional window, for a page rendered on `today`.
  *
  * Harri finalises a day about two days after it (D+2), and the cron re-syncs
- * the last three. So today and yesterday (Los Angeles business days) are not
- * final: hours can still be added and costs can still move. `from` is
- * yesterday's key and `today` today's, so a range that ends earlier names
- * nothing.
+ * the last three. So today and the two days before it (Los Angeles business
+ * days) are not final: hours can still be added and costs can still move.
+ * `from` is the key two days back and `today` today's, so a range that ends
+ * earlier names nothing.
  */
 export function provisionalWindow(today: Date): { from: string; today: string } {
   const d = businessCalendarDate(today)
-  return { from: isoDay(addDays(d, -1)), today: isoDay(d) }
+  return { from: isoDay(addDays(d, -2)), today: isoDay(d) }
 }
 
 /** Below this share of sales, a store's labor is more likely missing than lean. */

@@ -1006,11 +1006,13 @@ function buildActionCards(
       // which is negative for a loss, and a highest-first sort on the signed
       // figure put every loss below every gain — a store heading for a $2,000
       // loss could never reach the top five beside a $40 reprice.
-      const score = Math.abs(
+      // Only a profit risk is ranked on size: for a gain, a negative P25 is
+      // a wide interval and must stay at the bottom, not be promoted by abs().
+      const raw =
         o.impactP25 != null
           ? o.impactP25 * weekly
-          : o.estimatedDollarImpact * weekly * (CONFIDENCE_WEIGHT[o.confidence] ?? 0.5),
-      )
+          : o.estimatedDollarImpact * weekly * (CONFIDENCE_WEIGHT[o.confidence] ?? 0.5)
+      const score = o.opportunityType === "profit_risk" ? Math.abs(raw) : raw
       return { o, score }
     })
     .sort((a, b) => b.score - a.score)

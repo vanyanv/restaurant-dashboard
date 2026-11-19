@@ -518,14 +518,14 @@ describe("laborWeek — the schedule is read only over store-days with hours", (
 })
 
 describe("provisionalWindow / laborWeek provisional days", () => {
-  it("marks today and yesterday (LA) provisional, and nothing older", () => {
+  it("marks today and the two days before it (LA) provisional, and nothing older", () => {
     // 2026-11-19 at 05:00Z is still the 18th in Los Angeles.
     const w = provisionalWindow(new Date("2026-11-19T05:00:00Z"))
-    expect(w).toEqual({ from: "2026-11-17", today: "2026-11-18" })
+    expect(w).toEqual({ from: "2026-11-16", today: "2026-11-18" })
     const days = ["2026-11-15", "2026-11-16", "2026-11-17", "2026-11-18"].map((key) =>
       laborDay({ key, label: key, actualSeconds: 3600, scheduledMinutes: 60, cost: 20, totalSales: 100 }),
     )
-    expect(laborWeek(days, 0, { provisional: w }).provisionalDays).toEqual(["2026-11-17", "2026-11-18"])
+    expect(laborWeek(days, 0, { provisional: w }).provisionalDays).toEqual(["2026-11-16", "2026-11-17", "2026-11-18"])
     expect(laborWeek(days, 0).provisionalDays).toEqual([])
   })
 })

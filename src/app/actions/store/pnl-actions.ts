@@ -182,6 +182,8 @@ type DailyCogsRow = {
   lineCost: number
   status: CogsStatus
   recipeId: string | null
+  /** COGSED but some recipe lines had no price: `lineCost` reads low. */
+  partialCost?: boolean
 }
 
 /**
@@ -222,8 +224,8 @@ function summarizeDailyCogs(rows: DailyCogsRow[], periods: Period[]): {
   rowCountPerPeriod: number[]
   /**
    * Per period, the sales on rows whose food cost is NOT fully in
-   * `cogsValues`: UNMAPPED (no recipe, $0 counted) and MISSING_COST (only the
-   * priced ingredients counted). The food line reads low by the cost of these.
+   * `cogsValues`: UNMAPPED (no recipe, $0 counted) and MISSING_COST or partly costed
+   * rows (only the priced ingredients counted). The food line reads low by the cost of these.
    */
   uncostedSales: number[]
   /** `YYYY-MM-DD` days with at least one row in range. */
@@ -274,6 +276,9 @@ function summarizeDailyCogs(rows: DailyCogsRow[], periods: Period[]): {
 
     if (row.status === CogsStatus.MISSING_COST) {
       aggInto(missingCostAgg, row)
+      uncostedSales[idx] += row.salesRevenue
+    } else if (row.partialCost) {
+      // COSTED with some recipe lines unpriced: the total is an understatement.
       uncostedSales[idx] += row.salesRevenue
     }
   }
@@ -504,6 +509,7 @@ export async function getStorePnL(input: {
           lineCost: true,
           status: true,
           recipeId: true,
+          partialCost: true,
         },
       }),
       // Labor dollars: `loadLaborCost` is the one rule (daily actual, else the
@@ -655,9 +661,9 @@ export async function getAllStoresPnL(input: {
     // the commission basis, and a pre-change entry would lack both. `pnl4:`
     // since 2026-11-03: labor carries the employer payroll tax and its note.
     // `pnl5:` since 2026-11-04: periods carry laborMissingDays.
-    // `pnl6:` since 2026-11-19: periods carry laborEstimatedDays,
+    // `pnl7:` since 2026-11-19 (partly costed rows count as uncosted): periods carry laborEstimatedDays,
     // cogsMissingDays and uncostedSales.
-    `pnl6:account:${accountId}:${stableKey({
+    `pnl7:account:${accountId}:${stableKey({
       s: input.startDate.toISOString(),
       e: input.endDate.toISOString(),
       g: input.granularity,
@@ -766,6 +772,7 @@ export async function getAllStoresPnL(input: {
           lineCost: true,
           status: true,
           recipeId: true,
+          partialCost: true,
         },
       }),
       pnlFixedExpensesCached(storeIds.join(",")),

@@ -54,6 +54,7 @@ def _load_elastic_items(conn, store_id: str):
               AND "pricePointCount" >= %s
               AND "sampleSize" >= %s
               AND "elasticityStdErr" IS NOT NULL
+              AND elasticity <= 0 AND elasticity > -1
               AND "computedAt" >= NOW() - (%s * INTERVAL '1 hour')
             ORDER BY ABS(elasticity) DESC
             ''',
@@ -104,7 +105,9 @@ def generate(conn, *, store_id: str, as_of_date: dt.date) -> list[GrowthOpportun
             continue
         # Raises only, on inelastic items. See the module docstring for why
         # a cut is never recommended from this fit.
-        if abs(elasticity) >= 1:
+        # A positive slope (volume rising with price) is channel mix, not
+        # demand: the apps list higher and sell more. Only -1 < e <= 0 counts.
+        if elasticity > 0 or elasticity <= -1:
             continue
         margin = margins.get(sku)
         if margin is None or margin <= 0:
