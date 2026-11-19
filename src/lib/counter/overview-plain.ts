@@ -54,7 +54,18 @@ export interface OverviewPlain {
   sentence: string
   sales: number
   /** Against the period before; null when there is none to compare. */
-  salesVs: { amount: number; pct: number | null; label: string } | null
+  salesVs: {
+    amount: number
+    pct: number | null
+    label: string
+    /** Set while the last day is incomplete: "so far today (through 11 am), vs the same time last Wednesday". */
+    against?: string
+  } | null
+  /**
+   * While the range's last day is still trading or syncing, what is being
+   * compared (or that the comparison waits). Null for a completed range.
+   */
+  compareNote: string | null
   kept: number
   keptPct: number | null
   /** "at most · 2 Glendale days of labor missing", or null when nothing is missing. */
@@ -103,7 +114,16 @@ const pctWords = (v: number) => `${(Math.abs(v) * 100).toFixed(1).replace(/\.0$/
 export function buildOverviewPlain(input: OverviewPlainInput): OverviewPlain {
   const { pnl: p } = input
   const v = p.vsPrior
-  const salesVs = v ? { amount: v.sales, pct: changePct(v.sales, p.sales - v.sales), label: v.label } : null
+  // The base is the prior figure the change was measured against, which for
+  // an incomplete day is the prior's same hours, not today's sales less the change.
+  const salesVs = v
+    ? {
+        amount: v.sales,
+        pct: changePct(v.sales, v.salesPrior),
+        label: v.label,
+        ...(v.against ? { against: v.against } : {}),
+      }
+    : null
 
   /* ── one card per store, from the P&L's own store reading ── */
   const stores: OverviewStore[] = p.stores.map((s) => ({
@@ -111,7 +131,8 @@ export function buildOverviewPlain(input: OverviewPlainInput): OverviewPlain {
     name: s.name,
     sales: s.sales,
     salesChange: s.salesChange,
-    salesChangePct: s.salesChange === null ? null : changePct(s.salesChange, s.sales - s.salesChange),
+    salesChangePct:
+      s.salesChange === null ? null : changePct(s.salesChange, s.salesPrior ?? s.sales - s.salesChange),
     // A store the mix has no reading for is unknown, not zero orders.
     orders: input.orders && Object.hasOwn(input.orders, s.storeId) ? input.orders[s.storeId] : null,
     laborPct: s.laborMissingDays > 0 ? null : s.labor,
@@ -120,6 +141,9 @@ export function buildOverviewPlain(input: OverviewPlainInput): OverviewPlain {
 
   /* ── the sentence ── */
   const parts: string[] = []
+  // An incomplete last day says first what is being compared, or that the
+  // comparison waits, so no figure below reads as a whole day against a part.
+  if (p.compareNote && p.sales > 0) parts.push(p.compareNote)
   if (p.sales <= 0) {
     parts.push("No sales came in for this period yet.")
   } else {
@@ -226,6 +250,7 @@ export function buildOverviewPlain(input: OverviewPlainInput): OverviewPlain {
     sentence: parts.join(" "),
     sales: p.sales,
     salesVs,
+    compareNote: p.compareNote,
     kept: p.kept,
     keptPct: p.keptPct,
     keptAtMost: p.atMost,

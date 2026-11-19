@@ -5,6 +5,7 @@ export const OVERVIEW_PLAIN: OverviewPlain = {
   sentence: "Hollywood sold $7,468, up $298 (4.2%) on the week before, and kept $1,900 after app fees, food, labor and rent.",
   sales: 7468,
   salesVs: { amount: 298, pct: 0.0416, label: "the week before" },
+  compareNote: null,
   kept: 1900,
   keptPct: 0.254,
   keptAtMost: null,

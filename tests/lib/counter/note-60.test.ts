@@ -40,6 +40,8 @@ vi.mock("@/app/actions/forecasts/revenue-forecast-actions", () => ({
 vi.mock("@/app/actions/ratings/ratings-actions", () => ({ getRatingsSummary: vi.fn() }))
 vi.mock("@/lib/counter/channel-mix", () => ({ loadChannelMix: vi.fn() }))
 vi.mock("@/lib/counter/targets", () => ({ loadStripTargets: vi.fn() }))
+// Reads `OtterHourlySummary` and `JobRun` through `@/lib/prisma`; these ranges are long complete.
+vi.mock("@/lib/counter/adapters/elapsed-compare", () => ({ loadElapsedCompare: vi.fn(async () => null) }))
 // Both reach Prisma at MODULE LOAD (`@/lib/prisma` throws without
 // `DATABASE_URL`), so an unmocked import here fails the file's import rather
 // than one assertion.

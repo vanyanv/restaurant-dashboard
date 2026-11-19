@@ -2,6 +2,7 @@ import { shortStoreName } from "@/lib/checks/names"
 import { money } from "@/lib/counter/format"
 import type { Statement, StatementLines } from "@/lib/counter/statement"
 import { serializeWeekWindow, type SerializedWeekWindow, type WeekWindow } from "@/lib/counter/date-range"
+import type { ElapsedCompare } from "@/lib/counter/elapsed-compare"
 
 /**
  * The P&L "made plain" — the owner-approved redesign of 2026-11-03 (thread
@@ -114,9 +115,12 @@ export interface PlainStore {
   sales: number
   kept: number
   keptPct: number | null
+  /** Kept against the prior period; null with no prior sales, or while the last day is incomplete (a part-day's kept is not comparable). */
   keptChange: number | null
   /** Sales against the same store's prior period, or null with no prior sales. */
   salesChange: number | null
+  /** The prior sales `salesChange` is measured against, so a percent divides by the right base. Null with `salesChange`. */
+  salesPrior: number | null
   /** Days this store sold with no Harri labor reading. */
   laborMissingDays: number
   /** Days this store sold with no Harri reading, labor filled from its budget. */
@@ -144,7 +148,28 @@ export interface PnlPlain {
   keptNote: string | null
   /** The counts behind `atMost` and `keptNote`, for surfaces that say them differently. */
   gaps: PlainGaps
-  vsPrior: { label: string; kept: number; pts: number | null; sales: number } | null
+  /**
+   * The move against the prior period. While the last day of the range is
+   * still trading or syncing it is the hour-for-hour sales comparison
+   * (`elapsed-compare.ts`): `kept` and `pts` are null, since a part-day's kept
+   * has nothing fair to stand against, and `against` says what is compared.
+   */
+  vsPrior: {
+    label: string
+    kept: number | null
+    pts: number | null
+    sales: number
+    /** The prior sales `sales` is measured against. */
+    salesPrior: number
+    /** Words for the comparison when it is not the plain "vs <label>". */
+    against?: string
+  } | null
+  /**
+   * Said in place of, or beside, the comparison while the last day is
+   * incomplete: "So far today, through 11 am, …" or "… waits until the day is
+   * complete." Null when the range is complete and compares in full.
+   */
+  compareNote: string | null
   sentence: string
   statuses: PlainStatus[]
   todos: PlainTodo[]
@@ -190,6 +215,12 @@ export interface PlainInput {
   daily: Statement | null
   files: PlainStoreFile[]
   storeId: string | null
+  /**
+   * Set when the range's last day is still trading or syncing
+   * (`loadElapsedCompare`): the sales comparison is then hour for hour and
+   * the full-day prior is not compared against. Absent or null: in full.
+   */
+  elapsed?: ElapsedCompare | null
 }
 
 /** Longest range listed day by day. Past this the page says "pick a week". */
@@ -380,15 +411,30 @@ export function buildPlain(input: PlainInput): PnlPlain {
     estimateParts(s),
   )
 
-  const priorOk = prior !== null && prior.grossSales > 0 && !prior.storeNotFound
-  const vsPrior =
-    priorOk && input.priorLabel
+  // A part-day is never read against a whole one: while the last day is
+  // incomplete the prior statement is not compared against at all, and the
+  // sales move is the hour-for-hour reading instead.
+  const elapsed = input.elapsed ?? null
+  const priorOk = elapsed === null && prior !== null && prior.grossSales > 0 && !prior.storeNotFound
+  const vsPrior: PnlPlain["vsPrior"] = elapsed
+    ? elapsed.current !== null && elapsed.prior !== null && elapsed.prior > 0
+      ? {
+          label: elapsed.label,
+          kept: null,
+          pts: null,
+          sales: elapsed.current - elapsed.prior,
+          salesPrior: elapsed.prior,
+          against: elapsed.against,
+        }
+      : null
+    : priorOk && input.priorLabel
       ? {
           label: input.priorLabel,
           kept: s.bottomLine - prior.bottomLine,
           pts:
             keptPct === null ? null : (keptPct - prior.bottomLine / prior.grossSales) * 100,
           sales: sales - prior.grossSales,
+          salesPrior: prior.grossSales,
         }
       : null
 
@@ -649,6 +695,8 @@ export function buildPlain(input: PlainInput): PnlPlain {
       ? []
       : s.allStores.map((st) => {
           const p = priorOk ? prior.allStores.find((x) => x.storeId === st.storeId) : undefined
+          const e = elapsed && elapsed.current !== null ? elapsed.perStore[st.storeId] : undefined
+          const eOk = e !== undefined && e.prior > 0
           const file = files.find((f) => f.id === st.storeId)
           const nf = file ? fixedNotOnFile([file]).map((n) => n.what) : []
           const own = upperBoundCauses(st)
@@ -664,7 +712,10 @@ export function buildPlain(input: PlainInput): PnlPlain {
             kept: st.bottomLine,
             keptPct: share(st.bottomLine, st.grossSales),
             keptChange: p && p.grossSales > 0 ? st.bottomLine - p.bottomLine : null,
-            salesChange: p && p.grossSales > 0 ? st.grossSales - p.grossSales : null,
+            salesChange: elapsed
+              ? eOk ? e.current - e.prior : null
+              : p && p.grossSales > 0 ? st.grossSales - p.grossSales : null,
+            salesPrior: elapsed ? (eOk ? e.prior : null) : p && p.grossSales > 0 ? p.grossSales : null,
             laborMissingDays: st.laborMissingDays,
             laborEstimatedDays: st.laborEstimatedDays,
             food: share(st.cogsValue, st.grossSales),
@@ -691,6 +742,7 @@ export function buildPlain(input: PlainInput): PnlPlain {
       fixedNotOnFile: filesKnown ? nof.length : null,
     },
     vsPrior,
+    compareNote: elapsed?.note ?? null,
     sentence: parts.join(" "),
     statuses,
     todos,

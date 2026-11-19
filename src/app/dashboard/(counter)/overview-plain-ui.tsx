@@ -60,9 +60,9 @@ export function OverviewHero({
                 ? {
                     change: `${v.amount >= 0 ? "▲" : "▼"} ${signedMoney(v.amount)}${v.pct === null ? "" : ` · ${signedPct(v.pct)}`}`,
                     tone: v.amount >= 0 ? "up" : "down",
-                    against: `vs ${v.label}`,
+                    against: v.against ?? `vs ${v.label}`,
                   }
-                : { change: "", tone: "flat", against: "no earlier period to compare" }
+                : { change: "", tone: "flat", against: o.compareNote ?? "no earlier period to compare" }
             }
           />
           <BigNumber

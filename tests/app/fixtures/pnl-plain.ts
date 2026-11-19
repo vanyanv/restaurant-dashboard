@@ -24,7 +24,8 @@ return {
   atMost: "at most · 2 Glendale days of labor missing",
   keptNote: "at most · 2 Glendale days of labor missing",
   gaps: { laborMissingDays: 2, laborEstimatedDays: 0, cogsMissingDays: 0, uncostedShare: 0, unknownOrders: 0, rateShare: 0.05, fixedNotOnFile: 1 },
-  vsPrior: { label: "Oct 19 – 25", kept: 4_413, pts: 2.6, sales: 8_493 },
+  vsPrior: { label: "Oct 19 – 25", kept: 4_413, pts: 2.6, sales: 8_493, salesPrior: 75_609 },
+  compareNote: null,
   sentence: "You kept 28¢ of every dollar on $84,102 in sales. Some labor is missing, so the true number is lower.",
   statuses: [
     { tone: "ok", text: "Sales: from Otter" },
@@ -61,8 +62,8 @@ return {
     },
   ],
   stores: [
-    { storeId: storeIds[0], name: "Hollywood", sales: 47_977, kept: 15_786, keptPct: 0.329, keptChange: -698, salesChange: 2_100, laborMissingDays: 0, laborEstimatedDays: 0, food: 0.24, labor: 0.23, fees: 0.14, atMost: false, flags: [] },
-    { storeId: storeIds[1], name: "Glendale", sales: 9_681, kept: 3_629, keptPct: 0.375, keptChange: null, salesChange: null, laborMissingDays: 2, laborEstimatedDays: 0, food: 0.27, labor: 0.1, fees: 0.04, atMost: true, flags: ["2 days of labor missing"] },
+    { storeId: storeIds[0], name: "Hollywood", sales: 47_977, kept: 15_786, keptPct: 0.329, keptChange: -698, salesChange: 2_100, salesPrior: 45_877, laborMissingDays: 0, laborEstimatedDays: 0, food: 0.24, labor: 0.23, fees: 0.14, atMost: false, flags: [] },
+    { storeId: storeIds[1], name: "Glendale", sales: 9_681, kept: 3_629, keptPct: 0.375, keptChange: null, salesChange: null, salesPrior: null, laborMissingDays: 2, laborEstimatedDays: 0, food: 0.27, labor: 0.1, fees: 0.04, atMost: true, flags: ["2 days of labor missing"] },
   ],
 }
 }

@@ -26,6 +26,8 @@ vi.mock("@/app/actions/store/crud-actions", () => ({ getStores: vi.fn() }))
 vi.mock("@/app/actions/store/pnl-actions", () => ({ getAllStoresPnL: vi.fn() }))
 vi.mock("@/lib/counter/channel-mix", () => ({ loadChannelMix: vi.fn() }))
 vi.mock("@/lib/counter/targets", () => ({ loadStripTargets: vi.fn() }))
+// Reads `OtterHourlySummary` and `JobRun` through `@/lib/prisma`; these ranges are long complete.
+vi.mock("@/lib/counter/adapters/elapsed-compare", () => ({ loadElapsedCompare: vi.fn(async () => null) }))
 
 import { getStores } from "@/app/actions/store/crud-actions"
 import { getAllStoresPnL } from "@/app/actions/store/pnl-actions"

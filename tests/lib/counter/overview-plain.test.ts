@@ -109,8 +109,8 @@ describe("buildOverviewPlain", () => {
   })
 
   it("says a change against a tiny earlier period in dollars only, never as a percent", () => {
-    const pnl = { ...plainFixture(WEEKS), sales: 9_000, vsPrior: { label: "the week before", kept: 0, pts: null, sales: 8_700 } }
-    pnl.stores = [{ ...pnl.stores[0], sales: 9_000, salesChange: 8_700 }]
+    const pnl = { ...plainFixture(WEEKS), sales: 9_000, vsPrior: { label: "the week before", kept: 0, pts: null, sales: 8_700, salesPrior: 300 } }
+    pnl.stores = [{ ...pnl.stores[0], sales: 9_000, salesChange: 8_700, salesPrior: 300 }]
     const o = buildOverviewPlain(input({ pnl }))
     expect(o.salesVs).toEqual({ amount: 8_700, pct: null, label: "the week before" })
     expect(o.sentence).toContain("up $8,700 on the week before")

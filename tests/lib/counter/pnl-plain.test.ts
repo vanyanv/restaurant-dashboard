@@ -5,6 +5,8 @@ import { soldDaysWithoutLabor, type StoreLaborCost } from "@/lib/counter/labor-c
 import type { Statement, StatementLines, StoreStatement } from "@/lib/counter/statement"
 import type { CommissionTotals } from "@/lib/counter/commission-core"
 import { primeCost } from "@/lib/counter/prime-cost"
+import { buildElapsedCompare } from "@/lib/counter/elapsed-compare"
+import { buildOverviewPlain } from "@/lib/counter/overview-plain"
 
 const commission = (orders: number, estimated: number, unknown = 0): CommissionTotals =>
   ({
@@ -300,5 +302,84 @@ describe("buildPlain: the eight weeks", () => {
 
   it("marks a week at most on any gap of its own, not only labor", () => {
     expect(q.weeks.map((w) => w.atMost)).toEqual([false, true])
+  })
+})
+
+/**
+ * The auditor's morning: the full-day prior against a part-day read as
+ * "Every store sold less". While the last day is incomplete the P&L headline
+ * and the Overview sentence read the hour-for-hour comparison instead.
+ */
+describe("buildPlain with an incomplete last day", () => {
+  const today = new Date(2026, 10, 18)
+  const now = new Date("2026-11-18T11:20:00-08:00")
+  /** $each an hour from 8am up to (not including) `to`. */
+  const hourly = (storeId: string, day: string, to: number, each: number) =>
+    Array.from({ length: to - 8 }, (_, i) => ({ storeId, day, hour: 8 + i, netSales: each }))
+  // A morning's trade, and a whole last Wednesday ten times its size.
+  const part = statement([
+    storeSt("h", "Chris N Eddys - Hollywood", lines({ sales: 4000, fees: 30, food: 90, labor: 100, fixed: 50 })),
+    storeSt("g", "Chris N Eddys - Glendale", lines({ sales: 1500, fees: 10, food: 45, labor: 60, fixed: 40 })),
+  ])
+  const fullPrior = statement([
+    storeSt("h", "Chris N Eddys - Hollywood", lines({ sales: 9000, fees: 300, food: 900, labor: 700, fixed: 100 })),
+    storeSt("g", "Chris N Eddys - Glendale", lines({ sales: 3500, fees: 100, food: 450, labor: 400, fixed: 80 })),
+  ])
+  const base = { statement: part, prior: fullPrior, priorLabel: "Nov 11", weekWindows: [], weeks: null, daily: null, files, storeId: null }
+  const overview = (pnl: ReturnType<typeof buildPlain>) =>
+    buildOverviewPlain({ pnl, storeName: null, orders: null, alerts: { rows: [], open: 0 } })
+
+  it("without the elapsed reading, a part-day against a whole one reads as a collapse (the bug)", () => {
+    expect(overview(buildPlain(base)).sentence).toContain("Every store sold less.")
+  })
+
+  it("today: compares through 11 am against the same time last Wednesday, and says so", () => {
+    const elapsed = buildElapsedCompare({
+      range: { start: today, end: today },
+      state: "today",
+      now,
+      rows: [
+        ...hourly("h", "2026-11-18", 12, 1000), ...hourly("g", "2026-11-18", 11, 500),
+        ...hourly("h", "2026-11-11", 24, 800), ...hourly("g", "2026-11-11", 24, 550),
+      ],
+      newestHourly: { day: "2026-11-18", hour: 11 },
+    })
+    const p = buildPlain({ ...base, elapsed })
+    // Through 11 am: hours 8, 9, 10 on both sides.
+    expect(p.vsPrior).toMatchObject({ kept: null, pts: null, sales: 4500 - 4050, salesPrior: 4050 })
+    expect(p.vsPrior?.against).toBe("so far today (through 11 am), vs the same time last Wednesday")
+    expect(p.stores.find((s) => s.storeId === "h")).toMatchObject({ salesChange: 600, salesPrior: 2400, keptChange: null })
+    expect(p.stores.find((s) => s.storeId === "g")).toMatchObject({ salesChange: -150, salesPrior: 1650 })
+    // The full-day figures themselves are unchanged.
+    expect(p.sales).toBe(part.grossSales)
+    const o = overview(p)
+    expect(o.sentence).toBe(
+      "So far today, through 11 am, compared with the same time last Wednesday. " +
+        "Your two stores sold $5,500, up $450 (11.1%) on the same time last Wednesday, and kept at most $5,075 after app fees, food, labor and rent. " +
+        "Glendale was the one store that sold less. Some costs are not on file, so the true kept figure is lower.",
+    )
+    expect(o.sentence).not.toContain("Every store sold less")
+    expect(o.salesVs?.against).toBe("so far today (through 11 am), vs the same time last Wednesday")
+  })
+
+  it("no hourly data: drops the percent and says the comparison waits", () => {
+    const elapsed = buildElapsedCompare({
+      range: { start: today, end: today }, state: "today", now, rows: [], newestHourly: null,
+    })
+    const p = buildPlain({ ...base, elapsed })
+    expect(p.vsPrior).toBeNull()
+    expect(p.stores.every((s) => s.salesChange === null)).toBe(true)
+    const o = overview(p)
+    expect(o.salesVs).toBeNull()
+    expect(o.compareNote).toBe("Today is still trading, so the comparison with the period before waits until the day is complete.")
+    expect(o.sentence.startsWith(o.compareNote!)).toBe(true)
+    expect(o.sentence).not.toMatch(/%|sold less|sold more/)
+    expect(o.stores.every((s) => s.salesChangePct === null)).toBe(true)
+  })
+
+  it("a completed period still compares in full", () => {
+    const p = buildPlain({ ...base, elapsed: null })
+    expect(p.vsPrior).toMatchObject({ label: "Nov 11", sales: part.grossSales - fullPrior.grossSales })
+    expect(p.compareNote).toBeNull()
   })
 })

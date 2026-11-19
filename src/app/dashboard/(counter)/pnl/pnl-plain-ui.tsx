@@ -68,7 +68,14 @@ export function PlainHero({
           sub={p.sales > 0 ? `${pct(p.keptPct)} of sales` : undefined}
           missing={p.sales > 0 ? (p.keptNote ?? undefined) : undefined}
           vs={
-            v
+            v && v.kept === null
+              ? // The last day is still trading or syncing: only sales, hour for hour.
+                {
+                  change: `${v.sales >= 0 ? "▲ " : "▼ "}${signed(v.sales)}`,
+                  tone: v.sales >= 0 ? "up" : "down",
+                  against: `sales ${v.against ?? `vs ${v.label}`}`,
+                }
+              : v && v.kept !== null
               ? [
                   {
                     change: `${v.kept >= 0 ? "▲ " : "▼ "}${signed(v.kept)}`,
@@ -80,7 +87,7 @@ export function PlainHero({
                     : []),
                   { change: "", tone: "flat" as const, against: `sales ${signed(v.sales)}` },
                 ]
-              : { change: "", tone: "flat", against: "no earlier period to compare" }
+              : { change: "", tone: "flat", against: p.compareNote ?? "no earlier period to compare" }
           }
         />
         {p.sentence ? <Answer>{p.sentence}</Answer> : null}
