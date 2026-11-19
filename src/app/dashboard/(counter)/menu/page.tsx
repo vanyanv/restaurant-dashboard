@@ -54,6 +54,7 @@ export default async function MenuPage({
       range: counterParams.range,
       storeId: counterParams.storeId,
       accountId: session.user.accountId,
+      comparisonId: counterParams.comparisonId,
     },
     rangeLabel(counterParams.range, counterParams.presetId),
   )

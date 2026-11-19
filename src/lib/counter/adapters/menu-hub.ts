@@ -2,7 +2,7 @@ import { prisma } from "@/lib/prisma"
 import { getScopedStores } from "@/lib/account-stores"
 import { count, pct, plural } from "@/lib/counter/format"
 import { menuTab, navById, type SubNavItem } from "@/lib/counter/nav"
-import { toQueryBounds, type DateRange } from "@/lib/counter/date-range"
+import { comparisonWindows, rangeLabel as labelOf, toQueryBounds, type ComparisonId, type DateRange } from "@/lib/counter/date-range"
 import {
   awaitSections,
   classify,
@@ -11,7 +11,8 @@ import {
 } from "@/lib/counter/adapters/types"
 import { empty, mapReady, ready, type SectionData } from "@/lib/counter/section-data"
 import type { DonutSlice, FigureProps, MListRow, QueueItem } from "@/components/counter"
-import { getItemEconomics, menuMargin, type MenuMargin } from "@/lib/counter/item-economics"
+import { getItemEconomics, menuMargin, type ItemEconomics, type MenuMargin } from "@/lib/counter/item-economics"
+import { buildMenuPlain, type MenuPlain } from "@/lib/counter/menu-plain"
 
 /**
  * The Menu hub — `P.menuhub` (`docs/counter/counter-prototype.html:7274`).
@@ -88,6 +89,8 @@ export interface MenuCategoriesSection {
 }
 
 export interface MenuHubSections {
+  /** The page made plain (`menu-plain.ts`): kept share, earners, thin plates, to-dos. */
+  plain: SectionData<MenuPlain>
   headline: SectionData<MenuHubHeadline>
   work: SectionData<MenuWorkSection>
   categories: SectionData<MenuCategoriesSection>
@@ -97,6 +100,8 @@ export interface MenuHubInput {
   range: DateRange
   storeId: string | null
   accountId: string
+  /** What the plain answer's kept share is set against. Defaults to the period before. */
+  comparisonId?: ComparisonId
 }
 
 /**
@@ -129,6 +134,11 @@ interface MenuCounts {
   unmappedModifiers: number
   /** `menuMargin` — see `item-economics.ts`. */
   menu: MenuMargin
+  /** Every item's economics in the range, for the plain answer's rankings. */
+  economics: ItemEconomics[]
+  /** `menuMargin` over the comparison window(s), or null with none. */
+  before: MenuMargin | null
+  beforeLabel: string | null
 }
 
 async function loadMenuCounts(input: MenuHubInput): Promise<MenuCounts> {
@@ -148,12 +158,27 @@ async function loadMenuCounts(input: MenuHubInput): Promise<MenuCounts> {
       modifiers: 0,
       unmappedModifiers: 0,
       menu: menuMargin([]),
+      economics: [],
+      before: null,
+      beforeLabel: null,
     }
   }
   const storeIds = stores.map((s) => s.id)
   const where = { storeId: { in: storeIds }, date: { gte: startDate, lte: endDate } }
 
-  const [sold, mods, mappedItems, mappedMods, economics] = await Promise.all([
+  // The comparison window(s), through the same economics function, so the
+  // kept share now and before are the one rule applied twice.
+  const windows = comparisonWindows(range, input.comparisonId ?? "prev")
+  const beforeP = windows
+    ? Promise.all(
+        windows.map((w) => {
+          const b = toQueryBounds(w)
+          return getItemEconomics({ accountId, storeIds, startDate: b.startDate, endDate: b.endDate })
+        }),
+      )
+    : Promise.resolve(null)
+
+  const [sold, mods, mappedItems, mappedMods, economics, beforeAll] = await Promise.all([
     prisma.otterMenuItem.findMany({
       where: { ...where, isModifier: false },
       select: { itemName: true, category: true },
@@ -173,7 +198,10 @@ async function loadMenuCounts(input: MenuHubInput): Promise<MenuCounts> {
       select: { otterSubItemName: true },
     }),
     getItemEconomics({ accountId, storeIds, startDate, endDate }),
+    beforeP,
   ])
+  const beforeItems = beforeAll ? beforeAll.flatMap((e) => [...e.items.values()]) : []
+  const before = beforeAll && beforeItems.length > 0 ? menuMargin(beforeItems) : null
 
   const mappedItemNames = new Set(mappedItems.map((m) => m.otterItemName))
   const mappedModNames = new Set(mappedMods.map((m) => m.otterSubItemName))
@@ -223,6 +251,9 @@ async function loadMenuCounts(input: MenuHubInput): Promise<MenuCounts> {
     modifiers: mods.length,
     unmappedModifiers: mods.filter((m) => !mappedModNames.has(m.itemName)).length,
     menu: economics.menu,
+    economics: [...economics.items.values()],
+    before,
+    beforeLabel: windows === null ? null : windows.length === 1 ? labelOf(windows[0], "custom") : "the same weekday, 4 weeks",
   }
 }
 
@@ -422,6 +453,23 @@ export function getMenuHubSectionPromises(
   })
 
   return {
+    plain: guardSection(
+      countsP.then((sd) =>
+        mapReady(sd, (c) =>
+          buildMenuPlain({
+            menu: c.menu,
+            before: c.before,
+            beforeLabel: c.beforeLabel,
+            items: c.economics,
+            itemsSold: c.items,
+            unmappedItems: c.unmappedItems,
+            modifiers: c.modifiers,
+            unmappedModifiers: c.unmappedModifiers,
+          }),
+        ),
+      ),
+      "retryMenu",
+    ),
     headline: guardSection(
       countsP.then((sd) => mapReady(sd, headline)),
       "retryMenu",
