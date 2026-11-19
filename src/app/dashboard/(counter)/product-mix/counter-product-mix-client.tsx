@@ -20,6 +20,8 @@ import { readCounterParams, writeCounterParams } from "@/lib/counter/url-state"
 import { rangeLabel } from "@/lib/counter/date-range"
 import type { SectionSources } from "@/lib/counter/adapters/types"
 import type { ProductMixSections } from "@/lib/counter/adapters/product-mix"
+import { Fold } from "@/components/counter/ui"
+import { MixPlainView } from "./mix-plain-ui"
 
 /**
  * Product mix, composed from `P.productmix.desk()`
@@ -112,6 +114,11 @@ export function CounterProductMixClient({
           regenerates its tree on every load. See
           `e2e/desktop/console-sweep.spec.ts`, which is what caught it. */}
 
+      <Section bare title="Product mix in a sentence" data={sections.plain} pending={pending}>
+        {(p) => <MixPlainView p={p} />}
+      </Section>
+
+      <Fold summary="Every figure, as before">
       <Section bare title="The figures" data={sections.headline} pending={pending}>
         {(h) => <Strip cells={h.cells} />}
       </Section>
@@ -157,6 +164,7 @@ export function CounterProductMixClient({
           )}
         </Section>
       </div>
+      </Fold>
     </>
   )
 }

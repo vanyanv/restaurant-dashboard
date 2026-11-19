@@ -7,6 +7,8 @@ import { readCounterParams } from "@/lib/counter/url-state"
 import { rangeLabel } from "@/lib/counter/date-range"
 import type { ProductMixSections } from "@/lib/counter/adapters/product-mix"
 import type { SectionSources } from "@/lib/counter/adapters/types"
+import { Fold } from "@/components/counter/ui"
+import { MixPlainView } from "@/app/dashboard/(counter)/product-mix/mix-plain-ui"
 
 /**
  * Product mix, on a phone — `P.productmix.phone()`
@@ -52,6 +54,11 @@ export function CounterPhoneProductMixClient({
         <p className="msub">{windowLabel}</p>
       </div>
 
+      <Section bare title="Product mix in a sentence" data={sections.plain} pending={pending}>
+        {(p) => <MixPlainView p={p} />}
+      </Section>
+
+      <Fold summary="Every figure, as before">
       <Section bare title="The figures" data={sections.headline} pending={pending}>
         {(h) => <MStrip cells={h.phoneCells} />}
       </Section>
@@ -65,6 +72,7 @@ export function CounterPhoneProductMixClient({
         {(u) => <Chart {...u.phoneChart} />}
       </Section>
 
+      </Fold>
     </>
   )
 }

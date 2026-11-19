@@ -86,7 +86,19 @@ export interface MixBridge {
   note: string
 }
 
+/** The page made plain: what people bought, and why the kept share moved. */
+export interface MixPlain {
+  sentence: string
+  big: { label: string; value: string; sub: string }
+  vs: { change: string; tone: "up" | "down" | "flat"; against: string } | null
+  /** The bridge's three lines and its total, in points of kept share; empty with no prior window. */
+  bridge: Array<{ key: string; label: string; value: string; total?: boolean }>
+  moved: Array<{ key: string; name: string; change: string; up: boolean }>
+}
+
 export interface ProductMixSections {
+  /** The page made plain (owner's go, 2026-11-19): what people bought, and why the kept share moved. */
+  plain: SectionData<MixPlain>
   headline: SectionData<MixHeadline>
   units: SectionData<MixUnits>
   table: SectionData<MixTable>
@@ -131,7 +143,7 @@ const DESK_LABEL_CHARS = 18
  * so `cost × costedQty` and `price × costedQty` reconstitute the booked cost
  * and the collected revenue exactly.
  */
-interface Unit {
+export interface Unit {
   qty: number
   /** Units on COSTED rows; 0 when nothing costed it. */
   costedQty: number
@@ -151,7 +163,7 @@ interface Unit {
 const perUnit = (u: Unit) =>
   u.costedQty > 0 ? { cost: u.costTotal / u.costedQty, price: u.collectedTotal / u.costedQty } : null
 
-interface Window {
+export interface Window {
   units: Map<string, Unit>
   totalQty: number
   orders: number
@@ -159,7 +171,7 @@ interface Window {
   menu: MenuMargin
 }
 
-interface MixData {
+export interface MixData {
   now: Window
   prior: Window | null
   /** Every name in either window, so a term dropping to zero still counts. */
@@ -438,21 +450,21 @@ function tableOf(d: MixData): MixTable {
   }
 }
 
-function bridgeOf(d: MixData): MixBridge {
+/**
+ * The chained bridge's four margins: prior, prior with today's quantities,
+ * then with today's costs, then now. Null with no prior window or when one
+ * window has no costed revenue. One function, read by the bridge section and
+ * the plain answer, so the two can never disagree.
+ */
+function bridgePoints(d: MixData): { m0: number; mMix: number; mCost: number; m1: number } | null {
   const { now, prior } = d
-  if (!prior) {
-    return {
-      rows: [],
-      meta: "no prior window",
-      note: "A bridge needs two windows. This range has no window before it in the data.",
-    }
-  }
-
+  if (!prior) return null
   const at = (
     costFrom: Window,
     priceFrom: Window,
     qtyFrom: Window,
   ): number | null =>
+
     bridgeMargin(d.names, (n) => {
       const q = qtyFrom.units.get(n)
       // The same membership test as `menuMargin`, on the window the
@@ -474,8 +486,92 @@ function bridgeOf(d: MixData): MixBridge {
   const mMix = at(prior, prior, now)
   const mCost = at(now, prior, now)
   const m1 = at(now, now, now)
+  if (m0 === null || mMix === null || mCost === null || m1 === null) return null
+  return { m0, mMix, mCost, m1 }
+}
 
-  if (m0 === null || mMix === null || mCost === null || m1 === null) {
+/** Items below this many units in either window are too few to call a move. */
+const MOVE_MIN_UNITS = 20
+
+/** Exported for its test only; the page reads it through the `plain` section. */
+export function plainOf(d: MixData): MixPlain {
+  const { now, prior } = d
+  const change = prior && prior.totalQty > 0 ? ((now.totalQty - prior.totalQty) / prior.totalQty) * 100 : null
+  const perOrder = now.orders > 0 ? now.totalQty / now.orders : null
+
+  const moves = prior
+    ? d.names
+        .map((n) => ({ n, a: prior.units.get(n)?.qty ?? 0, b: now.units.get(n)?.qty ?? 0 }))
+        .filter((m) => m.a >= MOVE_MIN_UNITS && m.b >= MOVE_MIN_UNITS)
+        .map((m) => ({ ...m, pctChange: ((m.b - m.a) / m.a) * 100 }))
+    : []
+  const ups = moves.filter((m) => m.pctChange >= 1).sort((x, y) => y.pctChange - x.pctChange)
+  const downs = moves.filter((m) => m.pctChange <= -1).sort((x, y) => x.pctChange - y.pctChange)
+
+  const parts: string[] = []
+  parts.push(
+    `${count(now.totalQty)} items sold` +
+      (change === null ? "." : `, ${Math.abs(change) < 0.05 ? "the same as" : `${change > 0 ? "up" : "down"} ${Math.abs(change).toFixed(1)}% on`} the window before.`),
+  )
+  if (ups[0] && downs[0]) parts.push(`People bought more ${ups[0].n} and less ${downs[0].n}.`)
+  else if (ups[0]) parts.push(`${ups[0].n} grew the most.`)
+  else if (downs[0]) parts.push(`${downs[0].n} fell the most.`)
+
+  const b = bridgePoints(d)
+  const bridge: MixPlain["bridge"] = []
+  if (b) {
+    const mix = b.mMix - b.m0
+    const cost = b.mCost - b.mMix
+    const price = b.m1 - b.mCost
+    const say = (v: number) => (Math.abs(v) < 0.05 ? "did not move it" : `${v > 0 ? "added" : "took off"} ${Math.abs(v).toFixed(1)} points`)
+    parts.push(`Of what the menu kept, the mix ${say(mix)}, ingredient costs ${say(cost)} and menu prices ${say(price)}.`)
+    bridge.push(
+      { key: "mix", label: "Mix shift", value: pts(mix) },
+      { key: "cost", label: "Ingredient costs", value: pts(cost) },
+      { key: "price", label: "Menu prices", value: pts(price) },
+      { key: "total", label: "Change in what you kept", value: pts(b.m1 - b.m0), total: true },
+    )
+  }
+
+  return {
+    sentence: parts.join(" "),
+    big: {
+      label: "Items sold",
+      value: count(now.totalQty),
+      sub: perOrder === null ? "no orders" : `${perOrder.toFixed(1)} items per order`,
+    },
+    vs:
+      change === null
+        ? null
+        : {
+            change: Math.abs(change) < 0.05 ? "flat" : `${change > 0 ? "▲" : "▼"} ${Math.abs(change).toFixed(1)}%`,
+            tone: Math.abs(change) < 0.05 ? "flat" : change > 0 ? "up" : "down",
+            against: "vs the window before",
+          },
+    bridge,
+    moved: [...ups.slice(0, 2), ...downs.slice(0, 2)].map((m) => ({
+      key: m.n,
+      name: m.n,
+      change: `${m.pctChange > 0 ? "▲" : "▼"} ${Math.abs(m.pctChange).toFixed(0)}%`,
+      up: m.pctChange > 0,
+    })),
+  }
+}
+
+function bridgeOf(d: MixData): MixBridge {
+  const { now, prior } = d
+  if (!prior) {
+    return {
+      rows: [],
+      meta: "no prior window",
+      note: "A bridge needs two windows. This range has no window before it in the data.",
+    }
+  }
+
+  // The four re-measurements live in `bridgePoints`, shared with the plain answer.
+  const b = bridgePoints(d)
+
+  if (b === null) {
     return {
       rows: [],
       meta: "not computable",
@@ -483,6 +579,7 @@ function bridgeOf(d: MixData): MixBridge {
     }
   }
 
+  const { m0, mMix, mCost, m1 } = b
   return {
     rows: [
       { key: "prior", label: "Blended margin, prior window", value: pct(m0, { scaled: true }) },
@@ -518,6 +615,7 @@ export function getProductMixSectionPromises(
   })
 
   return {
+    plain: guardSection(dataP.then((sd) => mapReady(sd, plainOf)), "retryProductMix"),
     headline: guardSection(dataP.then((sd) => mapReady(sd, headlineOf)), "retryProductMix"),
     units: guardSection(dataP.then((sd) => mapReady(sd, unitsOf)), "retryProductMix"),
     table: guardSection(dataP.then((sd) => mapReady(sd, tableOf)), "retryProductMix"),
