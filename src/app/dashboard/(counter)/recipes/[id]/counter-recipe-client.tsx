@@ -33,6 +33,8 @@ import {
 } from "@/lib/counter/actions/recipe"
 import type { SectionSources } from "@/lib/counter/adapters/types"
 import { DishPhoto } from "./dish-photo"
+import { RecipePlainView } from "./recipe-plain-ui"
+import { Fold } from "@/components/counter/ui"
 import { ingredientPhoto } from "@/lib/counter/ingredient-photos"
 import { photoFrame } from "@/lib/counter/menu-photos"
 import type {
@@ -186,12 +188,15 @@ export function CounterRecipeClient({
   today,
   title,
   sections,
+  editing = false,
 }: {
   params: string
   stores: SwitchableStore[]
   today: Date
   title: string
   sections: CounterRecipeSections
+  /** The phone's edit page: no plain answer, the editor open. */
+  editing?: boolean
 }) {
   const surface = useSurfaceHref()
   const router = useRouter()
@@ -328,6 +333,14 @@ export function CounterRecipeClient({
         />
       </PageHead>
 
+      {editing ? null : (
+        <Section bare title="The recipe in a sentence" data={sections.plain} pending={pending}>
+          {(p) => <RecipePlainView p={p} editFold="recipe-editor" />}
+        </Section>
+      )}
+
+      {/* A recipe just started opens on its editor: there is nothing to read yet. */}
+      <Fold id="recipe-editor" summary="Edit lines, batch, notes and photo" defaultOpen={editing || params.get("new") === "1"}>
       <DishPhoto name={title} justCreated={params.get("new") === "1"} warn={params.get("warn")} />
 
       <Section bare title="The figures" data={sections.head} pending={pending}>
@@ -538,6 +551,7 @@ export function CounterRecipeClient({
           </>
         )}
       </Section>
+      </Fold>
     </>
   )
 }

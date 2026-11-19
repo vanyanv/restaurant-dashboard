@@ -55,6 +55,7 @@ export default async function MobileRecipeEditPage({
         today={today}
         title={named.name}
         sections={sections}
+        editing
       />
       <span hidden data-perf-ready="/m/recipes/[id]/edit" />
     </>
