@@ -25,6 +25,7 @@ import { buildDecisionsPlain, type DecisionsPlain } from "@/lib/counter/decision
 import { mergeAttributions, type Attribution } from "@/lib/decisions/attribution"
 import { parseAttribution } from "@/lib/decisions/attribution"
 import { loadRunOut, type RunOut } from "@/lib/counter/run-out"
+import { slugOf } from "@/lib/counter/adapters/menu-item"
 import {
   awaitSections,
   classify,
@@ -444,6 +445,34 @@ const ACTION_ROUTE: Record<string, string> = {
 }
 
 /**
+ * Where a type with no route of its own goes. It was `/dashboard/forecasts`,
+ * which is not a route — the button opened a 404. The Needs-you page itself
+ * is where every decision is listed, so that is the honest fallback.
+ */
+const FALLBACK_ACTION_ROUTE = "/dashboard/decisions"
+
+/**
+ * The evidence refs that name the one menu item an action is about —
+ * `MenuItemElasticity:<item>` on a reprice, `DailyCogsItem:<item>` on a
+ * slow mover. The item's own page is where its price and margin are, so an
+ * action about one item opens that page rather than the whole menu table.
+ */
+const ITEM_EVIDENCE_PREFIXES = ["MenuItemElasticity:", "DailyCogsItem:"] as const
+
+function itemOf(a: DecisionAction): string | null {
+  if (a.type !== "reprice" && a.type !== "menu_engineering") return null
+  for (const e of a.evidence) {
+    for (const prefix of ITEM_EVIDENCE_PREFIXES) {
+      if (e.ref.startsWith(prefix)) {
+        const name = e.ref.slice(prefix.length).trim()
+        if (name) return name
+      }
+    }
+  }
+  return null
+}
+
+/**
  * "Mon 24", which is what a `.wkd` cell prints and what the day-detail section
  * titles itself with.
  *
@@ -622,8 +651,13 @@ function categoryLabel(a: DecisionAction): string {
   return a.category.toLowerCase()
 }
 
-function hrefFor(a: DecisionAction): string {
-  return ACTION_ROUTE[a.type] ?? "/dashboard/forecasts"
+export function hrefFor(a: DecisionAction): string {
+  const item = itemOf(a)
+  if (item) {
+    const slug = slugOf(item)
+    if (slug) return `/dashboard/menu/catalog/${slug}`
+  }
+  return ACTION_ROUTE[a.type] ?? FALLBACK_ACTION_ROUTE
 }
 
 /** "80% interval, calibrated" — or what it is instead. */
@@ -1488,7 +1522,9 @@ function outcomeTone(r: DecisionRecord): Tone {
  * exactly.** Correcting a ranking inside a translation layer would change what
  * the page recommends without changing anything the loader believes, and the
  * two would then disagree about which action matters most. The defect is the
- * loader's to fix, in a change that says so.
+ * loader's to fix, in a change that says so. (One part was fixed there: the
+ * loader now sorts on the score's SIZE, so a projected loss — a negative
+ * profit-risk figure — ranks by how big it is instead of below every gain.)
  *
  * ## The figure is PRINTED, not re-normalised
  *
@@ -1511,8 +1547,10 @@ export function buildDecisionQueue(
       lead: money(a.impactUsdPerWeek),
       unit: "/wk",
       title: a.title,
-      body: `${a.why} ${confidence} · ${note}`.trim(),
-      act: `Open ${categoryLabel(a)}`,
+      // `basis` says what the figure in `lead` IS — an estimate and its
+      // assumption, or a forecast — so "+$541/wk" is never read as booked money.
+      body: `${a.why} ${a.basis} ${confidence} · ${note}`.trim(),
+      act: itemOf(a) ? `Open ${itemOf(a)}` : `Open ${categoryLabel(a)}`,
       href: hrefFor(a),
       dots: a.dots,
       note,
@@ -1567,7 +1605,7 @@ export function buildPhoneQueue(queue: DecisionQueue): PhoneQueue {
       detail: firstSentence(i.why),
       value: `${i.lead}${i.unit ?? ""}`,
       note: i.note,
-      noteTone: i.note === "decays daily" ? ("down" as const) : undefined,
+      noteTone: i.note === DECAYS_WORDS ? ("down" as const) : undefined,
       href: i.href,
     })),
   }
@@ -1615,8 +1653,11 @@ function confidenceWords(a: DecisionAction): string {
       : "low confidence"
 }
 
+/** The deadline words for something whose value runs down by the day. */
+export const DECAYS_WORDS = "worth less each day you wait"
+
 function deadlineWords(a: DecisionAction): string {
-  if (a.deadline.kind === "decays") return "decays daily"
+  if (a.deadline.kind === "decays") return DECAYS_WORDS
   if (a.deadline.kind === "horizon") return "no deadline"
   const days = a.deadline.daysLeft
   return `within ${days} day${days === 1 ? "" : "s"}`

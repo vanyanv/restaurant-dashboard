@@ -30,7 +30,7 @@ export interface DecisionsPlainCall {
   why: string
   /** "$420/wk" */
   worth: string
-  /** "decays daily", "by Fri", ... */
+  /** "worth less each day you wait", "within 5 days", ... */
   when: string
   action: { label: string; href: string } | null
 }

@@ -1,14 +1,28 @@
-"""reprice generator — recommends small price changes on inelastic items
-with high-confidence elasticity fits.
+"""reprice generator — recommends a small price RAISE on inelastic items
+with a defensible elasticity fit. It never recommends a price cut.
 
-Heuristic (spec §3.3):
-  * Source candidates from MenuItemElasticity where fitR2 >= 0.10
-    AND pricePointCount >= 2 (rows with no price variance lack signal).
-  * For inelastic items (|elasticity| < 1), suggest +$0.25 raise.
-  * For elastic items (|elasticity| > 1), suggest −$0.25 drop.
-  * Compute net dollar impact via impact.reprice_impact using (a) the change
-    in qty implied by the elasticity, and (b) the change in margin from
-    moving price. Only emit when net impact > $0 (= operator benefit).
+Why no cuts. The elasticity (ml/elasticity/menu_item.py) is fitted on a
+blended daily average price across channels. Promo days are now left out of
+that fit, but what is left still moves mostly with channel mix — the apps
+carry different list prices from the counter — rather than with any price the
+owner set. A cut recommendation needs the claim "customers buy more when it
+is cheaper", and this data cannot separate that from "more of today's orders
+came through the cheaper channel" or from a deal the attribution missed. It
+produced "cut the Signature Slider by $0.25 → +$541/wk" on an item whose
+cheap-looking days were Uber/DoorDash BOGOs. Until there is a list-price
+history per channel, cuts are suppressed rather than estimated.
+
+Raises are kept, narrowly: |elasticity| < 1 says volume barely moved with
+price, which is the conservative direction for the same contamination (a deal
+read as a low price makes an item look MORE elastic, not less).
+
+Candidate filter:
+  * fitR2 >= 0.30 (was 0.10 — a fit explaining a tenth of the variance is not
+    evidence for anything an owner should act on)
+  * at least 60 clean days and 3 distinct price points
+  * a standard error on the coefficient, so the range can be shown
+  * fitted in the latest nightly run (a row left over from before promo days
+    were excluded must not be read)
 """
 from __future__ import annotations
 
@@ -18,8 +32,12 @@ from ml.growth.uncertainty import interval_for
 from ml.growth.types import GrowthOpportunity, Evidence
 
 
-_MIN_FIT_R2 = 0.10                # spec §3.2: matches the low-confidence floor in MenuItemElasticity docstring
-_MIN_PRICE_POINTS = 2             # spec §3.2: no variance => no signal (column docstring)
+_MIN_FIT_R2 = 0.30                # a fit must explain at least 30% of daily volume variance
+_MIN_SAMPLE_DAYS = 60             # clean (non-promo) days in the fit
+_MIN_PRICE_POINTS = 3             # distinct prices seen; 2 is one change, which any shock confounds
+_MAX_FIT_AGE_HOURS = 36           # only fits from the latest nightly
+_HIGH_CONFIDENCE_R2 = 0.50
+_HIGH_CONFIDENCE_SAMPLE = 120
 _SUGGESTED_DELTA_DOLLARS = 0.25   # spec §3.2: small step preserves linearity assumption
 
 
@@ -34,9 +52,12 @@ def _load_elastic_items(conn, store_id: str):
             WHERE "storeId" = %s
               AND "fitR2" >= %s
               AND "pricePointCount" >= %s
+              AND "sampleSize" >= %s
+              AND "elasticityStdErr" IS NOT NULL
+              AND "computedAt" >= NOW() - (%s * INTERVAL '1 hour')
             ORDER BY ABS(elasticity) DESC
             ''',
-            (store_id, _MIN_FIT_R2, _MIN_PRICE_POINTS),
+            (store_id, _MIN_FIT_R2, _MIN_PRICE_POINTS, _MIN_SAMPLE_DAYS, _MAX_FIT_AGE_HOURS),
         )
         return cur.fetchall()
 
@@ -73,13 +94,23 @@ def generate(conn, *, store_id: str, as_of_date: dt.date) -> list[GrowthOpportun
 
     out: list[GrowthOpportunity] = []
     for sku, elasticity, fit_r2, n, std_err, mean_price, mean_qty in items:
+        # Re-check in Python: the SQL filter is the first line, this is the
+        # one a test can see.
+        if (
+            fit_r2 is None or fit_r2 < _MIN_FIT_R2
+            or n is None or n < _MIN_SAMPLE_DAYS
+            or std_err is None
+        ):
+            continue
+        # Raises only, on inelastic items. See the module docstring for why
+        # a cut is never recommended from this fit.
+        if abs(elasticity) >= 1:
+            continue
         margin = margins.get(sku)
         if margin is None or margin <= 0:
             continue
 
-        # Decide direction.
-        direction = "raise" if abs(elasticity) < 1 else "drop"
-        delta = _SUGGESTED_DELTA_DOLLARS if direction == "raise" else -_SUGGESTED_DELTA_DOLLARS
+        delta = _SUGGESTED_DELTA_DOLLARS
 
         # Net benefit = (new_revenue - new_cost) - (old_revenue - old_cost).
         # new_qty derives from elasticity × proportional price change.
@@ -98,12 +129,18 @@ def generate(conn, *, store_id: str, as_of_date: dt.date) -> list[GrowthOpportun
             _net_benefit, elasticity=elasticity, elasticity_std_err=std_err
         )
 
-        confidence = "high" if fit_r2 >= 0.30 else "medium"
+        # Evidence-based: how much of the variance the fit explains AND how
+        # many clean days it stands on. A floor-clearing fit is medium.
+        confidence = (
+            "high"
+            if fit_r2 >= _HIGH_CONFIDENCE_R2 and n >= _HIGH_CONFIDENCE_SAMPLE
+            else "medium"
+        )
         out.append(GrowthOpportunity(
             store_id=store_id,
             as_of_date=as_of_date.isoformat(),
             opportunity_type="reprice",
-            title=f"{direction.title()} price on {sku} by ${abs(delta):.2f}",
+            title=f"Raise price on {sku} by ${delta:.2f}",
             estimated_dollar_impact=round(net_benefit, 2),
             impact_p10=None if interval.is_degenerate else round(interval.p10, 2),
             impact_p25=None if interval.is_degenerate else round(interval.p25, 2),
@@ -118,13 +155,13 @@ def generate(conn, *, store_id: str, as_of_date: dt.date) -> list[GrowthOpportun
                 Evidence(kind="sample_size",    ref=f"MenuItemElasticity:{sku}", value=int(n)),
                 Evidence(kind="per_unit_margin",ref=f"DailyCogsItem:{sku}",       value=round(margin, 2)),
             ],
-            caveats=(
-                ["price elasticity assumes other conditions unchanged"]
-                if fit_r2 < 0.30 else []
-            ),
+            caveats=[
+                f"assumes sales volume responds to price the way it did over the "
+                f"last {int(n)} non-promo days; promo days are left out",
+            ],
             suggested_action=(
-                f"{direction.capitalize()} the menu price on {sku} by ${abs(delta):.2f} "
-                f"on Otter and observe net revenue over the next 14 days."
+                f"Raise the menu price on {sku} by ${delta:.2f} "
+                f"on Otter and watch its sales over the next 14 days."
             ),
         ))
 
