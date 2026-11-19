@@ -210,7 +210,8 @@ function NewRecipe({ categories }: { categories: string[] }) {
             onChange={(e) => setName(e.target.value)}
             // Enter is what somebody types after a name in a one-field row.
             onKeyDown={(e) => {
-              if (e.key === "Enter" && name.trim() && !creating) create()
+              // isComposing: an IME's Enter picks a candidate word, not "save".
+              if (e.key === "Enter" && !e.nativeEvent.isComposing && name.trim() && !creating) create()
             }}
           />
         </div>

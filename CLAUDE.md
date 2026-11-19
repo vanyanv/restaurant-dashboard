@@ -108,6 +108,18 @@ audit removed three models from the schema and left the tables in the database, 
 nullable column on 2026-08-19 came with a prompt to drop 129 rows. Resolve drift first, as its
 own change, with the data archived — never by reaching for `--accept-data-loss`.
 
+## Modern web guidance skill
+
+`.claude/skills/modern-web-guidance/` is the Chrome/Edge/Firefox/MDN teams'
+`modern-web-guidance` skill (installed 2026-11-19 with
+`npx modern-web-guidance@latest install`, pinned in `skills-lock.json`;
+refresh with `npx skills update`). Use it for client-side HTML/CSS/JS work,
+adapting its vanilla examples to Counter's tokens and rules above, which win
+where the two differ. Its CLI sends anonymous usage data to Google unless
+`DISABLE_TELEMETRY=1` is set, so set it. Browser support follows the skill's
+default: Baseline Widely available features freely, anything newer only with
+the fallback its guide gives.
+
 ## Other references
 
 - Refactor playbook (split big files safely): [`docs/refactor-playbook.md`](docs/refactor-playbook.md)
