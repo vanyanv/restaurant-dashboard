@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useTransition } from "react"
+import { useState } from "react"
 import { useRouter } from "next/navigation"
 import { Section, useCounterTransition, usePageChrome } from "@/components/counter"
 import {
@@ -15,6 +15,7 @@ import type { SectionSources } from "@/lib/counter/adapters/types"
 import type { SetupData, SetupItem, SetupSections } from "@/lib/counter/adapters/count"
 import { COUNT_AREAS, fmtQty, resolveLayers, type LayerInput } from "@/lib/counter/count-layers"
 import { CountHead, money, OutcomeLine, type Outcome } from "../count-ui"
+import { actMarks, useAct, type ActState } from "@/components/counter/ui"
 
 /**
  * Count & waste — Setup. What is on the weekly count, in which area, in walk
@@ -38,18 +39,21 @@ export function SetupClient({ sections }: { sections: SectionSources<SetupSectio
 
 function useAction() {
   const router = useRouter()
-  const [busy, start] = useTransition()
+  const { act, stateOf, busy } = useAct()
   const [outcome, setOutcome] = useState<Outcome>(null)
-  const run = (fn: () => Promise<ActionResult>, after?: () => void) =>
-    start(async () => {
+  /** `key` names the button, so only the tapped one shows working, then a tick. */
+  const run = (key: string, fn: () => Promise<ActionResult>, after?: () => void) =>
+    act(key, async () => {
       const r = await fn()
       setOutcome(r.ok ? (r.message ? { ok: true, text: r.message } : null) : { ok: false, text: r.error })
       if (r.ok) {
         after?.()
         router.refresh()
       }
+      return r
     })
-  return { busy, outcome, run }
+  const marks = (key: string) => actMarks(stateOf(key))
+  return { busy, outcome, run, marks, stateOf }
 }
 
 function summary(it: SetupItem): string {
@@ -59,7 +63,7 @@ function summary(it: SetupItem): string {
 }
 
 function Setup({ data }: { data: SetupData }) {
-  const { busy, outcome, run } = useAction()
+  const { busy, outcome, run, marks, stateOf } = useAction()
   const [editing, setEditing] = useState<string | null>(null)
   const [addId, setAddId] = useState("")
   const [addArea, setAddArea] = useState<string>("fridge")
@@ -81,11 +85,11 @@ function Setup({ data }: { data: SetupData }) {
               <option key={a.id} value={a.id}>{a.label}</option>
             ))}
           </select>
-          <button type="button" className="cw__btn cw__btn--primary" style={{ flex: "0 0 auto", minHeight: 44 }} disabled={busy || !addId} onClick={() => run(() => addCountItem({ ingredientId: addId, area: addArea }), () => setAddId(""))}>
+          <button {...marks("add")} type="button" className="cw__btn cw__btn--primary" style={{ flex: "0 0 auto", minHeight: 44 }} disabled={busy || !addId} onClick={() => run("add", () => addCountItem({ ingredientId: addId, area: addArea }), () => setAddId(""))}>
             Add
           </button>
           {data.items.length === 0 && (
-            <button type="button" className="cw__btn" style={{ flex: "0 0 auto", minHeight: 44 }} disabled={busy} onClick={() => run(() => addTopSpendItems(15))}>
+            <button {...marks("top")} type="button" className="cw__btn" style={{ flex: "0 0 auto", minHeight: 44 }} disabled={busy} onClick={() => run("top", () => addTopSpendItems(15))}>
               Start with my top 15 by spend
             </button>
           )}
@@ -110,12 +114,12 @@ function Setup({ data }: { data: SetupData }) {
                   <small>{summary(it)}</small>
                 </div>
                 <div className="cw-set__btns">
-                  <button type="button" aria-label={`Move ${it.name} up`} disabled={busy || i === 0} onClick={() => run(() => moveCountItem({ id: it.id, dir: "up" }))}>↑</button>
-                  <button type="button" aria-label={`Move ${it.name} down`} disabled={busy || i === rows.length - 1} onClick={() => run(() => moveCountItem({ id: it.id, dir: "down" }))}>↓</button>
+                  <button {...marks(`up:${it.id}`)} type="button" aria-label={`Move ${it.name} up`} disabled={busy || i === 0} onClick={() => run(`up:${it.id}`, () => moveCountItem({ id: it.id, dir: "up" }))}>↑</button>
+                  <button {...marks(`down:${it.id}`)} type="button" aria-label={`Move ${it.name} down`} disabled={busy || i === rows.length - 1} onClick={() => run(`down:${it.id}`, () => moveCountItem({ id: it.id, dir: "down" }))}>↓</button>
                   <button type="button" aria-expanded={editing === it.id} onClick={() => setEditing(editing === it.id ? null : it.id)}>{editing === it.id ? "Close" : "Edit"}</button>
-                  <button type="button" disabled={busy} onClick={() => run(() => removeCountItem(it.id))}>Remove</button>
+                  <button {...marks(`rm:${it.id}`)} type="button" disabled={busy} onClick={() => run(`rm:${it.id}`, () => removeCountItem(it.id))}>Remove</button>
                 </div>
-                {editing === it.id && <Editor item={it} busy={busy} onSave={(area, layers) => run(() => saveCountItemSetup({ id: it.id, area, layers }), () => setEditing(null))} />}
+                {editing === it.id && <Editor item={it} busy={busy} state={stateOf(`save:${it.id}`)} onSave={(area, layers) => run(`save:${it.id}`, () => saveCountItemSetup({ id: it.id, area, layers }), () => setEditing(null))} />}
               </div>
             ))}
           </div>
@@ -127,7 +131,7 @@ function Setup({ data }: { data: SetupData }) {
 
 type Draft = { label: string; qty: string; of: string; quarters: boolean }
 
-function Editor({ item, busy, onSave }: { item: SetupItem; busy: boolean; onSave: (area: string, layers: LayerInput[]) => void }) {
+function Editor({ item, busy, state, onSave }: { item: SetupItem; busy: boolean; state: ActState; onSave: (area: string, layers: LayerInput[]) => void }) {
   const [area, setArea] = useState(item.area)
   const [rows, setRows] = useState<Draft[]>(() => item.layers.map((l) => ({ label: l.label, qty: l.unsized ? "" : fmtQty(l.qty).replace(/,/g, ""), of: l.of, quarters: Boolean(l.quarters) })))
   const layers: LayerInput[] = rows.map((r) => ({ label: r.label, qty: Number(r.qty), of: r.of, quarters: r.quarters, ...(r.qty.trim() === "" ? { unsized: true } : {}) }))
@@ -185,7 +189,7 @@ function Editor({ item, busy, onSave }: { item: SetupItem; busy: boolean; onSave
         </span>
       </div>
       <div className="cw-ed__row">
-        <button type="button" className="cw__btn cw__btn--primary" style={{ flex: "0 0 auto", minHeight: 42 }} disabled={busy || !check.ok} onClick={() => onSave(area, layers)}>
+        <button {...actMarks(state)} type="button" className="cw__btn cw__btn--primary" style={{ flex: "0 0 auto", minHeight: 42 }} disabled={busy || !check.ok} onClick={() => onSave(area, layers)}>
           Save
         </button>
       </div>

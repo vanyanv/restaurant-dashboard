@@ -167,12 +167,13 @@ export function CounterNewCountClient({
             </p>
             <div className="btnrow">
               <button
+                aria-busy={busy || undefined}
                 className="btn btn--primary"
                 type="button"
                 onClick={begin}
                 disabled={busy || targetStoreId === null}
               >
-                {busy ? "Opening…" : o.resumes ? "Resume the open count" : "Start on this device"}
+                {o.resumes ? "Resume the open count" : "Start on this device"}
               </button>
             </div>
             <Note live tone={problem === null ? undefined : "bad"}>

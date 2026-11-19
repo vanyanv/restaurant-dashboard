@@ -1,9 +1,9 @@
 "use client"
 
-import { useEffect, useState, useTransition, type ReactNode, useEffectEvent } from "react"
+import { useEffect, useState, type ReactNode, useEffectEvent } from "react"
 import { reviewCheckPhoto } from "@/lib/counter/actions/checks"
 import type { CellView } from "@/lib/counter/adapters/checks"
-import { Answer, BigNumber, type Vs } from "@/components/counter/ui"
+import { actMarks, Answer, BigNumber, useAct, type Vs } from "@/components/counter/ui"
 import { Glyph, Lightbox, markPhotoSrc, OutcomeLine, photoSrc, type Outcome } from "./checks-ui"
 
 /**
@@ -138,18 +138,19 @@ export function PhotoReview({ cell, caption }: { cell: CellView; caption: string
 }
 
 function PhotoCard({ p, onOpen, onReviewed }: { p: CellView["markPhotos"][number]; onOpen: () => void; onReviewed?: () => void }) {
-  const [busy, start] = useTransition()
+  const { act, stateOf, busy } = useAct()
   const [asking, setAsking] = useState(false)
   const [note, setNote] = useState("")
   const [outcome, setOutcome] = useState<Outcome>(null)
   const send = (verdict: "ok" | "redo") =>
-    start(async () => {
+    act(verdict, async () => {
       const r = await reviewCheckPhoto({ markId: p.id, verdict, note: verdict === "redo" ? note : undefined })
       setOutcome(r.ok ? { ok: true, text: r.message ?? "Saved." } : { ok: false, text: r.error })
       if (r.ok) {
         setAsking(false)
         onReviewed?.()
       }
+      return r
     })
   return (
     <figure className={`ck-prv__card${p.review === "redo" ? " is-redo" : ""}`}>
@@ -176,7 +177,7 @@ function PhotoCard({ p, onOpen, onReviewed }: { p: CellView["markPhotos"][number
               onChange={(e) => setNote(e.target.value)}
             />
             <span className="ck-row">
-              <button aria-busy={busy || undefined} type="button" className="btn btn--primary" disabled={busy} onClick={() => send("redo")}>
+              <button {...actMarks(stateOf("redo"))} type="button" className="btn btn--primary" disabled={busy} onClick={() => send("redo")}>
                 Send it back
               </button>
               <button type="button" className="btn btn--quiet" disabled={busy} onClick={() => setAsking(false)}>
@@ -186,7 +187,7 @@ function PhotoCard({ p, onOpen, onReviewed }: { p: CellView["markPhotos"][number
           </div>
         ) : (
           <div className="ck-prv__act">
-            <button type="button" className="ok" disabled={busy || p.review === "ok"} onClick={() => send("ok")}>
+            <button {...actMarks(stateOf("ok"))} type="button" className="ok" disabled={busy || p.review === "ok"} onClick={() => send("ok")}>
               {p.review === "ok" ? "✓ Looks good" : "Looks good"}
             </button>
             <button type="button" className="redo" disabled={busy} onClick={() => setAsking(true)}>
@@ -408,7 +409,7 @@ export function PhotoViewer({ cell, caption }: { cell: CellView; caption: string
   const photos = cell.markPhotos
   const [at, setAt] = useState(() => Math.max(0, photos.findIndex((p) => p.review === null)))
   const [open, setOpen] = useState(false)
-  const [busy, start] = useTransition()
+  const { act, stateOf, busy } = useAct()
   const [outcome, setOutcome] = useState<Outcome>(null)
   const i = Math.min(at, photos.length - 1)
   const p = photos[i]
@@ -429,7 +430,7 @@ export function PhotoViewer({ cell, caption }: { cell: CellView; caption: string
 
   if (!p) return null
   const allRest = () =>
-    start(async () => {
+    act("all", async () => {
       const todo = photos.filter((x) => x.review === null)
       let failed: string | null = null
       for (const x of todo) {
@@ -440,6 +441,7 @@ export function PhotoViewer({ cell, caption }: { cell: CellView; caption: string
         }
       }
       setOutcome(failed ? { ok: false, text: failed } : { ok: true, text: `${todo.length} marked as looking good.` })
+      return failed ? { ok: false as const, error: failed } : { ok: true as const }
     })
 
   return (
@@ -482,7 +484,7 @@ export function PhotoViewer({ cell, caption }: { cell: CellView; caption: string
         </>
       )}
       {rest.length > 0 && (
-        <button aria-busy={busy || undefined} type="button" className="btn btn--quiet" disabled={busy} onClick={allRest}>
+        <button {...actMarks(stateOf("all"))} type="button" className="btn btn--quiet" disabled={busy} onClick={allRest}>
           {p.review === null ? `All ${rest.length + 1} left look good` : `All ${rest.length} left look good`}
         </button>
       )}

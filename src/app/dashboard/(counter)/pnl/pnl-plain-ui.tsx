@@ -4,6 +4,7 @@ import { Fragment, useState, type CSSProperties } from "react"
 import { useSurfaceHref } from "@/components/counter"
 import {
   Answer,
+  Freshness,
   BigNumber,
   ButtonLink,
   Card,
@@ -83,6 +84,7 @@ export function PlainHero({
           }
         />
         {p.sentence ? <Answer>{p.sentence}</Answer> : null}
+        <Freshness />
       </Card>
 
       <WeekBars

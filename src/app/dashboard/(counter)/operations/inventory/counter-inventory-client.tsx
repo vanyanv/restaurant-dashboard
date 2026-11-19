@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useMemo, useState, useTransition} from "react"
+import { useCallback, useMemo, useState } from "react"
 import Link from "next/link"
 import type { AdjustFormReason } from "@/lib/counter/waste-reasons"
 import { usePathname, useRouter } from "next/navigation"
@@ -22,6 +22,7 @@ import {
   SubNav,
 } from "@/components/counter"
 import { INVENTORY_TABS } from "@/lib/counter/nav"
+import { actMarks, useAct } from "@/components/counter/ui"
 import { readCounterParams, writeCounterParams } from "@/lib/counter/url-state"
 import type { SectionSources } from "@/lib/counter/adapters/types"
 import { recordInventoryAdjustment } from "@/lib/counter/actions/inventory"
@@ -103,7 +104,7 @@ const ASK_SUGGESTIONS = [
  */
 function AdjustOnHand({ data }: { data: InventoryAdjust }) {
   const router = useRouter()
-  const [saving, startSaving] = useTransition()
+  const { act, stateOf, busy: saving } = useAct()
   const [ingredientId, setIngredientId] = useState("")
   const [qty, setQty] = useState("")
   const [reason, setReason] = useState("EXPIRY")
@@ -125,7 +126,7 @@ function AdjustOnHand({ data }: { data: InventoryAdjust }) {
       return
     }
     setSaid(null)
-    startSaving(async () => {
+    act("save", async () => {
       const result = await recordInventoryAdjustment({
         storeId: data.storeId as string,
         ingredientId,
@@ -135,7 +136,7 @@ function AdjustOnHand({ data }: { data: InventoryAdjust }) {
       })
       if (!result.ok) {
         setSaid({ ok: false, text: `Not written: ${result.error}.` })
-        return
+        return result
       }
       setQty("")
       setNote("")
@@ -143,7 +144,8 @@ function AdjustOnHand({ data }: { data: InventoryAdjust }) {
       // The on-hand model, the waste forecast and the COGS waste line all read
       // the row that was just written.
       router.refresh()
-    })
+      return result
+    }, { done: "Written" })
   }
 
   return (
@@ -201,6 +203,7 @@ function AdjustOnHand({ data }: { data: InventoryAdjust }) {
 
       <div className="btnrow" style={{ marginTop: 11 }}>
         <button
+          {...actMarks(stateOf("save"))}
           className="btn btn--primary"
           type="button"
           disabled={saving || data.storeId === null}
@@ -208,8 +211,8 @@ function AdjustOnHand({ data }: { data: InventoryAdjust }) {
         >
           {data.storeId === null
             ? "No active store to adjust"
-            : saving
-              ? "Writing…"
+            : stateOf("save") === "done"
+              ? "✓ Written"
               : "Save adjustment"}
         </button>
       </div>

@@ -25,8 +25,14 @@ import {
   StoreCard,
   Tabs,
   useAct,
+  actMarks,
   DONE_MS,
+  Freshness,
+  freshTime,
 } from "@/components/counter/ui"
+
+const refresh = vi.fn()
+vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh }) }))
 import { splitFigure } from "@/components/counter/ui/big-number"
 
 const UI = join(process.cwd(), "src/components/counter/ui")
@@ -219,6 +225,26 @@ describe("shared blocks", () => {
     expect(screen.getByRole("button").textContent).toBe("✓ Approved")
     rerender(<Button state="idle" onClick={onClick}>Approve</Button>)
     expect(screen.getByRole("button").dataset.state).toBeUndefined()
+  })
+
+  it("Freshness: says when the figures came in and refreshes them on a tap, then says they are up to date", async () => {
+    expect(freshTime(new Date(2026, 10, 19, 8, 14).getTime())).toBe("8:14 am")
+    expect(freshTime(new Date(2026, 10, 19, 17, 5).getTime())).toBe("5:05 pm")
+    render(<Freshness />)
+    expect(screen.getByText(/^Updated \d{1,2}:\d{2} (am|pm)$/)).toBeTruthy()
+    await rtlAct(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Refresh" }))
+    })
+    expect(refresh).toHaveBeenCalledTimes(1)
+    const done = await screen.findByRole("button", { name: "✓ Up to date" })
+    expect(done.getAttribute("data-state")).toBe("done")
+  })
+
+  it("actMarks: a plain button carries busy and done for the motion layer, nothing when idle or failed", () => {
+    expect(actMarks("busy")).toEqual({ "aria-busy": true, "data-state": "busy" })
+    expect(actMarks("done")).toEqual({ "aria-busy": undefined, "data-state": "done" })
+    expect(actMarks("idle")).toEqual({ "aria-busy": undefined, "data-state": undefined })
+    expect(actMarks("failed")).toEqual({ "aria-busy": undefined, "data-state": undefined })
   })
 
   it("useAct: busy, then done with the words fixed at the tap, then idle; a failure keeps its error", async () => {

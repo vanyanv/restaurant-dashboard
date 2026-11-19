@@ -3,6 +3,7 @@
 import { useSurfaceHref } from "@/components/counter"
 import {
   Answer,
+  Freshness,
   BigNumber,
   BigNumbers,
   ButtonLink,
@@ -26,6 +27,7 @@ export function DecisionsPlainView({ p }: { p: DecisionsPlain }) {
     <div className="cu-stack">
       <Card label="The week ahead">
         <Answer>{p.sentence}</Answer>
+        <Freshness />
         <BigNumbers>
           <BigNumber
             label="Expected sales this week"

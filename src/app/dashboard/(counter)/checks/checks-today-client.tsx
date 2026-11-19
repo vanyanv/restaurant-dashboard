@@ -1,7 +1,7 @@
 "use client"
 
 import { CheckDetail, PlainHead } from "./checks-plain-ui"
-import { useState, useTransition } from "react"
+import { useState } from "react"
 import Link from "next/link"
 import { Section, useCounterTransition, usePageChrome, useSurfaceHref } from "@/components/counter"
 import { setChecksPaused, setStoreClosed } from "@/lib/counter/actions/checks"
@@ -10,6 +10,7 @@ import type { SectionSources } from "@/lib/counter/adapters/types"
 import type { TodayData, TodaySections, CellView } from "@/lib/counter/adapters/checks"
 import { ChecksHead, Glyph, Legend, OutcomeLine, type Outcome } from "./checks-ui"
 import { useUrlParam } from "@/components/counter/keep/use-url-param"
+import { actMarks, useAct } from "@/components/counter/ui"
 
 /**
  * Store checks — Today. One card per store with its Morning and Night check
@@ -250,18 +251,20 @@ export function Tile({ label, cell, pressed, onClick }: { label: string; cell: C
 }
 
 export function ClosedToggle({ storeId, day, closed }: { storeId: string; day: string; closed: boolean }) {
-  const [busy, start] = useTransition()
+  const { act, stateOf, busy } = useAct()
   const [outcome, setOutcome] = useState<Outcome>(null)
   return (
     <span className="ck-row">
-      <button aria-busy={busy || undefined}
+      <button
+        {...actMarks(stateOf("go"))}
         type="button"
         className="ck-link"
         disabled={busy}
         onClick={() =>
-          start(async () => {
+          act("go", async () => {
             const r = await setStoreClosed({ storeId, day, closed: !closed })
             setOutcome(r.ok ? null : { ok: false, text: r.error })
+            return r
           })
         }
       >
@@ -275,7 +278,7 @@ export function ClosedToggle({ storeId, day, closed }: { storeId: string; day: s
 /** The store's checks are paused for training: say so on its card, with the way back. */
 export function PausedNote({ storeId, since }: { storeId: string; since: string }) {
   const href = useSurfaceHref()
-  const [busy, start] = useTransition()
+  const { act, stateOf, busy } = useAct()
   const [outcome, setOutcome] = useState<Outcome>(null)
   return (
     <div className="ck-pause" role="status">
@@ -285,17 +288,19 @@ export function PausedNote({ storeId, since }: { storeId: string; since: string 
       </span>
       <span className="ck-row">
         <button
+          {...actMarks(stateOf("go"))}
           type="button"
           className="btn"
           disabled={busy}
           onClick={() =>
-            start(async () => {
+            act("go", async () => {
               const r = await setChecksPaused({ storeId, paused: false })
               setOutcome(r.ok ? null : { ok: false, text: r.error })
+              return r
             })
           }
         >
-          {busy ? "Resuming…" : "Resume checks"}
+          Resume checks
         </button>
         <Link className="ck-link" href={href(`/dashboard/stores/${storeId}`)}>
           Store settings
@@ -307,22 +312,24 @@ export function PausedNote({ storeId, since }: { storeId: string; since: string 
 }
 
 export function PauseLink({ storeId }: { storeId: string }) {
-  const [busy, start] = useTransition()
+  const { act, stateOf, busy } = useAct()
   const [outcome, setOutcome] = useState<Outcome>(null)
   return (
     <>
       <button
+        {...actMarks(stateOf("go"))}
         type="button"
         className="ck-link"
         disabled={busy}
         onClick={() =>
-          start(async () => {
+          act("go", async () => {
             const r = await setChecksPaused({ storeId, paused: true })
             setOutcome(r.ok ? null : { ok: false, text: r.error })
+            return r
           })
         }
       >
-        {busy ? "Pausing…" : "Pause for training"}
+        Pause for training
       </button>
       <OutcomeLine outcome={outcome} />
     </>

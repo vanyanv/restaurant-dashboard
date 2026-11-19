@@ -4,6 +4,7 @@ import Link from "next/link"
 import { useSurfaceHref } from "@/components/counter"
 import {
   Answer,
+  Freshness,
   BigNumber,
   BigNumbers,
   Card,
@@ -47,6 +48,7 @@ export function OrdersPlainView({ p }: { p: OrdersPlain }) {
     <div className="cu-stack">
       <Card label="Orders in a sentence">
         <Answer>{p.sentence}</Answer>
+        <Freshness />
         <BigNumbers>
           <BigNumber
             label="Orders"
@@ -75,6 +77,7 @@ export function OrderPlainView({ p }: { p: OrderPlain }) {
     <div className="cu-stack">
       <Card label="This order in a sentence">
         <Answer>{p.sentence}</Answer>
+        <Freshness />
         <BigNumbers>
           <BigNumber label={p.big.label} value={p.big.value} sub={p.big.sub || undefined} missing={p.big.missing} />
         </BigNumbers>

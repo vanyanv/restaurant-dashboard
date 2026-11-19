@@ -33,7 +33,7 @@
 .cu-status--off{background:var(--sunk);color:var(--ink-3)}
 .cu-status--plain{background:none;border:0;padding:0;gap:5px}
 a.cu-status,button.cu-status{font-family:inherit;text-decoration:none;cursor:pointer}
-a.cu-status:hover,button.cu-status:hover{text-decoration:underline;text-underline-offset:3px}
+@media (hover:hover){a.cu-status:hover,button.cu-status:hover{text-decoration:underline;text-underline-offset:3px}}
 a.cu-status:focus-visible,button.cu-status:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .cu-statuses{display:flex;flex-wrap:wrap;gap:8px}
 
@@ -41,15 +41,15 @@ a.cu-status:focus-visible,button.cu-status:focus-visible{outline:2px solid var(-
 .cu-btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:36px;padding:0 16px;border-radius:var(--r);
   border:1px solid var(--line-strong);background:var(--surface);color:var(--ink);font:inherit;font-size:var(--t-body);font-weight:600;line-height:1;
   text-decoration:none;cursor:pointer;white-space:nowrap;
-  transition:background-color var(--ct-dur-quick) var(--ease),border-color var(--ct-dur-quick) var(--ease),color var(--ct-dur-quick) var(--ease),transform var(--ct-dur-tap) ease-out,opacity var(--ct-dur-quick) var(--ease)}
-.cu-btn:hover{background:var(--sunk);border-color:var(--ink-3)}
-.cu-btn:active:not([disabled]){transform:translateY(1px) scale(.98)}
+  transition:background-color var(--ct-dur-quick) var(--ease),border-color var(--ct-dur-quick) var(--ease),color var(--ct-dur-quick) var(--ease),transform var(--ct-dur-spring) var(--ct-ease-spring),opacity var(--ct-dur-quick) var(--ease)}
+@media (hover:hover){.cu-btn:hover{background:var(--sunk);border-color:var(--ink-3)}}
+.cu-btn:active:not([disabled]){transform:translateY(1px) scale(var(--ct-press));transition-duration:var(--ct-dur-tap);transition-timing-function:ease-out}
 .cu-btn:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .cu-btn[disabled]{opacity:.5;cursor:not-allowed;transform:none}
 .cu-btn--primary{background:var(--accent);border-color:var(--accent);color:var(--surface)}
-.cu-btn--primary:hover{background:var(--accent-hi);border-color:var(--accent-hi);color:var(--surface)}
+@media (hover:hover){.cu-btn--primary:hover{background:var(--accent-hi);border-color:var(--accent-hi);color:var(--surface)}}
 .cu-btn--quiet{background:none;border-color:transparent;color:var(--ink-2);text-decoration:underline;text-underline-offset:3px;padding:0 6px}
-.cu-btn--quiet:hover{background:none;border-color:transparent;color:var(--ink)}
+@media (hover:hover){.cu-btn--quiet:hover{background:none;border-color:transparent;color:var(--ink)}}
 @media (pointer:coarse){.cu-btn{min-height:44px}}
 /* Every block that answers to its own width (container-type) must also say how
    wide it is. A query container has no width of its own content, so inside a
@@ -69,7 +69,7 @@ a.cu-status:focus-visible,button.cu-status:focus-visible{outline:2px solid var(-
    tooltips and the date picker that are meant to overflow. See card.tsx. */
 .cu-card{display:grid;gap:10px;align-content:start;min-width:0;padding:14px;background:var(--surface);border:1px solid var(--line);border-radius:var(--r);contain:layout;color:inherit;text-decoration:none}
 button.cu-card{font:inherit;text-align:left;cursor:pointer}
-a.cu-card:hover,button.cu-card:hover{border-color:var(--line-strong)}
+@media (hover:hover){a.cu-card:hover,button.cu-card:hover{border-color:var(--line-strong)}}
 a.cu-card:focus-visible,button.cu-card:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 
 /* ---- BigNumber ---- */
@@ -185,7 +185,7 @@ a.cu-card:focus-visible,button.cu-card:focus-visible{outline:2px solid var(--acc
    query: the column minimum does the work. */
 .cu-tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;min-width:0}
 .cu-tile{display:grid;gap:4px;align-content:start;min-width:0;padding:12px 14px;background:var(--surface);border:1px solid var(--line);border-radius:var(--r);color:inherit;text-decoration:none}
-a.cu-tile:hover{border-color:var(--line-strong)}
+@media (hover:hover){a.cu-tile:hover{border-color:var(--line-strong)}}
 a.cu-tile:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .cu-tile__label{font-family:var(--mono);font-size:var(--t-micro);letter-spacing:.07em;text-transform:uppercase;color:var(--ink-3)}
 .cu-tile__value{font-size:28px;font-weight:600;line-height:1.1;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
@@ -260,25 +260,29 @@ a.cu-tile:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 /* Status pills pop in after the sentence; a changed figure flashes once. */
 @keyframes cu-pop{from{opacity:0;transform:scale(.92)}to{opacity:1;transform:none}}
 .cu-statuses>.cu-status{animation:cu-pop var(--ct-dur-rise) var(--ease) both;animation-delay:calc(var(--ct-dur-step)*3)}
-@keyframes cu-flash{from{background:var(--good-wash)}to{background:transparent}}
-.cu-big__value.is-changed{animation:cu-flash 1.3s var(--ease);border-radius:var(--r-sm)}
+/* The flash is a wash behind the figure fading out (opacity only, so the
+   figure itself never repaints its box). */
+@keyframes cu-flash{from{opacity:1}to{opacity:0}}
+.cu-big__value.is-changed{position:relative;isolation:isolate}
+.cu-big__value.is-changed::after{content:"";position:absolute;inset:-2px -4px;z-index:-1;border-radius:var(--r-sm);background:var(--good-wash);opacity:0;
+  animation:cu-flash 1.3s var(--ease)}
 
-/* Folds and Needs you slide open instead of jumping (browsers without
-   ::details-content simply open at once). */
-.cu-fold,.cu-needs{interpolate-size:allow-keywords}
-.cu-fold::details-content,.cu-needs::details-content{block-size:0;overflow:hidden;
-  transition:block-size var(--ct-dur-rise) var(--ease),content-visibility var(--ct-dur-rise) allow-discrete}
-.cu-fold[open]::details-content,.cu-needs[open]::details-content{block-size:auto}
+/* Folds and Needs you: what opens fades and slides down into place. Opacity
+   and transform only; the space opens at once, so nothing below is pushed
+   frame by frame (browsers without ::details-content open at once). */
+.cu-fold::details-content,.cu-needs::details-content{opacity:0;transform:translateY(-6px);
+  transition:opacity var(--ct-dur-rise) var(--ease),transform var(--ct-dur-rise) var(--ease),content-visibility var(--ct-dur-rise) allow-discrete}
+.cu-fold[open]::details-content,.cu-needs[open]::details-content{opacity:1;transform:none}
 
 /* Week bars grow from the baseline, one after another. */
 .cu-weeks__bar{transform-origin:bottom;animation:ct-bar-grow calc(var(--ct-dur-rise)*2) var(--ease) both;animation-delay:calc(var(--i,0)*var(--ct-dur-step)*.72)}
 .cu-weeks__bar{transition:opacity var(--ct-dur-quick) var(--ease)}
 
 /* Tabs and tiles answer the tap. */
-.cu-tab{transition:background-color var(--ct-dur-quick) var(--ease),color var(--ct-dur-quick) var(--ease),box-shadow var(--ct-dur-quick) var(--ease),transform var(--ct-dur-tap) ease-out}
-.cu-tab:active{transform:scale(.97)}
-a.cu-tile,a.cu-card,button.cu-card{transition:border-color var(--ct-dur-quick) var(--ease),transform var(--ct-dur-tap) ease-out}
-a.cu-tile:active,a.cu-card:active,button.cu-card:active{transform:translateY(1px)}
+.cu-tab{transition:background-color var(--ct-dur-quick) var(--ease),color var(--ct-dur-quick) var(--ease),box-shadow var(--ct-dur-quick) var(--ease),transform var(--ct-dur-spring) var(--ct-ease-spring)}
+.cu-tab:active{transform:scale(var(--ct-press))}
+a.cu-tile,a.cu-card,button.cu-card{transition:border-color var(--ct-dur-quick) var(--ease),transform var(--ct-dur-spring) var(--ct-ease-spring)}
+a.cu-tile:active,a.cu-card:active,button.cu-card:active{transform:translateY(1px) scale(var(--ct-press-row))}
 
 /* A button reports what its tap did, on itself: working, then done. The
    label stays in the button while it works, so the button never changes
@@ -293,9 +297,16 @@ a.cu-tile:active,a.cu-card:active,button.cu-card:active{transform:translateY(1px
 
 /* A Needs you row that was just done slides away; it stays in the page
    (hidden from screen readers) until the refreshed list drops it. */
-@keyframes cu-leave{from{opacity:1;transform:none;max-height:240px}to{opacity:0;transform:translateX(16px);max-height:0;padding-block:0;border-width:0}}
+@keyframes cu-leave{from{opacity:1;transform:none}to{opacity:0;transform:translateX(16px)}}
 .cu-needs__g.is-leaving{overflow:hidden;pointer-events:none;animation:cu-leave var(--ct-dur-leave) var(--ease) forwards}
 @keyframes cu-arrive{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
 .cu-notice{animation:cu-arrive var(--ct-dur-rise) var(--ease) both}
 .cu-notice__undo{margin-left:8px;padding:0;border:0;background:none;font:inherit;font-weight:600;color:inherit;text-decoration:underline;text-underline-offset:3px;cursor:pointer}
 .cu-notice__undo:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+/* ---- Freshness: "Updated 8:14 am · Refresh" under a page's answer ---- */
+.cu-fresh{margin:6px 0 0;font-family:var(--mono);font-size:var(--t-micro);letter-spacing:.02em;color:var(--ink-3)}
+.cu-fresh__go{padding:0;border:0;background:none;font:inherit;color:var(--ink-2);text-decoration:underline;text-underline-offset:3px;cursor:pointer}
+.cu-fresh__go[data-state="done"]{color:var(--good);text-decoration:none}
+.cu-fresh__go[disabled]{cursor:progress}
+.cu-fresh__go:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:2px}

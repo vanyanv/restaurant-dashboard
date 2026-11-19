@@ -1,6 +1,6 @@
 "use client"
 
-import { Answer, BigNumber, BigNumbers, Card, Rows, Status, Statuses, type RowsColumn } from "@/components/counter/ui"
+import { Answer, Freshness, BigNumber, BigNumbers, Card, Rows, Status, Statuses, type RowsColumn } from "@/components/counter/ui"
 import type { LaborPlain } from "@/lib/counter/labor-plain"
 
 /**
@@ -20,6 +20,7 @@ export function LaborPlainView({ p, title = "Labor in a sentence" }: { p: LaborP
     <div className="cu-stack">
       <Card label={title}>
         <Answer>{p.sentence}</Answer>
+        <Freshness />
         <BigNumbers>
           <BigNumber
             label={p.big.label}

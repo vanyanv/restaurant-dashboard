@@ -16,34 +16,53 @@
 
 /* ---- Presses: everything you can tap answers the finger ---- */
 :is(.seg button,.seg a,.mtab,.storeopt,.chip:is(a,button),.wkd,.padk,.ckc__btn,.ckb__more,.ckc__row,.do,.linkact,.tile:is(a,button),.card:is(a,button),.qitem a,.mlist a){
-  transition:background-color var(--ct-dur-quick) var(--ct-ease),border-color var(--ct-dur-quick) var(--ct-ease),color var(--ct-dur-quick) var(--ct-ease),box-shadow var(--ct-dur-quick) var(--ct-ease),opacity var(--ct-dur-quick) var(--ct-ease),transform var(--ct-dur-tap) ease-out
+  transition:background-color var(--ct-dur-quick) var(--ct-ease),border-color var(--ct-dur-quick) var(--ct-ease),color var(--ct-dur-quick) var(--ct-ease),box-shadow var(--ct-dur-quick) var(--ct-ease),opacity var(--ct-dur-quick) var(--ct-ease),transform var(--ct-dur-spring) var(--ct-ease-spring)
 }
-:is(.seg button,.seg a,.mtab,.chip:is(a,button),.storeopt,.wkd,.do,.linkact):active:not([disabled]){transform:scale(.97);transition-duration:0s}
-:is(.ckc__btn,.ckb__more,.ckc__row,.tile:is(a,button),.card:is(a,button),.qitem a,.mlist a):active:not([disabled]){transform:translateY(1px) scale(.995);transition-duration:0s}
+:is(.seg button,.seg a,.mtab,.chip:is(a,button),.storeopt,.wkd,.do,.linkact):active:not([disabled]){transform:scale(var(--ct-press));transition-duration:0s}
+:is(.ckc__btn,.ckb__more,.ckc__row,.tile:is(a,button),.card:is(a,button),.qitem a,.mlist a):active:not([disabled]){transform:translateY(1px) scale(var(--ct-press-row));transition-duration:0s}
+/* Press in at once, spring back on release (the transition above). */
+
+/* ---- Panels you open arrive on the gentle spring ----
+   Date picker, phone sheets, store switcher, the crew page's sheets, the
+   people dialog and the photo viewer. Fill is backwards only: a filled
+   transform:none would trap their position:fixed children. */
+@keyframes ct-panel{from{opacity:0;transform:translateY(10px) scale(.985)}to{opacity:1;transform:none}}
+.drpop,.msheet.on,.storepop{animation-duration:var(--ct-dur-spring);animation-timing-function:var(--ct-ease-spring)}
+:is(.ckc__sheet,.pp-scrim,.ck-lightbox)>*{animation:ct-panel var(--ct-dur-spring) var(--ct-ease-spring) backwards}
+
+/* ---- A keyboard always sees where it is ----
+   Zero specificity, so every control's own focus style still wins. */
+:where(.ct-root) :where(a,button,summary,[role="button"],[role="tab"],[tabindex]:not([tabindex="-1"])):focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 
 /* ---- Working, then done, on the button that was tapped ---- */
 @keyframes ct-spin{to{transform:rotate(360deg)}}
 @keyframes ct-pop{from{opacity:.4;transform:scale(.92)}to{opacity:1;transform:none}}
-:is(.btn,.mbtn,.do,.qbtn,.sug,.ckc__btn,.linkact)[data-state="busy"],
+:is(.btn,.mbtn,.do,.qbtn,.sug,.ckc__btn,.linkact,.cw__btn,.iv-btn,.ck-link)[data-state="busy"],
 button[aria-busy="true"]:not(.cu-btn){cursor:progress;opacity:.85}
-:is(.btn,.mbtn,.do,.qbtn,.sug,.ckc__btn,.linkact)[data-state="busy"]::before,
+:is(.btn,.mbtn,.do,.qbtn,.sug,.ckc__btn,.linkact,.cw__btn,.iv-btn,.ck-link,.cu-fresh__go)[data-state="busy"]::before,
 button[aria-busy="true"]:not(.cu-btn)::before{content:"";display:inline-block;flex:none;width:12px;height:12px;margin-right:6px;vertical-align:-2px;
   border-radius:50%;border:2px solid currentColor;border-right-color:transparent;animation:ct-spin .7s linear infinite}
 @media (prefers-reduced-motion:reduce){
-  :is(.btn,.mbtn,.do,.qbtn,.sug,.ckc__btn,.linkact)[data-state="busy"]::before,
+  :is(.btn,.mbtn,.do,.qbtn,.sug,.ckc__btn,.linkact,.cw__btn,.iv-btn,.ck-link)[data-state="busy"]::before,
   button[aria-busy="true"]:not(.cu-btn)::before{animation:none;border-right-color:currentColor;opacity:.5}
 }
-:is(.btn,.mbtn,.ckc__btn)[data-state="done"]{background:var(--good);border-color:var(--good);color:var(--surface);animation:ct-pop var(--ct-dur-rise) var(--ct-ease)}
-:is(.btn--quiet,.do,.qbtn,.sug,.linkact)[data-state="done"]{background:none;border-color:transparent;color:var(--good);animation:ct-pop var(--ct-dur-rise) var(--ct-ease)}
+:is(.btn,.mbtn,.ckc__btn,.cw__btn,.iv-btn)[data-state="done"]{background:var(--good);border-color:var(--good);color:var(--surface);animation:ct-pop var(--ct-dur-rise) var(--ct-ease)}
+:is(.btn--quiet,.do,.qbtn,.sug,.linkact,.ck-link)[data-state="done"]{background:none;border-color:transparent;color:var(--good);animation:ct-pop var(--ct-dur-rise) var(--ct-ease)}
+
+/* ---- A row a tap just finished slides away at once (useLeaving) ----
+   The shared blocks' to-do groups have their own rule in counter-ui.css. */
+@keyframes ct-leave{from{opacity:1;transform:none}to{opacity:0;transform:translateX(16px)}}
+.ct-root .is-leaving:not(.cu-needs__g){overflow:hidden;pointer-events:none;animation:ct-leave var(--ct-dur-leave) var(--ct-ease) forwards}
 
 /* ---- A tick draws in when a task is ticked (store checks, crew page) ---- */
 .ckc__row.done .ck{animation:ct-pop var(--ct-dur-rise) var(--ct-ease)}
 
-/* ---- Every fold in the app slides open instead of jumping ----
-   Browsers without ::details-content open at once, as before. */
-.ct-root details{interpolate-size:allow-keywords}
-.ct-root details::details-content{block-size:0;overflow:hidden;transition:block-size var(--ct-dur-rise) var(--ct-ease),content-visibility var(--ct-dur-rise) allow-discrete}
-.ct-root details[open]::details-content{block-size:auto}
+/* ---- Every fold in the app: what opens fades and slides into place ----
+   Opacity and transform only; the space opens at once rather than pushing
+   the page down frame by frame. Browsers without ::details-content open at
+   once, as before. */
+.ct-root details::details-content{opacity:0;transform:translateY(-6px);transition:opacity var(--ct-dur-rise) var(--ct-ease),transform var(--ct-dur-rise) var(--ct-ease),content-visibility var(--ct-dur-rise) allow-discrete}
+.ct-root details[open]::details-content{opacity:1;transform:none}
 
 /* ---- Lines that just arrived (a saved note, an error) ease in ---- */
 @keyframes ct-arrive{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}

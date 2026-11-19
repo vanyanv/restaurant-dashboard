@@ -1,6 +1,6 @@
 "use client"
 
-import { Answer, BigNumber, BigNumbers, Card, Rows, type RowsColumn } from "@/components/counter/ui"
+import { Answer, Freshness, BigNumber, BigNumbers, Card, Rows, type RowsColumn } from "@/components/counter/ui"
 import type { AnalyticsPlain, AnalyticsPlainChannel } from "@/lib/counter/analytics-plain"
 
 /**
@@ -19,6 +19,7 @@ export function AnalyticsPlainView({ p }: { p: AnalyticsPlain }) {
     <div className="cu-stack">
       <Card label="Where sales came from">
         <Answer>{p.sentence}</Answer>
+        <Freshness />
         <BigNumbers>
           <BigNumber label={p.big.label} value={p.big.value} vs={p.vs ?? undefined} />
         </BigNumbers>

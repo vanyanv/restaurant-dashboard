@@ -432,6 +432,17 @@ own motion, so a page built from them gets it with no page code:
   writes money or the books waits for the answer and marks it in `onDone`.
   `Notice onUndo` offers the way back where one exists.
 
+### Motion rules (owner, 2026-11-19)
+
+Every new piece of motion follows these six; `tests/styles/counter-motion.test.ts` checks the ones a test can see.
+
+1. **Productive, not expressive.** Motion answers a tap, a save, a fold or a row leaving. Page entrances stay a short rise (done by ~330 ms). Data never bounces.
+2. **One restrained spring, two uses.** `--ct-ease-spring` (about 2% overshoot, `--ct-dur-spring` 340 ms) is only for a panel you open (date picker, phone sheets, store switcher, dialogs) and a pressed control springing back. Figures, bars and rows keep `--ct-ease`.
+3. **Touch and pointer differ.** Presses read `--ct-press` / `--ct-press-row`, which are firmer under `(pointer: coarse)`. Every `:hover` rule sits inside `@media (hover:hover)` so a tap never leaves a stuck hover. Every control in `.ct-root` gets a focus ring from one zero-specificity rule in `counter-motion.css`.
+4. **No page updates itself without a way to stop it.** Counter pages do not auto-refresh. The Made Plain pages show `Freshness` ("Updated 8:14 am · Refresh") under their answer. A page that ever polls must add a pause control too.
+5. **Reduced motion through the tokens.** Every duration is a `--ct-dur-*` token, and one `prefers-reduced-motion` rule zeroes them all. No component uses framer-motion.
+6. **Transform and opacity only.** Folds fade and slide (the space opens at once), leaving rows slide and fade without collapsing their height, and the changed-figure flash fades a wash behind the number. No keyframe or transition animates height, width, padding or margin.
+
 ## Shell
 
 `AppShell` (`src/components/counter/shell/app-shell.tsx`) is the frame every

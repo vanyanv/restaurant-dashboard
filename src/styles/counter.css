@@ -317,6 +317,19 @@
   --ct-dur-step:  36ms;
   --ct-dur-leave: 260ms;
 
+  /* A restrained spring: about 2% past the mark and back, no wobble. Only for
+     a panel opening and a pressed control springing back; data (figures,
+     bars, rows) keeps --ct-ease. spring: how long the spring takes. */
+  --ct-ease-spring: linear(0, 0.2 7%, 0.55 17%, 0.83 29%, 0.97 41%, 1.02 53%, 1.022 62%, 1.01 76%, 1);
+  --ct-dur-spring: 340ms;
+
+  /* How far a control presses in under the finger. Firmer on touch, where
+     the finger hides the control and the press is the only answer it sees;
+     barely there with a mouse or trackpad, where hover already answers.
+     press: buttons, tabs, chips. press-row: cards and whole rows. */
+  --ct-press: .985;
+  --ct-press-row: .997;
+
   /* Ask's two-column split, mirrored from the prototype.
 
      `.askpage`'s grid is sized by these numbers in counter-components.css,
@@ -427,8 +440,11 @@
 /* Bars grow from the baseline. Paired with a custom `shape` on the Bar,
  * because Recharts animates a whole bar series on one shared timer and the
  * design calls for each bar to arrive 26ms after the one before it. */
+@media (pointer: coarse) {
+  :root { --ct-press: .96; --ct-press-row: .985; }
+}
 @media (prefers-reduced-motion: reduce) {
-  :root { --ct-dur-tap: 0ms; --ct-dur-quick: 0ms; --ct-dur-rise: 0ms; --ct-dur-step: 0ms; --ct-dur-leave: 0ms; }
+  :root { --ct-dur-tap: 0ms; --ct-dur-quick: 0ms; --ct-dur-rise: 0ms; --ct-dur-step: 0ms; --ct-dur-leave: 0ms; --ct-dur-spring: 0ms; }
 }
 
 @keyframes ct-bar-grow {

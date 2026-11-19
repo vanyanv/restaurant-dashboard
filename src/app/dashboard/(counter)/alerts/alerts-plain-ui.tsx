@@ -4,6 +4,7 @@ import { useSearchParams } from "next/navigation"
 import { useSurfaceHref } from "@/components/counter"
 import {
   Answer,
+  Freshness,
   Button,
   ButtonLink,
   Card,
@@ -33,6 +34,7 @@ export function AlertsPlainView({ p, onOpen }: { p: AlertsPlain; onOpen: (id: st
     <div className="cu-stack">
       <Card label="Alerts in a sentence">
         <Answer>{p.sentence}</Answer>
+        <Freshness />
       </Card>
       {p.statuses.length > 0 ? (
         <Statuses>
