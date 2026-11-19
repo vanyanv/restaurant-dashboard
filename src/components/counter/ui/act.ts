@@ -109,3 +109,15 @@ export function useLeaving() {
     isLeaving: (key: string) => shown.has(key),
   }
 }
+
+/**
+ * The attributes a plain `<button>` (not the shared `Button`) needs to show
+ * a tap's state: the working mark while it saves, the green tick once done.
+ * `counter-motion.css` draws both from these.
+ */
+export function actMarks(state: ActState) {
+  return {
+    "aria-busy": state === "busy" || undefined,
+    "data-state": state === "busy" || state === "done" ? state : undefined,
+  } as const
+}

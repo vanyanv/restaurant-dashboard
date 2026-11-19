@@ -25,6 +25,7 @@ import {
   StoreCard,
   Tabs,
   useAct,
+  actMarks,
   DONE_MS,
 } from "@/components/counter/ui"
 import { splitFigure } from "@/components/counter/ui/big-number"
@@ -219,6 +220,13 @@ describe("shared blocks", () => {
     expect(screen.getByRole("button").textContent).toBe("✓ Approved")
     rerender(<Button state="idle" onClick={onClick}>Approve</Button>)
     expect(screen.getByRole("button").dataset.state).toBeUndefined()
+  })
+
+  it("actMarks: a plain button carries busy and done for the motion layer, nothing when idle or failed", () => {
+    expect(actMarks("busy")).toEqual({ "aria-busy": true, "data-state": "busy" })
+    expect(actMarks("done")).toEqual({ "aria-busy": undefined, "data-state": "done" })
+    expect(actMarks("idle")).toEqual({ "aria-busy": undefined, "data-state": undefined })
+    expect(actMarks("failed")).toEqual({ "aria-busy": undefined, "data-state": undefined })
   })
 
   it("useAct: busy, then done with the words fixed at the tap, then idle; a failure keeps its error", async () => {

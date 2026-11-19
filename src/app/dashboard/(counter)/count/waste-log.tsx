@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState, useTransition, useEffectEvent } from "react"
+import { useEffect, useState, useEffectEvent } from "react"
 import Link from "next/link"
 import { useSurfaceHref } from "@/components/counter"
 import { deleteWaste, logWaste } from "@/lib/counter/actions/count"
@@ -8,7 +8,7 @@ import type { WasteData, WasteEntry } from "@/lib/counter/adapters/count"
 import { WASTE_REASONS, fmtQty, showQty, type WasteReason } from "@/lib/counter/count-layers"
 import { money, OutcomeLine, type Outcome } from "./count-ui"
 import { clearDraft, readDraft, writeDraft } from "@/components/counter/keep/use-draft"
-import { Status } from "@/components/counter/ui"
+import { actMarks, Status, useAct, useLeaving } from "@/components/counter/ui"
 
 /**
  * The waste log: what, how much, why. Ten seconds, any time of day. The
@@ -19,7 +19,7 @@ import { Status } from "@/components/counter/ui"
  */
 export function WasteLog({ data, base }: { data: WasteData; base: "/dashboard/count" | "/m/count" }) {
   const href = useSurfaceHref()
-  const [busy, start] = useTransition()
+  const { act, stateOf, doneOf, busy } = useAct()
   const [outcome, setOutcome] = useState<Outcome>(null)
   const [pick, setPick] = useState<string | null>(null)
   const [layer, setLayer] = useState(0)
@@ -72,7 +72,7 @@ export function WasteLog({ data, base }: { data: WasteData; base: "/dashboard/co
       setOutcome({ ok: false, text: "That's more than a store holds. Check the amount" })
       return
     }
-    start(async () => {
+    act("save", async () => {
       const r = await logWaste({ storeId: data.store.id, ingredientId: item.ingredientId, qty: qty * unit.per, reason, note: note.trim() || undefined })
       setOutcome(r.ok ? { ok: true, text: `Saved: ${item.name}, ${fmtQty(qty)} × ${unit.label}` } : { ok: false, text: r.error })
       if (r.ok) {
@@ -83,7 +83,8 @@ export function WasteLog({ data, base }: { data: WasteData; base: "/dashboard/co
         setLayer(0)
         // logWaste revalidates the count section; no router.refresh() needed.
       }
-    })
+      return r
+    }, { done: "Saved" })
   }
 
   if (data.items.length === 0) {
@@ -164,8 +165,8 @@ export function WasteLog({ data, base }: { data: WasteData; base: "/dashboard/co
       <OutcomeLine outcome={outcome} />
       <div className="cw__foot cw__foot--stick cw-item-foot">
         <Link className="cw__btn" href={`${base}/walk?store=${data.store.id}`}>Back to the count</Link>
-        <button aria-busy={busy || undefined} type="button" className="cw__btn cw__btn--primary" disabled={busy} onClick={save}>
-          Save waste
+        <button {...actMarks(stateOf("save"))} type="button" className="cw__btn cw__btn--primary" disabled={busy} onClick={save}>
+          {doneOf("save") ? `✓ ${doneOf("save")}` : "Save waste"}
         </button>
       </div>
 
@@ -178,20 +179,28 @@ export function WasteLog({ data, base }: { data: WasteData; base: "/dashboard/co
  * entry on an item with no price says "Not valued yet"; it is never $0.
  */
 export function WasteEntries({ entries }: { entries: WasteEntry[] }) {
-  const [busy, start] = useTransition()
+  const { act } = useAct()
+  const leaving = useLeaving()
   const [outcome, setOutcome] = useState<Outcome>(null)
+  // The entry slides away as soon as Undo is tapped; if the delete fails it
+  // comes back by itself and the error shows below.
   const undo = (id: string) =>
-    start(async () => {
-      // deleteWaste revalidates the count section; no router.refresh() needed.
-      const r = await deleteWaste(id)
-      setOutcome(r.ok ? { ok: true, text: "Removed" } : { ok: false, text: r.error })
-    })
+    act(
+      id,
+      async () => {
+        // deleteWaste revalidates the count section; no router.refresh() needed.
+        const r = await deleteWaste(id)
+        setOutcome(r.ok ? { ok: true, text: "Removed" } : { ok: false, text: r.error })
+        return r
+      },
+      { optimistic: () => leaving.mark(id), onDone: () => leaving.keep(id) },
+    )
   if (entries.length === 0) return <p className="iv-quiet iv-pad">Nothing logged in the last 7 days.</p>
   return (
     <>
       <ul className="iv-list">
         {entries.map((w) => (
-          <li className="iv-it" key={w.id}>
+          <li className={`iv-it${leaving.isLeaving(w.id) ? " is-leaving" : ""}`} key={w.id} aria-hidden={leaving.isLeaving(w.id) || undefined}>
             <div className="iv-it__h">
               <b>{w.name}</b>
               {w.dollars != null
@@ -203,7 +212,7 @@ export function WasteEntries({ entries }: { entries: WasteEntry[] }) {
                 <em>{w.amount}</em> · {w.reason} · {w.when}
                 {w.note ? ` · ${w.note}` : ""}
               </span>
-              <button type="button" className="iv-btn iv-btn--sm" disabled={busy} onClick={() => undo(w.id)} aria-label={`Remove ${w.name} waste entry`}>
+              <button type="button" className="iv-btn iv-btn--sm" disabled={leaving.isLeaving(w.id)} onClick={() => undo(w.id)} aria-label={`Remove ${w.name} waste entry`}>
                 Undo
               </button>
             </div>

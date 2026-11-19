@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useTransition } from "react"
+import { useState } from "react"
 import { useRouter } from "next/navigation"
 import { Section, useCounterTransition, usePageChrome } from "@/components/counter"
 import {
@@ -15,6 +15,7 @@ import type { SectionSources } from "@/lib/counter/adapters/types"
 import type { CrewData, CrewRow, CrewSections } from "@/lib/counter/adapters/checks"
 import { formatUsPhone, howToTextBody, pinTextBody, smsHref } from "@/lib/checks/text"
 import { ChecksHead, OutcomeLine, StorePicker, type Outcome } from "../checks-ui"
+import { actMarks, useAct } from "@/components/counter/ui"
 
 /**
  * Store checks — Crew & PINs. Crew come in from Harri with a PIN already
@@ -50,22 +51,25 @@ function shortDate(iso: string): string {
 
 function useAction() {
   const router = useRouter()
-  const [busy, start] = useTransition()
+  const { act, stateOf, busy } = useAct()
   const [outcome, setOutcome] = useState<Outcome>(null)
-  const run = (fn: () => Promise<ActionResult>, after?: () => void) =>
-    start(async () => {
+  /** `key` names the button, so only the tapped one shows working, then a tick. */
+  const run = (fn: () => Promise<ActionResult>, after?: () => void, key = "run") =>
+    act(key, async () => {
       const r = await fn()
       setOutcome(r.ok ? (r.message ? { ok: true, text: r.message } : null) : { ok: false, text: r.error })
       if (r.ok) {
         after?.()
         router.refresh()
       }
+      return r
     })
-  return { busy, outcome, run, setOutcome }
+  const marks = (key = "run") => actMarks(stateOf(key))
+  return { busy, outcome, run, marks, setOutcome }
 }
 
 function Crew({ data }: { data: CrewData }) {
-  const { busy, outcome, run } = useAction()
+  const { busy, outcome, run, marks } = useAction()
   const [showAll, setShowAll] = useState(false)
   const [adding, setAdding] = useState(false)
   const active = data.crew.filter((c) => c.active).length
@@ -81,7 +85,7 @@ function Crew({ data }: { data: CrewData }) {
         </div>
         <div className="ck-row">
           <OutcomeLine outcome={outcome} />
-          <button aria-busy={busy || undefined} type="button" className="btn" disabled={busy} onClick={() => run(() => syncStoreCrew({ storeId: data.store.id }))}>
+          <button {...marks()} type="button" className="btn" disabled={busy} onClick={() => run(() => syncStoreCrew({ storeId: data.store.id }))}>
             Sync from Harri
           </button>
           <button type="button" className="btn" onClick={() => setShowAll((v) => !v)}>
@@ -150,7 +154,7 @@ function CrewLine({
 }) {
   const [show, setShow] = useState(false)
   const [editing, setEditing] = useState(false)
-  const { busy, outcome, run } = useAction()
+  const { busy, outcome, run, marks } = useAction()
   const visible = show || showAll
 
   if (editing) {
@@ -201,7 +205,7 @@ function CrewLine({
         <span className="ck-row" style={{ justifyContent: "flex-end" }}>
           <OutcomeLine outcome={outcome} />
           {c.active && c.email && emailReady && (
-            <button type="button" className="ck-link" disabled={busy} onClick={() => run(() => emailCrewPin({ crewId: c.id }))}>
+            <button {...marks("email")} type="button" className="ck-link" disabled={busy} onClick={() => run(() => emailCrewPin({ crewId: c.id }), undefined, "email")}>
               {c.pinEmailedAt ? "Resend" : "Send"}
             </button>
           )}
@@ -227,10 +231,11 @@ function CrewLine({
             Edit
           </button>
           <button
+            {...marks("active")}
             type="button"
             className="ck-link"
             disabled={busy}
-            onClick={() => run(() => setCrewActive({ crewId: c.id, active: !c.active }))}
+            onClick={() => run(() => setCrewActive({ crewId: c.id, active: !c.active }), undefined, "active")}
           >
             {c.active ? "Turn off" : "Turn on"}
           </button>
@@ -277,7 +282,7 @@ function CrewForm({
     phone: initial.phone,
     pin: initial.pin ?? "",
   })
-  const { busy, outcome, run } = useAction()
+  const { busy, outcome, run, marks } = useAction()
   const set = (k: keyof CrewValues) => (e: React.ChangeEvent<HTMLInputElement>) =>
     setV((x) => ({ ...x, [k]: k === "pin" ? e.target.value.replace(/\D/g, "").slice(0, 4) : e.target.value }))
   return (
@@ -309,7 +314,7 @@ function CrewForm({
         <input className="ck-input ck-pin" inputMode="numeric" pattern="\d{4}" value={v.pin} onChange={set("pin")} />
       </label>
       <span className="ck-row">
-        <button aria-busy={busy || undefined} type="submit" className="btn btn--primary" disabled={busy}>
+        <button {...marks()} type="submit" className="btn btn--primary" disabled={busy}>
           {submitLabel}
         </button>
         <button type="button" className="btn btn--quiet" onClick={onCancel}>

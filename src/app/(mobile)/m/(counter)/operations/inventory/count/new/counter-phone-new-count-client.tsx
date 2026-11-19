@@ -89,12 +89,13 @@ export function CounterPhoneNewCountClient({
         {(o) => (
           <>
             <button
+              aria-busy={busy || undefined}
               className="mbtn mbtn--primary"
               type="button"
               onClick={begin}
               disabled={busy || targetStoreId === null}
             >
-              {busy ? "Opening…" : o.resumes ? "Resume the open count" : "Begin the count"}
+              {o.resumes ? "Resume the open count" : "Begin the count"}
             </button>
             <Note live tone={problem === null ? undefined : "bad"}>
               {problem === null ? o.note : `Could not open a count: ${problem}.`}

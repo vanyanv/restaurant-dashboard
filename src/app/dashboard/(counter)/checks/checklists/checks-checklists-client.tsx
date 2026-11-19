@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useTransition } from "react"
+import { useState } from "react"
 import { Section, useCounterTransition, usePageChrome } from "@/components/counter"
 import { copyChecklistToOtherStores, saveChecklist } from "@/lib/counter/actions/checks"
 import type { SectionSources } from "@/lib/counter/adapters/types"
@@ -12,6 +12,7 @@ import type {
 } from "@/lib/counter/adapters/checks"
 import { ChecksHead, OutcomeLine, StorePicker, type Outcome } from "../checks-ui"
 import { useLeaveGuard } from "@/components/counter/keep/use-leave-guard"
+import { actMarks, useAct } from "@/components/counter/ui"
 
 /**
  * Store checks — Checklists. One store and one check at a time: the window
@@ -69,7 +70,7 @@ function Editor({ data }: { data: ChecklistsData }) {
   // Ask before leaving with list edits not saved.
   useLeaveGuard(Object.values(dirty).some(Boolean))
   const [outcome, setOutcome] = useState<Outcome>(null)
-  const [busy, start] = useTransition()
+  const { act, stateOf, busy } = useAct()
   const t = drafts[kind]
 
   const update = (fn: (t: EditorTemplate) => void) => {
@@ -86,7 +87,7 @@ function Editor({ data }: { data: ChecklistsData }) {
   if (!t) return <p className="ck-meta" style={{ padding: 16 }}>No checks set up for this store.</p>
 
   const save = () =>
-    start(async () => {
+    act("save", async () => {
       const r = await saveChecklist({
         storeId: data.store.id,
         kind: t.kind as "MORNING" | "EVENING",
@@ -109,16 +110,18 @@ function Editor({ data }: { data: ChecklistsData }) {
         setOutcome({ ok: true, text: r.message ?? "Saved." })
         // saveChecklist revalidates /checks; no router.refresh() needed.
       } else setOutcome({ ok: false, text: r.error })
+      return r
     })
 
   const copy = () =>
-    start(async () => {
+    act("copy", async () => {
       if (dirty[kind]) {
         setOutcome({ ok: false, text: "Save this checklist first, then copy it." })
-        return
+        return { ok: false, error: "unsaved" }
       }
       const r = await copyChecklistToOtherStores({ storeId: data.store.id, kind: t.kind })
       setOutcome(r.ok ? { ok: true, text: r.message ?? "Copied." } : { ok: false, text: r.error })
+      return r
     })
 
   // Due before or at the open time means "after midnight".
@@ -133,10 +136,10 @@ function Editor({ data }: { data: ChecklistsData }) {
         {/* On a phone this row sticks to the bottom, so Save is never a scroll away. */}
         <div className="ck-row ck-edbar">
           <OutcomeLine outcome={outcome} />
-          <button type="button" className="btn" onClick={copy} disabled={busy}>
+          <button {...actMarks(stateOf("copy"))} type="button" className="btn" onClick={copy} disabled={busy}>
             Copy to other stores
           </button>
-          <button aria-busy={busy || undefined} type="button" className="btn btn--primary" onClick={save} disabled={busy || !dirty[kind]}>
+          <button {...actMarks(stateOf("save"))} type="button" className="btn btn--primary" onClick={save} disabled={busy || !dirty[kind]}>
             {dirty[kind] ? "Save changes" : "Saved"}
           </button>
         </div>

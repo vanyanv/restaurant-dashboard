@@ -24,17 +24,22 @@
 /* ---- Working, then done, on the button that was tapped ---- */
 @keyframes ct-spin{to{transform:rotate(360deg)}}
 @keyframes ct-pop{from{opacity:.4;transform:scale(.92)}to{opacity:1;transform:none}}
-:is(.btn,.mbtn,.do,.qbtn,.sug,.ckc__btn,.linkact)[data-state="busy"],
+:is(.btn,.mbtn,.do,.qbtn,.sug,.ckc__btn,.linkact,.cw__btn,.iv-btn,.ck-link)[data-state="busy"],
 button[aria-busy="true"]:not(.cu-btn){cursor:progress;opacity:.85}
-:is(.btn,.mbtn,.do,.qbtn,.sug,.ckc__btn,.linkact)[data-state="busy"]::before,
+:is(.btn,.mbtn,.do,.qbtn,.sug,.ckc__btn,.linkact,.cw__btn,.iv-btn,.ck-link)[data-state="busy"]::before,
 button[aria-busy="true"]:not(.cu-btn)::before{content:"";display:inline-block;flex:none;width:12px;height:12px;margin-right:6px;vertical-align:-2px;
   border-radius:50%;border:2px solid currentColor;border-right-color:transparent;animation:ct-spin .7s linear infinite}
 @media (prefers-reduced-motion:reduce){
-  :is(.btn,.mbtn,.do,.qbtn,.sug,.ckc__btn,.linkact)[data-state="busy"]::before,
+  :is(.btn,.mbtn,.do,.qbtn,.sug,.ckc__btn,.linkact,.cw__btn,.iv-btn,.ck-link)[data-state="busy"]::before,
   button[aria-busy="true"]:not(.cu-btn)::before{animation:none;border-right-color:currentColor;opacity:.5}
 }
-:is(.btn,.mbtn,.ckc__btn)[data-state="done"]{background:var(--good);border-color:var(--good);color:var(--surface);animation:ct-pop var(--ct-dur-rise) var(--ct-ease)}
-:is(.btn--quiet,.do,.qbtn,.sug,.linkact)[data-state="done"]{background:none;border-color:transparent;color:var(--good);animation:ct-pop var(--ct-dur-rise) var(--ct-ease)}
+:is(.btn,.mbtn,.ckc__btn,.cw__btn,.iv-btn)[data-state="done"]{background:var(--good);border-color:var(--good);color:var(--surface);animation:ct-pop var(--ct-dur-rise) var(--ct-ease)}
+:is(.btn--quiet,.do,.qbtn,.sug,.linkact,.ck-link)[data-state="done"]{background:none;border-color:transparent;color:var(--good);animation:ct-pop var(--ct-dur-rise) var(--ct-ease)}
+
+/* ---- A row a tap just finished slides away at once (useLeaving) ----
+   The shared blocks' to-do groups have their own rule in counter-ui.css. */
+@keyframes ct-leave{from{opacity:1;transform:none;max-height:240px}to{opacity:0;transform:translateX(16px);max-height:0;padding-block:0;margin-block:0;border-width:0}}
+.ct-root .is-leaving:not(.cu-needs__g){overflow:hidden;pointer-events:none;animation:ct-leave var(--ct-dur-leave) var(--ct-ease) forwards}
 
 /* ---- A tick draws in when a task is ticked (store checks, crew page) ---- */
 .ckc__row.done .ck{animation:ct-pop var(--ct-dur-rise) var(--ct-ease)}

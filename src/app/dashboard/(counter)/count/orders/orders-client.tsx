@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useTransition } from "react"
+import { useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { Section, useCounterTransition, usePageChrome, useSurfaceHref } from "@/components/counter"
@@ -10,6 +10,7 @@ import type { SwitcherSections } from "@/lib/counter/adapters/inventory-shelf"
 import { setDraftSkipCount } from "@/lib/counter/actions/count"
 import { COVER_DAY_CHOICES, COVER_LABELS, DEFAULT_COVER_DAYS } from "@/lib/counter/draft-orders"
 import { CountHead, money, OutcomeLine, type Outcome } from "../count-ui"
+import { actMarks, useAct } from "@/components/counter/ui"
 
 /**
  * Count & waste — Restock. Per store: what is on the shelf and how long it
@@ -225,13 +226,14 @@ function VendorCard({ vendor: v, store }: { vendor: DraftVendor; store: string }
 }
 
 function SkipSwitch({ data }: { data: DraftData }) {
-  const [busy, start] = useTransition()
+  const { act, stateOf, busy } = useAct()
   const [outcome, setOutcome] = useState<Outcome>(null)
   function toggle(skip: boolean) {
-    start(async () => {
+    act("skip", async () => {
       const r = await setDraftSkipCount(data.store.id, skip)
       // The action revalidates the count section; no router.refresh() needed.
       setOutcome(r.ok ? { ok: true, text: r.message ?? "Saved" } : { ok: false, text: r.error })
+      return r
     })
   }
   return (
@@ -249,6 +251,7 @@ function SkipSwitch({ data }: { data: DraftData }) {
             </small>
           </span>
           <button
+            {...actMarks(stateOf("skip"))}
             type="button"
             className={`cw__btn ${data.store.skip ? "cw__btn--primary" : ""}`}
             style={{ flex: "0 0 auto" }}
