@@ -69,6 +69,22 @@ describe("buildAlertsPlain", () => {
     expect(p.groups[0].why).toBe("Counted from the 8 most serious of 144 open alerts.")
   })
 
+  it("puts missed punches first as a Time records group, without counting them as alerts", () => {
+    const timeRecords = { missedIn: 13, missedOut: 3, stores: ["Hollywood"], from: "2026-11-13", to: "2026-11-19" }
+    const p = buildAlertsPlain(alerts({ timeRecords }))
+    expect(p.groups[0]).toMatchObject({
+      key: "time-records",
+      what: "Time records need fixing: 13 missed clock-ins, 3 missed clock-outs",
+      action: { href: "/dashboard/labor" },
+    })
+    expect(p.open).toBe(8)
+    expect(p.sentence).toContain("Most of the rest are 6 menu items")
+    expect(p.statuses[0]).toEqual({ tone: "warn", text: "Time records need fixing: 13 missed clock-ins, 3 missed clock-outs" })
+
+    const none = buildAlertsPlain({ openRows: [], serious: [], counts: { open: 0, critical: 0 }, closed: 0, timeRecords })
+    expect(none.sentence).toBe("No alerts are open. Time records need fixing: 13 missed clock-ins, 3 missed clock-outs.")
+  })
+
   it("says plainly when nothing is open", () => {
     const p = buildAlertsPlain({ openRows: [], serious: [], counts: { open: 0, critical: 0 }, closed: 0 })
     expect(p.sentence).toBe("Nothing is open. Every alert has been dealt with.")

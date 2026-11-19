@@ -1,6 +1,7 @@
 import type { PnlPlain, PlainWeek } from "@/lib/counter/pnl-plain"
 import { money, plural } from "@/lib/counter/format"
 import { alertGroupWords, countByTarget } from "@/lib/counter/alert-groups"
+import { timeRecordsGroup, type TimeRecordsNeed } from "@/lib/counter/time-records"
 
 /**
  * The Overview "made plain" (owner's go, 2026-11-18; mock
@@ -80,6 +81,12 @@ export interface OverviewPlainInput {
   orders: Record<string, number> | null
   /** Open alerts as loaded (the inbox returns the newest 100), and how many are open in all. Null when the inbox did not load. */
   alerts: { rows: OverviewAlert[]; open: number } | null
+  /**
+   * Missed clock-ins and clock-outs Harri flagged this week (`loadTimeRecordsNeed`).
+   * Read straight off Harri's alerts, never written as `Alert` rows. Null when
+   * there are none or the read failed.
+   */
+  timeRecords?: TimeRecordsNeed | null
 }
 
 const WORDS = ["no", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten"]
@@ -182,6 +189,12 @@ export function buildOverviewPlain(input: OverviewPlainInput): OverviewPlain {
     why: t.items.join(" "),
     action: t.action,
   }))
+  // Time records first among the alert groups: until a missed punch is fixed
+  // in Harri, labor (and so every cost figure above) reads wrong.
+  if (input.timeRecords) {
+    const g = timeRecordsGroup(input.timeRecords)
+    needs.push({ key: "time-records", tone: "warn", what: g.what, why: g.why, action: g.action })
+  }
   if (input.alerts === null) {
     // Never an empty Needs you that reads as all clear.
     needs.push({

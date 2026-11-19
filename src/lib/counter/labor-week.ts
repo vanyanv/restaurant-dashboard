@@ -5,6 +5,7 @@ import { cached, stableKey } from "@/lib/cache/cached"
 import { otterRangeTags, rangeTtl } from "@/lib/cache/range"
 import { loadLaborCost } from "@/lib/counter/labor-cost"
 import { missingLaborByDay, missingStoresByDay } from "@/lib/counter/labor-cost-core"
+import { businessCalendarDate } from "@/lib/counter/business-date"
 import {
   dayCount,
   isoDay,
@@ -111,6 +112,21 @@ export interface LaborDay {
    * wrong for free.
    */
   totalSales: number | null
+  /**
+   * Hours worked against hours published over ONLY this day's store-days that
+   * carry both. A store-day with a schedule and no hours from Harri yet is left
+   * out of both sides, so a sync that has not landed cannot read as the store
+   * working under its schedule. `null` when no store-day has both.
+   */
+  compare: ScheduleCompare | null
+  /** Store-days with a published schedule and no hours worked from Harri yet. */
+  awaitingStoreDays: number
+}
+
+/** Hours worked and hours published over the same store-days. */
+export interface ScheduleCompare {
+  actualHours: number
+  scheduledHours: number
 }
 
 export interface LaborWeek {
@@ -126,6 +142,21 @@ export interface LaborWeek {
   /** Over TOTAL SALES (L-R2). */
   laborPct: number | null
   overtimeCost: number
+  /**
+   * The schedule reading: `LaborDay.compare` summed. THIS, not
+   * `actualHours - scheduledHours`, is what any "over / under the schedule"
+   * sentence reads. The gross pair also counts days Harri has not sent hours
+   * for, and that read a missing sync as 128 hours "under the schedule".
+   */
+  compare: ScheduleCompare | null
+  /** Labels of days with at least one store-day still waiting on Harri's hours. */
+  awaitingDays: string[]
+  awaitingStoreDays: number
+  /**
+   * Labels of days in the range Harri has not finalised yet (see
+   * `provisionalWindow`). Their hours and costs can still move.
+   */
+  provisionalDays: string[]
 }
 
 export interface LaborRole {
@@ -231,6 +262,14 @@ export function laborDay(input: {
   actualSeconds: number
   /** `null` when `HarriShift` published no shift at all for this day. */
   scheduledMinutes: number | null
+  /**
+   * The day's store-days with BOTH hours worked and a published schedule,
+   * summed. Left out (single-store callers and tests), it is the day's own
+   * totals when the day has both, else nothing.
+   */
+  matched?: { seconds: number; scheduledMinutes: number } | null
+  /** Store-days with a schedule and no hours yet. Left out, derived from the day's totals. */
+  awaitingStoreDays?: number
   cost: number
   /** Store-days that sold with no labor reading (see `LaborDay.missingStoreDays`). */
   missingStoreDays?: number
@@ -255,6 +294,20 @@ export function laborDay(input: {
   // so its percentage is "no reading", never 0.0%.
   const laborPct = pctOfSales(input.cost, ratedSales)
 
+  const matched =
+    input.matched !== undefined
+      ? input.matched
+      : input.scheduledMinutes !== null && input.actualSeconds > 0
+        ? { seconds: input.actualSeconds, scheduledMinutes: input.scheduledMinutes }
+        : null
+  const compare =
+    matched === null || matched.seconds <= 0
+      ? null
+      : { actualHours: matched.seconds / 3600, scheduledHours: matched.scheduledMinutes / 60 }
+  const awaitingStoreDays =
+    input.awaitingStoreDays ??
+    (input.scheduledMinutes !== null && input.scheduledMinutes > 0 && input.actualSeconds === 0 ? 1 : 0)
+
   return {
     key: input.key,
     label: input.label,
@@ -267,6 +320,8 @@ export function laborDay(input: {
     splh,
     laborPct,
     totalSales: input.totalSales,
+    compare,
+    awaitingStoreDays,
   }
 }
 
@@ -289,7 +344,14 @@ export function laborDay(input: {
  * week's real hours and real spend do not become smaller because one day's
  * sales went unrecorded.
  */
-export function laborWeek(days: LaborDay[], overtimeCost: number): LaborWeek {
+export function laborWeek(
+  days: LaborDay[],
+  overtimeCost: number,
+  opts: {
+    /** `provisionalWindow(today)`: days from `from` up to `today` are provisional. */
+    provisional?: { from: string; today: string }
+  } = {},
+): LaborWeek {
   const actualHours = sum(days.map((d) => d.actualHours))
   const cost = sum(days.map((d) => d.cost))
   const blendedRate = actualHours > 0 ? cost / actualHours : null
@@ -329,6 +391,19 @@ export function laborWeek(days: LaborDay[], overtimeCost: number): LaborWeek {
 
   const missingStoreDays = sum(days.map((d) => d.missingStoreDays))
 
+  const compared = days.filter((d) => d.compare !== null)
+  const compare =
+    compared.length === 0
+      ? null
+      : {
+          actualHours: sum(compared.map((d) => d.compare!.actualHours)),
+          scheduledHours: sum(compared.map((d) => d.compare!.scheduledHours)),
+        }
+  const awaiting = days.filter((d) => d.awaitingStoreDays > 0)
+  const p = opts.provisional
+  const provisionalDays =
+    p === undefined ? [] : days.filter((d) => d.key >= p.from && d.key <= p.today).map((d) => d.label)
+
   return {
     days,
     actualHours,
@@ -339,7 +414,75 @@ export function laborWeek(days: LaborDay[], overtimeCost: number): LaborWeek {
     splh,
     laborPct,
     overtimeCost,
+    compare,
+    awaitingDays: awaiting.map((d) => d.label),
+    awaitingStoreDays: sum(awaiting.map((d) => d.awaitingStoreDays)),
+    provisionalDays,
   }
+}
+
+/**
+ * Harri's provisional window, for a page rendered on `today`.
+ *
+ * Harri finalises a day about two days after it (D+2), and the cron re-syncs
+ * the last three. So today and yesterday (Los Angeles business days) are not
+ * final: hours can still be added and costs can still move. `from` is
+ * yesterday's key and `today` today's, so a range that ends earlier names
+ * nothing.
+ */
+export function provisionalWindow(today: Date): { from: string; today: string } {
+  const d = businessCalendarDate(today)
+  return { from: isoDay(addDays(d, -1)), today: isoDay(d) }
+}
+
+/** Below this share of sales, a store's labor is more likely missing than lean. */
+export const LABOR_INCOMPLETE_PCT = 10
+
+/** One store's labor over its own rated sales for the range. */
+export interface LaborStoreShare {
+  storeId: string
+  name: string
+  cost: number
+  /** Net Sales on the store's days that HAVE a labor reading. */
+  ratedSales: number
+  /** `null` with no rated sales. */
+  laborPct: number | null
+}
+
+/**
+ * The stores whose labor reads below `LABOR_INCOMPLETE_PCT` of their sales.
+ *
+ * A restaurant does not run on 2% labor. A share that low on a store that
+ * sold means hours or wages are missing from what Harri sent (Glendale read
+ * 2.2%), so the page says "looks incomplete" instead of printing it as fact.
+ */
+export function incompleteLaborStores(shares: LaborStoreShare[]): LaborStoreShare[] {
+  return shares.filter(
+    (s) => s.ratedSales > 0 && s.laborPct !== null && s.laborPct < LABOR_INCOMPLETE_PCT,
+  )
+}
+
+/**
+ * Each store's share, off the per-store labor cost and the per-store sales.
+ * A store-day with no labor reading is left out of that store's sales, the
+ * same rule `laborDay`'s rated sales applies.
+ */
+export function laborStoreShares(
+  stores: Array<{ id: string; name: string }>,
+  costByStore: Record<string, number>,
+  missingByDay: Record<string, string[]>,
+  salesByStoreDay: Map<string, Map<string, number>>,
+): LaborStoreShare[] {
+  return stores.map((s) => {
+    let ratedSales = 0
+    for (const [day, sales] of salesByStoreDay.get(s.id) ?? []) {
+      if (!Number.isFinite(sales)) continue
+      if (missingByDay[day]?.includes(s.id)) continue
+      ratedSales += sales
+    }
+    const cost = costByStore[s.id] ?? 0
+    return { storeId: s.id, name: s.name, cost, ratedSales, laborPct: pctOfSales(cost, ratedSales) }
+  })
 }
 
 /**
@@ -454,14 +597,19 @@ export async function loadLaborWeek(input: {
   salesByDay: Map<string, number> | Promise<Map<string, number>>
   /** The same Net Sales per store and day, off the same statement — see `salesByStoreDayOf`. */
   salesByStoreDay: Map<string, Map<string, number>> | Promise<Map<string, Map<string, number>>>
-}): Promise<{ days: LaborDay[]; roles: LaborRole[]; overtimeCost: number }> {
+}): Promise<{
+  days: LaborDay[]
+  roles: LaborRole[]
+  overtimeCost: number
+  storeShares: LaborStoreShare[]
+}> {
   const { range, storeId, accountId } = input
   const { startDate, endDate } = toQueryBounds(range)
 
   const stores = await getScopedStores(accountId, storeId ?? null)
   // A storeId that is not on this account resolves to no stores, not to the
   // whole account (same rule as `loadChannelMix`/`loadServiceProfile`).
-  if (stores.length === 0) return { days: [], roles: [], overtimeCost: 0 }
+  if (stores.length === 0) return { days: [], roles: [], overtimeCost: 0, storeShares: [] }
   const storeIds = stores.map((s) => s.id)
 
   // The FOLD is cached, never the rows — every row here carries a `Date` that
@@ -470,7 +618,7 @@ export async function loadLaborWeek(input: {
   // under its own key, and it only enters at `laborDay` below. Folding it in
   // would make this key move with the statement instead of with labour.
   const fold = await cached(
-    `counter:laborweek3:${stableKey({ a: accountId, ids: [...storeIds].sort(), from: startDate, to: endDate })}`,
+    `counter:laborweek4:${stableKey({ a: accountId, ids: [...storeIds].sort(), from: startDate, to: endDate })}`,
     rangeTtl(endDate),
     // Three tables, two writers: `/api/cron/harri` busts `harri` (positions
     // AND shifts come from that one run) and `/api/cron/otter/hourly` busts
@@ -494,6 +642,8 @@ export async function loadLaborWeek(input: {
         label: dayLabel(d),
         actualSeconds: hb?.seconds ?? 0,
         scheduledMinutes: key in fold.scheduledByDate ? fold.scheduledByDate[key] : null,
+        matched: fold.matchedByDate[key] ?? null,
+        awaitingStoreDays: fold.awaitingByDate[key] ?? 0,
         cost: fold.costByDate[key] ?? 0,
         missingStoreDays: missing[key]?.storeDays ?? 0,
         missingSales: missing[key]?.sales ?? 0,
@@ -504,7 +654,14 @@ export async function loadLaborWeek(input: {
 
   const roles = laborRole([...fold.roles].sort((a, b) => b.cost - a.cost))
 
-  return { days, roles, overtimeCost: fold.overtimeCost }
+  const storeShares = laborStoreShares(
+    stores.map((s) => ({ id: s.id, name: s.name })),
+    fold.costByStore,
+    fold.missingByDay,
+    salesByStoreDay,
+  )
+
+  return { days, roles, overtimeCost: fold.overtimeCost, storeShares }
 }
 
 /**
@@ -524,6 +681,12 @@ async function foldLaborWeekRows(input: {
   /** Per day, the stores with no labor reading (whether or not they sold). */
   missingByDay: Record<string, string[]>
   scheduledByDate: Record<string, number>
+  /** Per day, hours worked and minutes published over store-days carrying BOTH. */
+  matchedByDate: Record<string, { seconds: number; scheduledMinutes: number }>
+  /** Per day, store-days with a published shift and no hours worked yet. */
+  awaitingByDate: Record<string, number>
+  /** `loadLaborCost`'s decided dollars, per store. */
+  costByStore: Record<string, number>
   roles: Array<{ position: string; payType: "HOURLY" | "SALARIED"; hours: number; cost: number }>
   overtimeCost: number
 }> {
@@ -533,6 +696,7 @@ async function foldLaborWeekRows(input: {
     prisma.harriPositionDaily.findMany({
       where: { storeId: { in: storeIds }, date: { gte: startDate, lte: endDate } },
       select: {
+        storeId: true,
         date: true,
         positionCode: true,
         positionName: true,
@@ -550,7 +714,7 @@ async function foldLaborWeekRows(input: {
         date: { gte: startDate, lte: endDate },
         isVirtual: false,
       },
-      select: { date: true, minutes: true },
+      select: { storeId: true, date: true, minutes: true },
     }),
     // Labor DOLLARS: the one rule shared with the P&L. The position rows above
     // still give hours and the role split.
@@ -558,12 +722,18 @@ async function foldLaborWeekRows(input: {
   ])
 
   const costByDate: Record<string, number> = {}
+  const costByStore: Record<string, number> = {}
   for (const store of Object.values(laborCost.stores)) {
     for (const [day, v] of Object.entries(store.byDay)) {
       costByDate[day] = (costByDate[day] ?? 0) + v.amount
+      costByStore[store.storeId] = (costByStore[store.storeId] ?? 0) + v.amount
     }
   }
 
+  // Per store-day, so a schedule is only read against hours on the SAME
+  // store-day: a store whose hours Harri has not sent must not count its
+  // published shifts as hours nobody worked.
+  const secByStoreDay = new Map<string, number>()
   const hoursByDate: Record<string, { seconds: number }> = {}
   const roleAgg = new Map<
     string,
@@ -576,6 +746,8 @@ async function foldLaborWeekRows(input: {
     const bucket = hoursByDate[key] ?? { seconds: 0 }
     bucket.seconds += r.actualSeconds ?? 0
     hoursByDate[key] = bucket
+    const sdKey = `${key}|${r.storeId}`
+    secByStoreDay.set(sdKey, (secByStoreDay.get(sdKey) ?? 0) + (r.actualSeconds ?? 0))
 
     overtimeCost += r.overtimeAmount ?? 0
 
@@ -593,9 +765,26 @@ async function foldLaborWeekRows(input: {
   }
 
   const scheduledByDate: Record<string, number> = {}
+  const minByStoreDay = new Map<string, number>()
   for (const s of shiftRows) {
     const key = dbDay(s.date)
     scheduledByDate[key] = (scheduledByDate[key] ?? 0) + s.minutes
+    const sdKey = `${key}|${s.storeId}`
+    minByStoreDay.set(sdKey, (minByStoreDay.get(sdKey) ?? 0) + s.minutes)
+  }
+
+  const matchedByDate: Record<string, { seconds: number; scheduledMinutes: number }> = {}
+  const awaitingByDate: Record<string, number> = {}
+  for (const [sdKey, minutes] of minByStoreDay) {
+    const day = sdKey.slice(0, 10)
+    const seconds = secByStoreDay.get(sdKey) ?? 0
+    if (seconds > 0) {
+      const m = (matchedByDate[day] ??= { seconds: 0, scheduledMinutes: 0 })
+      m.seconds += seconds
+      m.scheduledMinutes += minutes
+    } else if (minutes > 0) {
+      awaitingByDate[day] = (awaitingByDate[day] ?? 0) + 1
+    }
   }
 
   // Role dollars are Harri's per-position wages; the Total row is the shared
@@ -609,7 +798,17 @@ async function foldLaborWeekRows(input: {
     for (const r of roles) r.cost *= scale
   }
 
-  return { hoursByDate, costByDate, missingByDay: missingStoresByDay(laborCost), scheduledByDate, roles, overtimeCost }
+  return {
+    hoursByDate,
+    costByDate,
+    missingByDay: missingStoresByDay(laborCost),
+    scheduledByDate,
+    matchedByDate,
+    awaitingByDate,
+    costByStore,
+    roles,
+    overtimeCost,
+  }
 }
 
 /**

@@ -123,10 +123,14 @@ export function splhLead(input: { points: SplhPoint[]; days?: LaborDay[] }): Spl
   // A range where SOME days were published still has a published total, and
   // the caption says how many days it covers rather than pretending the null
   // days were zero-hour days.
-  const published = days.filter((d) => d.scheduledHours !== null)
+  //
+  // And only over the store-days that ALSO have hours worked (`compare`): a day
+  // Harri has not sent hours for yet would otherwise count its whole schedule
+  // as hours nobody worked, and read as running under the schedule.
+  const published = days.filter((d) => d.compare != null)
   const scheduled =
     published.length > 0
-      ? published.reduce((t, d) => t + (d.scheduledHours as number), 0)
+      ? published.reduce((t, d) => t + d.compare!.scheduledHours, 0)
       : null
 
   const cost = days.reduce((t, d) => t + d.cost, 0)
@@ -135,7 +139,7 @@ export function splhLead(input: { points: SplhPoint[]; days?: LaborDay[] }): Spl
   // The gap is only meaningful over the days a schedule covers — comparing a
   // seven-day actual against a four-day schedule is a gap made of the three
   // days nobody published, which reads as overstaffing and is not.
-  const actualOverPublished = published.reduce((t, d) => t + d.actualHours, 0)
+  const actualOverPublished = published.reduce((t, d) => t + d.compare!.actualHours, 0)
   const gap = scheduled === null ? null : actualOverPublished - scheduled
 
   return {

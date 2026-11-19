@@ -9,20 +9,24 @@ import {
   type Statement,
 } from "@/lib/counter/statement"
 import {
+  incompleteLaborStores,
   laborWeek,
   loadLaborTrend,
   loadLaborWeek,
+  provisionalWindow,
   type LaborDay,
   type LaborRole,
+  type LaborStoreShare,
   type LaborTrendWeek,
   type LaborWeek,
 } from "@/lib/counter/labor-week"
-import { hoursText, scheduleHeld } from "@/lib/counter/schedule-hold"
+import { hoursText, readSchedule } from "@/lib/counter/schedule-hold"
 import { loadLeakLedger, type LeakLedger } from "@/lib/counter/labor-leaks"
+import { missedPunches, timeRecordsHeadline, type MissedPunches } from "@/lib/counter/time-records"
 import { salesByDayOf, salesByStoreDayOf } from "@/lib/counter/labor-figures"
 import { loadScheduleGap, loadStaffingCurve, type StaffingCurve } from "@/lib/counter/staffing-curve"
 import { count, money, pct, plural, points } from "@/lib/counter/format"
-import { buildLaborPlain, type LaborPlain } from "@/lib/counter/labor-plain"
+import { buildLaborPlain, listDays, type LaborPlain } from "@/lib/counter/labor-plain"
 import {
   dayCount,
   isoDay,
@@ -284,7 +288,7 @@ export interface RolesSection {
 export interface LeakRowView {
   key: string
   leak: string
-  kind: "leak" | "saving" | "uncostable"
+  kind: "leak" | "short" | "uncostable"
   alerts: string
   hours: string
   cost: string
@@ -292,11 +296,16 @@ export interface LeakRowView {
 }
 
 export interface LeaksSection {
-  /** Leaks first, then savings, then the uncostable codes. */
+  /** Leaks first, then short shifts, then the uncostable codes. */
   rows: LeakRowView[]
   total: { hours: string; cost: string }
-  /** The LEAK rows only, as the store desk's queue. Savings are not leaks and are not in it. */
+  /**
+   * The store desk's queue: the missed punches to fix first, then the LEAK
+   * rows. Short shifts (late in, left early) are not leaks and are not in it.
+   */
   items: QueueEntry[]
+  /** The missed punches alone, for the group desk's queue above the table. */
+  fixes: QueueEntry[]
   meta: string
   /** What the dollar total does not include, and why. */
   note: string
@@ -528,6 +537,43 @@ interface LaborData {
   roles: LaborRole[]
   week: LaborWeek
   salesByDay: Map<string, number>
+  /** Each store's labor over its own sales, for the "looks incomplete" check. */
+  storeShares: LaborStoreShare[]
+}
+
+/**
+ * What stops the labor share being a settled, plain figure: missed punches,
+ * days Harri has not finalised, stores whose labor reads under 10% of sales.
+ * Worked out ONCE per request, and every builder below reads this.
+ */
+interface LaborTrust {
+  missed: MissedPunches | null
+  fixHeadline: string | null
+  incomplete: LaborStoreShare[]
+  /** Every store on the page reads incomplete: the share is not shown as a figure. */
+  allIncomplete: boolean
+  provisional: boolean
+}
+
+function laborTrust(d: LaborData, ledger: LeakLedger | null): LaborTrust {
+  const missed = ledger === null ? null : missedPunches(ledger.rows)
+  const fixHeadline = missed === null ? null : timeRecordsHeadline(missed)
+  const incomplete = incompleteLaborStores(d.storeShares)
+  const allIncomplete = incomplete.length > 0 && incomplete.length >= d.storeShares.length
+  return {
+    missed,
+    fixHeadline,
+    incomplete,
+    allIncomplete,
+    provisional: fixHeadline !== null || d.week.provisionalDays.length > 0 || incomplete.length > 0,
+  }
+}
+
+/** "Glendale", "Glendale and Van Nuys". */
+function storeNames(stores: LaborStoreShare[]): string {
+  const names = stores.map((s) => s.name)
+  if (names.length <= 1) return names.join("")
+  return `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`
 }
 
 /** True when Harri has nothing at all for this range — no hours, no cost, no schedule. */
@@ -565,33 +611,54 @@ function missingLaborText(storeDays: number, lead: string): string {
  * at all is not judged: it says so and stops, because there is nothing to be
  * on or off.
  */
-function buildVerdict(week: LaborWeek, ledger: LeakLedger | null): LaborVerdict {
+function buildVerdict(week: LaborWeek, ledger: LeakLedger | null, trust: LaborTrust): LaborVerdict {
   const body: ReadingSegment[] = []
   const say = (text: string) => body.push({ text })
   const strong = (text: string) => body.push({ text, strong: true })
 
+  // Missed punches LEAD: the hours under every figure after this are wrong
+  // until a manager fixes them, so they are not buried below a calm headline.
+  if (trust.fixHeadline !== null) {
+    strong(trust.fixHeadline)
+    say(". Until they are fixed in Harri, those shifts carry the wrong hours, so the figures below are provisional. ")
+  }
+
   strong(hoursText(week.actualHours))
   say(" cost ")
   strong(money(week.cost))
-  if (week.laborPct !== null) {
+  if (week.laborPct !== null && !trust.allIncomplete) {
     say(" — ")
     strong(pct(week.laborPct, { scaled: true }))
-    say(" of net sales")
+    say(trust.provisional ? " of net sales so far, provisional" : " of net sales")
   }
   if (week.splh !== null) {
-    say(`${week.laborPct === null ? " — " : ", and "}`)
+    say(`${week.laborPct === null || trust.allIncomplete ? " — " : ", and "}`)
     strong(money(week.splh, { cents: true }))
     say(" of net sales for every hour worked")
   }
   say(".")
   if (week.missingStoreDays > 0) say(missingLaborText(week.missingStoreDays, " ") + ".")
+  if (trust.incomplete.length > 0) {
+    say(" ")
+    strong(`Labor looks incomplete for ${storeNames(trust.incomplete)}`)
+    say(
+      `: under 10% of ${trust.incomplete.length === 1 ? "its" : "their"} sales is on file as labor, ` +
+        "which usually means hours or wages are missing from Harri.",
+    )
+  }
+  if (week.provisionalDays.length > 0) {
+    say(
+      ` Harri has not finalised ${listDays(week.provisionalDays)} yet (it settles a day about two days later), ` +
+        "so those days can still change.",
+    )
+  }
 
-  const scheduled = week.scheduledHours
+  const sched = readSchedule(week.compare, week.scheduledHours)
   const rate = week.blendedRate
   let tone: Tone = "good"
   let headline = "On the published schedule"
 
-  if (scheduled === null) {
+  if (sched.kind === "none") {
     tone = "warn"
     headline = "No published schedule"
     say(
@@ -602,24 +669,53 @@ function buildVerdict(week: LaborWeek, ledger: LeakLedger | null): LaborVerdict 
         "the only plan there is to read them against is the schedule the store publishes for " +
         "itself, and none was published here.",
     )
+  } else if (sched.kind === "waiting") {
+    tone = "warn"
+    headline = "Hours not in from Harri yet"
+    say(
+      ` ${hoursText(sched.published)} is published, and no day with a schedule has hours from Harri ` +
+        "yet, so the hours are not read against it.",
+    )
   } else {
-    const gap = week.actualHours - scheduled
-    if (scheduleHeld(gap, scheduled)) {
-      say(` That is ${hoursText(scheduled)} published and ${hoursText(week.actualHours)} worked — the schedule held.`)
+    // Over the days that HAVE hours only (`readSchedule`): a day still waiting
+    // on Harri is counted on its own below, never as hours nobody worked.
+    const on = week.scheduledHours !== null && Math.abs(sched.published - week.scheduledHours) >= 0.05
+      ? " on the days with hours"
+      : ""
+    if (sched.kind === "held") {
+      say(` That is ${hoursText(sched.published)} published and ${hoursText(sched.worked)} worked${on} — the schedule held.`)
     } else {
-      tone = gap > 0 ? "warn" : "good"
-      headline = gap > 0 ? "Over the published schedule" : "Under the published schedule"
+      const over = sched.kind === "over"
+      // Running under is not praise while the hours under it are unsettled.
+      tone = over || trust.provisional ? "warn" : "good"
+      headline = over ? "Over the published schedule" : "Under the published schedule"
       say(" That is ")
-      strong(`${hoursText(Math.abs(gap))} ${gap > 0 ? "over" : "under"}`)
-      say(` the ${hoursText(scheduled)} published`)
-      say(rate === null ? "." : `, about ${money(Math.abs(gap) * rate)} of labor.`)
+      strong(`${hoursText(Math.abs(sched.gap))} ${sched.kind}`)
+      say(` the ${hoursText(sched.published)} published${on}`)
+      say(rate === null ? "." : `, about ${money(Math.abs(sched.gap) * rate)} of labor.`)
     }
+  }
+  if (week.awaitingDays.length > 0) {
+    const n = week.awaitingDays.length
+    say(
+      ` ${plural(n, "day is", "days are")} still waiting on Harri for hours worked ` +
+        `(${listDays(week.awaitingDays)}) and left out of the schedule check.`,
+    )
   }
 
   if (ledger !== null && ledger.leakedHours > 0) {
     say(` ${hoursText(ledger.leakedHours)} went to clock-ins and clock-outs the schedule did not ask for — `)
     strong(money(ledger.leakedCost))
     say(".")
+  }
+
+  // The headline says what most needs doing, in that order.
+  if (trust.fixHeadline !== null) {
+    tone = "warn"
+    headline = trust.fixHeadline
+  } else if (trust.incomplete.length > 0) {
+    tone = "warn"
+    headline = `Labor looks incomplete for ${storeNames(trust.incomplete)}`
   }
 
   return { tone, headline, body }
@@ -642,19 +738,40 @@ function buildVerdict(week: LaborWeek, ledger: LeakLedger | null): LaborVerdict 
  * reference is invisible on the phone and an extra landmark on the desk
  * (A-R22).
  */
+/** The labor share as a strip/lead value: a dash when every store on the page reads incomplete. */
+function shareValue(week: LaborWeek, trust: LaborTrust): string {
+  return trust.allIncomplete ? DASH : pct(week.laborPct, { scaled: true })
+}
+
+/** What the Hours cell says beside the hours worked: the schedule it is read against, and what is still waiting. */
+function publishedText(week: LaborWeek): string {
+  if (week.scheduledHours === null) return "no schedule published"
+  const sched = readSchedule(week.compare, week.scheduledHours)
+  const waiting =
+    week.awaitingDays.length > 0 ? ` · ${plural(week.awaitingDays.length, "day")} waiting on Harri` : ""
+  if (sched.kind === "waiting") return `${hoursText(week.scheduledHours)} published · no hours in yet`
+  if (sched.kind === "none") return "no schedule published"
+  return Math.abs(sched.published - week.scheduledHours) >= 0.05
+    ? `${hoursText(sched.published)} published on days with hours${waiting}`
+    : `${hoursText(week.scheduledHours)} published${waiting}`
+}
+
 function buildStrip(
   week: LaborWeek,
   ledger: LeakLedger | null,
   totalSales: number,
+  trust: LaborTrust,
 ): StripCell[] {
   const cells: StripCell[] = [
     {
       label: "Hourly labor",
-      value: pct(week.laborPct, { scaled: true }),
-      delta:
-        `${money(week.cost)} of ${money(totalSales)} net sales` +
-        missingLaborText(week.missingStoreDays, " · "),
-      deltaTone: "is-flat",
+      value: shareValue(week, trust),
+      delta: trust.allIncomplete
+        ? `looks incomplete · ${money(week.cost)} of ${money(totalSales)} net sales`
+        : (trust.provisional ? "provisional · " : "") +
+          `${money(week.cost)} of ${money(totalSales)} net sales` +
+          missingLaborText(week.missingStoreDays, " · "),
+      deltaTone: trust.allIncomplete ? "is-down" : "is-flat",
     },
     {
       label: "Hours",
@@ -669,10 +786,7 @@ function buildStrip(
        * nothing to tell a reader they were the same hours.
        */
       value: hoursText(week.actualHours),
-      delta:
-        week.scheduledHours === null
-          ? "no schedule published"
-          : `${hoursText(week.scheduledHours)} published`,
+      delta: publishedText(week),
       deltaTone: "is-flat",
     },
     {
@@ -719,8 +833,9 @@ function buildStoreStrip(
   week: LaborWeek,
   ledger: LeakLedger | null,
   totalSales: number,
+  trust: LaborTrust,
 ): StripCell[] {
-  const group = buildStrip(week, ledger, totalSales)
+  const group = buildStrip(week, ledger, totalSales, trust)
   const cells: StripCell[] = [group[0], group[1], group[2]]
   if (ledger !== null) {
     cells.push({
@@ -738,18 +853,19 @@ function buildHeadline(input: {
   ledger: LeakLedger | null
   totalSales: number
   store: boolean
+  trust: LaborTrust
 }): LaborHeadline {
-  const { week, ledger, totalSales, store } = input
+  const { week, ledger, totalSales, store, trust } = input
 
   const cells = store
-    ? buildStoreStrip(week, ledger, totalSales)
-    : buildStrip(week, ledger, totalSales)
+    ? buildStoreStrip(week, ledger, totalSales, trust)
+    : buildStrip(week, ledger, totalSales, trust)
 
   const laborCell: StripCell = {
     label: store ? "Labor" : "Hourly labor",
-    value: pct(week.laborPct, { scaled: true }),
-    delta: "of net sales",
-    deltaTone: "is-flat",
+    value: shareValue(week, trust),
+    delta: trust.allIncomplete ? "looks incomplete" : trust.provisional ? "of net sales · provisional" : "of net sales",
+    deltaTone: trust.allIncomplete ? "is-down" : "is-flat",
   }
   const phoneCells: StripCell[] = [laborCell]
   if (store && ledger !== null) {
@@ -770,12 +886,20 @@ function buildHeadline(input: {
 
   return {
     figure: {
-      label: "Hourly labor",
-      value: pct(week.laborPct, { scaled: true }),
-      detail: "of net sales · the P&L's own denominator",
-      detailTone: "is-flat",
+      label: trust.provisional ? "Hourly labor · provisional" : "Hourly labor",
+      value: shareValue(week, trust),
+      detail: trust.allIncomplete
+        ? `Labor looks incomplete for ${storeNames(trust.incomplete)}`
+        : trust.fixHeadline !== null
+          ? `provisional until the time records are fixed · of net sales`
+          : trust.provisional
+            ? week.provisionalDays.length > 0
+              ? `provisional: Harri has not finalised ${listDays(week.provisionalDays)} · of net sales`
+              : "provisional · of net sales"
+            : "of net sales · the P&L's own denominator",
+      detailTone: trust.allIncomplete ? "is-down" : "is-flat",
     },
-    verdict: buildVerdict(week, ledger),
+    verdict: buildVerdict(week, ledger, trust),
     cells,
     phoneCells,
     note: store
@@ -874,17 +998,18 @@ function buildWeekTable(
       let verdict = "no schedule published"
       let verdictTone: TagTone | undefined
 
-      if (d.scheduledHours !== null) {
-        const gap = d.actualHours - d.scheduledHours
-        if (scheduleHeld(gap, d.scheduledHours)) {
-          verdict = "on the published schedule"
-        } else if (rate === null) {
-          verdict = `${hoursText(Math.abs(gap))} ${gap > 0 ? "over" : "under"} the schedule`
-          verdictTone = gap > 0 ? "warn" : "good"
-        } else {
-          verdict = `${money(Math.abs(gap) * rate)} ${gap > 0 ? "over" : "under"} the schedule`
-          verdictTone = gap > 0 ? "warn" : "good"
-        }
+      const sched = readSchedule(d.compare, d.scheduledHours)
+      if (sched.kind === "waiting") {
+        // Hours Harri has not sent are not hours nobody worked.
+        verdict = "waiting on Harri for hours"
+        verdictTone = "warn"
+      } else if (sched.kind === "held") {
+        verdict = "on the published schedule"
+      } else if (sched.kind === "over" || sched.kind === "under") {
+        const amount = rate === null ? hoursText(Math.abs(sched.gap)) : money(Math.abs(sched.gap) * rate)
+        verdict = `${amount} ${sched.kind} the schedule`
+        // Under is neutral, not praise: a short floor is not a saving.
+        verdictTone = sched.kind === "over" ? "warn" : undefined
       }
 
       return {
@@ -1027,14 +1152,31 @@ function buildSchedule(
       `${hoursText(week.actualHours)} were worked in this range and no shift was published ` +
       "against them, so there is nothing to read the hours against."
   } else {
-    const gap = week.actualHours - scheduled
-    // The SAME predicate the head block's verdict asks (`scheduleHeld`), so the
-    // two sentences cannot reach opposite readings of the same two numbers.
-    sentence = scheduleHeld(gap, scheduled)
-      ? `${hoursText(scheduled)} published, ${hoursText(week.actualHours)} worked — the schedule held.`
-      : `${hoursText(scheduled)} published, ${hoursText(week.actualHours)} worked — ` +
-        `${hoursText(Math.abs(gap))} ${gap > 0 ? "over" : "under"}` +
-        (rate === null ? "." : `, about ${money(Math.abs(gap) * rate)} of labor.`)
+    // The SAME reading the head block's verdict takes (`readSchedule`), over
+    // the store-days that have hours, so the two sentences cannot reach
+    // opposite readings and neither counts a day Harri has not sent.
+    const sched = readSchedule(week.compare, scheduled)
+    if (sched.kind === "waiting" || sched.kind === "none") {
+      sentence =
+        `${hoursText(scheduled)} published. No day with a schedule has hours from Harri yet, so ` +
+        "the hours are not read against it."
+    } else {
+      const lead =
+        Math.abs(sched.published - scheduled) >= 0.05
+          ? `On the days with hours: ${hoursText(sched.published)} published, ${hoursText(sched.worked)} worked`
+          : `${hoursText(sched.published)} published, ${hoursText(sched.worked)} worked`
+      sentence =
+        sched.kind === "held"
+          ? `${lead} — the schedule held.`
+          : `${lead} — ${hoursText(Math.abs(sched.gap))} ${sched.kind}` +
+            (rate === null ? "." : `, about ${money(Math.abs(sched.gap) * rate)} of labor.`)
+    }
+    if (week.awaitingDays.length > 0) {
+      const n = week.awaitingDays.length
+      sentence +=
+        ` ${plural(n, "day is", "days are")} still waiting on Harri for hours ` +
+        `(${listDays(week.awaitingDays)}).`
+    }
   }
   // Store-days, not days: on a multi-store day one store can be missing while
   // another reported hours, and that day still reads low.
@@ -1175,10 +1317,10 @@ function buildRoles(roles: LaborRole[], week: LaborWeek): RolesSection {
 
 /* ── Where the hours leaked ───────────────────────────────────────────── */
 
-/** Leaks first, then savings, then the codes nobody can cost. */
-const LEAK_ORDER: Record<"leak" | "saving" | "uncostable", number> = {
+/** Leaks first, then short shifts, then the codes nobody can cost. */
+const LEAK_ORDER: Record<"leak" | "short" | "uncostable", number> = {
   leak: 0,
-  saving: 1,
+  short: 1,
   uncostable: 2,
 }
 
@@ -1212,7 +1354,37 @@ function buildLeaks(ledger: LeakLedger, week: LaborWeek): LeaksSection {
     people: count(r.people),
   }))
 
-  const items: QueueEntry[] = sorted
+  // Missed punches come FIRST in the queue: they are the time records a
+  // manager has to fix in Harri before the hours (and every labor figure)
+  // are right. They carry no duration, so the lead is the count, never hours.
+  const missed = missedPunches(ledger.rows)
+  const fixItems: QueueEntry[] = []
+  if (missed.missedIn > 0) {
+    fixItems.push({
+      key: "fix-missed-in",
+      tone: "warn",
+      lead: count(missed.missedIn),
+      unit: missed.missedIn === 1 ? "punch" : "punches",
+      title: `Fix ${missed.missedIn === 1 ? "a missed clock-in" : "missed clock-ins"}`,
+      body:
+        `Harri flagged ${plural(missed.missedIn, "shift")} with no clock-in. Until a manager fixes ` +
+        `${missed.missedIn === 1 ? "it" : "them"} in Harri, those hours are wrong and labor reads wrong.`,
+    })
+  }
+  if (missed.missedOut > 0) {
+    fixItems.push({
+      key: "fix-missed-out",
+      tone: "warn",
+      lead: count(missed.missedOut),
+      unit: missed.missedOut === 1 ? "punch" : "punches",
+      title: `Fix ${missed.missedOut === 1 ? "a missed clock-out" : "missed clock-outs"}`,
+      body:
+        `Harri flagged ${plural(missed.missedOut, "shift")} with no clock-out. Until a manager fixes ` +
+        `${missed.missedOut === 1 ? "it" : "them"} in Harri, those hours are wrong and labor reads wrong.`,
+    })
+  }
+
+  const leakItems: QueueEntry[] = sorted
     .filter((r) => r.kind === "leak" && (r.hours ?? 0) > 0)
     .map((r) => ({
       key: r.code,
@@ -1226,19 +1398,20 @@ function buildLeaks(ledger: LeakLedger, week: LaborWeek): LeaksSection {
         `of ${rateText(week.blendedRate)}. It is time the store paid for and the schedule did not ask for.`,
     }))
 
-  const savings = ledger.rows.filter((r) => r.kind === "saving")
-  const savedHours = savings.reduce((t, r) => t + (r.hours ?? 0), 0)
+  const shorts = ledger.rows.filter((r) => r.kind === "short")
+  const shortHours = shorts.reduce((t, r) => t + (r.hours ?? 0), 0)
 
   return {
     rows,
     total: { hours: hoursText(ledger.leakedHours), cost: money(ledger.leakedCost) },
-    items,
+    items: [...fixItems, ...leakItems],
+    fixes: fixItems,
     meta: `${hoursText(ledger.leakedHours)} · ${money(ledger.leakedCost)} at ${rateText(week.blendedRate)}`,
     note:
       `The total is the two LEAK codes only — time paid for that the schedule did not ask for. ` +
-      (savings.length > 0
-        ? `Clocking in late and out early ran the other way, ${hoursText(savedHours)} of it, and ` +
-          "adding those in would report a saving as a cost. "
+      (shorts.length > 0
+        ? `Clocking in late and leaving early ran the other way, ${hoursText(shortHours)} of it. ` +
+          "That is not a saving (the floor ran short of what was planned), and it is not added in. "
         : "") +
       (ledger.uncostableAlerts > 0
         ? `${count(ledger.uncostableAlerts)} further alerts — the missed and unscheduled clock-ins — ` +
@@ -1502,8 +1675,12 @@ function loadEverything(input: LaborSectionsInput) {
         return mapReady(sd, (raw) => ({
           days: raw.days,
           roles: raw.roles,
-          week: laborWeek(raw.days, raw.overtimeCost),
+          // Today and yesterday (LA) are provisional: Harri settles a day about
+          // two days after it, and the labor page names them rather than
+          // presenting their figures as final.
+          week: laborWeek(raw.days, raw.overtimeCost, { provisional: provisionalWindow(input.today) }),
           salesByDay: map,
+          storeShares: raw.storeShares,
         }))
       }),
     )
@@ -1547,16 +1724,18 @@ function headlineSection(
   leakSd: SectionData<LeakLedger>,
   store: boolean,
 ): SectionData<LaborHeadline> {
-  return laborSection(laborSd, NO_HARRI_OWED, (d) =>
-    buildHeadline({
+  return laborSection(laborSd, NO_HARRI_OWED, (d) => {
+    // A ledger that has not loaded, failed, or could not be costed leaves the
+    // headline one cell shorter and one clause shorter — never a zero.
+    const ledger = dataOf(leakSd)
+    return buildHeadline({
       week: d.week,
-      // A ledger that has not loaded, failed, or could not be costed leaves the
-      // headline one cell shorter and one clause shorter — never a zero.
-      ledger: dataOf(leakSd),
+      ledger,
       totalSales: Array.from(d.salesByDay.values()).reduce((t, n) => t + n, 0),
       store,
-    }),
-  )
+      trust: laborTrust(d, ledger),
+    })
+  })
 }
 
 /**
@@ -1575,18 +1754,25 @@ function plainSection(
   const at = dayCount(range) === 7 ? weeks.findIndex((w) => w.key === isoDay(range.start)) : -1
   const before = at > 0 ? weeks[at - 1] : null
   const ledger = dataOf(leakSd)
-  return laborSection(laborSd, NO_HARRI_OWED, (d) =>
-    buildLaborPlain({
+  return laborSection(laborSd, NO_HARRI_OWED, (d) => {
+    const trust = laborTrust(d, ledger)
+    return buildLaborPlain({
       laborPct: d.week.laborPct,
       cost: d.week.cost,
       hours: d.week.actualHours,
       scheduledHours: d.week.scheduledHours,
+      compare: d.week.compare,
+      awaitingDays: d.week.awaitingDays,
+      provisionalDays: d.week.provisionalDays,
+      missed: trust.missed,
+      incomplete: trust.incomplete.map((s) => ({ name: s.name, laborPct: s.laborPct })),
+      storeCount: d.storeShares.length,
       missingStoreDays: d.week.missingStoreDays,
       splh: d.week.splh,
       leak: ledger === null ? null : { hours: ledger.leakedHours, cost: ledger.leakedCost },
       prior: before === null || before.isPartial ? null : { label: before.label, laborPct: before.laborPct },
-    }),
-  )
+    })
+  })
 }
 
 /** The leak section, on either route. */
