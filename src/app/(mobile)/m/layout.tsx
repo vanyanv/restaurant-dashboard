@@ -1,10 +1,9 @@
 import type { Metadata, Viewport } from "next"
 import { Suspense } from "react"
-import { getServerSession } from "next-auth"
-import { authOptions } from "@/lib/auth"
 import { MTabs } from "@/components/counter"
 import { WelcomeMarquee } from "@/components/dashboard/welcome-marquee"
-import { consumePendingWelcome } from "@/lib/welcome"
+import { consumePendingWelcome, extractFirstName } from "@/lib/welcome"
+import { readSessionToken } from "@/lib/session-token"
 import { PageViewTracker } from "@/components/telemetry/page-view-tracker"
 import "@/styles/phone-frame.css"
 import "@/styles/welcome-marquee.css"
@@ -65,23 +64,28 @@ export default async function MobileLayout({
 }: {
   children: React.ReactNode
 }) {
-  const session = await getServerSession(authOptions)
+  // The cookie, not `getServerSession`: this layout wraps every phone page,
+  // and a database read here held the whole response until the database
+  // answered. Opened from the home screen after Neon had gone to sleep, that
+  // was up to ten seconds of black screen. See `@/lib/session-token`.
+  const token = await readSessionToken()
+  const userId = token?.id ?? null
   const trackViews =
-    session?.user?.id != null &&
-    (session.user.role !== "DEVELOPER" ||
+    userId != null &&
+    (token?.role !== "DEVELOPER" ||
       // Local-only escape hatch; never honoured in production.
       (process.env.TRACK_DEVELOPER_PAGE_VIEWS === "1" &&
         process.env.NODE_ENV !== "production"))
-  const firstName = session?.user?.firstName ?? null
+  const firstName = extractFirstName(token?.name)
 
   return (
     <div>
       <PageViewTracker enabled={trackViews} />
       <div className="m-shell">
         <main className="m-shell__main">
-          {session?.user?.id != null && firstName != null ? (
+          {userId != null && firstName != null ? (
             <Suspense fallback={null}>
-              <WelcomeGate userId={session.user.id} firstName={firstName} />
+              <WelcomeGate userId={userId} firstName={firstName} />
             </Suspense>
           ) : null}
           {children}
@@ -103,7 +107,7 @@ export default async function MobileLayout({
             group alone — mounting it there would leave the handful of routes
             not yet rebuilt carrying the old bar, which is the split this
             replaces rather than a state to preserve. */}
-        {session ? <MTabs /> : null}
+        {token ? <MTabs /> : null}
       </div>
     </div>
   )

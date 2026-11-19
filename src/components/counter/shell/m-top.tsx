@@ -93,9 +93,15 @@ export interface MTopProps {
   date?: ReactNode
   /** `.mback`, for a page with a trail. Overview is a root tab and has none. */
   back?: ReactNode
+  /**
+   * The store list has not arrived yet (the frame paints before the database
+   * answers). A picked store reads "Store" rather than "All stores", which
+   * would be wrong, until its name is known.
+   */
+  storesPending?: boolean
 }
 
-export function MTop({ stores, selectedStoreId, onSelectStore, date, back }: MTopProps) {
+export function MTop({ stores, selectedStoreId, onSelectStore, date, back, storesPending = false }: MTopProps) {
   const [open, setOpen] = useState(false)
   const sheetId = useId()
 
@@ -120,7 +126,7 @@ export function MTop({ stores, selectedStoreId, onSelectStore, date, back }: MTo
         aria-controls={sheetId}
         onClick={() => setOpen(true)}
       >
-        {selected ? selected.name : "All stores"}
+        {selected ? selected.name : storesPending && selectedStoreId !== null ? "Store" : "All stores"}
         <StoreChevron />
       </button>
 
