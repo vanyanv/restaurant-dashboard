@@ -269,7 +269,7 @@ export async function loadRunOut(input: RunOutInput): Promise<RunOut> {
         tag: tagFor(reco.status, input.asOf, reco.reorderBy),
         tagTone: toneFor(reco.status),
         qty: owedQty(shaped.days.map((d) => d.qty), onHand, leadDays, reco.safetyDays, ing.recipeUnit ?? ""),
-        href: `/dashboard/operations/inventory?ingredient=${encodeURIComponent(ing.id)}`,
+        href: `/dashboard/count/item/${encodeURIComponent(ing.id)}?store=${encodeURIComponent(storeId)}`,
       })
     }
   }

@@ -25,6 +25,20 @@ describe("Counter legacy redirects", () => {
     expect(url.searchParams.get("from")).toBe("2026-08-01")
     expect(url.searchParams.get("to")).toBe("2026-08-07")
   })
+  it("sends Stock on hand to Inventory's Shelf, store kept", () => {
+    const url = redirect("/dashboard/operations/inventory?store=vannuys")
+    expect(url.pathname).toBe("/dashboard/count/shelf")
+    expect(url.searchParams.get("store")).toBe("vannuys")
+  })
+  it("sends the old Start a count to the count walk, on both surfaces", () => {
+    expect(redirect("/dashboard/operations/inventory/count/new").pathname).toBe("/dashboard/count/walk")
+    expect(onPhone("/dashboard/operations/inventory/count/new").pathname).toBe("/m/count/walk")
+    expect(onPhone("/m/operations/inventory").pathname).toBe("/m/count/shelf")
+    expect(onPhone("/dashboard/operations/inventory").pathname).toBe("/m/count/shelf")
+  })
+  it("leaves the past-counts pages where they are", () => {
+    expect(redirect("/dashboard/operations/inventory/counts")).toBeNull()
+  })
   it("also preserves filters on destinations without their own query", () => {
     expect(redirect("/dashboard/chat?range=d30").searchParams.get("range")).toBe("d30")
   })

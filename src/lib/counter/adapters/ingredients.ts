@@ -910,7 +910,7 @@ function workOf(d: IngredientData): IngredientWork {
       body:
         `${money(d.orphans.food.spend)} of food sits against ingredients that appear in no recipe — ` +
         `${d.orphans.food.top.slice(0, 3).map((r) => titleCase(r.name)).join(", ")} lead it. ` +
-        `Every plate cost in this product is understated by some part of that. ` +
+        `Every plate cost shown is too low by some part of that. ` +
         `A further ${money(d.orphans.supplies.spend)} across ${count(d.orphans.supplies.n)} items ` +
         `is packaging and cleaning, which belongs outside plate cost` +
         (d.orphans.artifacts.n > 0

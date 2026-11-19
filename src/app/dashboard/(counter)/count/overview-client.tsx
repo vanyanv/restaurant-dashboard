@@ -351,6 +351,7 @@ function AllStores({ data }: { data: ShelfData }) {
         {blank.length > 0 && data.total !== null && (
           <small>{blank.map((s) => s.name).join(" and ")} {blank.length === 1 ? "has" : "have"} no finished count, so {blank.length === 1 ? "it is" : "they are"} not in that number.</small>
         )}
+        <small>{data.countedSay}</small>
       </Answer>
       <div className="iv-card iv-a-key"><Legend /></div>
       <div className="iv-stores">

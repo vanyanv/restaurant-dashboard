@@ -336,7 +336,7 @@ function clockWarningFor(userZone: string, storeZone: string, at: Date): string 
   const gap = clockGap(userZone, storeZone, at)
   return (
     `Your clock is set to ${userZone} and every store is in ${storeZone}. ` +
-    `That is the schema default rather than a choice` +
+    `Nobody chose that store timezone; it was never changed from the starting setting` +
     (gap === null
       ? ", and the two zones keep the same offset today — but a date bucketed by " +
         "your timezone is still being bucketed by the wrong one."
@@ -369,7 +369,7 @@ function accountOf(d: SettingsData): SettingsAccount {
         detail:
           you && you.ownedStores.length > 0
             ? "the ones your account is named on"
-            : "every store is owned by the developer account",
+            : "no store is under your name yet",
         value: you && you.ownedStores.length > 0 ? you.ownedStores.join(", ") : "none",
         tone: you && you.ownedStores.length === 0 ? "warn" : undefined,
       },
@@ -497,7 +497,7 @@ function teamOf(d: SettingsData): SettingsTeam {
           ? ""
           : `${wrong.map((p) => p.name).join(" and ")} ${wrong.length === 1 ? "is" : "are"} ` +
             `set to ${wrong.map((p) => p.timezone).join(" and ")} while every store is in ` +
-            `${d.storeTimezoneHint} — the schema default rather than a choice. `
+            `${d.storeTimezoneHint}, the starting setting nobody changed. `
       })() +
       // The Role enum has no manager value and nothing issues invites.
       `Only owner accounts exist for now, so there is no one to invite yet.`,

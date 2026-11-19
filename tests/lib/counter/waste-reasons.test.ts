@@ -94,7 +94,7 @@ describe("the reason taxonomy", () => {
   })
 
   it("keeps the stored values each form already writes", () => {
-    expect(WASTE_REASONS.map((r) => r.id)).toEqual(["DROPPED", "EXPIRY", "BURNT", "REMAKE", "OTHER"])
+    expect(WASTE_REASONS.map((r) => r.id)).toEqual(["DROPPED", "EXPIRY", "BURNT", "REMAKE", "DAMAGE", "OTHER"])
     expect(ADJUST_FORM_REASONS.map((r) => r.id).sort()).toEqual(
       ["DAMAGE", "EXPIRY", "OTHER", "SUPPLIER_RETURN", "THEFT"],
     )

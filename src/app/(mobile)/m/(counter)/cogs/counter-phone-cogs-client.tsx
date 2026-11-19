@@ -127,7 +127,7 @@ export function CounterPhoneCogsClient({
         {(p) => <CogsPlainView p={p} />}
       </Section>
 
-      <Fold summary="Every figure, as before">
+      <Fold summary="COGS breakdown">
 
       {/* Two cells: Food cost, Against plan. `h.phoneCells`, never a slice of
           `h.cells` — see the file note above. */}

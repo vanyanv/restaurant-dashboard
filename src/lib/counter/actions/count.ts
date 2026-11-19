@@ -245,7 +245,7 @@ export async function logWaste(input: z.input<typeof WasteInput>): Promise<Actio
         storeId: store.id,
         canonicalIngredientId: ing.id,
         qty: v.qty,
-        reason: v.reason as "DROPPED" | "EXPIRY" | "BURNT" | "REMAKE" | "OTHER",
+        reason: v.reason as "DROPPED" | "EXPIRY" | "BURNT" | "REMAKE" | "DAMAGE" | "OTHER",
         note: v.note || null,
         occurredAt: new Date(),
         createdByUserId: owner.id,

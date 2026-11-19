@@ -100,7 +100,7 @@ export function CounterPhoneStoreCogsClient({
         {(p) => <CogsPlainView p={p} />}
       </Section>
 
-      <Fold summary="Every figure, as before">
+      <Fold summary="COGS breakdown">
 
       {/* `h.phoneCells` — two, and NOT a slice of the desk's four. */}
       <Section bare title="The figures" data={sections.headline} pending={pending}>

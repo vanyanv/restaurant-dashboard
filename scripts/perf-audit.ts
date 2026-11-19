@@ -18,8 +18,6 @@ const ROUTES = [
   "/dashboard/menu",
   "/dashboard/menu/catalog",
   "/dashboard/operations",
-  "/dashboard/operations/inventory",
-  "/dashboard/operations/inventory/count/new",
   "/dashboard/operations/inventory/counts",
   "/dashboard/operations/packaging",
   "/dashboard/operations/product-usage",

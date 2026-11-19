@@ -38,7 +38,7 @@ export type NavId =
   | "overview" | "ask" | "needs-you" | "checks" | "shop" | "decisions" | "orders"
   | "analytics" | "pnl" | "cogs" | "labor"
   | "menu" | "recipes"
-  | "invoices" | "count" | "inventory" | "ingredients" | "vendors"
+  | "invoices" | "count" | "ingredients" | "vendors"
   | "stores" | "settings" | "monitoring" | "people"
 
 export interface NavItem {
@@ -52,6 +52,12 @@ export interface NavItem {
    * `/dashboard` itself; without this a prefix match would light all seventeen.
    */
   exact?: boolean
+  /**
+   * Other route prefixes that light this item. Inventory owns the past-counts
+   * pages under `/dashboard/operations/inventory/` since "Stock on hand" left
+   * the rail: those pages are Inventory's, and the rail should say so.
+   */
+  also?: readonly string[]
 }
 
 export interface NavGroup {
@@ -112,8 +118,11 @@ export const NAV_GROUPS: readonly NavGroup[] = [
     caption: "Stock and suppliers",
     items: [
       { id: "invoices", label: "Invoices", href: "/dashboard/invoices", icon: "FileText" },
-      { id: "count", label: "Inventory", href: "/dashboard/count", icon: "ClipboardList" },
-      { id: "inventory", label: "Stock on hand", href: "/dashboard/operations/inventory", icon: "Package" },
+      // "Stock on hand" used to sit under this as a second rail item reading
+      // the same counts. It is gone: `/dashboard/operations/inventory` now
+      // redirects to Inventory's Shelf (`src/proxy.ts`), and its past-counts
+      // pages are Inventory's "Past counts" tab.
+      { id: "count", label: "Inventory", href: "/dashboard/count", icon: "ClipboardList", also: ["/dashboard/operations/inventory"] },
       { id: "ingredients", label: "Ingredients", href: "/dashboard/ingredients", icon: "Carrot" },
       { id: "vendors", label: "Vendors", href: "/dashboard/operations/vendors", icon: "Truck" },
     ],
@@ -146,7 +155,8 @@ export function navById(id: NavId): NavItem {
  */
 export function isActive(item: NavItem, pathname: string): boolean {
   if (item.exact) return pathname === item.href
-  return pathname === item.href || pathname.startsWith(`${item.href}/`)
+  const under = (base: string) => pathname === base || pathname.startsWith(`${base}/`)
+  return under(item.href) || (item.also ?? []).some(under)
 }
 
 /**
@@ -203,7 +213,7 @@ export const USAGE_TABS: readonly SubNavItem[] = [
 export const CHECKS_TABS: readonly SubNavItem[] = [
   { label: "Today", href: "/dashboard/checks" },
   { label: "History", href: "/dashboard/checks/history" },
-  { label: "Report", href: "/dashboard/checks/report" },
+  { label: "Checks report", href: "/dashboard/checks/report" },
   { label: "Checklists", href: "/dashboard/checks/checklists" },
   { label: "Crew & PINs", href: "/dashboard/checks/crew" },
   { label: "Links & email", href: "/dashboard/checks/posters" },
@@ -221,14 +231,17 @@ export const COUNT_TABS: readonly SubNavItem[] = [
   { label: "Shelf", href: "/dashboard/count/shelf" },
   { label: "Order", href: "/dashboard/count/orders" },
   { label: "Waste", href: "/dashboard/count/waste" },
-  { label: "Report", href: "/dashboard/count/report" },
+  { label: "Count report", href: "/dashboard/count/report" },
+  // Every count, open and finished, and each one line by line. It was a tab
+  // of "Stock on hand" and was kept when that page folded into this one.
+  { label: "Past counts", href: "/dashboard/operations/inventory/counts" },
 ] as const
 
 /** Invoices — the worklist, the full list, and what the prices did. */
 export const INVOICES_TABS: readonly SubNavItem[] = [
   { label: "This week", href: "/dashboard/invoices" },
   { label: "All invoices", href: "/dashboard/invoices/all" },
-  { label: "Prices", href: "/dashboard/invoices/prices" },
+  { label: "Price changes", href: "/dashboard/invoices/prices" },
 ] as const
 
 /** Shop — the chrisneddys.com merch desk. See `src/lib/shop/`. */
@@ -293,7 +306,7 @@ export const ALERT_TABS: readonly SubNavItem[] = [
 
 export const INGREDIENT_TABS: readonly SubNavItem[] = [
   { label: "Catalogue", href: "/dashboard/ingredients" },
-  { label: "Prices", href: "/dashboard/ingredients/prices" },
+  { label: "Ingredient prices", href: "/dashboard/ingredients/prices" },
 ] as const
 
 export const VENDOR_TABS: readonly SubNavItem[] = [
@@ -301,11 +314,13 @@ export const VENDOR_TABS: readonly SubNavItem[] = [
   { label: "Packaging", href: "/dashboard/operations/packaging" },
 ] as const
 
-export const INVENTORY_TABS: readonly SubNavItem[] = [
-  { label: "On hand", href: "/dashboard/operations/inventory" },
-  { label: "Counts", href: "/dashboard/operations/inventory/counts" },
-  { label: "Start a count", href: "/dashboard/operations/inventory/count/new" },
-] as const
+/**
+ * The past-counts pages under `/dashboard/operations/inventory/` carry
+ * Inventory's own bar. They used to carry "On hand · Counts · Start a count",
+ * a second family with a second way to start a count; "Stock on hand" now
+ * redirects to the Shelf and "Start a count" to the count walk (`src/proxy.ts`).
+ */
+export const INVENTORY_TABS: readonly SubNavItem[] = COUNT_TABS
 
 /**
  * The Menu family's four views.

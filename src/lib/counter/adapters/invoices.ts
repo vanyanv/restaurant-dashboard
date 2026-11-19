@@ -791,8 +791,8 @@ function dueNoteOf(d: InvoiceData): string {
     `${count(past)} ${pluralWord(past, "is", "are")} past the date it prints, ` +
     `${count(soon)} ${pluralWord(soon, "falls", "fall")} inside the next ${DUE_SOON_DAYS} days, ` +
     `and ${count(none)} ${pluralWord(none, "prints", "print")} no due date at all. ` +
-    `Nothing here records whether an invoice was PAID — the schema holds no payment against an ` +
-    `invoice — so a date in the past means the date has passed and nothing more.`
+    `Payments are not tracked here, so a date in the past means the due date has passed, ` +
+    `not that the invoice is unpaid.`
   )
 }
 

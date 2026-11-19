@@ -46,6 +46,7 @@ import {
   getInventoryShelfSectionPromises,
   getInventorySwitcherSectionPromises,
   pickShelfView,
+  lastCountsSay,
   type CountLine,
 } from "@/lib/counter/adapters/inventory-shelf"
 import type { ItemRow } from "@/lib/counter/adapters/count"
@@ -564,5 +565,19 @@ describe("the shelf loaders", () => {
     const sw = await getInventorySwitcherSectionPromises({ accountId: "acct_ours" }).switcher
     expect(sw.status).toBe("empty")
     expect(h.loadStoreDraft).not.toHaveBeenCalled()
+  })
+})
+
+describe("lastCountsSay — which stores have a count to trust, on All stores", () => {
+  const at = (day: string, stale: boolean) => ({ day, ago: "", stale, older: 0 })
+  it("groups each store by its last finished count", () => {
+    expect(lastCountsSay([
+      { name: "Van Nuys", lastCount: at("Nov 12", false) },
+      { name: "Burbank", lastCount: at("Sep 3", true) },
+      { name: "Glendale", lastCount: null },
+    ])).toBe("Recent count: Van Nuys (Nov 12). Old count: Burbank (Sep 3). Not counted yet: Glendale.")
+  })
+  it("says only what is true when every store is counted", () => {
+    expect(lastCountsSay([{ name: "Van Nuys", lastCount: at("Nov 12", false) }])).toBe("Recent count: Van Nuys (Nov 12).")
   })
 })

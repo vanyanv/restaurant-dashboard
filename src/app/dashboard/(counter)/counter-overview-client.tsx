@@ -438,7 +438,7 @@ export function CounterOverviewClient({
         ]}
       />
 
-      <Fold summary="Every figure, as before: the strip, the charts, every alert, the store ledger and the feeds">
+      <Fold summary="Detailed figures: sales, charts, alerts, each store and data feeds">
       {/* Note 30, as two figures and a verdict: net sales says whether the day
           happened, sales per labor hour says whether it was worth having.
           Three sections, one block — they come from three rollups that fail
@@ -672,7 +672,7 @@ export function CounterOverviewClient({
             }
             notes={[
               `Every figure is ${windowLabel}.`,
-              "Net sales across the cards sum to the headline, because both come from one rollup.",
+              "Net sales across the store cards add up to the total at the top.",
             ]}
           />
         )}

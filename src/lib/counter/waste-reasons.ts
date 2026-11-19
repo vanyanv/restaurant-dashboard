@@ -81,8 +81,12 @@ function pick<const T extends readonly AdjustmentReason[]>(ids: T) {
   >
 }
 
-/** The Count & waste log's quick-pick: kitchen waste, plus Other. */
-export const WASTE_LOG_REASONS = pick(["DROPPED", "EXPIRY", "BURNT", "REMAKE", "OTHER"] as const)
+/**
+ * The Count & waste log's quick-pick: kitchen waste, plus Damaged and Other.
+ * Damaged was only on "Stock on hand"'s adjust form, which folded into
+ * Inventory; it is thrown out by `THROWN_OUT_REASONS`, so the Waste tab lists it.
+ */
+export const WASTE_LOG_REASONS = pick(["DROPPED", "EXPIRY", "BURNT", "REMAKE", "DAMAGE", "OTHER"] as const)
 
 /** Inventory's "Adjust on hand": stock that left for a reason other than the line. */
 export const ADJUST_FORM_REASONS = pick([

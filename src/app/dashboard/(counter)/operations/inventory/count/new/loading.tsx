@@ -3,19 +3,15 @@
 import { Section } from "@/components/counter"
 import { loading } from "@/lib/counter/section-data"
 
-/** Start a count's loading boundary — the three panels `P.countnew` has. */
+/**
+ * The loading boundary `npm run tokens` asks for beside every `(counter)`
+ * page. This page only redirects into Inventory, so there is nothing of its
+ * own to sketch.
+ */
 export default function Loading() {
   return (
-    <>
-      <Section title="What to count" data={loading()}>
-        {() => null}
-      </Section>
-      <Section title="The sheet" data={loading()} pad={false}>
-        {() => null}
-      </Section>
-      <Section title="Then what" data={loading()}>
-        {() => null}
-      </Section>
-    </>
+    <Section bare title="Inventory" data={loading()}>
+      {() => null}
+    </Section>
   )
 }
