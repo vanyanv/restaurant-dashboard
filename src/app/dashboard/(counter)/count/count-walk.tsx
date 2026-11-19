@@ -393,7 +393,7 @@ export function CountWalk({ data, base }: { data: WalkData; base: "/dashboard/co
               ? "Everything is counted. Look it over and finish."
               : `${done} of ${items.length} counted.${resumeName ? ` Next up: ${resumeName} in ${resumeArea}.` : ""}`
             : `${items.length} items to count, in ${sections.length} sections.`}
-           
+          {" "}
           {data.lastFinished ? `Last full count ${data.lastFinished}.` : "This is the first count for this store."}
         </Answer>
         <div className="cw__bar" aria-hidden="true"><i style={{ width: `${Math.round((done / items.length) * 100)}%` }} /></div>
