@@ -170,8 +170,13 @@ function NeedsYouBadge({ count }: { count: number }) {
   const cls = ["badge", rising ? "is-rising" : null, leaving ? "is-leaving" : null]
     .filter(Boolean)
     .join(" ")
+  // The count is every open alert across ALL of the account's stores
+  // (`getShellStatus`), whichever store the page is filtered to — so a
+  // one-store queue can read empty beside a "22". Say so, rather than let the
+  // number pass for this store's.
+  const label = `${shown} open across all stores`
   return (
-    <span className={cls} aria-label={`${shown} open`}>
+    <span className={cls} aria-label={label} title={label}>
       {shown}
     </span>
   )

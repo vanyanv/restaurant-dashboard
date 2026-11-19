@@ -227,8 +227,10 @@ def detect_revenue_interval_anomalies(
     """Score the trailing reconciled window for one store.
 
     Returns an empty list when the store has no reconciled forecasts yet — a
-    warming-up store, or one whose first nightly has not landed. The caller
-    falls back to the z-score detector in that case.
+    warming-up store, or one whose first nightly has not landed. An empty
+    list also means a quiet window, so a caller that falls back to the
+    z-score detector must decide on `load_reconciled_observations` being
+    empty, not on this result (see `run_anomaly_detection_for_store`).
     """
     observations = load_reconciled_observations(store_id, lookback_days)
     if not observations:
