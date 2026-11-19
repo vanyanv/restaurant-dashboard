@@ -361,7 +361,8 @@ function ConversationRow({
               onClick={(e) => e.stopPropagation()}
               onBlur={() => finishRename(true)}
               onKeyDown={(e) => {
-                if (e.key === "Enter") {
+                // isComposing: an IME's Enter picks a candidate word, not "save".
+                if (e.key === "Enter" && !e.nativeEvent.isComposing) {
                   e.preventDefault()
                   finishRename(true)
                 } else if (e.key === "Escape") {

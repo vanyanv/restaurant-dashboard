@@ -13,6 +13,9 @@ import { cleanup } from "@testing-library/react"
 // silently lacks a matcher fails in a confusing way.
 import "@testing-library/jest-dom/vitest"
 
+// Native modal <dialog> stand-in for jsdom (see the file).
+import "./dialog-shim"
+
 afterEach(() => {
   cleanup()
 })

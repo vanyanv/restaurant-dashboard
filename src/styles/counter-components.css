@@ -1259,9 +1259,9 @@ width:340px; height:718px; flex:none;
 .vd.is-fit b{color:var(--good)}
 .vd.is-over{background:var(--signal-wash);border-color:var(--signal-line)}
 .vd.is-over b{color:var(--signal-ink)}
-.cmdkwrap{position:absolute;inset:0;z-index:40;display:grid;justify-items:center;align-items:start;
+.cmdkwrap{position:fixed;inset:0;z-index:40;display:grid;justify-items:center;align-items:start;
   padding:84px 16px 20px;background:oklch(24% 0.014 40 / .32);animation:cnfade .14s var(--ease) both}
-.cmdkwrap[hidden]{display:none}
+.cmdkwrap:not([open]){display:none}
 .cmdk{max-height:min(560px,100%);grid-template-rows:auto auto minmax(0,1fr) auto;
   animation:cnrise .18s var(--ease) both}
 .cmdk__ctx{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:7px 15px;
@@ -4947,3 +4947,13 @@ button.setrow--pick.is-on { background: var(--accent-wash) }
 .qitem{animation-duration:.18s}
 .qitem:nth-child(2){animation-delay:12ms}
 .qitem:nth-child(3){animation-delay:24ms}
+
+/* ModalDialog (components/counter/modal-dialog.tsx): a native modal <dialog>.
+ * :where() keeps this at zero specificity, so the class each dialog carries
+ * (.ckc__sheet, .pp-scrim, .ck-lightbox, .ckp-view, .cmdkwrap) still draws the
+ * scrim and the panel; this only removes the browser's default dialog box.
+ * overscroll-behavior on the dialog and its ::backdrop keeps a swipe inside a
+ * sheet from scrolling the page behind it, without locking <body>. */
+:where(dialog.ct-dialog){margin:0;padding:0;border:0;width:auto;height:auto;max-width:none;max-height:none;background:none;color:inherit;overflow:visible}
+dialog.ct-dialog:modal{overscroll-behavior:contain}
+dialog.ct-dialog::backdrop{background:none;overflow:hidden;overscroll-behavior:contain}

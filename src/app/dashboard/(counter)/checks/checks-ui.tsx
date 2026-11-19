@@ -1,6 +1,7 @@
 "use client"
 
-import { useEffect, useState, type ReactNode } from "react"
+import { useState, type ReactNode } from "react"
+import { ModalDialog } from "@/components/counter/modal-dialog"
 import { useRouter } from "next/navigation"
 import { PageHead, SubNav, useSurfaceHref } from "@/components/counter"
 import { CHECKS_TABS } from "@/lib/counter/nav"
@@ -137,13 +138,8 @@ export function Thumbs({ photos, caption }: { photos: PhotoRef[]; caption: strin
 }
 
 export function Lightbox({ photo, caption, onClose, src }: { photo: PhotoRef; caption: string; onClose: () => void; src?: string }) {
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose()
-    window.addEventListener("keydown", onKey)
-    return () => window.removeEventListener("keydown", onKey)
-  }, [onClose])
   return (
-    <div className="ck-lightbox" role="dialog" aria-modal="true" aria-label={`${photo.section} photo`} onClick={onClose}>
+    <ModalDialog className="ck-lightbox" aria-label={`${photo.section} photo`} onClose={onClose} onClick={onClose}>
       <figure onClick={(e) => e.stopPropagation()}>
         <img src={src ?? photoSrc(photo.id)} alt={`${photo.section} photo, ${caption}`} />
         <figcaption>
@@ -155,7 +151,7 @@ export function Lightbox({ photo, caption, onClose, src }: { photo: PhotoRef; ca
           </button>
         </figcaption>
       </figure>
-    </div>
+    </ModalDialog>
   )
 }
 

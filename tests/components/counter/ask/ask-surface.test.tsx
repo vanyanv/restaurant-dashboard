@@ -72,15 +72,15 @@ describe("AskSurface", () => {
     }
   })
 
-  it("stays mounted when closed and hides with the hidden ATTRIBUTE", () => {
-    // `.cmdkwrap[hidden]{display:none}` is a rule in the ported sheet. Render
-    // it conditionally and that rule — plus `.cmdk__row[hidden]` and
-    // `.cmdk__k[hidden]`, which the filter depends on — is dead.
+  it("stays mounted when closed, as a native modal dialog that opens with showModal", () => {
+    // Always mounted so `.cmdk__row[hidden]` and `.cmdk__k[hidden]`, which the
+    // filter depends on, keep working; open state is the <dialog>'s own.
     render(<AskSurface {...props} />)
     expect(wrap()).not.toBeNull()
-    expect(wrap().hidden).toBe(true)
+    expect(wrap().tagName).toBe("DIALOG")
+    expect((wrap() as HTMLDialogElement).open).toBe(false)
     openWith("k", { metaKey: true })
-    expect(wrap().hidden).toBe(false)
+    expect((wrap() as HTMLDialogElement).open).toBe(true)
   })
 
   /* --------------------------------------------------------- opening it */
@@ -346,25 +346,12 @@ describe("AskSurface", () => {
     expect(document.activeElement).toBe(trigger)
   })
 
-  it("traps Tab inside the dialog while it is open", () => {
-    render(
-      <>
-        <button>outside</button>
-        <AskSurface {...props} />
-      </>,
-    )
+  it("leaves the Tab trap and the inert page to the browser's modal dialog", () => {
+    render(<AskSurface {...props} />)
     openWith("k", { metaKey: true })
-    const focusable = Array.from(
-      dialog().querySelectorAll<HTMLElement>("input, button, a[href]"),
-    ).filter((el) => !el.hidden && el.closest("[hidden]") === null)
-    const last = focusable[focusable.length - 1]
-
-    last.focus()
-    fireEvent.keyDown(document, { key: "Tab" })
-    expect(document.activeElement).toBe(focusable[0])
-
-    fireEvent.keyDown(document, { key: "Tab", shiftKey: true })
-    expect(document.activeElement).toBe(last)
+    // No hand-rolled modal ARIA: the native modal <dialog> supplies it.
+    expect(dialog().closest("dialog")?.open).toBe(true)
+    expect(document.querySelector("[aria-modal]")).toBeNull()
   })
 
   /* ------------------------------------------------------- the delegation */

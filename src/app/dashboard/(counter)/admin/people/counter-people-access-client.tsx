@@ -17,6 +17,7 @@ import type { SectionSources } from "@/lib/counter/adapters/types"
 import type { PeopleAccessData, PeopleAccessSections, PersonRow, PersonState } from "@/lib/counter/adapters/people-access"
 import { useUrlParam } from "@/components/counter/keep/use-url-param"
 import { Status, type StatusTone } from "@/components/counter/ui"
+import { ModalDialog } from "@/components/counter/modal-dialog"
 
 /**
  * Admin > People (developer only). Everyone who can sign in, everyone waiting
@@ -493,16 +494,20 @@ function PersonLine({
 
 function RemoveDialog({ r, busy, onCancel, onConfirm }: { r: PersonRow; busy: boolean; onCancel: () => void; onConfirm: () => void }) {
   const keep = useRef<HTMLButtonElement>(null)
+  // The safe choice takes focus. Escape is the native dialog's (ModalDialog).
   useEffect(() => {
     keep.current?.focus()
-    const esc = (e: KeyboardEvent) => e.key === "Escape" && onCancel()
-    document.addEventListener("keydown", esc)
-    return () => document.removeEventListener("keydown", esc)
-  }, [onCancel])
+  }, [])
   const name = first(r.name)
   return (
-    <div className="pp-scrim" onMouseDown={(e) => e.target === e.currentTarget && onCancel()}>
-      <div className="pp-dialog" role="alertdialog" aria-modal="true" aria-labelledby="pp-dialog-title">
+    <ModalDialog
+      className="pp-scrim"
+      role="alertdialog"
+      aria-labelledby="pp-dialog-title"
+      onClose={onCancel}
+      onMouseDown={(e) => e.target === e.currentTarget && onCancel()}
+    >
+      <div className="pp-dialog">
         <h3 id="pp-dialog-title">Remove {name}&rsquo;s access?</h3>
         <ul>
           <li>{name} is signed out on their next page load, on every device.</li>
@@ -518,6 +523,6 @@ function RemoveDialog({ r, busy, onCancel, onConfirm }: { r: PersonRow; busy: bo
           </button>
         </div>
       </div>
-    </div>
+    </ModalDialog>
   )
 }
