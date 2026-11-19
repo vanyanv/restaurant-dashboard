@@ -3,6 +3,7 @@
 import { useSurfaceHref } from "@/components/counter"
 import {
   Answer,
+  Freshness,
   BigNumber,
   BigNumbers,
   ButtonLink,
@@ -49,6 +50,7 @@ export function OverviewHero({
     <>
       <Card label="How the period went">
         <Answer>{o.sentence}</Answer>
+        <Freshness />
         <BigNumbers>
           <BigNumber
             label="Sales"

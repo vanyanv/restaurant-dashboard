@@ -21,6 +21,7 @@ import type { PriceSections } from "@/lib/counter/adapters/prices";
 import { confirmInvoiceStore, resolveInvoiceReview } from "@/lib/counter/actions/invoice";
 import {
   Answer,
+  Freshness,
   Button,
   ButtonLink,
   ButtonRow,
@@ -214,6 +215,7 @@ function Lede({ week }: { week: InvoiceWeek }) {
           ),
         )}
       </Answer>
+      <Freshness />
       <Statuses>
         {week.pills.map((p) =>
           p.href.includes("#iv-needs") ? (

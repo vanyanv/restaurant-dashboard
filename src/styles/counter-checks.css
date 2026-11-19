@@ -114,7 +114,7 @@ button.ck-gl:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .ck-erow{display:grid;grid-template-columns:auto minmax(0,1fr) minmax(0,1fr) auto;gap:8px;align-items:center}
 .ck-erow--head{font-family:var(--mono);font-size:var(--t-micro);letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3)}
 .ck-iconbtn{border:1px solid var(--line);background:var(--surface);border-radius:var(--r-sm);width:28px;height:28px;display:inline-grid;place-items:center;color:var(--ink-2);cursor:pointer}
-.ck-iconbtn:hover{color:var(--ink);border-color:var(--line-strong)}
+@media (hover:hover){.ck-iconbtn:hover{color:var(--ink);border-color:var(--line-strong)}}
 .ck-iconbtn[disabled]{opacity:.35;cursor:default}
 .ck-check{display:inline-flex;gap:8px;align-items:center;font-size:var(--t-cap);font-weight:500;cursor:pointer}
 .ck-check input{accent-color:var(--good);width:16px;height:16px}
@@ -128,7 +128,7 @@ button.ck-gl:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .ck-tablewrap{overflow-x:auto}
 .ck-pin{font-family:var(--mono);font-size:var(--t-mid);letter-spacing:.2em}
 .ck-link{background:none;border:0;padding:0;color:var(--accent);font:inherit;font-weight:600;font-size:var(--t-cap);cursor:pointer}
-.ck-link:hover{color:var(--accent-hi);text-decoration:underline}
+@media (hover:hover){.ck-link:hover{color:var(--accent-hi);text-decoration:underline}}
 .ck-link[disabled]{color:var(--ink-3);cursor:default;text-decoration:none}
 .ck-crewform{display:grid;grid-template-columns:repeat(5,minmax(0,1fr)) auto;gap:10px;align-items:end;padding:14px 16px;border-bottom:1px solid var(--line);background:var(--paper)}
 @media (max-width:900px){.ck-crewform{grid-template-columns:1fr 1fr}}

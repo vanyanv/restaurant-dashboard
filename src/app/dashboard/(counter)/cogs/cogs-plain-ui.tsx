@@ -3,6 +3,7 @@
 import { useSurfaceHref } from "@/components/counter"
 import {
   Answer,
+  Freshness,
   BigNumber,
   BigNumbers,
   ButtonLink,
@@ -32,6 +33,7 @@ export function CogsPlainView({ p }: { p: CogsPlain }) {
     <div className="cu-stack">
       <Card label="Food cost in a sentence">
         <Answer>{p.sentence}</Answer>
+        <Freshness />
         <BigNumbers>
           <BigNumber label={p.big.label} value={p.big.value} sub={p.big.sub} vs={p.vs ?? undefined} missing={p.big.missing} />
         </BigNumbers>
