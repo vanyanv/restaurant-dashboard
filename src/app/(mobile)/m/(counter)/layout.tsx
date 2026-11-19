@@ -30,13 +30,21 @@ import { counterToday } from "@/lib/counter/today"
  * switcher with nothing in it for the instant before the page redirects,
  * rather than a second copy of an authorisation decision that could drift from
  * the pages'.
+ *
+ * ## The store list is handed over unresolved
+ *
+ * `getOverviewStores()` is passed as a promise, not awaited. Awaiting it here
+ * held the phone frame AND every page's loading skeleton until the database
+ * answered, so opening the home-screen app while Neon slept showed a black
+ * screen for up to ten seconds. Now the frame and skeleton go out at once and
+ * only the store button's label waits (see `PhoneShell`).
  */
-export default async function CounterPhoneLayout({
+export default function CounterPhoneLayout({
   children,
 }: {
   children: React.ReactNode
 }) {
-  const stores = await getOverviewStores()
+  const stores = getOverviewStores()
 
   return (
     <PhoneShell stores={stores} today={counterToday()}>

@@ -1,9 +1,9 @@
 "use client"
 
-import { useCallback, useEffect, useMemo, useState, useTransition, type ReactNode } from "react"
+import { Suspense, use, useCallback, useEffect, useMemo, useState, useTransition, type ReactNode } from "react"
 import Link from "next/link"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
-import { MTop } from "./m-top"
+import { MTop, type MTopProps } from "./m-top"
 import { MDateSheet } from "./m-date-sheet"
 import { PageChromeContext, type PageChrome } from "./page-chrome"
 import { CounterTransitionContext, type CounterTransition } from "./counter-transition"
@@ -57,7 +57,12 @@ export function PhoneShell({
   today,
   children,
 }: {
-  stores: SwitchableStore[]
+  /**
+   * The store list, or a promise of it. The layout passes the promise so the
+   * frame paints before the database answers (see
+   * `src/app/(mobile)/m/(counter)/layout.tsx`); only the store button waits.
+   */
+  stores: SwitchableStore[] | Promise<SwitchableStore[]>
   today?: Date
   children: ReactNode
 }) {
@@ -163,36 +168,41 @@ export function PhoneShell({
   const trail = phoneTrail(pathname)
   const windowed = hasWindow(pathname)
 
+  const top: Omit<MTopProps, "stores"> = {
+    selectedStoreId,
+    onSelectStore,
+    /*
+     * `phoneFor()` writes `(p.nodate ? '' : CD.chip())`, and `P.order` is
+     * `nodate: true` (line 6569): one order does not have a range. `MTop`
+     * emits the slot only when there is something in it, so the chip is
+     * absent rather than present and inert — note 46's exact defect is a
+     * control that is drawn and does nothing.
+     */
+    date: windowed ? (
+      <MDateSheet
+        presetId={presetId}
+        comparisonId={comparisonId}
+        range={range}
+        onPreset={(id: PresetId) => push({ presetId: id })}
+        onComparison={(id: ComparisonId) => push({ comparisonId: id })}
+        onRange={(next: DateRange) => push({ range: next })}
+      />
+    ) : undefined,
+    back: trail ? <PhoneBack href={trail.href} label={trail.label} /> : undefined,
+  }
+
   return (
     <div className="ct-root ct-phone">
       {/* The store and the range, in the prototype's own phone chrome. Outside
           `.mscroll`, and so outside the fidelity surface — which is why it
           went missing without a gate noticing. */}
-      <MTop
-        stores={stores}
-        selectedStoreId={selectedStoreId}
-        onSelectStore={onSelectStore}
-        /*
-         * `phoneFor()` writes `(p.nodate ? '' : CD.chip())`, and `P.order` is
-         * `nodate: true` (line 6569): one order does not have a range. `MTop`
-         * emits the slot only when there is something in it, so the chip is
-         * absent rather than present and inert — note 46's exact defect is a
-         * control that is drawn and does nothing.
-         */
-        date={
-          windowed ? (
-            <MDateSheet
-              presetId={presetId}
-              comparisonId={comparisonId}
-              range={range}
-              onPreset={(id: PresetId) => push({ presetId: id })}
-              onComparison={(id: ComparisonId) => push({ comparisonId: id })}
-              onRange={(next: DateRange) => push({ range: next })}
-            />
-          ) : undefined
-        }
-        back={trail ? <PhoneBack href={trail.href} label={trail.label} /> : undefined}
-      />
+      {Array.isArray(stores) ? (
+        <MTop stores={stores} {...top} />
+      ) : (
+        <Suspense fallback={<MTop stores={[]} storesPending {...top} />}>
+          <MTopWhenStoresArrive stores={stores} {...top} />
+        </Suspense>
+      )}
 
       {/* `.mscroll` is the phone page's grid: 12px of padding, 11px between
           blocks, and the staggered entry `counter-components.css (repairs)` already repairs
@@ -204,6 +214,14 @@ export function PhoneShell({
       </div>
     </div>
   )
+}
+
+/** `MTop` once the layout's store list has arrived. */
+function MTopWhenStoresArrive({
+  stores,
+  ...top
+}: Omit<MTopProps, "stores"> & { stores: Promise<SwitchableStore[]> }) {
+  return <MTop stores={use(stores)} {...top} />
 }
 
 /**
