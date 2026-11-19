@@ -73,6 +73,9 @@ interface JobRow {
   failures: number
   meanMs: number | null
   lastAt: Date | null
+  /** Whether the most recent run failed. The error column is about that run only. */
+  lastFailed: boolean
+  lastFailureAt: Date | null
   lastError: string | null
   verdictJob: boolean
 }
@@ -152,6 +155,8 @@ async function loadInfra(): Promise<InfraData> {
         failures: bigint
         meanMs: number | null
         lastAt: Date | null
+        lastStatus: string | null
+        lastFailureAt: Date | null
         lastError: string | null
       }>
     >`
@@ -160,6 +165,8 @@ async function loadInfra(): Promise<InfraData> {
              SUM(CASE WHEN status = 'FAILURE' THEN 1 ELSE 0 END) failures,
              AVG("durationMs") "meanMs",
              MAX("startedAt") "lastAt",
+             (ARRAY_AGG(status::text ORDER BY "startedAt" DESC))[1] "lastStatus",
+             MAX("startedAt") FILTER (WHERE status = 'FAILURE') "lastFailureAt",
              (ARRAY_AGG("errorMessage" ORDER BY "startedAt" DESC)
                 FILTER (WHERE "errorMessage" IS NOT NULL AND "errorMessage" <> ''))[1] "lastError"
       FROM "JobRun"
@@ -190,6 +197,8 @@ async function loadInfra(): Promise<InfraData> {
       // AVG() comes back as a Decimal, which is not a finite number until coerced.
       meanMs: j.meanMs === null ? null : Number(j.meanMs),
       lastAt: j.lastAt,
+      lastFailed: j.lastStatus === "FAILURE",
+      lastFailureAt: j.lastFailureAt,
       lastError: j.lastError,
       verdictJob: VERDICT_JOBS.has(j.jobName),
     })),
@@ -323,6 +332,20 @@ function filesOf(d: InfraData): InfraFiles {
   }
 }
 
+/**
+ * The error column. "Last" is the newest run, so the error beside it is
+ * only red when that run failed. An older failure in the window says when it
+ * happened and that the newest run was fine. On 2026-11-19 the table showed a
+ * Harri Cognito 400, a Graph 502 and "a gate did not pass" beside runs that
+ * had all succeeded, and read as three live outages.
+ */
+function errorCell(j: JobRow): string | { v: string; cls: string } {
+  if (j.failures === 0) return "—"
+  const what = j.verdictJob ? "a gate did not pass" : (j.lastError ?? "failed").slice(0, 40)
+  if (j.lastFailed) return { v: what, cls: "hot" }
+  return `last run ok · ${ago(j.lastFailureAt)}: ${what}`
+}
+
 export interface InfraJobs {
   rows: Row[]
   phoneRows: MListRow[]
@@ -344,23 +367,22 @@ function jobsOf(d: InfraData): InfraJobs {
             : "none",
         mean: duration(j.meanMs),
         last: ago(j.lastAt),
-        error: j.verdictJob
-          ? "a gate did not pass"
-          : j.lastError
-            ? { v: j.lastError.slice(0, 40), cls: "hot" }
-            : "—",
+        error: errorCell(j),
       },
     })),
     phoneRows: [...d.jobs]
-      .sort((a, b) => Number(b.failures > 0) - Number(a.failures > 0) || b.runs - a.runs)
+      .sort((a, b) =>
+        Number(b.lastFailed) - Number(a.lastFailed) ||
+        Number(b.failures > 0) - Number(a.failures > 0) ||
+        b.runs - a.runs)
       .slice(0, PHONE_ROWS)
       .map((j) => ({
         key: j.job,
         title: j.job,
         detail: `${plural(j.runs, "run")} · ${duration(j.meanMs)}`,
         value: j.failures === 0 ? "clean" : count(j.failures),
-        note: j.verdictJob ? "verdicts" : j.failures > 0 ? "failed" : "ok",
-        noteTone: (j.verdictJob ? undefined : j.failures > 0 ? "down" : "up") as
+        note: j.lastFailed ? "failed" : j.verdictJob ? "verdicts" : j.failures > 0 ? "ok now" : "ok",
+        noteTone: (j.lastFailed ? "down" : j.verdictJob ? undefined : "up") as
           | "up"
           | "down"
           | undefined,

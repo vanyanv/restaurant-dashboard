@@ -2,6 +2,21 @@ import { fetchWithTimeout } from "@/lib/fetch-with-timeout"
 
 const GRAPH_BASE = "https://graph.microsoft.com/v1.0"
 
+/**
+ * GET from Graph, trying once more after a short pause when Microsoft answers
+ * 502/503/504. Those are their gateway hiccups (the invoice sync logs an
+ * occasional Graph 502 and the next run is fine); one retry keeps a single
+ * blip from failing the whole run. Anything else returns as is.
+ */
+export async function graphGet(url: string, token: string, pauseMs = 2_000): Promise<Response> {
+  const init = { headers: { Authorization: `Bearer ${token}` } }
+  const res = await fetchWithTimeout(url, init)
+  if (res.status !== 502 && res.status !== 503 && res.status !== 504) return res
+  await res.body?.cancel()
+  await new Promise((r) => setTimeout(r, pauseMs))
+  return fetchWithTimeout(url, init)
+}
+
 // --- Token cache (same pattern as otter.ts) ---
 let cachedToken: string | null = null
 let cachedTokenExp = 0 // unix seconds
@@ -90,9 +105,7 @@ export async function fetchInvoiceEmails(sinceDate: Date): Promise<GraphMessage[
     `&$top=50`
 
   while (url) {
-    const res: Response = await fetchWithTimeout(url, {
-      headers: { Authorization: `Bearer ${token}` },
-    })
+    const res: Response = await graphGet(url, token)
 
     if (!res.ok) {
       const text = await res.text()
@@ -119,9 +132,7 @@ export async function getEmailAttachments(messageId: string): Promise<GraphAttac
   const url =
     `${GRAPH_BASE}/users/${encodeURIComponent(userId)}/messages/${messageId}/attachments`
 
-  const res = await fetchWithTimeout(url, {
-    headers: { Authorization: `Bearer ${token}` },
-  })
+  const res = await graphGet(url, token)
 
   if (!res.ok) {
     const text = await res.text()
