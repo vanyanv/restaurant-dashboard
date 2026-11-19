@@ -26,7 +26,13 @@ export interface OverviewStore {
   storeId: string
   name: string
   sales: number
-  /** Sales change against the period before, as a fraction; null with no earlier sales. */
+  /** Sales change against the period before, in dollars; null with no earlier sales. */
+  salesChange: number | null
+  /**
+   * The same change as a fraction; null with no earlier sales, or when the
+   * earlier sales are under `MIN_PRIOR_FOR_PCT` and a percent would read as
+   * a boom (a pre-open week's $40 against this week's $9,000).
+   */
   salesChangePct: number | null
   /** Null when the orders did not load: unknown, never 0. */
   orders: number | null
@@ -52,6 +58,8 @@ export interface OverviewPlain {
   keptPct: number | null
   /** "at most · 2 Glendale days of labor missing", or null when nothing is missing. */
   keptAtMost: string | null
+  /** The completeness line beside the figure: `keptAtMost` plus what is estimated. See `PnlPlain.keptNote`. */
+  keptNote: string | null
   weeks: PlainWeek[]
   statuses: OverviewStatus[]
   stores: OverviewStore[]
@@ -77,20 +85,26 @@ export interface OverviewPlainInput {
 const WORDS = ["no", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten"]
 const inWords = (n: number) => WORDS[n] ?? String(n)
 
-const share = (part: number, whole: number) => (whole > 0 ? part / whole : null)
+
+/** Below this much earlier sales a change is said in dollars only, never as a percent. */
+export const MIN_PRIOR_FOR_PCT = 500
+
+/** A change as a fraction of the earlier figure, or null when the earlier figure is too small to divide by. */
+const changePct = (change: number, prior: number) => (prior >= MIN_PRIOR_FOR_PCT ? change / prior : null)
 const pctWords = (v: number) => `${(Math.abs(v) * 100).toFixed(1).replace(/\.0$/, "")}%`
 
 export function buildOverviewPlain(input: OverviewPlainInput): OverviewPlain {
   const { pnl: p } = input
   const v = p.vsPrior
-  const salesVs = v ? { amount: v.sales, pct: share(v.sales, p.sales - v.sales), label: v.label } : null
+  const salesVs = v ? { amount: v.sales, pct: changePct(v.sales, p.sales - v.sales), label: v.label } : null
 
   /* ── one card per store, from the P&L's own store reading ── */
   const stores: OverviewStore[] = p.stores.map((s) => ({
     storeId: s.storeId,
     name: s.name,
     sales: s.sales,
-    salesChangePct: s.salesChange === null ? null : share(s.salesChange, s.sales - s.salesChange),
+    salesChange: s.salesChange,
+    salesChangePct: s.salesChange === null ? null : changePct(s.salesChange, s.sales - s.salesChange),
     // A store the mix has no reading for is unknown, not zero orders.
     orders: input.orders && Object.hasOwn(input.orders, s.storeId) ? input.orders[s.storeId] : null,
     laborPct: s.laborMissingDays > 0 ? null : s.labor,
@@ -114,20 +128,26 @@ export function buildOverviewPlain(input: OverviewPlainInput): OverviewPlain {
       : ""
     const kept =
       p.kept >= 0
-        ? `kept ${p.atMost ? "at most " : ""}${money(p.kept)}`
+        ? `kept ${p.atMost ? "at most " : p.keptNote ? "an estimated " : ""}${money(p.kept)}`
         : `lost ${money(Math.abs(p.kept))}`
     parts.push(`${who} sold ${money(p.sales)}${change} and ${kept} after app fees, food, labor and rent.`)
 
-    const compared = stores.filter((s) => s.salesChangePct !== null)
-    const slipped = compared.filter((s) => (s.salesChangePct ?? 0) < 0)
-    const grew = compared.filter((s) => (s.salesChangePct ?? 0) > 0)
+    const compared = stores.filter((s) => s.salesChange !== null)
+    const slipped = compared.filter((s) => (s.salesChange ?? 0) < 0)
+    const grew = compared.filter((s) => (s.salesChange ?? 0) > 0)
     if (compared.length > 1 && salesVs) {
       if (slipped.length === 1) parts.push(`${slipped[0].name} was the one store that sold less.`)
       else if (slipped.length === 0) parts.push(grew.length === compared.length ? "Every store sold more." : "No store sold less.")
       else if (slipped.length < compared.length) parts.push(`${listNames(slipped.map((s) => s.name))} sold less.`)
       else parts.push("Every store sold less.")
     }
-    if (p.atMost) parts.push("Some labor is missing, so the true kept figure is lower.")
+    if (p.atMost) {
+      parts.push(
+        p.gaps.laborMissingDays > 0
+          ? "Some labor is missing, so the true kept figure is lower."
+          : "Some costs are not on file, so the true kept figure is lower.",
+      )
+    } else if (p.keptNote) parts.push("Part of the kept figure is estimated.")
   }
 
   /* ── status in words ── */
@@ -144,12 +164,15 @@ export function buildOverviewPlain(input: OverviewPlainInput): OverviewPlain {
   }
   if (stores.length === 0 && p.atMost) statuses.push({ tone: "warn", text: "Some labor missing" })
   for (const st of p.statuses) {
-    // Labor is said per store above; the P&L's other cost inputs carry over as they are.
-    if (st.tone !== "ok" && !st.text.startsWith("Labor")) {
+    // Missing labor is said per store above; the P&L's other cost inputs
+    // (estimated labor among them) carry over as they are.
+    if (st.tone !== "ok" && !(st.tone === "bad" && st.text.startsWith("Labor"))) {
       statuses.push({ tone: st.tone === "bad" ? "bad" : "warn", text: st.text })
     }
   }
-  if (statuses.every((s) => s.tone === "good") && p.sales > 0) statuses.push({ tone: "good", text: "Every cost on file" })
+  if (statuses.every((s) => s.tone === "good") && p.sales > 0 && p.keptNote === null) {
+    statuses.push({ tone: "good", text: "Every cost on file" })
+  }
 
   /* ── Needs you, a few groups ── */
   const needs: OverviewNeed[] = p.todos.map((t, i) => ({
@@ -193,6 +216,7 @@ export function buildOverviewPlain(input: OverviewPlainInput): OverviewPlain {
     kept: p.kept,
     keptPct: p.keptPct,
     keptAtMost: p.atMost,
+    keptNote: p.keptNote,
     weeks: p.weeks,
     statuses,
     stores,

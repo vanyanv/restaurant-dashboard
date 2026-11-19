@@ -10,6 +10,7 @@ const PLAIN_WEEKS = WEEKS.map((w, i) => ({
   kept: 20_000 + i * 400,
   keptPct: 0.25,
   atMost: i === 7,
+  running: w.partial,
 }))
 
 const line = (key: PlainLine["key"], label: string, amount: number, how: string, tone: PlainLine["tone"] = "ok"): PlainLine => ({
@@ -21,6 +22,8 @@ return {
   kept: 23_916,
   keptPct: 0.284,
   atMost: "at most · 2 Glendale days of labor missing",
+  keptNote: "at most · 2 Glendale days of labor missing",
+  gaps: { laborMissingDays: 2, laborEstimatedDays: 0, cogsMissingDays: 0, uncostedShare: 0, unknownOrders: 0, rateShare: 0.05, fixedNotOnFile: 1 },
   vsPrior: { label: "Oct 19 – 25", kept: 4_413, pts: 2.6, sales: 8_493 },
   sentence: "You kept 28¢ of every dollar on $84,102 in sales. Some labor is missing, so the true number is lower.",
   statuses: [
@@ -41,7 +44,7 @@ return {
   weeks: PLAIN_WEEKS,
   days: [
     {
-      date: "2026-08-24", label: "Mon 8/24", short: "Mon", sales: 9_140, kept: 1_963, keptPct: 0.215, atMost: false, best: false, laborMissing: [],
+      date: "2026-08-24", label: "Mon 8/24", short: "Mon", sales: 9_140, kept: 1_963, keptPct: 0.215, atMost: false, ownGap: false, best: false, laborMissing: [],
       lines: [line("fees", "App fees", 1_356, "of app orders"), line("food", "Food", 2_305, "recipe cost"), line("labor", "Labor", 2_456, "from Harri"), line("fixed", "Rent & fixed", 1_060, "one day"), line("kept", "Kept", 1_963, "what is left")],
       stores: [
         { storeId: storeIds[0], name: "Hollywood", sales: 5_849, kept: 1_846, laborMissing: false },
@@ -49,7 +52,7 @@ return {
       ],
     },
     {
-      date: "2026-08-25", label: "Tue 8/25", short: "Tue", sales: 9_831, kept: 2_364, keptPct: 0.24, atMost: true, best: true, laborMissing: ["Glendale"],
+      date: "2026-08-25", label: "Tue 8/25", short: "Tue", sales: 9_831, kept: 2_364, keptPct: 0.24, atMost: true, ownGap: true, best: true, laborMissing: ["Glendale"],
       lines: [line("labor", "Labor", 2_486, "no Harri labor for Glendale", "bad"), line("kept", "Kept", 2_364, "at most")],
       stores: [
         { storeId: storeIds[0], name: "Hollywood", sales: 6_573, kept: 2_335, laborMissing: false },
@@ -58,8 +61,8 @@ return {
     },
   ],
   stores: [
-    { storeId: storeIds[0], name: "Hollywood", sales: 47_977, kept: 15_786, keptPct: 0.329, keptChange: -698, salesChange: 2_100, laborMissingDays: 0, food: 0.24, labor: 0.23, fees: 0.14, atMost: false, flags: [] },
-    { storeId: storeIds[1], name: "Glendale", sales: 9_681, kept: 3_629, keptPct: 0.375, keptChange: null, salesChange: null, laborMissingDays: 2, food: 0.27, labor: 0.1, fees: 0.04, atMost: true, flags: ["2 days of labor missing"] },
+    { storeId: storeIds[0], name: "Hollywood", sales: 47_977, kept: 15_786, keptPct: 0.329, keptChange: -698, salesChange: 2_100, laborMissingDays: 0, laborEstimatedDays: 0, food: 0.24, labor: 0.23, fees: 0.14, atMost: false, flags: [] },
+    { storeId: storeIds[1], name: "Glendale", sales: 9_681, kept: 3_629, keptPct: 0.375, keptChange: null, salesChange: null, laborMissingDays: 2, laborEstimatedDays: 0, food: 0.27, labor: 0.1, fees: 0.04, atMost: true, flags: ["2 days of labor missing"] },
   ],
 }
 }

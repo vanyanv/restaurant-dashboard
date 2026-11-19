@@ -62,11 +62,11 @@ export function PlainHero({
     <div className="pl-hero">
       <Card>
         <BigNumber
-          label="Kept after every cost"
+          label="Estimated profit"
           value={p.sales > 0 ? money(p.kept) : "No sales"}
           atMost={p.sales > 0 && Boolean(p.atMost)}
           sub={p.sales > 0 ? `${pct(p.keptPct)} of sales` : undefined}
-          missing={p.atMost ?? undefined}
+          missing={p.sales > 0 ? (p.keptNote ?? undefined) : undefined}
           vs={
             v
               ? [
@@ -89,15 +89,15 @@ export function PlainHero({
 
       <WeekBars
         title={`Last ${p.weeks.length} weeks · tap a week`}
-        partialLabel="labor missing, true number lower"
+        partialLabel="a cost missing, true number lower"
         weeks={p.weeks.map((w) => ({
           key: w.window.start,
-          label: w.label,
+          label: w.running ? "so far" : w.label,
           value: w.kept,
           top: w.sales > 0 ? pct(w.keptPct) : "—",
           partial: w.atMost,
           selected: isSelected(w.window, range),
-          ariaLabel: `Week of ${w.label}: kept ${w.atMost ? "at most " : ""}${money(w.kept)}`,
+          ariaLabel: `Week of ${w.label}${w.running ? ", so far" : ""}: kept ${w.atMost ? "at most " : ""}${money(w.kept)}`,
         }))}
         onPick={(key) => {
           const w = p.weeks.find((x) => x.window.start === key)

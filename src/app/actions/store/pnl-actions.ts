@@ -72,8 +72,12 @@ import type {
 function periodLines(
   computeds: Array<ReturnType<typeof computeStorePnL>>,
   periods: Period[],
-  /** Per computed, per period: `soldDaysWithoutLabor`. Absent reads as 0. */
-  laborMissing: number[][] = [],
+  /**
+   * Per computed, per period: the gaps behind the figures — what
+   * `PnLPeriodLines` documents as `laborMissingDays`, `laborEstimatedDays`,
+   * `cogsMissingDays` and `uncostedSales`. Absent reads as 0.
+   */
+  gaps: Partial<Record<PeriodGap, number[][]>> = {},
 ): PnLPeriodLines[] {
   const total = (xs: number[]) => xs.reduce((a, b) => a + b, 0)
   return periods.map((_p, i) => {
@@ -117,9 +121,19 @@ function periodLines(
       laborPct: r(labor),
       rentValue: rent,
       rentPct: r(rent),
-      laborMissingDays: total(laborMissing.map((m) => m[i] ?? 0)),
+      laborMissingDays: gapAt(gaps.laborMissingDays, i),
+      laborEstimatedDays: gapAt(gaps.laborEstimatedDays, i),
+      cogsMissingDays: gapAt(gaps.cogsMissingDays, i),
+      uncostedSales: gapAt(gaps.uncostedSales, i),
     }
   })
+}
+
+/** The per-period gap counts `periodLines` carries alongside the dollars. */
+type PeriodGap = "laborMissingDays" | "laborEstimatedDays" | "cogsMissingDays" | "uncostedSales"
+
+function gapAt(perComputed: number[][] | undefined, i: number): number {
+  return (perComputed ?? []).reduce((a, m) => a + (m[i] ?? 0), 0)
 }
 
 /** The sales cascade and commission over a whole range, summed from its periods. */
@@ -206,9 +220,19 @@ function summarizeDailyCogs(rows: DailyCogsRow[], periods: Period[]): {
   unmappedItems: UnmappedMenuItem[]
   missingCostItems: UnmappedMenuItem[]
   rowCountPerPeriod: number[]
+  /**
+   * Per period, the sales on rows whose food cost is NOT fully in
+   * `cogsValues`: UNMAPPED (no recipe, $0 counted) and MISSING_COST (only the
+   * priced ingredients counted). The food line reads low by the cost of these.
+   */
+  uncostedSales: number[]
+  /** `YYYY-MM-DD` days with at least one row in range. */
+  daysWithRows: Set<string>
 } {
   const cogsValues = periods.map(() => 0)
   const rowCountPerPeriod = periods.map(() => 0)
+  const uncostedSales = periods.map(() => 0)
+  const daysWithRows = new Set<string>()
   const unmappedAgg = new Map<string, UnmappedMenuItem>()
   const missingCostAgg = new Map<string, UnmappedMenuItem>()
 
@@ -238,9 +262,11 @@ function summarizeDailyCogs(rows: DailyCogsRow[], periods: Period[]): {
     if (idx === -1) continue
 
     rowCountPerPeriod[idx]++
+    daysWithRows.add(new Date(row.date).toISOString().slice(0, 10))
 
     if (row.status === CogsStatus.UNMAPPED) {
       aggInto(unmappedAgg, row)
+      uncostedSales[idx] += row.salesRevenue
       continue
     }
 
@@ -248,6 +274,7 @@ function summarizeDailyCogs(rows: DailyCogsRow[], periods: Period[]): {
 
     if (row.status === CogsStatus.MISSING_COST) {
       aggInto(missingCostAgg, row)
+      uncostedSales[idx] += row.salesRevenue
     }
   }
 
@@ -257,7 +284,7 @@ function summarizeDailyCogs(rows: DailyCogsRow[], periods: Period[]): {
   const missingCostItems = Array.from(missingCostAgg.values()).sort(
     (a, b) => b.salesRevenue - a.salesRevenue
   )
-  return { cogsValues, unmappedItems, missingCostItems, rowCountPerPeriod }
+  return { cogsValues, unmappedItems, missingCostItems, rowCountPerPeriod, uncostedSales, daysWithRows }
 }
 
 function computeMovers(
@@ -628,7 +655,9 @@ export async function getAllStoresPnL(input: {
     // the commission basis, and a pre-change entry would lack both. `pnl4:`
     // since 2026-11-03: labor carries the employer payroll tax and its note.
     // `pnl5:` since 2026-11-04: periods carry laborMissingDays.
-    `pnl5:account:${accountId}:${stableKey({
+    // `pnl6:` since 2026-11-19: periods carry laborEstimatedDays,
+    // cogsMissingDays and uncostedSales.
+    `pnl6:account:${accountId}:${stableKey({
       s: input.startDate.toISOString(),
       e: input.endDate.toISOString(),
       g: input.granularity,
@@ -783,7 +812,12 @@ export async function getAllStoresPnL(input: {
 
 
     const perStoreComputed: Array<ReturnType<typeof computeStorePnL>> = []
-    const perStoreMissing: number[][] = []
+    const perStoreGaps: Record<PeriodGap, number[][]> = {
+      laborMissingDays: [],
+      laborEstimatedDays: [],
+      cogsMissingDays: [],
+      uncostedSales: [],
+    }
 
     const perStore = stores.map((store) => {
       const storeSummaries = byStore.get(store.id) ?? []
@@ -813,13 +847,29 @@ export async function getAllStoresPnL(input: {
         netByDay.set(day, (netByDay.get(day) ?? 0) + rowSales(r).net)
       }
       const soldDays = new Set([...netByDay].filter(([, net]) => net > 0).map(([day]) => day))
-      const missing = soldDaysWithoutLabor(
-        laborCost.stores[store.id],
-        soldDays,
-        periods,
-        hasFixedLabor(store.fixedMonthlyLabor),
-      )
-      perStoreMissing.push(missing)
+      // Sold days Harri sent nothing for. With a labor budget on file
+      // `computeStorePnL` fills them from it — an ESTIMATE, counted as such;
+      // without one they count as $0 — MISSING.
+      const uncovered = soldDaysWithoutLabor(laborCost.stores[store.id], soldDays, periods)
+      const budgetFills = hasFixedLabor(store.fixedMonthlyLabor)
+      const none = periods.map(() => 0)
+      const missing = budgetFills ? none : uncovered
+      const laborEstimated = budgetFills ? uncovered : none
+      // Sold days with no DailyCogsItem row at all: food counted as $0 on them.
+      const cogsMissing = periods.map((p) => {
+        const start = p.startDate.toISOString().slice(0, 10)
+        const end = p.endDate.toISOString().slice(0, 10)
+        let n = 0
+        for (const d of soldDays) if (d >= start && d <= end && !storeCogs.daysWithRows.has(d)) n += 1
+        return n
+      })
+      const storeGaps: Record<PeriodGap, number[][]> = {
+        laborMissingDays: [missing],
+        laborEstimatedDays: [laborEstimated],
+        cogsMissingDays: [cogsMissing],
+        uncostedSales: [storeCogs.uncostedSales],
+      }
+      for (const k of Object.keys(storeGaps) as PeriodGap[]) perStoreGaps[k].push(storeGaps[k][0])
 
       const grossSales = sum(computed.totalSales)
       const netAfterCommissions = sum(computed.netAfterCommissions)
@@ -846,7 +896,7 @@ export async function getAllStoresPnL(input: {
         []
       )
 
-      const storePeriods = periodLines([computed], periods, [missing])
+      const storePeriods = periodLines([computed], periods, storeGaps)
       return {
         storeId: store.id,
         storeName: store.name,
@@ -863,6 +913,9 @@ export async function getAllStoresPnL(input: {
         rentValue,
         rentPct: ratio(rentValue),
         laborMissingDays: sum(missing),
+        laborEstimatedDays: sum(laborEstimated),
+        cogsMissingDays: sum(cogsMissing),
+        uncostedSales: sum(storeCogs.uncostedSales),
         channelMix: channelMix(totalChannelVals),
         fixedCostsConfigured:
           hasFixedLabor(store.fixedMonthlyLabor) && store.fixedMonthlyRent != null,
@@ -877,7 +930,7 @@ export async function getAllStoresPnL(input: {
     const combinedCogs = sum(perStore.map((p) => p.cogsValue))
     const combinedLabor = sum(perStore.map((p) => p.laborValue))
     const combinedRent = sum(perStore.map((p) => p.rentValue))
-    const perPeriod = periodLines(perStoreComputed, periods, perStoreMissing)
+    const perPeriod = periodLines(perStoreComputed, periods, perStoreGaps)
     const combined = {
       grossSales: combinedGross,
       ...rangeSalesLines(perPeriod),
@@ -892,6 +945,9 @@ export async function getAllStoresPnL(input: {
       rentValue: combinedRent,
       rentPct: combinedGross <= 0 ? 0 : combinedRent / combinedGross,
       laborMissingDays: sum(perStore.map((p) => p.laborMissingDays)),
+      laborEstimatedDays: sum(perStore.map((p) => p.laborEstimatedDays)),
+      cogsMissingDays: sum(perStore.map((p) => p.cogsMissingDays)),
+      uncostedSales: sum(perStore.map((p) => p.uncostedSales)),
     }
     combined.marginPct =
       combined.grossSales <= 0 ? 0 : combined.bottomLine / combined.grossSales

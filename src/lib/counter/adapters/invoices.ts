@@ -13,6 +13,7 @@ import {
 } from "@/lib/counter/adapters/types"
 import { mapReady, type SectionData } from "@/lib/counter/section-data"
 import { reasonLabel } from "@/lib/counter/invoice-reasons"
+import { PRICED_INVOICE_STATUSES } from "@/lib/invoice-verify"
 import { shortStoreName } from "@/lib/checks/names"
 import { businessQueryDate } from "@/lib/counter/business-date"
 import type { FigureProps, MListRow, MoneyLine, QueueItem, Row } from "@/components/counter"
@@ -576,7 +577,9 @@ function dueToneOf(due: Date | null, today: Date): "bad" | "warn" | null {
 function headlineOf(d: InvoiceData): InvoiceHeadline {
   const received = d.received
   const inReview = d.all.filter((i) => i.status === "REVIEW")
-  const costed = received.filter((i) => i.status === "MATCHED")
+  // MATCHED and APPROVED both feed ingredient costs (`PRICED_INVOICE_STATUSES`);
+  // counting MATCHED alone left every owner-approved invoice out of "costed".
+  const costed = received.filter((i) => (PRICED_INVOICE_STATUSES as readonly string[]).includes(i.status))
   const broken = d.all.filter(openGap)
   // The SIGNED net, not the sum of magnitudes. Five invoices are short and two
   // are over; summing the absolutes gives $4,390 while the section's own

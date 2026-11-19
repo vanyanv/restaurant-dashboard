@@ -107,4 +107,31 @@ describe("buildOverviewPlain", () => {
     expect(g.what).toBe("1 price change")
     expect(g.why).toBe("Counted from the 1 most serious of 140 open alerts.")
   })
+
+  it("says a change against a tiny earlier period in dollars only, never as a percent", () => {
+    const pnl = { ...plainFixture(WEEKS), sales: 9_000, vsPrior: { label: "the week before", kept: 0, pts: null, sales: 8_700 } }
+    pnl.stores = [{ ...pnl.stores[0], sales: 9_000, salesChange: 8_700 }]
+    const o = buildOverviewPlain(input({ pnl }))
+    expect(o.salesVs).toEqual({ amount: 8_700, pct: null, label: "the week before" })
+    expect(o.sentence).toContain("up $8,700 on the week before")
+    expect(o.stores[0]).toMatchObject({ salesChange: 8_700, salesChangePct: null })
+  })
+
+  it("carries the completeness line, and never says every cost is on file when part is estimated", () => {
+    const pnl = {
+      ...plainFixture(WEEKS),
+      atMost: null,
+      keptNote: "estimated · 3 days of labor estimated from your labor budget",
+      statuses: [{ tone: "warn" as const, text: "Labor: 3 days estimated from your labor budget" }],
+      todos: [],
+    }
+    pnl.stores = pnl.stores.map((s) => ({ ...s, laborMissingDays: 0 }))
+    pnl.gaps = { ...pnl.gaps, laborMissingDays: 0, laborEstimatedDays: 3 }
+    const o = buildOverviewPlain(input({ pnl }))
+    expect(o.keptNote).toBe(pnl.keptNote)
+    expect(o.sentence).toContain("kept an estimated $23,916")
+    expect(o.sentence).toContain("Part of the kept figure is estimated.")
+    expect(o.statuses).toContainEqual({ tone: "warn", text: "Labor: 3 days estimated from your labor budget" })
+    expect(o.statuses.some((s) => s.text === "Every cost on file")).toBe(false)
+  })
 })

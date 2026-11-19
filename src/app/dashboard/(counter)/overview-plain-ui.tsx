@@ -66,11 +66,11 @@ export function OverviewHero({
             }
           />
           <BigNumber
-            label="Kept after every cost"
+            label="Estimated profit"
             value={o.sales > 0 ? money(o.kept) : null}
             atMost={o.sales > 0 && o.keptAtMost !== null}
             sub={o.sales > 0 ? `${pct(o.keptPct)} of sales` : undefined}
-            missing={o.keptAtMost ?? undefined}
+            missing={o.sales > 0 ? (o.keptNote ?? undefined) : undefined}
           />
         </BigNumbers>
         <ButtonRow>
@@ -81,11 +81,11 @@ export function OverviewHero({
         title={`Sales, last ${o.weeks.length} weeks · tap a week`}
         weeks={o.weeks.map((w) => ({
           key: w.window.start,
-          label: w.label,
+          label: w.running ? "so far" : w.label,
           value: w.sales,
           top: w.sales > 0 ? compact(w.sales) : "—",
           selected: w.window.start === isoDay(range.start) && w.window.end === isoDay(range.end),
-          ariaLabel: `Week of ${w.label}: sales ${money(w.sales)}`,
+          ariaLabel: `Week of ${w.label}${w.running ? ", so far" : ""}: sales ${money(w.sales)}`,
         }))}
         onPick={(key) => {
           const w = o.weeks.find((x) => x.window.start === key)
@@ -130,11 +130,15 @@ export function OverviewStores({ o, onStore }: { o: OverviewPlain; onStore: (sto
           status={
             s.sales <= 0
               ? { tone: "off", label: "No sales" }
-              : s.salesChangePct === null
+              : s.salesChange === null
                 ? { tone: "off", label: "Nothing to compare" }
-                : s.salesChangePct >= 0
-                  ? { tone: "good", label: `▲ ${pct(s.salesChangePct)}` }
-                  : { tone: "bad", label: `▼ ${pct(Math.abs(s.salesChangePct))}` }
+                : s.salesChangePct === null
+                  ? s.salesChange >= 0
+                    ? { tone: "good", label: `▲ ${signedMoney(s.salesChange)}` }
+                    : { tone: "bad", label: `▼ ${signedMoney(s.salesChange)}` }
+                  : s.salesChangePct >= 0
+                    ? { tone: "good", label: `▲ ${pct(s.salesChangePct)}` }
+                    : { tone: "bad", label: `▼ ${pct(Math.abs(s.salesChangePct))}` }
           }
           figures={[
             { label: "Sales", value: money(s.sales) },
