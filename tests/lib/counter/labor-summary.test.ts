@@ -94,7 +94,7 @@ describe("buildLaborSummary", () => {
       { storeId: "g", name: "Glendale", cost: 1090, ratedSales: 13300, laborPct: 8.2 },
       { storeId: "n", name: "New", cost: 0, ratedSales: 0, laborPct: null },
     ]
-    const s = buildLaborSummary({ days: [], week: week(), roles: [], storeShares: shares })
+    const s = buildLaborSummary({ days: [], week: week(), roles: [], storeShares: shares, incompleteStoreIds: ["g"] })
     expect(s.stores.map((c) => c.status.label)).toEqual(["Labor on file", "Labor looks incomplete", "No labor on file"])
     expect(s.stores[1].figures[0]).toEqual({ label: "Share on file", value: "8.2%" })
     expect(s.stores[2].figures[1].value).toBe("missing")

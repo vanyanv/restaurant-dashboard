@@ -1,13 +1,8 @@
 import { money, pct, plural, points } from "@/lib/counter/format"
 import { hoursText } from "@/lib/counter/schedule-hold"
-import {
-  LABOR_INCOMPLETE_PCT,
-  type LaborDay,
-  type LaborRole,
-  type LaborStoreShare,
-  type LaborTrendWeek,
-  type LaborWeek,
-} from "@/lib/counter/labor-week"
+// TYPES ONLY from `labor-week`: that module reads the database, and this one
+// is also imported by the page's client view (`compareLaborWeeks`).
+import type { LaborDay, LaborRole, LaborStoreShare, LaborTrendWeek, LaborWeek } from "@/lib/counter/labor-week"
 
 /**
  * The Labor page's detail, brought out of the fold (owner's go, 2026-11-20,
@@ -106,10 +101,13 @@ export function buildLaborSummary(input: {
   week: LaborWeek
   roles: LaborRole[]
   storeShares: LaborStoreShare[]
+  /** Stores whose labor reads too low to be whole, by `incompleteLaborStores`: the adapter's call, not this file's. */
+  incompleteStoreIds?: string[]
 }): LaborSummary {
   const { week, roles, storeShares } = input
   const days = input.days.slice(-LABOR_DAYS_SHOWN)
   const provisional = new Set(week.provisionalDays)
+  const incompleteIds = new Set(input.incompleteStoreIds ?? [])
 
   const shares = days.map((d) => d.laborPct).filter((v): v is number => v !== null && Number.isFinite(v))
   const top = Math.max(DAY_SCALE_FLOOR, ...shares, week.laborPct ?? 0) * 1.05
@@ -157,7 +155,7 @@ export function buildLaborSummary(input: {
     storeShares.length < 2
       ? []
       : storeShares.map((s) => {
-          const incomplete = s.ratedSales > 0 && s.laborPct !== null && s.laborPct < LABOR_INCOMPLETE_PCT
+          const incomplete = incompleteIds.has(s.storeId)
           const none = s.laborPct === null || (s.cost === 0 && s.ratedSales === 0)
           return {
             storeId: s.storeId,

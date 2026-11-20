@@ -1786,7 +1786,13 @@ function plainSection(
 /** The days, stores and roles brought out of the fold, on either route. */
 function summarySection(laborSd: SectionData<LaborData>): SectionData<LaborSummary> {
   return laborSection(laborSd, NO_HARRI_OWED, (d) =>
-    buildLaborSummary({ days: d.days, week: d.week, roles: d.roles, storeShares: d.storeShares }),
+    buildLaborSummary({
+      days: d.days,
+      week: d.week,
+      roles: d.roles,
+      storeShares: d.storeShares,
+      incompleteStoreIds: incompleteLaborStores(d.storeShares).map((s) => s.storeId),
+    }),
   )
 }
 

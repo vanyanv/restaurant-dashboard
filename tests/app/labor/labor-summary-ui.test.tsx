@@ -58,6 +58,7 @@ const summary = buildLaborSummary({
     { storeId: "v", name: "Van Nuys", cost: 7280, ratedSales: 24600, laborPct: 29.6 },
     { storeId: "g", name: "Glendale", cost: 1090, ratedSales: 13300, laborPct: 8.2 },
   ],
+  incompleteStoreIds: ["g"],
 })
 
 const PCTS = [26.1, 25.8, 27.2, 26.4, 25.9, 26.8, 27.5, 26.2, 26.6, 27.1, 26.9, 28.0]
