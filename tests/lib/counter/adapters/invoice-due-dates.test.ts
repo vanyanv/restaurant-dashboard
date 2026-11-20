@@ -105,7 +105,7 @@ describe("invoices adapter · the due date on the list", () => {
 
   it("says the date is the vendor's and that no payment is recorded", async () => {
     const list = await listSection()
-    expect(list.dueNote).toContain("no payment")
+    expect(list.dueNote).toContain("Payments are not tracked")
     expect(list.dueNote).toContain("1 is past the date it prints")
     expect(list.dueNote).toContain("1 prints no due date")
   })

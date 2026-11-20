@@ -141,9 +141,11 @@ const LEAK_COLUMNS: Column[] = [
  * reader who summed the visible Hours column would get 24.94 against the
  * stated 13.47, and the column that stops that happening is this one.
  */
-const KIND: Record<LeakRowView["kind"], { label: string; tone?: "good" | "warn" }> = {
+const KIND: Record<LeakRowView["kind"], { label: string; tone?: "warn" }> = {
   leak: { label: "leak", tone: "warn" },
-  saving: { label: "saving", tone: "good" },
+  // Neutral. Clocking in late or leaving early is a short shift, not a saving:
+  // the floor ran with less than was planned.
+  short: { label: "short shift" },
   uncostable: { label: "not costed" },
 }
 
@@ -441,6 +443,9 @@ export function CounterLaborClient({
         >
           {(l) => (
             <>
+              {/* Missed punches to fix in Harri, first: until they are fixed
+                  the hours under every figure on this page are wrong. */}
+              {l.fixes.length > 0 ? <Queue items={queueItems(l.fixes)} /> : null}
               <Table columns={LEAK_COLUMNS} rows={leakRows(l)} />
               {/* Unwrapped, for the reason the role note above is unwrapped. */}
               <Note flush>

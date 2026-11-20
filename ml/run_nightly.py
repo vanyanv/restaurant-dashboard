@@ -24,9 +24,9 @@ import time
 import traceback
 
 from ml.anomaly.interval import (
-    detect_revenue_interval_anomalies,
     interval_coverage_rate,
     load_reconciled_observations,
+    score_interval_anomalies,
     to_anomaly_events,
 )
 from ml.anomaly.zscore import (
@@ -575,13 +575,21 @@ def run_anomaly_detection_for_store(store_id: str) -> dict:
         # already accounted for and a skipped nightly backfills itself (F4).
         # The z-score path stays as the fallback for a store that has no
         # reconciled forecasts yet — a warming-up store, or a first run.
-        interval_anomalies = detect_revenue_interval_anomalies(store_id)
+        #
+        # The fallback keys on whether reconciled rows EXIST, not on whether
+        # the interval detector found anything. It used to fall back whenever
+        # the interval detector returned an empty list — which is what a
+        # normal, quiet week returns — so a store with good forecasts got the
+        # blunt z-score detector on exactly the nights the better one had
+        # judged nothing unusual, and the z-score then raised the alerts the
+        # interval had correctly declined to.
+        observations = load_reconciled_observations(store_id)
         # Breach rate is calibration health, not an alert. Reported so a
         # drifting band shows up in the nightly log rather than only as a
         # change in how often the inbox fills (F10).
-        coverage = interval_coverage_rate(load_reconciled_observations(store_id))
-        if interval_anomalies:
-            revenue_anomalies = to_anomaly_events(interval_anomalies)
+        coverage = interval_coverage_rate(observations)
+        if observations:
+            revenue_anomalies = to_anomaly_events(score_interval_anomalies(observations))
             detector = "interval"
         else:
             revenue_anomalies = detect_revenue_anomalies(store_id)

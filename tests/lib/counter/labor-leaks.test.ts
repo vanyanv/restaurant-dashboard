@@ -86,9 +86,10 @@ describe("classifyAlertCode", () => {
 
   // Explicit, per the brief: "the difference between a $275 leak and a $509
   // one" — these are NOT leaks, they are the store paying less than planned.
-  it("classifies LATE_CLOCK_IN and EARLY_CLOCK_OUT as savings, not leaks", () => {
-    expect(classifyAlertCode("LATE_CLOCK_IN")).toBe("saving")
-    expect(classifyAlertCode("EARLY_CLOCK_OUT")).toBe("saving")
+  // And not "savings" either: a shift that ran short is neutral, never praised.
+  it("classifies LATE_CLOCK_IN and EARLY_CLOCK_OUT as short shifts, not leaks or savings", () => {
+    expect(classifyAlertCode("LATE_CLOCK_IN")).toBe("short")
+    expect(classifyAlertCode("EARLY_CLOCK_OUT")).toBe("short")
   })
 
   it("classifies every MISSED_* and UNSCHEDULED_* code as uncostable", () => {
@@ -126,13 +127,15 @@ describe("leakLedger", () => {
     expect(missed.people).toBe(8)
   })
 
-  it("does not fold saving hours into the leak total", () => {
+  it("does not fold short-shift hours into the leak total, and labels them plainly", () => {
     const lateIn = rowFor(ledger.rows, "LATE_CLOCK_IN")
     const earlyOut = rowFor(ledger.rows, "EARLY_CLOCK_OUT")
-    expect(lateIn.kind).toBe("saving")
-    expect(earlyOut.kind).toBe("saving")
-    // Savings still carry a real hours/cost figure of their own — they are
-    // just excluded from `leakedHours`/`leakedCost`.
+    expect(lateIn.kind).toBe("short")
+    expect(earlyOut.kind).toBe("short")
+    expect(lateIn.label).toBe("Clocked in late")
+    expect(earlyOut.label).toBe("Left early")
+    // Short shifts still carry a real hours/cost figure of their own — they
+    // are just excluded from `leakedHours`/`leakedCost`.
     expect(lateIn.hours).toBeCloseTo(4.92, 2)
     expect(earlyOut.hours).toBeCloseTo(6.55, 2)
   })

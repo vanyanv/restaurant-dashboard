@@ -154,13 +154,16 @@ function progressOf(d: Data): CountsProgress {
   const it = open[0]
 
   if (it === undefined) {
+    const finished = d.sessions.some((x) => x.status === "COMPLETED")
     return {
       lead: "No count is open right now.",
       meta: "nothing in progress",
       href: null,
-      note:
-        `The last session to be opened was ${d.sessions.length === 0 ? "never" : "abandoned"}. ` +
-        `Starting one is the only way anything on this page gets a reading.`,
+      note: d.sessions.length === 0
+        ? "No count has been started yet. Next step: count the shelves once from Inventory."
+        : finished
+          ? "Start the next count from Inventory when it is due."
+          : "No count has been finished yet. Next step: finish one count from Inventory.",
     }
   }
 
@@ -178,8 +181,7 @@ function progressOf(d: Data): CountsProgress {
       (open.length > 1
         ? `${count(open.length)} counts are open at once, which is usually one nobody closed. `
         : "") +
-      `Nothing here says "short so far": short is a variance, and no count in this ` +
-      `account has ever reached COMPLETED for one to be measured against.`,
+      `Finish it to see what is short or over.`,
   }
 }
 
@@ -400,14 +402,14 @@ function headlineOf(d: Data): CountsHeadline {
   const newest = d.sessions[0]?.countedAt ?? null
 
   const sessionsCell: FigureProps = {
-    label: "Sessions",
+    label: "Counts",
     value: count(d.sessions.length),
     delta:
       d.sessions.length === 0
         ? "none ever started"
         : completed === 0
-          ? "none ever completed"
-          : `${count(completed)} closed`,
+          ? "none finished yet"
+          : `${count(completed)} finished`,
     deltaTone: completed === 0 && d.sessions.length > 0 ? "is-down" : "is-flat",
   }
   const valueCell: FigureProps = {
@@ -435,7 +437,7 @@ function headlineOf(d: Data): CountsHeadline {
       {
         label: "Still open",
         value: count(open),
-        delta: open === 0 ? "nothing in progress" : "started and left",
+        delta: open === 0 ? "nothing in progress" : "not finished yet",
         deltaTone: open > 0 ? "is-down" : "is-flat",
       },
       valueCell,
@@ -457,9 +459,6 @@ function headlineOf(d: Data): CountsHeadline {
  * `completedAt` to measure to.
  */
 function sessionsOf(d: Data): CountsSessions {
-  const byDeveloper = d.sessions.filter((s) => /vardan|demo@/i.test(s.by)).length
-  const days = [...new Set(d.sessions.map((s) => D(s.countedAt)))]
-
   return {
     rows: d.sessions.map((s) => ({
       key: s.id,
@@ -492,19 +491,12 @@ function sessionsOf(d: Data): CountsSessions {
     note:
       d.sessions.length === 0
         ? `No stock count has ever been started on ${d.scope}.`
-        : `No Short, Over or variance column: those subtract a counted quantity from an expected ` +
-          `one, and ` +
+        : `Short and over show up once a count can be compared with the one before it` +
           (d.linesWithEstimate === 0
-            ? `no line has an expected quantity on it yet`
-            : `only ${count(d.linesWithEstimate)} of ${count(d.lines.length)} lines have one`) +
-          ` — see below. ` +
-          (byDeveloper === d.sessions.length
-            ? `Every session here was run from the developer account, on ` +
-              `${days.length === 1 ? "one day" : `${count(days.length)} days`} in May. ` +
-              `Counting has not been used by the people who run the restaurant. `
-            : "") +
-          `Value is what the counted lines price out at, and it is a floor where a line has no ` +
-          `cost on its ingredient.`,
+            ? `; none can yet. `
+            : `: ${count(d.linesWithEstimate)} of ${count(d.lines.length)} lines can. `) +
+          `Value is what the counted lines are worth at their last price; a line with no price ` +
+          `is left out, so the real figure may be higher.`,
   }
 }
 
@@ -530,25 +522,20 @@ function varianceOf(d: Data): CountsVariance {
   const has = d.linesWithEstimate > 0
   return {
     lead: has
-      ? `A variance is a counted quantity minus an expected one. ` +
-        `${count(d.linesWithEstimate)} of ${count(d.lines.length)} counted lines carry an ` +
-        `expected quantity, recorded when the line was saved and anchored to the moment its ` +
-        `session was opened: the last closed count on that store, plus deliveries since, minus ` +
-        `what the recipes say the sales consumed, minus adjustments.`
-      : `A variance is a counted quantity minus an expected one. No line here carries the ` +
-        `second yet, and the reason is not that a count was left unfinished. An expected ` +
-        `quantity is measured FROM the last closed count on the store, and ` +
-        `${completed === 0 ? `no count on ${d.scope} has ever closed` : "no closed count precedes these"} ` +
-        `— so there is nothing to measure from. Closing a count does not give that count an ` +
-        `expectation; it becomes the baseline the next one is measured against.`,
+      ? `Short or over is what was counted against what should have been there: the last ` +
+        `finished count, plus deliveries since, minus what sales used, minus logged waste. ` +
+        `${count(d.linesWithEstimate)} of ${count(d.lines.length)} counted lines have that figure.`
+      : `Short or over is what was counted against what should have been there, worked out ` +
+        `from the last finished count. ` +
+        (completed === 0
+          ? `No count on ${d.scope} has been finished yet. Next step: finish one count; the ` +
+            `count after it will show what is short or over.`
+          : `None of these counts had a finished count before it to compare with. The next ` +
+            `count will.`),
     absences:
-      `${count(d.lines.length)} lines have been counted and ` +
-      `${count(d.linesWithEstimate)} of them carry an expected quantity. ` +
-      `${count(completed)} of ${count(d.sessions.length)} sessions on ${d.scope} have reached ` +
-      `COMPLETED, ` +
-      `which is what an expectation is measured from, and IngredientModelState — the table that ` +
-      `refines the expectation once closed counts start scoring it — holds ` +
-      `${count(d.modelStateRows)} rows.`,
+      `${count(d.lines.length)} lines counted, ${count(d.linesWithEstimate)} of them with an ` +
+      `expected amount. ${count(completed)} of ${count(d.sessions.length)} counts on ${d.scope} ` +
+      `finished.`,
     rows: [
       { label: "Lines counted", value: count(d.lines.length) },
       {
@@ -557,27 +544,22 @@ function varianceOf(d: Data): CountsVariance {
         ...(d.linesWithEstimate === 0 ? { tone: "bad" as const } : {}),
       },
       {
-        label: "Calibration rows",
+        label: "Items with a learned usage rate",
         value: count(d.modelStateRows),
         ...(d.modelStateRows === 0 ? { tone: "bad" as const } : {}),
       },
       {
-        label: "Sessions ever completed",
+        label: "Counts finished",
         value: count(completed),
         ...(completed === 0 && d.sessions.length > 0 ? { tone: "bad" as const } : {}),
       },
     ],
     meta: has ? "expected against counted" : "what it would need",
     note: has
-      ? `StockCountLine.estimatedQtyAtCount is the column the expectation is written to, on the ` +
-        `save. It is only written where that ingredient has a closed count behind it to be ` +
-        `measured from; an ingredient counted here for the first time still has none, which is ` +
-        `why the two figures above differ.`
-      : `StockCountLine.estimatedQtyAtCount is the column an expectation is written to, on the ` +
-        `save. It is left empty on purpose while a store has no closed count: with no anchor the ` +
-        `walk would re-base on the epoch and return every delivery ever recorded minus every ` +
-        `sale ever modelled, which is not an expectation and would be worse than an empty ` +
-        `column. Close a count and the next one taken against it fills this in.`,
+      ? `An item counted for the first time has nothing to compare with yet, which is why the ` +
+        `two figures above differ.`
+      : `Expected amounts are left blank until a store has a finished count, rather than ` +
+        `guessed. Finish a count and the next one fills them in.`,
   }
 }
 
@@ -709,11 +691,9 @@ function sessionWorkOf(session: Session, lines: CountedLine[]): CountSessionWork
       unit: days === 1 ? "day" : "days",
       title: "This count was never closed",
       body:
-        `Opened ${start === null ? "at an unrecorded time" : `on ${D(start)}`} and still ` +
-        `IN_PROGRESS, with ${count(lines.length)} ` +
-        `${lines.length === 1 ? "line" : "lines"} entered. A count only becomes a reading ` +
-        `when it closes, and closing it is what gives the NEXT count something to expect ` +
-        `from — this one is measured against whatever closed before it, which is nothing.`,
+        `Opened ${start === null ? "at an unrecorded time" : `on ${D(start)}`} and still open, ` +
+        `with ${count(lines.length)} ${lines.length === 1 ? "line" : "lines"} entered. Its ` +
+        `numbers only count once it is finished. Next step: finish it from Inventory.`,
       act: "See every count",
       href: "/dashboard/operations/inventory/counts",
     })
@@ -726,8 +706,8 @@ function sessionWorkOf(session: Session, lines: CountedLine[]): CountSessionWork
       title: "This count was abandoned",
       body:
         `It was opened ${start === null ? "at an unrecorded time" : `on ${D(start)}`} and ` +
-        `${lines.length === 0 ? "nothing was ever entered in it" : "abandoned with lines in it"}. ` +
-        `An abandoned count teaches the model nothing and is not a baseline for the next one.`,
+        `${lines.length === 0 ? "nothing was ever entered in it" : "left before it was finished"}. ` +
+        `Its numbers are not used anywhere, and the next count is compared with the last finished one instead.`,
       act: "See every count",
       href: "/dashboard/operations/inventory/counts",
     })

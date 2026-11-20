@@ -63,6 +63,34 @@ export function scheduleHeld(gap: number, scheduled: number): boolean {
 }
 
 /**
+ * The schedule reading, decided once for every sentence that says it.
+ *
+ * It reads `compare` — hours worked against hours published over ONLY the
+ * store-days that carry both — never the gross pair. The gross pair counts a
+ * day whose hours Harri has not sent as a day nobody worked, which put "50 h
+ * worked against 178 h published" on the page and called it under schedule.
+ *
+ * - `none`: nothing published in the range.
+ * - `waiting`: shifts are published, but no store-day has hours yet.
+ * - `held` / `over` / `under`: read on the matched store-days only.
+ */
+export type ScheduleReading =
+  | { kind: "none" }
+  | { kind: "waiting"; published: number }
+  | { kind: "held" | "over" | "under"; gap: number; published: number; worked: number }
+
+export function readSchedule(
+  compare: { actualHours: number; scheduledHours: number } | null,
+  scheduledHours: number | null,
+): ScheduleReading {
+  if (scheduledHours === null) return { kind: "none" }
+  if (compare === null) return { kind: "waiting", published: scheduledHours }
+  const gap = compare.actualHours - compare.scheduledHours
+  const kind = scheduleHeld(gap, compare.scheduledHours) ? "held" : gap > 0 ? "over" : "under"
+  return { kind, gap, published: compare.scheduledHours, worked: compare.actualHours }
+}
+
+/**
  * "432.1 h", or an em-dash.
  *
  * Hours are a measurement, and absence is not zero hours — a range with no

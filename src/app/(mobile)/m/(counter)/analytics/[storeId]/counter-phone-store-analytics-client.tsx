@@ -137,7 +137,7 @@ export function CounterPhoneStoreAnalyticsClient({
         {(p) => <AnalyticsPlainView p={p} />}
       </Section>
 
-      <Fold summary="Every figure, as before">
+      <Fold summary="Sales breakdown">
 
       {/* Two cells: Net sales · Food cost — `h.phoneCells`, never a slice of
           `h.cells` (which carries four: Net sales, Orders, Avg ticket, Food

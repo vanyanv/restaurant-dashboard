@@ -29,6 +29,7 @@ import {
   type Statement,
 } from "@/lib/counter/statement"
 import { loadLaborWeek, type LaborDay } from "@/lib/counter/labor-week"
+import { loadTimeRecordsNeed } from "@/lib/counter/labor-leaks"
 import { splhLead, type SplhLead } from "@/lib/counter/splh-lead"
 import { hoursText } from "@/lib/counter/schedule-hold"
 import { getFeedHealth } from "@/lib/counter/adapters/feed-health"
@@ -1414,6 +1415,13 @@ export function getOverviewSectionPromises(
     },
   ))
 
+  // Missed clock-ins / clock-outs Harri flagged this week, for Needs you. A
+  // read of `HarriTimekeepingAlert`, scoped through `store: { accountId }`;
+  // nothing is written. A failed read leaves the group out, never a zero.
+  const timeRecordsP = lazy(() =>
+    loadTimeRecordsNeed({ accountId, storeId, today }).catch(() => null),
+  )
+
   const ratingsP = lazy(() => classify(
     async () => {
       const summary = await getRatingsSummary({ storeId })
@@ -1731,8 +1739,8 @@ export function getOverviewSectionPromises(
     channels: lazy(() => guardSection(channelsP, "retryChannels")),
 
     plain: lazy(() => guardSection(
-      Promise.all([pnlPlainP(), storeFilesP, perStoreMixP, queueP]).then(
-        ([pnlSd, storeFilesSd, perStoreMixSd, queueSd]) =>
+      Promise.all([pnlPlainP(), storeFilesP, perStoreMixP, queueP, timeRecordsP]).then(
+        ([pnlSd, storeFilesSd, perStoreMixSd, queueSd, timeRecords]) =>
           mapReady(pnlSd, (pnl) => {
             const files = dataOf(storeFilesSd) ?? []
             const mix = dataOf(perStoreMixSd)
@@ -1755,6 +1763,7 @@ export function getOverviewSectionPromises(
                 inbox && alertRows
                   ? { rows: alertRows, open: storeId === null ? inbox.counts.open : alertRows.length }
                   : null,
+              timeRecords,
             })
           }),
       ),

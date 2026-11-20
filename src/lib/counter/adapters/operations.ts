@@ -262,8 +262,8 @@ async function loadOperations(input: OperationsInput): Promise<OperationsData> {
     },
     {
       key: "inventory",
-      name: "Stock on hand",
-      href: "/dashboard/operations/inventory",
+      name: "Inventory",
+      href: "/dashboard/count",
       open: countLines,
       openUnit: "lines counted, ever",
       worth: null,
@@ -500,14 +500,14 @@ function workOf(d: OperationsData): OperationsWork {
       tone: "bad",
       lead: count(d.countsTotal),
       unit: "counts",
-      title: "Counts started and left",
+      title: "No count finished yet",
       body:
-        `${count(d.countsTotal)} stock counts exist and not one was ever completed — ` +
-        `${count(d.countsOpen)} still say in progress, the rest were abandoned, and the newest is ` +
-        `from ${D(at("counts")?.lastTouched ?? null)}. That is why there is no on-hand value and ` +
-        `no theoretical-versus-actual anywhere in this product.`,
-      act: "Open stock counts",
-      href: "/dashboard/operations/inventory/counts",
+        `${count(d.countsTotal)} stock ${d.countsTotal === 1 ? "count was" : "counts were"} started and none was finished` +
+        (d.countsOpen > 0 ? `; ${count(d.countsOpen)} ${d.countsOpen === 1 ? "is" : "are"} still open` : "") +
+        `. The newest is from ${D(at("counts")?.lastTouched ?? null)}. Until one is finished, ` +
+        `stock on hand and what went missing can't be shown. Next step: finish one count.`,
+      act: "Count now",
+      href: "/dashboard/count/walk",
     })
   }
 

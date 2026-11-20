@@ -109,7 +109,7 @@ export function CounterPhoneOrdersClient({
         {(p) => <OrdersPlainView p={p} />}
       </Section>
 
-      <Fold summary="Every figure, as before">
+      <Fold summary="All orders and figures">
       {/* Two cells, chosen by NAME out of the adapter's five. Nothing here
           is judged — ruling O-R2 — so no cell carries a reference and the
           phone draws no bullet and no band. */}

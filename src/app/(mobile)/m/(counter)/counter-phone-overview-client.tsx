@@ -298,7 +298,7 @@ return (
         suggestions={askSuggestions}
       />
 
-      <Fold summary="Every figure, as before">
+      <Fold summary="Detailed figures">
       {/* The whole head block, as one figure and one sentence. Two sections
           that fail independently: the figure is the sales rollup, the sentence
           is the verdict derived across every figure on the page. */}

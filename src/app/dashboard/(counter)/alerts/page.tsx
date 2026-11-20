@@ -83,6 +83,7 @@ export default async function AlertsPage({
       sources: counterParams.sources,
       search: counterParams.search,
       today,
+      accountId: session.user.accountId,
     }),
   ])
 

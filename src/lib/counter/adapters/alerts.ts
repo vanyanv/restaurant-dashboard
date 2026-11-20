@@ -18,6 +18,7 @@ import { median } from "@/lib/counter/median"
 import { classify } from "@/lib/counter/adapters/types"
 import { mapReady, type SectionData } from "@/lib/counter/section-data"
 import { buildAlertsPlain, type AlertsPlain } from "@/lib/counter/alerts-plain"
+import { loadTimeRecordsNeed } from "@/lib/counter/labor-leaks"
 import type { ChartSeries } from "@/lib/counter/chart-geometry"
 import type { DeltaTone } from "@/components/counter/surface/figure"
 import type { PillSeverity, TagTone } from "@/components/counter"
@@ -264,6 +265,12 @@ export interface AlertsQuery {
   search?: string
   /** Injected by tests; the clock otherwise. */
   today?: Date
+  /**
+   * The reader's account, from the page's session. Only the "Time records"
+   * group reads it (missed punches off `HarriTimekeepingAlert`, scoped through
+   * `store: { accountId }`); left out, that group is simply not shown.
+   */
+  accountId?: string
 }
 
 /* ------------------------------------------------------------------ *
@@ -796,6 +803,15 @@ export async function getAlertsSections(input: AlertsQuery = {}): Promise<Alerts
     search: input.search?.trim() ?? "",
   }
 
+  // Read alongside the inbox, never written: missed punches are not `Alert`
+  // rows. A failed read leaves the group out rather than claiming none.
+  const timeRecordsP =
+    input.accountId === undefined
+      ? Promise.resolve(null)
+      : loadTimeRecordsNeed({ accountId: input.accountId, storeId: input.storeId ?? null, today }).catch(
+          () => null,
+        )
+
   const loaded: SectionData<AlertInboxData> = await classify(
     async () => {
       const result = await getAlertInbox({
@@ -807,6 +823,7 @@ export async function getAlertsSections(input: AlertsQuery = {}): Promise<Alerts
     },
     { retryAction: RETRY },
   )
+  const timeRecords = await timeRecordsP
 
   /*
    * ONE derivation, mapped once. The segment, the filter and the whole load
@@ -837,6 +854,7 @@ export async function getAlertsSections(input: AlertsQuery = {}): Promise<Alerts
         serious: buildRows(open, today).filter((r) => r.severity === "CRITICAL"),
         counts: { open: d.counts.open, critical: d.counts.critical },
         closed: closedAlerts(d.alerts).length,
+        timeRecords,
       })
     }),
     strip: mapReady(view, (v) => buildStrip(v.inbox)),

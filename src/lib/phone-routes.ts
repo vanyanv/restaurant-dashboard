@@ -41,7 +41,9 @@ export const DESKTOP_TO_MOBILE: Record<string, string> = {
   "/dashboard/menu/items": "/m/menu/items",
   "/dashboard/menu/items/new": "/m/menu/items/new",
   "/dashboard/operations": "/m/operations",
-  "/dashboard/operations/inventory": "/m/operations/inventory",
+  // "Stock on hand" folded into Inventory: its desk path lands on the phone's
+  // Shelf directly rather than on a phone page that would redirect again.
+  "/dashboard/operations/inventory": "/m/count/shelf",
   // Built on Counter with phone surfaces of their own, and unreachable from
   // their desk URL until they were listed here — the same lag Analytics, COGS
   // and Ask each had. Found by the fidelity suite's own landing assertion:
@@ -78,7 +80,8 @@ export const DESKTOP_TO_MOBILE: Record<string, string> = {
   // and `MList` against `P.*.phone()`. This block used to carry a deferral —
   // whether a phone view is the intended destination for an admin route — and
   // then a shrinking list of the tabs that had no phone page. Both are done.
-  "/dashboard/operations/inventory/count/new": "/m/operations/inventory/count/new",
+  // One way to start a count: Inventory's count walk.
+  "/dashboard/operations/inventory/count/new": "/m/count/walk",
   "/dashboard/admin/monitoring": "/m/monitoring",
   "/dashboard/admin/monitoring/activity": "/m/monitoring/activity",
   "/dashboard/admin/monitoring/cache": "/m/monitoring/cache",

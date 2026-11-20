@@ -80,6 +80,19 @@ export type PnLPeriodLines = {
    * without it reads as 0.
    */
   laborMissingDays?: number
+  /**
+   * Store-days that SOLD with no Harri reading whose labor was FILLED from
+   * the store's monthly labor budget — an estimate, not a reading.
+   */
+  laborEstimatedDays?: number
+  /** Store-days that SOLD with no `DailyCogsItem` row at all: food counted as $0 on them. */
+  cogsMissingDays?: number
+  /**
+   * Sales on menu items whose food cost is not fully counted: no recipe
+   * (UNMAPPED, $0) or a recipe with unpriced ingredients (MISSING_COST,
+   * only the priced part). Read as a share of `grossSales`.
+   */
+  uncostedSales?: number
 }
 
 export type AllStoresPnLResult =

@@ -135,6 +135,12 @@ export interface StatementLines {
   laborPct: number
   /** Store-days that sold with no labor reading — labor counted as nothing on them. */
   laborMissingDays: number
+  /** Store-days that sold with no Harri reading, labor filled from the monthly budget: an estimate. */
+  laborEstimatedDays: number
+  /** Store-days that sold with no recipe-cost rows at all: food counted as nothing on them. */
+  cogsMissingDays: number
+  /** Sales on items whose food cost is not fully counted (no recipe, or unpriced ingredients). */
+  uncostedSales: number
 }
 
 export interface StoreStatement extends StatementLines {
@@ -242,6 +248,9 @@ function linesFrom(k: RollupLines): StatementLines {
     cogsPct: k.grossSales <= 0 ? 0 : k.cogsPct,
     laborPct: k.grossSales <= 0 ? 0 : k.laborPct,
     laborMissingDays: k.laborMissingDays ?? 0,
+    laborEstimatedDays: k.laborEstimatedDays ?? 0,
+    cogsMissingDays: k.cogsMissingDays ?? 0,
+    uncostedSales: k.uncostedSales ?? 0,
   }
 }
 
@@ -283,6 +292,9 @@ const NO_LINES: StatementLines = {
   cogsPct: 0,
   laborPct: 0,
   laborMissingDays: 0,
+  laborEstimatedDays: 0,
+  cogsMissingDays: 0,
+  uncostedSales: 0,
 }
 
 /**
@@ -543,6 +555,9 @@ export async function loadComparisonStatement(input: {
     cogsPct: grossSales <= 0 ? 0 : cogsValue / grossSales,
     laborPct: grossSales <= 0 ? 0 : laborValue / grossSales,
     laborMissingDays: total((p) => p.laborMissingDays),
+    laborEstimatedDays: total((p) => p.laborEstimatedDays),
+    cogsMissingDays: total((p) => p.cogsMissingDays),
+    uncostedSales: total((p) => p.uncostedSales),
   }
 
   return {

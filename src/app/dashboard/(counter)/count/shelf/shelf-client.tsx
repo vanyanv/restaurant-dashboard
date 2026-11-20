@@ -223,6 +223,7 @@ function AllShelves({ data }: { data: ShelfData }) {
       <Answer>
         {n} shelves, one block per line.
         <small>Blocks are in your sheet&apos;s order, section by section.</small>
+        <small>{data.countedSay}</small>
       </Answer>
       <div className="iv-card"><Legend /></div>
       <div className="iv-stores">

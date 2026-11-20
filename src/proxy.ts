@@ -27,6 +27,15 @@ const LEGACY_PATHS: Record<string, string> = {
   "/dashboard/chat": "/dashboard/ask",
   "/dashboard/operations/costs": "/dashboard/menu-profit",
   "/dashboard/operations/recipes": "/dashboard/recipes",
+  // "Stock on hand" was a second rail item reading the same counts as
+  // Inventory, minus the count list and the waste log. It folded into
+  // Inventory's Shelf; its "Start a count" into Inventory's count walk. The
+  // past-counts pages under it (`/counts`, `/counts/<id>`) still render, as
+  // Inventory's "Past counts" tab. A `?store=` carries over below.
+  "/dashboard/operations/inventory": "/dashboard/count/shelf",
+  "/dashboard/operations/inventory/count/new": "/dashboard/count/walk",
+  "/m/operations/inventory": "/m/count/shelf",
+  "/m/operations/inventory/count/new": "/m/count/walk",
   "/m/settings": "/m/more",
 }
 

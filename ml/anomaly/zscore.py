@@ -19,6 +19,7 @@ import numpy as np
 import pandas as pd
 
 from ml.db import connect, cuid_like
+from ml.features.completeness import load_hourly_coverage, trim_incomplete_trailing_days
 from ml.features.revenue import load_daily_revenue
 
 
@@ -42,8 +43,11 @@ class Anomaly:
     explanation: str | None = None
 
 
-def _score_series(series: pd.Series, window: int = WINDOW_DAYS) -> Iterable[tuple[pd.Timestamp, float, float]]:
-    """Yield (timestamp, residual, z) for the LAST observation only.
+def _score_series(series: pd.Series, window: int = WINDOW_DAYS) -> Iterable[tuple[pd.Timestamp, float, float, float]]:
+    """Yield (timestamp, residual, z, usual) for the LAST observation only.
+
+    `usual` is the trailing-window mean the day is compared against. It is a
+    28-day average, not a forecast, and anything shown to an owner must say so.
 
     We only ever flag the most recent day — older anomalies were already
     flagged on the day they happened (or weren't, and re-detection now
@@ -60,7 +64,7 @@ def _score_series(series: pd.Series, window: int = WINDOW_DAYS) -> Iterable[tupl
         return
     residual = last_value - mean
     z = residual / std
-    yield (last_ts, residual, z)
+    yield (last_ts, residual, z, mean)
 
 
 def detect_revenue_anomalies(store_id: str) -> list[Anomaly]:
@@ -85,8 +89,10 @@ def detect_revenue_anomalies(store_id: str) -> list[Anomaly]:
         return []
 
     out: list[Anomaly] = []
-    for ts, residual, z in _score_series(series):
+    for ts, residual, z, usual in _score_series(series):
         if abs(z) >= Z_THRESHOLD:
+            actual = usual + residual
+            verb = "over" if residual >= 0 else "under"
             out.append(
                 Anomaly(
                     target="REVENUE",
@@ -94,6 +100,11 @@ def detect_revenue_anomalies(store_id: str) -> list[Anomaly]:
                     occurred_on=ts.date(),
                     residual=residual,
                     z_score=z,
+                    explanation=(
+                        f"${actual:,.0f} in sales against a usual ${usual:,.0f} a day "
+                        f"(average of the last {WINDOW_DAYS} days); "
+                        f"${abs(residual):,.0f} {verb}."
+                    ),
                 )
             )
     return out
@@ -118,6 +129,13 @@ def detect_menu_item_anomalies(store_id: str, item_names: list[str]) -> list[Ano
         df = pd.read_sql_query(sql, conn, params=(store_id, item_names))
     if df.empty:
         return []
+    # Drop the business day that is still being written, exactly as the
+    # revenue path does through `load_daily_revenue`. Scoring today's partial
+    # count against full days read every item as collapsing each evening, and
+    # pushed whatever had sold early "above usual" at lunch.
+    df = trim_incomplete_trailing_days(df, load_hourly_coverage(store_id, 60))
+    if df.empty:
+        return []
     df["date"] = pd.to_datetime(df["date"])
 
     out: list[Anomaly] = []
@@ -130,8 +148,10 @@ def detect_menu_item_anomalies(store_id: str, item_names: list[str]) -> list[Ano
         series = series.reindex(
             pd.date_range(series.index.min(), series.index.max(), freq="D")
         ).fillna(0.0)
-        for ts, residual, z in _score_series(series):
+        for ts, residual, z, usual in _score_series(series):
             if abs(z) >= Z_THRESHOLD:
+                actual = usual + residual
+                verb = "more" if residual >= 0 else "fewer"
                 out.append(
                     Anomaly(
                         target="MENU_ITEM",
@@ -139,6 +159,11 @@ def detect_menu_item_anomalies(store_id: str, item_names: list[str]) -> list[Ano
                         occurred_on=ts.date(),
                         residual=residual,
                         z_score=z,
+                        explanation=(
+                            f"{actual:,.0f} sold against a usual {usual:,.1f} a day "
+                            f"(average of the last {WINDOW_DAYS} days); "
+                            f"{abs(residual):,.0f} {verb}."
+                        ),
                     )
                 )
     return out

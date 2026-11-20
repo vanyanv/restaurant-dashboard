@@ -166,8 +166,13 @@ describe("Counter P&L", () => {
     // The shared BigNumber block (`@/components/counter/ui`).
     const big = container.querySelector(".cu-big__value")?.textContent
     expect(big).toBe("≤ $23,916" + "28.4% of sales")
+    expect(container.querySelector(".cu-big__label")?.textContent).toBe("Estimated profit")
     expect(container.querySelector(".cu-missing")?.textContent).toBe("at most · 2 Glendale days of labor missing")
     expect(container.querySelector(".cu-big__vs")?.textContent).toContain("▲ +$4,413 vs Oct 19 – 25")
+    // The running week is said as "so far", not as a finished week.
+    const labels = Array.from(container.querySelectorAll(".cu-weeks__lbl")).map((l) => l.textContent)
+    expect(labels.at(-1)).toBe("so far")
+    expect(labels.filter((l) => l === "so far")).toHaveLength(1)
     expect(container.querySelector(".cu-answer")?.textContent).toContain("true number is lower")
     expect(Array.from(container.querySelectorAll(".cu-statuses .cu-status")).map((p) => p.className)).toEqual([
       "cu-status cu-status--good",

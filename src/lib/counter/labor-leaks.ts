@@ -3,7 +3,16 @@ import { getScopedStores } from "@/lib/account-stores"
 import { cached, monthTags, stableKey } from "@/lib/cache/cached"
 import { rangeTtl } from "@/lib/cache/range"
 import { rangeScopedTags } from "@/lib/cache/closed-range"
-import { toQueryBounds, type DateRange } from "@/lib/counter/date-range"
+import { isoDay, toQueryBounds, type DateRange } from "@/lib/counter/date-range"
+import { businessCalendarDate } from "@/lib/counter/business-date"
+import { shortStoreName } from "@/lib/checks/names"
+import {
+  MISSED_CLOCK_IN_CODES,
+  MISSED_CLOCK_OUT_CODES,
+  TIME_RECORDS_DAYS,
+  timeRecordsNeed,
+  type TimeRecordsNeed,
+} from "@/lib/counter/time-records"
 
 /**
  * The leak ledger: Harri's timekeeping alerts turned into a table of where
@@ -17,7 +26,10 @@ import { toQueryBounds, type DateRange } from "@/lib/counter/date-range"
  * - `LATE_CLOCK_OUT` and `EARLY_CLOCK_IN` are **leaks** — the employee was on
  *   the clock, and paid, for time the schedule never asked for.
  * - `LATE_CLOCK_IN` and `EARLY_CLOCK_OUT` are the OPPOSITE — the store paid
- *   for LESS time than it scheduled. Counting these as leaks does not just
+ *   for LESS time than it scheduled. They are kind `"short"`, shown neutral:
+ *   a shift that ran short is not a saving (the floor may have been
+ *   understaffed for it), so the page never paints it green or calls it one.
+ *   Counting these as leaks does not just
  *   add noise, it flips the sign on real dollars: over the measured window
  *   (2026-08-20 … 2026-08-26, Hollywood) a sign-blind sum of all four costed
  *   alert codes reports **24.94 leaked hours** where the true leak, leak
@@ -30,12 +42,12 @@ import { toQueryBounds, type DateRange } from "@/lib/counter/date-range"
  *   into `$0` (see below).
  *
  * `classifyAlertCode` is the one function that draws these lines, and it is
- * an ALLOW-LIST for the two costed kinds — `"leak"` and `"saving"` are each
+ * an ALLOW-LIST for the two costed kinds — `"leak"` and `"short"` are each
  * named explicitly, and everything else, unconditionally, is `"uncostable"`.
  * That is deliberate: Harri can add an alert type any day, and a switch that
  * falls through an unrecognised code into the leak branch would silently
  * start counting money leaving the building on a code nobody has looked at.
- * The only way to be added to `"leak"` or `"saving"` is to be named here.
+ * The only way to be added to `"leak"` or `"short"` is to be named here.
  *
  * ## `null` is not `0`
  *
@@ -65,7 +77,7 @@ import { toQueryBounds, type DateRange } from "@/lib/counter/date-range"
  * `accountId` from its own session lookup.
  */
 
-export type LeakKind = "leak" | "saving" | "uncostable"
+export type LeakKind = "leak" | "short" | "uncostable"
 
 export interface LeakRow {
   code: string
@@ -96,11 +108,11 @@ export interface LeakLedger {
  * accident of switch-statement ordering.
  */
 const LEAK_CODES = new Set<string>(["LATE_CLOCK_OUT", "EARLY_CLOCK_IN"])
-const SAVING_CODES = new Set<string>(["LATE_CLOCK_IN", "EARLY_CLOCK_OUT"])
+const SHORT_CODES = new Set<string>(["LATE_CLOCK_IN", "EARLY_CLOCK_OUT"])
 
 export function classifyAlertCode(code: string): LeakKind {
   if (LEAK_CODES.has(code)) return "leak"
-  if (SAVING_CODES.has(code)) return "saving"
+  if (SHORT_CODES.has(code)) return "short"
   return "uncostable"
 }
 
@@ -112,7 +124,7 @@ const LABELS: Record<string, string> = {
   LATE_CLOCK_OUT: "Clocked out late",
   EARLY_CLOCK_IN: "Clocked in early",
   LATE_CLOCK_IN: "Clocked in late",
-  EARLY_CLOCK_OUT: "Clocked out early",
+  EARLY_CLOCK_OUT: "Left early",
   MISSED_CLOCK_OUT_OT_NOW: "Missed clock-out",
   MISSED_CLOCK_IN: "Missed clock-in",
   UNSCHEDULED_CLOCK_IN: "Unscheduled clock-in",
@@ -232,4 +244,39 @@ export async function loadLeakLedger(input: {
   )
 
   return leakLedger(alerts, blendedRate)
+}
+
+/**
+ * The missed clock-ins and clock-outs Harri flagged over the last
+ * `TIME_RECORDS_DAYS` business days, for Needs you. Read-only: nothing is
+ * written, and no `Alert` row is created for them.
+ *
+ * Scoped by `accountId` through `store: { accountId }` (the tenancy
+ * boundary), and narrowed to one store when `storeId` is given. Harri does not
+ * tell us when a punch is fixed, so these are "flagged", not "still open".
+ */
+export async function loadTimeRecordsNeed(input: {
+  accountId: string
+  storeId: string | null
+  today: Date
+}): Promise<TimeRecordsNeed | null> {
+  const { accountId, storeId, today } = input
+  const end = businessCalendarDate(today)
+  const start = new Date(end.getFullYear(), end.getMonth(), end.getDate() - (TIME_RECORDS_DAYS - 1))
+  const { startDate, endDate } = toQueryBounds({ start, end })
+
+  const rows = await prisma.harriTimekeepingAlert.findMany({
+    where: {
+      store: storeId === null ? { accountId } : { accountId, id: storeId },
+      date: { gte: startDate, lte: endDate },
+      alertCode: { in: [...MISSED_CLOCK_IN_CODES, ...MISSED_CLOCK_OUT_CODES] },
+    },
+    select: { alertCode: true, store: { select: { name: true } } },
+  })
+
+  return timeRecordsNeed(
+    rows.map((r) => ({ alertCode: r.alertCode, storeName: shortStoreName(r.store.name) })),
+    isoDay(start),
+    isoDay(end),
+  )
 }

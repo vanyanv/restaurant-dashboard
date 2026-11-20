@@ -167,6 +167,12 @@ export type ShelfData = SwitcherData & {
   shelves: StoreShelf[]
   areas: Array<{ id: string; label: string }>
   barDays: number
+  /**
+   * One line on which stores have a recent finished count, for the All stores
+   * view: "Recent count: Van Nuys (Nov 12). Old count: Burbank (Sep 3). Not
+   * counted yet: Glendale." See `lastCountsSay`.
+   */
+  countedSay: string
 }
 
 export type ShelfSections = { shelf: SectionData<ShelfData | null> }
@@ -563,6 +569,24 @@ export function switcherOf(stores: SwitchStore[]): SwitcherData {
   }
 }
 
+/**
+ * Which stores' numbers can be trusted, in one line: each store's last
+ * finished count, grouped as recent (within `STALE_COUNT_DAYS`), old, or none.
+ * Only a FINISHED count is a count here; an open one is not "abandoned" and
+ * not a reading either, so it is not named.
+ */
+export function lastCountsSay(shelves: Array<Pick<StoreShelf, "name" | "lastCount">>): string {
+  const dated = (s: Pick<StoreShelf, "name" | "lastCount">) => `${s.name} (${s.lastCount?.day})`
+  const fresh = shelves.filter((s) => s.lastCount && !s.lastCount.stale)
+  const old = shelves.filter((s) => s.lastCount?.stale)
+  const none = shelves.filter((s) => !s.lastCount)
+  const parts: string[] = []
+  if (fresh.length) parts.push(`Recent count: ${fresh.map(dated).join(", ")}.`)
+  if (old.length) parts.push(`Old count: ${old.map(dated).join(", ")}.`)
+  if (none.length) parts.push(`Not counted yet: ${none.map((s) => s.name).join(", ")}.`)
+  return parts.join(" ")
+}
+
 /** Which shelf a `?store=` asks for: one store, or all of them when there is more than one. */
 export function pickShelfView(stores: Array<{ id: string }>, requested: string | undefined): string | null {
   if (stores.length === 0) return null
@@ -584,6 +608,7 @@ export function getInventoryShelfSectionPromises(opts: { accountId: string; stor
           shelves: view === ALL_STORES ? shelves : shelves.filter((s) => s.id === view),
           areas: COUNT_AREAS.map((a) => ({ id: a.id, label: a.label })),
           barDays: BAR_DAYS,
+          countedSay: lastCountsSay(shelves),
         }
       }, { retryAction: "count.shelf", isEmpty: (d) => d === null, emptyReason: "no_stores" }),
       "count.shelf",

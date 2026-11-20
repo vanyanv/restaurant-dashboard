@@ -131,6 +131,15 @@ describe("invoices adapter · the list's status shapes", () => {
     expect(costed.value).toBe("$100")
   })
 
+  it("counts APPROVED as costed, the same set that feeds ingredient prices", async () => {
+    const rows = [invoice("ok", { lines: [100] }), invoice("apr", { status: "APPROVED", lines: [250] })]
+    const s = await sectionsOf(rows)
+    const head = await ready(s.headline)
+    const costed = head.cells.find((c) => c.label === "Matched and costed")!
+    expect(costed.value).toBe("$350")
+    expect(costed.delta).toBe("2 of 2")
+  })
+
   it("takes a rejected invoice that does not add up off the worklist", async () => {
     const rows = [invoice("rej", { status: "REJECTED", lines: [], total: 1474.06, subtotal: 1474.06 })]
     const s = await sectionsOf(rows)

@@ -2,6 +2,7 @@ import { shortStoreName } from "@/lib/checks/names"
 import { money } from "@/lib/counter/format"
 import type { Statement, StatementLines } from "@/lib/counter/statement"
 import { serializeWeekWindow, type SerializedWeekWindow, type WeekWindow } from "@/lib/counter/date-range"
+import type { ElapsedCompare } from "@/lib/counter/elapsed-compare"
 
 /**
  * The P&L "made plain" — the owner-approved redesign of 2026-11-03 (thread
@@ -21,11 +22,20 @@ import { serializeWeekWindow, type SerializedWeekWindow, type WeekWindow } from 
  * instead of letting a missing day of labor print as $0.
  *
  * The rule it keeps: **an incomplete figure is labelled, never filled in.**
- * A store-day that sold with no Harri labor (`laborMissingDays`) makes the
- * kept figure an upper bound, so it is marked `atMost` and the page prints
- * "at most". Fixed costs not on the store file and app fees worked out from
- * the store's rates are named in the to-dos. No estimate is invented for any
- * of them (owner, 2026-11-03: "only use real, verifiable numbers").
+ * Every input the rollup counted as $0 for want of data makes the kept figure
+ * an upper bound, so it is marked `atMost`, the page prints "at most", and
+ * the line beside the figure names each cause (`upperBoundCauses`):
+ *
+ * - a store-day that sold with no Harri labor (`laborMissingDays`);
+ * - a store-day that sold with no recipe-cost rows (`cogsMissingDays`);
+ * - sales on items with no recipe or unpriced ingredients (`uncostedSales`);
+ * - a fixed cost not on the store file (rent, cleaning, towels);
+ * - app orders with no recorded fee and no rate on file (`unknownOrders`).
+ *
+ * What the rollup ESTIMATED rather than read — labor days filled from the
+ * monthly budget, app fees at the store's rates — is not an upper bound, but
+ * it is said as an estimate beside the figure (owner, 2026-11-03: "only use
+ * real, verifiable numbers"; 2026-11-19: estimates must say they are).
  */
 
 export type PlainTone = "ok" | "warn" | "bad"
@@ -65,8 +75,10 @@ export interface PlainWeek {
   sales: number
   kept: number
   keptPct: number | null
-  /** Some labor is missing, so `kept` is an upper bound. */
+  /** An input is missing (labor, food cost, app fees), so `kept` is an upper bound. */
   atMost: boolean
+  /** The running week, clipped to today: its figures are "so far". */
+  running: boolean
 }
 
 export interface PlainDayStore {
@@ -88,6 +100,8 @@ export interface PlainDay {
   kept: number
   keptPct: number | null
   atMost: boolean
+  /** A gap of this day's own (labor, food, fees), so it cannot be the best day. */
+  ownGap: boolean
   best: boolean
   /** Short names of the stores that sold this day with no labor reading. */
   laborMissing: string[]
@@ -101,11 +115,16 @@ export interface PlainStore {
   sales: number
   kept: number
   keptPct: number | null
+  /** Kept against the prior period; null with no prior sales, or while the last day is incomplete (a part-day's kept is not comparable). */
   keptChange: number | null
   /** Sales against the same store's prior period, or null with no prior sales. */
   salesChange: number | null
+  /** The prior sales `salesChange` is measured against, so a percent divides by the right base. Null with `salesChange`. */
+  salesPrior: number | null
   /** Days this store sold with no Harri labor reading. */
   laborMissingDays: number
+  /** Days this store sold with no Harri reading, labor filled from its budget. */
+  laborEstimatedDays: number
   food: number | null
   labor: number | null
   fees: number | null
@@ -120,7 +139,37 @@ export interface PnlPlain {
   keptPct: number | null
   /** "at most · 2 Glendale days of labor missing", or null when nothing is missing. */
   atMost: string | null
-  vsPrior: { label: string; kept: number; pts: number | null; sales: number } | null
+  /**
+   * The line printed beside the figure: `atMost`, plus what in it is an
+   * estimate ("… · 3 days of labor estimated from your labor budget"), or
+   * "estimated · …" when nothing is missing but something is estimated. Null
+   * when every input is a reading.
+   */
+  keptNote: string | null
+  /** The counts behind `atMost` and `keptNote`, for surfaces that say them differently. */
+  gaps: PlainGaps
+  /**
+   * The move against the prior period. While the last day of the range is
+   * still trading or syncing it is the hour-for-hour sales comparison
+   * (`elapsed-compare.ts`): `kept` and `pts` are null, since a part-day's kept
+   * has nothing fair to stand against, and `against` says what is compared.
+   */
+  vsPrior: {
+    label: string
+    kept: number | null
+    pts: number | null
+    sales: number
+    /** The prior sales `sales` is measured against. */
+    salesPrior: number
+    /** Words for the comparison when it is not the plain "vs <label>". */
+    against?: string
+  } | null
+  /**
+   * Said in place of, or beside, the comparison while the last day is
+   * incomplete: "So far today, through 11 am, …" or "… waits until the day is
+   * complete." Null when the range is complete and compares in full.
+   */
+  compareNote: string | null
   sentence: string
   statuses: PlainStatus[]
   todos: PlainTodo[]
@@ -129,6 +178,20 @@ export interface PnlPlain {
   /** Every day of the range, or null when the range is too long to list by day. */
   days: PlainDay[] | null
   stores: PlainStore[]
+}
+
+export interface PlainGaps {
+  laborMissingDays: number
+  laborEstimatedDays: number
+  cogsMissingDays: number
+  /** `uncostedSales / sales`, or null with no sales. */
+  uncostedShare: number | null
+  /** App orders with no recorded fee and no rate on file: $0 counted. */
+  unknownOrders: number
+  /** Share of app orders whose fee was worked out from the store's rates, or null with none. */
+  rateShare: number | null
+  /** Fixed costs not on the store file; null when the store file did not load. */
+  fixedNotOnFile: number | null
 }
 
 /** The store file fields this reading looks at. A full `Store` row satisfies it. */
@@ -152,6 +215,12 @@ export interface PlainInput {
   daily: Statement | null
   files: PlainStoreFile[]
   storeId: string | null
+  /**
+   * Set when the range's last day is still trading or syncing
+   * (`loadElapsedCompare`): the sales comparison is then hour for hour and
+   * the full-day prior is not compared against. Absent or null: in full.
+   */
+  elapsed?: ElapsedCompare | null
 }
 
 /** Longest range listed day by day. Past this the page says "pick a week". */
@@ -206,10 +275,89 @@ export function fixedNotOnFile(files: PlainStoreFile[]): { storeId: string; stor
   return out
 }
 
-/** Share of marketplace orders whose fee was worked out from the store's rate. */
-function estimatedShare(l: StatementLines): number | null {
+/**
+ * Share of marketplace orders whose fee was worked out from the store's rate.
+ * Orders with no rate at all (`unknownOrders`) are NOT in it: nothing was
+ * worked out for them, they count $0 and make the figure an upper bound.
+ */
+function rateShare(l: StatementLines): number | null {
   const c = l.commission
-  return c.orders > 0 ? (c.ordersEstimated + c.unknownOrders) / c.orders : null
+  return c.orders > 0 ? c.ordersEstimated / c.orders : null
+}
+
+/** Above this share of app orders at the store's rates, the fee line is called estimated. */
+export const FEES_ESTIMATED_WARN = 0.1
+
+/** Share of sales whose food cost is not fully counted, or null with no sales. */
+function uncostedShare(l: StatementLines): number | null {
+  return l.grossSales > 0 ? Math.min(1, Math.max(0, l.uncostedSales) / l.grossSales) : null
+}
+
+/** "12%", or "under 1%" for a share that rounds to nothing but is not nothing. */
+function pctWords(v: number): string {
+  const r = Math.round(v * 100)
+  return r === 0 && v > 0 ? "under 1%" : `${r}%`
+}
+
+/**
+ * The inputs counted as $0 for want of data, in the words the line beside
+ * the figure prints. Empty when the figure is whole. The ONE place a kept
+ * figure is judged an upper bound: headline, weeks, days and stores all ask it.
+ */
+export function upperBoundCauses(
+  l: StatementLines,
+  opts: { laborMissing?: string[]; fixedNotOnFile?: number | null } = {},
+): string[] {
+  const out: string[] = []
+  if (opts.laborMissing) out.push(...opts.laborMissing)
+  else if (l.laborMissingDays > 0) out.push(`${plural(l.laborMissingDays, "day")} of labor missing`)
+  if (l.cogsMissingDays > 0) out.push(`${plural(l.cogsMissingDays, "day")} with no food cost`)
+  const u = uncostedShare(l)
+  if (u !== null && u > 0) out.push(`${pctWords(u)} of sales not fully costed`)
+  if (opts.fixedNotOnFile === null) out.push("store settings did not load")
+  else if (opts.fixedNotOnFile) out.push(`${plural(opts.fixedNotOnFile, "fixed cost")} not on file`)
+  if (l.commission.unknownOrders > 0) out.push(`${plural(l.commission.unknownOrders, "app order")} with no fee`)
+  return out
+}
+
+/** What in a kept figure is an estimate rather than a reading, in words. */
+export function estimateParts(l: StatementLines): string[] {
+  const out: string[] = []
+  if (l.laborEstimatedDays > 0) out.push(`${plural(l.laborEstimatedDays, "day")} of labor estimated from your labor budget`)
+  const r = rateShare(l)
+  if (r !== null && r > FEES_ESTIMATED_WARN) out.push(`${pctWords(r)} of app fees estimated from your rates`)
+  return out
+}
+
+function noteFor(causes: string[], estimates: string[]): { atMost: string | null; note: string | null } {
+  const atMost = causes.length > 0 ? `at most · ${causes.join(" · ")}` : null
+  const note =
+    atMost !== null
+      ? [atMost, ...estimates].join(" · ")
+      : estimates.length > 0
+        ? `estimated · ${estimates.join(" · ")}`
+        : null
+  return { atMost, note }
+}
+
+/** The fee line's words and tone: real fees, estimated at your rates, or missing. */
+function feesHow(l: StatementLines): [string, PlainTone] {
+  const c = l.commission
+  if (c.orders === 0) return ["no app orders", "ok"]
+  const r = rateShare(l) ?? 0
+  if (c.unknownOrders > 0) {
+    return [`${plural(c.unknownOrders, "order")} with no fee or rate, counted as nothing`, "bad"]
+  }
+  if (r === 0) return ["real fees from the apps", "ok"]
+  return [`${pctWords(1 - r)} real fees, ${pctWords(r)} estimated from your rates`, r > FEES_ESTIMATED_WARN ? "warn" : "ok"]
+}
+
+/** The food line's words and tone: whole, or how much of what sold has no cost behind it. */
+function foodHow(l: StatementLines): [string, PlainTone] {
+  if (l.cogsMissingDays > 0) return [`${plural(l.cogsMissingDays, "day")} with no food cost`, "bad"]
+  const u = uncostedShare(l)
+  if (u !== null && u > 0) return [`${pctWords(u)} of sales not fully costed`, "warn"]
+  return ["recipe cost of what sold", "ok"]
 }
 
 function lineSet(l: StatementLines, prior: StatementLines | null, how: Record<PlainKey, [string, PlainTone]>): PlainLine[] {
@@ -246,22 +394,47 @@ export function buildPlain(input: PlainInput): PnlPlain {
   const nof = fixedNotOnFile(scopeFiles)
   // No store file came back (load failed or empty): unknown, never "all on file".
   const filesKnown = scopeFiles.length > 0
-  const est = estimatedShare(s)
+  const est = rateShare(s)
+  const unknown = s.commission.unknownOrders
+  const uncosted = uncostedShare(s)
+  const foodGap = s.cogsMissingDays > 0 || (uncosted !== null && uncosted > 0)
+  const estDays = s.laborEstimatedDays
 
-  const atMost =
-    missing.length === 0
-      ? null
-      : `at most · ${list(missing.map((m) => `${plural(m.days, `${m.store} day`)} of labor missing`))}`
+  const { atMost, note: keptNote } = noteFor(
+    upperBoundCauses(s, {
+      laborMissing:
+        missing.length > 0
+          ? [list(missing.map((m) => `${plural(m.days, `${m.store} day`)} of labor missing`))]
+          : [],
+      fixedNotOnFile: filesKnown ? nof.length : null,
+    }),
+    estimateParts(s),
+  )
 
-  const priorOk = prior !== null && prior.grossSales > 0 && !prior.storeNotFound
-  const vsPrior =
-    priorOk && input.priorLabel
+  // A part-day is never read against a whole one: while the last day is
+  // incomplete the prior statement is not compared against at all, and the
+  // sales move is the hour-for-hour reading instead.
+  const elapsed = input.elapsed ?? null
+  const priorOk = elapsed === null && prior !== null && prior.grossSales > 0 && !prior.storeNotFound
+  const vsPrior: PnlPlain["vsPrior"] = elapsed
+    ? elapsed.current !== null && elapsed.prior !== null && elapsed.prior > 0
+      ? {
+          label: elapsed.label,
+          kept: null,
+          pts: null,
+          sales: elapsed.current - elapsed.prior,
+          salesPrior: elapsed.prior,
+          against: elapsed.against,
+        }
+      : null
+    : priorOk && input.priorLabel
       ? {
           label: input.priorLabel,
           kept: s.bottomLine - prior.bottomLine,
           pts:
             keptPct === null ? null : (keptPct - prior.bottomLine / prior.grossSales) * 100,
           sales: sales - prior.grossSales,
+          salesPrior: prior.grossSales,
         }
       : null
 
@@ -293,31 +466,48 @@ export function buildPlain(input: PlainInput): PnlPlain {
       }
     }
     if (missing.length > 0) parts.push("Some labor is missing, so the true number is lower.")
+    else if (atMost !== null) parts.push("Some costs are not on file, so the true number is lower.")
+    if (keptNote !== null && atMost === null) parts.push("Part of it is estimated.")
   }
 
   /* ── statuses, in words ── */
   const missDays = missing.reduce((a, m) => a + m.days, 0)
+  const uncostedText = uncosted !== null && uncosted > 0 ? `Food: ${pctWords(uncosted)} of sales not fully costed` : null
+  const estText = estDays > 0 ? `Labor: ${plural(estDays, "day")} estimated from your labor budget` : null
   const statuses: PlainStatus[] = [
     { tone: "ok", text: "Sales: from Otter" },
-    { tone: "ok", text: "Food: from your recipes" },
+    s.cogsMissingDays > 0
+      ? { tone: "bad", text: `Food: ${plural(s.cogsMissingDays, "store-day")} with no food cost` }
+      : uncostedText
+        ? { tone: "warn", text: uncostedText }
+        : { tone: "ok", text: "Food: from your recipes" },
+    ...(s.cogsMissingDays > 0 && uncostedText ? [{ tone: "warn" as const, text: uncostedText }] : []),
     missDays > 0
       ? { tone: "bad", text: `Labor: ${plural(missDays, "store-day")} missing` }
-      : { tone: "ok", text: "Labor: every day from Harri" },
+      : estText
+        ? { tone: "warn", text: estText }
+        : { tone: "ok", text: "Labor: every day from Harri" },
+    ...(missDays > 0 && estText ? [{ tone: "warn" as const, text: estText }] : []),
     !filesKnown
       ? { tone: "warn", text: "Fixed costs: store settings did not load" }
       : nof.length > 0
         ? { tone: "warn", text: `Fixed costs: ${nof.length} not on file` }
         : { tone: "ok", text: "Fixed costs: all on file" },
   ]
+  if (unknown > 0) {
+    statuses.push({ tone: "bad", text: `App fees: ${plural(unknown, "order")} with no fee and no rate on file` })
+  }
   if (est !== null) {
     statuses.push(
-      est > 0.5
-        ? { tone: "warn", text: `App fees: ${Math.round(est * 100)}% worked out from your rates` }
-        : { tone: "ok", text: "App fees: mostly from the apps" },
+      est > FEES_ESTIMATED_WARN
+        ? { tone: "warn", text: `App fees: ${pctWords(est)} estimated from your rates` }
+        : est > 0
+          ? { tone: "ok", text: "App fees: mostly from the apps" }
+          : { tone: "ok", text: "App fees: from the apps" },
     )
   }
 
-  /* ── Needs you, three groups at most ── */
+  /* ── Needs you, one group per kind of gap ── */
   const todos: PlainTodo[] = []
   if (missing.length > 0) {
     todos.push({
@@ -328,6 +518,23 @@ export function buildPlain(input: PlainInput): PnlPlain {
           `${m.store}: no Harri labor on ${plural(m.days, "day")} with sales. Those days count no labor, so profit reads high.`,
       ),
       action: { label: "Open Labor", href: "/dashboard/labor" },
+    })
+  }
+  if (foodGap) {
+    todos.push({
+      tone: s.cogsMissingDays > 0 ? "bad" : "warn",
+      title: "Food cost is incomplete",
+      items: [
+        ...(s.cogsMissingDays > 0
+          ? [`${plural(s.cogsMissingDays, "store-day")} sold with no food cost worked out. Those days count no food.`]
+          : []),
+        ...(uncosted !== null && uncosted > 0
+          ? [
+              `${pctWords(uncosted)} of sales are items with no recipe or with ingredients that have no price. Their cost counts as nothing or only in part, so profit reads high.`,
+            ]
+          : []),
+      ],
+      action: { label: "Open food cost", href: "/dashboard/cogs" },
     })
   }
   if (nof.length > 0) {
@@ -345,17 +552,25 @@ export function buildPlain(input: PlainInput): PnlPlain {
       },
     })
   }
-  if (est !== null && est > 0.5) {
+  const feesEstimated = est !== null && est > FEES_ESTIMATED_WARN
+  if (unknown > 0 || feesEstimated) {
     const perStore = s.perStore
-      .map((p) => ({ name: names.get(p.storeId) ?? shortStoreName(p.storeName), e: estimatedShare(p) }))
+      .map((p) => ({ name: names.get(p.storeId) ?? shortStoreName(p.storeName), e: rateShare(p) }))
       .filter((p): p is { name: string; e: number } => p.e !== null)
     todos.push({
-      tone: "warn",
-      title: "App fees are mostly estimated",
+      tone: unknown > 0 ? "bad" : "warn",
+      title: unknown > 0 ? "App fees are missing" : "App fees are estimated",
       items: [
-        `${Math.round(est * 100)}% of app orders came without their real fee, so it is worked out from each store's commission rates.`,
-        ...(perStore.length > 1
-          ? [perStore.map((p) => `${p.name} ${Math.round(p.e * 100)}%`).join(" · ")]
+        ...(unknown > 0
+          ? [
+              `${plural(unknown, "app order")} came with no fee and no commission rate on file, so they count no fee and profit reads high.`,
+            ]
+          : []),
+        ...(feesEstimated
+          ? [`${pctWords(est)} of app orders came without their real fee, so it is estimated from each store's commission rates.`]
+          : []),
+        ...(perStore.length > 1 && feesEstimated
+          ? [perStore.map((p) => `${p.name} ${pctWords(p.e)}`).join(" · ")]
           : []),
       ],
       action: {
@@ -367,16 +582,20 @@ export function buildPlain(input: PlainInput): PnlPlain {
 
   /* ── where each dollar went ── */
   const lines = lineSet(s, priorOk ? prior : null, {
-    fees: [
-      est === null ? "no app orders" : `${Math.round((1 - est) * 100)}% real fees, the rest at your rates`,
-      est !== null && est > 0.5 ? "warn" : "ok",
+    fees: feesHow(s),
+    food: foodHow(s),
+    labor: [
+      missDays > 0
+        ? `${plural(missDays, "day")} missing`
+        : estDays > 0
+          ? `${plural(estDays, "day")} estimated from your labor budget`
+          : "from Harri",
+      missDays > 0 ? "bad" : estDays > 0 ? "warn" : "ok",
     ],
-    food: ["recipe cost of what sold", "ok"],
-    labor: [missDays > 0 ? `${plural(missDays, "day")} missing` : "from Harri", missDays > 0 ? "bad" : "ok"],
     fixed: !filesKnown
       ? ["store settings did not load", "warn"]
       : [nof.length > 0 ? `${nof.length} not on file` : "monthly, charged per day", nof.length > 0 ? "warn" : "ok"],
-    kept: [missDays > 0 ? "at most" : "what is left", "ok"],
+    kept: [atMost !== null ? "at most" : keptNote !== null ? "estimated" : "what is left", "ok"],
   })
 
   /* ── the eight weeks ── */
@@ -391,7 +610,9 @@ export function buildPlain(input: PlainInput): PnlPlain {
             sales: st?.grossSales ?? 0,
             kept: st?.bottomLine ?? 0,
             keptPct: st ? share(st.bottomLine, st.grossSales) : null,
-            atMost: (st?.laborMissingDays ?? 0) > 0,
+            // The week's own gaps. A fixed cost not on file is said once, on the headline.
+            atMost: st ? upperBoundCauses(st).length > 0 : false,
+            running: w.partial,
           }
         })
 
@@ -414,7 +635,10 @@ export function buildPlain(input: PlainInput): PnlPlain {
         }
       })
       const laborMissing = stores.filter((x) => x.laborMissing).map((x) => x.name)
-      const dEst = estimatedShare(l)
+      const dayCauses = upperBoundCauses(l, {
+        laborMissing: laborMissing.length > 0 ? [`no labor for ${list(laborMissing)}`] : [],
+        fixedNotOnFile: filesKnown ? nof.length : null,
+      })
       return {
         date,
         label: `${WEEKDAY[p.startDate.getUTCDay()]} ${p.startDate.getUTCMonth() + 1}/${p.startDate.getUTCDate()}`,
@@ -422,7 +646,14 @@ export function buildPlain(input: PlainInput): PnlPlain {
         sales: l.grossSales,
         kept: l.bottomLine,
         keptPct: share(l.bottomLine, l.grossSales),
-        atMost: laborMissing.length > 0,
+        atMost: dayCauses.length > 0,
+        // Gaps that make THIS day read high against the others. A fixed cost
+        // not on file is the same every day, so it does not rule out a best day.
+        ownGap:
+          laborMissing.length > 0 ||
+          l.cogsMissingDays > 0 ||
+          (uncostedShare(l) ?? 0) > 0 ||
+          l.commission.unknownOrders > 0,
         best: false,
         laborMissing,
         lines: lineSet(l, null, {
@@ -430,21 +661,28 @@ export function buildPlain(input: PlainInput): PnlPlain {
             l.commission.orders === 0
               ? "no app orders"
               : `${l.commission.ordersRecorded} of ${l.commission.orders} app orders had a real fee`,
-            dEst !== null && dEst > 0.5 ? "warn" : "ok",
+            feesHow(l)[1],
           ],
-          food: ["recipe cost of what sold", "ok"],
+          food: foodHow(l),
           labor: [
-            laborMissing.length > 0 ? `no Harri labor for ${list(laborMissing)}` : "from Harri",
-            laborMissing.length > 0 ? "bad" : "ok",
+            laborMissing.length > 0
+              ? `no Harri labor for ${list(laborMissing)}`
+              : l.laborEstimatedDays > 0
+                ? "estimated from your labor budget"
+                : "from Harri",
+            laborMissing.length > 0 ? "bad" : l.laborEstimatedDays > 0 ? "warn" : "ok",
           ],
           fixed: [nof.length > 0 ? `not on file: ${list(nof.map((n) => `${n.store} ${n.what}`))}` : "one day of the month", nof.length > 0 ? "warn" : "ok"],
-          kept: [laborMissing.length > 0 ? "at most" : "what is left", "ok"],
+          kept: [
+            dayCauses.length > 0 ? "at most" : estimateParts(l).length > 0 ? "estimated" : "what is left",
+            "ok",
+          ],
         }),
         stores,
       }
     })
-    // An "at most" day cannot be the best one: its kept is high BECAUSE labor is missing.
-    const traded = days.filter((x) => x.sales > 0 && !x.atMost)
+    // A day with a gap of its own cannot be the best one: its kept is high BECAUSE an input is missing.
+    const traded = days.filter((x) => x.sales > 0 && !x.ownGap)
     if (traded.length > 1) {
       const best = traded.reduce((a, b) => (b.kept > a.kept ? b : a))
       best.best = true
@@ -457,11 +695,15 @@ export function buildPlain(input: PlainInput): PnlPlain {
       ? []
       : s.allStores.map((st) => {
           const p = priorOk ? prior.allStores.find((x) => x.storeId === st.storeId) : undefined
+          const e = elapsed && elapsed.current !== null ? elapsed.perStore[st.storeId] : undefined
+          const eOk = e !== undefined && e.prior > 0
           const file = files.find((f) => f.id === st.storeId)
           const nf = file ? fixedNotOnFile([file]).map((n) => n.what) : []
+          const own = upperBoundCauses(st)
           const flags = [
-            st.laborMissingDays > 0 ? `${plural(st.laborMissingDays, "day")} of labor missing` : null,
+            ...own,
             nf.length > 0 ? `${list(nf)} not on file` : null,
+            st.laborEstimatedDays > 0 ? `${plural(st.laborEstimatedDays, "day")} of labor estimated` : null,
           ].filter((x): x is string => x !== null)
           return {
             storeId: st.storeId,
@@ -470,12 +712,16 @@ export function buildPlain(input: PlainInput): PnlPlain {
             kept: st.bottomLine,
             keptPct: share(st.bottomLine, st.grossSales),
             keptChange: p && p.grossSales > 0 ? st.bottomLine - p.bottomLine : null,
-            salesChange: p && p.grossSales > 0 ? st.grossSales - p.grossSales : null,
+            salesChange: elapsed
+              ? eOk ? e.current - e.prior : null
+              : p && p.grossSales > 0 ? st.grossSales - p.grossSales : null,
+            salesPrior: elapsed ? (eOk ? e.prior : null) : p && p.grossSales > 0 ? p.grossSales : null,
             laborMissingDays: st.laborMissingDays,
+            laborEstimatedDays: st.laborEstimatedDays,
             food: share(st.cogsValue, st.grossSales),
             labor: share(st.laborValue, st.grossSales),
             fees: share(st.commissions, st.grossSales),
-            atMost: st.laborMissingDays > 0,
+            atMost: own.length > 0 || nf.length > 0,
             flags,
           }
         })
@@ -485,7 +731,18 @@ export function buildPlain(input: PlainInput): PnlPlain {
     kept: s.bottomLine,
     keptPct,
     atMost,
+    keptNote,
+    gaps: {
+      laborMissingDays: missDays,
+      laborEstimatedDays: estDays,
+      cogsMissingDays: s.cogsMissingDays,
+      uncostedShare: uncosted,
+      unknownOrders: unknown,
+      rateShare: est,
+      fixedNotOnFile: filesKnown ? nof.length : null,
+    },
     vsPrior,
+    compareNote: elapsed?.note ?? null,
     sentence: parts.join(" "),
     statuses,
     todos,

@@ -27,6 +27,8 @@
  */
 import { describe, it, expect, vi, beforeEach } from "vitest"
 
+// Imports @/lib/prisma at load, which throws without DATABASE_URL (CI).
+vi.mock("@/lib/counter/labor-leaks", () => ({ loadTimeRecordsNeed: vi.fn(async () => null), loadLeakLedger: vi.fn() }))
 vi.mock("@/app/actions/store/crud-actions", () => ({ getStores: vi.fn() }))
 vi.mock("@/app/actions/store/pnl-actions", () => ({ getAllStoresPnL: vi.fn() }))
 vi.mock("@/app/actions/invoice-actions", () => ({ getInvoiceSummary: vi.fn() }))
@@ -38,6 +40,8 @@ vi.mock("@/app/actions/forecasts/revenue-forecast-actions", () => ({
 vi.mock("@/app/actions/ratings/ratings-actions", () => ({ getRatingsSummary: vi.fn() }))
 vi.mock("@/lib/counter/channel-mix", () => ({ loadChannelMix: vi.fn() }))
 vi.mock("@/lib/counter/targets", () => ({ loadStripTargets: vi.fn() }))
+// Reads `OtterHourlySummary` and `JobRun` through `@/lib/prisma`; these ranges are long complete.
+vi.mock("@/lib/counter/adapters/elapsed-compare", () => ({ loadElapsedCompare: vi.fn(async () => null) }))
 // Both reach Prisma at MODULE LOAD (`@/lib/prisma` throws without
 // `DATABASE_URL`), so an unmocked import here fails the file's import rather
 // than one assertion.
