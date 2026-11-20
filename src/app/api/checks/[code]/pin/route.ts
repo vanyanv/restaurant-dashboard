@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
-import { rateLimit, rateLimitKey } from "@/lib/rate-limit"
+import { clientIp, rateLimit } from "@/lib/rate-limit"
 import { findStoreByCode, loadCrewView } from "@/lib/checks/crew"
 import { issueCrewPass } from "@/lib/checks/crew-session"
+import { chargeWrongPin, pinTryAllowed } from "@/lib/checks/pin-guard"
 import { shortName } from "@/lib/checks/data"
 import { isUniqueViolation, isValidPin } from "@/lib/checks/setup"
 import { dayToDb } from "@/lib/checks/time"
@@ -11,14 +12,22 @@ import { dayToDb } from "@/lib/checks/time"
  * Crew PIN step. Public: the store's code in the URL is the only thing that
  * names the store, and only that store's PINs work here.
  *
- * Rate-limited per IP rather than locked out per person (the owner chose no
- * lockouts): a store's crew share one Wi-Fi, so the limit is generous. A
- * second limit counts every attempt at one store from any address, so
- * rotating addresses does not make guessing PINs fast. A real shift enters a
- * PIN a handful of times an hour; thirty in ten minutes is an attack.
+ * Two kinds of limit (the owner chose no lockouts):
+ * - every request, per address: 20 a minute, a ceiling against a loop;
+ * - WRONG PINs only, per address and per store's day (`pin-guard.ts`, where
+ *   the numbers are argued). A malformed request is refused before either is
+ *   charged, and a right PIN never spends anything, so someone with the
+ *   poster link cannot run the crew out of tries. A store being guessed at
+ *   from many addresses alerts the owner and slows every address further;
+ *   it never locks the crew out.
+ *
+ * What the PIN buys is a signed crew pass (`crew-session.ts`) naming this
+ * store, this person, this check and its day. Mark and submit accept that
+ * pass and nothing else, and re-check that the person is still active at
+ * this store of this account; state is the same read-only view the public
+ * page shows.
  */
 const PIN_LIMIT = { limit: 20, windowMs: 60_000, identifyBy: "ip" as const }
-const STORE_PIN_LIMIT = { limit: 30, windowMs: 10 * 60_000 }
 
 export async function POST(request: NextRequest, { params }: { params: Promise<{ code: string }> }) {
   const limited = await rateLimit(request, PIN_LIMIT)
@@ -27,14 +36,18 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   const { code } = await params
   const store = await findStoreByCode(code)
   if (!store) return NextResponse.json({ error: "This QR code is no longer in use." }, { status: 404 })
-  const storeLimited = await rateLimitKey(`checks-pin:${store.id}`, STORE_PIN_LIMIT)
-  if (storeLimited) {
-    return NextResponse.json({ error: "Too many PIN tries at this store. Wait a few minutes." }, { status: 429 })
-  }
 
   const body = (await request.json().catch(() => null)) as { pin?: unknown } | null
   const pin = typeof body?.pin === "string" ? body.pin : ""
   if (!isValidPin(pin)) return NextResponse.json({ error: "Enter all 4 digits." }, { status: 400 })
+
+  const ip = clientIp(request)
+  if (!(await pinTryAllowed(store, ip))) {
+    return NextResponse.json(
+      { error: "Too many wrong PINs from this phone's network. Wait 10 minutes and try again." },
+      { status: 429, headers: { "Retry-After": "600" } },
+    )
+  }
 
   const now = new Date()
   const view = await loadCrewView(store, now)
@@ -47,6 +60,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     select: { id: true, firstName: true, lastName: true },
   })
   if (!crew) {
+    await chargeWrongPin(store, ip, now)
     return NextResponse.json({ error: `That PIN isn't set up for ${store.name}.` }, { status: 401 })
   }
 

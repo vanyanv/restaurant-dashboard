@@ -7,6 +7,8 @@ import {
   upsertRecipe,
 } from "@/app/actions/recipe-actions"
 import { prisma } from "@/lib/prisma"
+import { getAuthScope } from "@/lib/auth-scope"
+import { typedCostError } from "@/lib/cost-input"
 
 /**
  * The Counter layer's WRITE path — and the first one it has ever had.
@@ -127,8 +129,21 @@ export async function saveRecipeLines(input: {
   notes?: string | null
   foodCostOverride?: number | null
 }): Promise<SaveResult> {
-  const current = await prisma.recipe.findUnique({
-    where: { id: input.recipeId },
+  // Who is asking, before anything is read: the header read below is scoped
+  // to their account, so another account's recipe id reads as "no longer
+  // exists" and nothing about it comes back. (It used to be a bare
+  // `findUnique` ahead of any session check; `upsertRecipe` refused the
+  // write, but the read had already happened.)
+  const scope = await getAuthScope()
+  if (!scope) return { ok: false, error: "You're signed out. Sign in again and save." }
+
+  if (input.foodCostOverride !== undefined && input.foodCostOverride !== null) {
+    const costError = typedCostError(input.foodCostOverride)
+    if (costError) return { ok: false, error: costError }
+  }
+
+  const current = await prisma.recipe.findFirst({
+    where: { id: input.recipeId, accountId: scope.accountId },
     select: {
       itemName: true, category: true, servingSize: true, notes: true,
       isSellable: true, foodCostOverride: true, yieldUnit: true,

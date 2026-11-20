@@ -6,6 +6,7 @@ import { revalidatePath } from "next/cache"
 import { bustTags } from "@/lib/cache/cached"
 import { getAuthScope, getSession } from "@/lib/auth-scope"
 import { prisma } from "@/lib/prisma"
+import { typedCostError } from "@/lib/cost-input"
 import {
   seedCanonicalIngredientsFromInvoices,
   type SeedResult,
@@ -380,6 +381,12 @@ export async function updateCanonicalCost(input: {
   const scope = await getAuthScope()
   if (!scope) throw new Error("Not authenticated")
   const { accountId } = scope
+
+  if (input.costPerRecipeUnit !== undefined && input.costPerRecipeUnit !== null) {
+    // Negative, NaN/Infinity and absurd costs are refused (`cost-input.ts`).
+    const costError = typedCostError(input.costPerRecipeUnit)
+    if (costError) throw new Error(costError)
+  }
 
   const existing = await prisma.canonicalIngredient.findFirst({
     where: { id: input.canonicalIngredientId, accountId },

@@ -38,6 +38,18 @@ export const RATE_LIMIT_TIERS = {
   /** Auth endpoints: 10 req/min per IP */
   auth: { limit: 10, windowMs: 60_000, identifyBy: "ip" as const } as RateLimitConfig,
   /**
+   * Wrong passwords for one email, from any address: 10 per 15 minutes.
+   *
+   * The `auth` tier is per IP, so an attacker rotating addresses could try
+   * one account's password as fast as they could buy addresses. This counts
+   * failures against the (lowercased) email instead. Only failures are
+   * charged, so the owner typing the right password is never refused because
+   * of someone else's tries; the cost of an attack is that the owner may wait
+   * up to 15 minutes after ten wrong tries on their email. 40 guesses an hour
+   * against a password of 8+ characters is not a useful rate.
+   */
+  authEmail: { limit: 10, windowMs: 15 * 60_000 } as RateLimitConfig,
+  /**
    * Beacons: 240 req/min.
    *
    * A ceiling against a RUNAWAY CLIENT, not against a reader, and the two need
@@ -181,6 +193,35 @@ export async function rateLimitKey(key: string, config: RateLimitConfig): Promis
   const redisResult = await redisRateLimit(key, config)
   if (redisResult !== undefined) return redisResult
   return memoryRateLimit(key, config)
+}
+
+/**
+ * Is this key already at its limit? Reads the count without adding to it.
+ *
+ * For limits that charge only FAILURES (a wrong PIN, a wrong password): the
+ * route peeks first, refuses if the budget is spent, and charges the key with
+ * `rateLimitKey` only when the attempt turns out wrong. A person who gets it
+ * right never spends anything, so a stranger's failures cannot be paid for by
+ * the crew.
+ */
+export async function isOverLimitKey(key: string, config: RateLimitConfig): Promise<boolean> {
+  const redis = getRedis()
+  if (redis) {
+    try {
+      const count = Number((await redis.get<number | string>(`rate:${key}`)) ?? 0)
+      return count >= config.limit
+    } catch (err) {
+      console.error("[rate-limit] Redis peek failed; falling back to in-memory", err)
+    }
+  }
+  const entry = store.get(key)
+  if (!entry || entry.resetAt < Date.now()) return false
+  return entry.count >= config.limit
+}
+
+/** The client address the limiter keys on, for callers composing their own keys. */
+export function clientIp(request: Request): string {
+  return getClientIp(request)
 }
 
 export async function rateLimit(

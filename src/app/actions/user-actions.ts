@@ -7,6 +7,8 @@ import { z } from "zod"
 import bcrypt from "bcryptjs"
 import { revalidatePath } from "next/cache"
 import { prisma } from "@/lib/prisma"
+import { passwordChangeStamp } from "@/lib/password-change"
+import { reissueSessionCookie } from "@/lib/session-token"
 
 /** The two pages that read the signed-in user's own settings row. */
 function revalidateProfilePages() {
@@ -108,10 +110,15 @@ export async function changePassword(formData: FormData): Promise<ActionResult> 
     if (!matches) return { error: "Current password is incorrect" }
 
     const hashed = await bcrypt.hash(data.newPassword, 10)
+    // Stamping the change ends every session signed in before it (the jwt
+    // callback in `src/lib/auth.ts`), so a stolen or forgotten session does
+    // not outlive the password it was signed in with. This person's own
+    // cookie is re-issued right after, so they stay signed in here.
     await prisma.user.update({
       where: { id: session.user.id },
-      data: { password: hashed },
+      data: { password: hashed, passwordChangedAt: passwordChangeStamp() },
     })
+    await reissueSessionCookie()
 
     revalidatePath("/dashboard/settings/account")
     return { success: true as const }
