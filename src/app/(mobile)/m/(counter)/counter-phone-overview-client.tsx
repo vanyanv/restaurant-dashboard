@@ -263,7 +263,7 @@ return (
 
       {/* The Overview made plain, stacked: the same blocks the desk renders,
           in the same order (mock https://claude.ai/artifact/8ZrnRsGAYWc2WV6tg6wb5D).
-          What the phone said before is folded underneath, unchanged. */}
+          What the phone said before sits in named tabs beside it (DESIGN.md "Page layout"). */}
       <PageTabs
         label="Overview views"
         tabs={[

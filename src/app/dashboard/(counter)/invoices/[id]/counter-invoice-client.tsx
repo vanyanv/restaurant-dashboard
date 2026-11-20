@@ -18,7 +18,7 @@ import type { SectionSources } from "@/lib/counter/adapters/types"
 import type { InvoiceCheck, InvoiceLines, InvoiceSections } from "@/lib/counter/adapters/invoice"
 import { markInvoiceReturn, resolveInvoiceReview } from "@/lib/counter/actions/invoice"
 import { useRouter } from "next/navigation"
-import { Button, ButtonRow, Status, useAct, type StatusTone } from "@/components/counter/ui"
+import { PageTabs, Button, ButtonRow, Status, useAct, type StatusTone } from "@/components/counter/ui"
 import { InvoiceGlyph, Tiles, type InvoiceGlyphKind } from "../invoices-ui"
 
 /**
@@ -245,106 +245,134 @@ export function CounterInvoiceClient({
 
       <PageHead title={`${vendor} · ${title}`} sub="One invoice, checked against its own PDF" />
 
-      <Section bare title="The figures" data={sections.head} pending={pending}>
-        {(h) => (
-          <div className="iv-head">
-            <p className="iv-sub">{h.sub}</p>
-            <Tiles cells={h.cells} />
-          </div>
-        )}
-      </Section>
+      <PageTabs
+        label="Invoice views"
+        tabs={[
+          {
+            key: "summary",
+            label: "Summary",
+            content: (
+              <>
+                <Section bare title="The figures" data={sections.head} pending={pending}>
+                  {(h) => (
+                    <div className="iv-head">
+                      <p className="iv-sub">{h.sub}</p>
+                      <Tiles cells={h.cells} />
+                    </div>
+                  )}
+                </Section>
 
-      <Section bare title="Decision" data={sections.lines} pending={pending}>
-        {(l) => <DecisionBar lines={l} />}
-      </Section>
+                <Section bare title="Decision" data={sections.lines} pending={pending}>
+                  {(l) => <DecisionBar lines={l} />}
+                </Section>
 
-      <div className="split">
-        <Section title="The invoice" meta={(d) => d.meta} data={sections.document} pending={pending}>
-          {(d) => (
-            <>
-              {d.href ? (
-                <object className="docpane" data={d.href} type="application/pdf" aria-label="The stored invoice PDF">
-                  <a href={d.href} target="_blank" rel="noreferrer">
-                    Open the PDF
-                  </a>
-                </object>
-              ) : null}
-              {d.href ? (
-                <p className="iv-open">
-                  <a href={d.href} target="_blank" rel="noreferrer">
-                    Open the full PDF
-                  </a>
-                </p>
-              ) : null}
-              <Note bare={!d.href}>{d.note}</Note>
-            </>
-          )}
-        </Section>
+                <div className="split">
+                  <Section title="The invoice" meta={(d) => d.meta} data={sections.document} pending={pending}>
+                    {(d) => (
+                      <>
+                        {d.href ? (
+                          <object className="docpane" data={d.href} type="application/pdf" aria-label="The stored invoice PDF">
+                            <a href={d.href} target="_blank" rel="noreferrer">
+                              Open the PDF
+                            </a>
+                          </object>
+                        ) : null}
+                        {d.href ? (
+                          <p className="iv-open">
+                            <a href={d.href} target="_blank" rel="noreferrer">
+                              Open the full PDF
+                            </a>
+                          </p>
+                        ) : null}
+                        <Note bare={!d.href}>{d.note}</Note>
+                      </>
+                    )}
+                  </Section>
 
-        <Section
-          title="What we checked"
-          meta={(r) => r.meta}
-          data={sections.reasons}
-          pending={pending}
-          pad={false}
-          askAbout="why is this invoice in review"
-        >
-          {(r) => (
-            <>
-              <ul className="iv-checks">
-                {r.checks.map((c) => (
-                  <li key={c.key} className={`iv-check iv-check--${c.tone}`}>
-                    <InvoiceGlyph kind={CHECK_GLYPH[c.tone]} />
-                    <span>
-                      <b>{c.title}</b>
-                      <span className="ck-meta">{c.body}</span>
-                    </span>
-                  </li>
-                ))}
-              </ul>
-              <Note flush>{r.note}</Note>
-            </>
-          )}
-        </Section>
-      </div>
+                  <Section
+                    title="What we checked"
+                    meta={(r) => r.meta}
+                    data={sections.reasons}
+                    pending={pending}
+                    pad={false}
+                    askAbout="why is this invoice in review"
+                  >
+                    {(r) => (
+                      <>
+                        <ul className="iv-checks">
+                          {r.checks.map((c) => (
+                            <li key={c.key} className={`iv-check iv-check--${c.tone}`}>
+                              <InvoiceGlyph kind={CHECK_GLYPH[c.tone]} />
+                              <span>
+                                <b>{c.title}</b>
+                                <span className="ck-meta">{c.body}</span>
+                              </span>
+                            </li>
+                          ))}
+                        </ul>
+                        <Note flush>{r.note}</Note>
+                      </>
+                    )}
+                  </Section>
+                </div>
+              </>
+            ),
+          },
+          {
+            key: "lines",
+            label: "Lines",
+            content: (
+              <>
+                <Section
+                  title="Lines"
+                  meta={(l) => l.meta}
+                  data={sections.lines}
+                  pending={pending}
+                  askAbout="which lines match nothing in the catalogue"
+                >
+                  {(l) => (
+                    <>
+                      <Table columns={LINE_COLUMNS} rows={l.rows} />
+                      <div className="sec__body">
+                        <MoneyLines rows={l.money} />
+                        <Note>{l.note}</Note>
+                      </div>
+                    </>
+                  )}
+                </Section>
+              </>
+            ),
+          },
+          {
+            key: "history",
+            label: "How it got here",
+            content: (
+              <>
+                <Section title="How it got here" meta={(p) => p.arrival.meta} data={sections.panels} pending={pending}>
+                  {(p) => (
+                    <div className="iv-panels">
+                      <div>
+                        <span className="ck-mono">Arrival</span>
+                        <Kv rows={p.arrival.rows} />
+                      </div>
+                      <div>
+                        <span className="ck-mono">What we store · {p.storage.meta}</span>
+                        <Kv rows={p.storage.rows} />
+                      </div>
+                      <div>
+                        <span className="ck-mono">Matching · {p.matching.meta}</span>
+                        <Kv rows={p.matching.rows} />
+                        <Note tight>{p.matching.note}</Note>
+                      </div>
+                    </div>
+                  )}
+                </Section>
+              </>
+            ),
+          },
+        ]}
+      />
 
-      <Section
-        title="Lines"
-        meta={(l) => l.meta}
-        data={sections.lines}
-        pending={pending}
-        askAbout="which lines match nothing in the catalogue"
-      >
-        {(l) => (
-          <>
-            <Table columns={LINE_COLUMNS} rows={l.rows} />
-            <div className="sec__body">
-              <MoneyLines rows={l.money} />
-              <Note>{l.note}</Note>
-            </div>
-          </>
-        )}
-      </Section>
-
-      <Section title="How it got here" meta={(p) => p.arrival.meta} data={sections.panels} pending={pending}>
-        {(p) => (
-          <div className="iv-panels">
-            <div>
-              <span className="ck-mono">Arrival</span>
-              <Kv rows={p.arrival.rows} />
-            </div>
-            <div>
-              <span className="ck-mono">What we store · {p.storage.meta}</span>
-              <Kv rows={p.storage.rows} />
-            </div>
-            <div>
-              <span className="ck-mono">Matching · {p.matching.meta}</span>
-              <Kv rows={p.matching.rows} />
-              <Note tight>{p.matching.note}</Note>
-            </div>
-          </div>
-        )}
-      </Section>
     </>
   )
 }

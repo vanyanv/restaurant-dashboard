@@ -7,7 +7,7 @@ import { readCounterParams } from "@/lib/counter/url-state"
 import { rangeLabel } from "@/lib/counter/date-range"
 import type { ProductMixSections } from "@/lib/counter/adapters/product-mix"
 import type { SectionSources } from "@/lib/counter/adapters/types"
-import { Fold } from "@/components/counter/ui"
+import { PageTabs } from "@/components/counter/ui"
 import { MixPlainView } from "@/app/dashboard/(counter)/product-mix/mix-plain-ui"
 
 /**
@@ -54,25 +54,42 @@ export function CounterPhoneProductMixClient({
         <p className="msub">{windowLabel}</p>
       </div>
 
-      <Section bare title="Product mix in a sentence" data={sections.plain} pending={pending}>
-        {(p) => <MixPlainView p={p} />}
-      </Section>
+      <PageTabs
+        label="Product mix views"
+        tabs={[
+          {
+            key: "summary",
+            label: "Summary",
+            content: (
+              <>
+                <Section bare title="Product mix in a sentence" data={sections.plain} pending={pending}>
+                  {(p) => <MixPlainView p={p} />}
+                </Section>
+              </>
+            ),
+          },
+          {
+            key: "units",
+            label: "Units",
+            content: (
+              <>
+                <Section bare title="The figures" data={sections.headline} pending={pending}>
+                  {(h) => <MStrip cells={h.phoneCells} />}
+                </Section>
 
-      <Fold summary="Every figure, as before">
-      <Section bare title="The figures" data={sections.headline} pending={pending}>
-        {(h) => <MStrip cells={h.phoneCells} />}
-      </Section>
-
-      <Section
-        title="Units by item"
-        meta={() => windowLabel}
-        data={sections.units}
-        pending={pending}
-      >
-        {(u) => <Chart {...u.phoneChart} />}
-      </Section>
-
-      </Fold>
+                <Section
+                  title="Units by item"
+                  meta={() => windowLabel}
+                  data={sections.units}
+                  pending={pending}
+                >
+                  {(u) => <Chart {...u.phoneChart} />}
+                </Section>
+              </>
+            ),
+          },
+        ]}
+      />
     </>
   )
 }

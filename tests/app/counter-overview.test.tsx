@@ -26,6 +26,7 @@ vi.mock("next/navigation", () => ({
   useSearchParams: () => new URLSearchParams(SEARCH),
 }))
 
+import { pastSummary, tabPanel, tabPanels } from "./page-tabs-support"
 import { AppShell } from "@/components/counter"
 import { CounterOverviewClient as OverviewIsland } from "@/app/dashboard/(counter)/counter-overview-client"
 
@@ -185,14 +186,18 @@ describe("Counter Overview", () => {
     )
   })
 
-  it("answers first, made plain, and folds the old page underneath it", () => {
+  it("answers first, made plain, and puts the old page in tabs after it", () => {
     // The Overview made plain (owner's go, 2026-11-18): the sentence and the
     // figures, where sales came from, Needs you, the ask bar, then everything
-    // the page said before in one fold.
+    // the page said before in named tabs (DESIGN.md "Page layout").
     const { container } = render(<CounterOverviewClient {...base} sections={sections} />)
     const main = container.querySelector("main#ct-main") as HTMLElement
     const kids = [...main.children].map((c) => c.className.split(" ")[0])
-    expect(kids).toEqual(["pagehead", "dispatch", "cu-stack", "chan", "cu-card", "askbar", "cu-fold"])
+    expect(kids).toEqual(["pagehead", "dispatch", "cu-pagetabs", "askbar"])
+    expect(tabPanels(main).map((p) => p.dataset.tab)).toEqual(["summary", "trends", "stores", "checks"])
+    expect(tabPanels(main).map((p) => p.hidden)).toEqual([false, true, true, true])
+    const summary = tabPanel(main, "summary")
+    expect([...summary.children].map((c) => c.className.split(" ")[0])).toEqual(["cu-stack", "chan", "cu-card"])
     const stack = main.querySelector(".cu-stack") as HTMLElement
     expect(stack.querySelector(".cu-answer")?.textContent).toContain("Hollywood sold $7,468")
     expect(stack.querySelectorAll(".cu-weeks__bars button")).toHaveLength(2)
@@ -204,26 +209,25 @@ describe("Counter Overview", () => {
     expect(needs.textContent).toContain("12 menu items sold far above or below normal")
   })
 
-  it("keeps the old page whole inside the fold, in the prototype's order", () => {
+  it("keeps the old page whole in the tabs after Summary, in the prototype's order", () => {
     const { container } = render(<CounterOverviewClient {...base} sections={sections} />)
-    const fold = container.querySelector("main#ct-main > .cu-fold") as HTMLDetailsElement
-    expect(fold.open).toBe(false)
-    const inner = fold.querySelector(".cu-fold__in") as HTMLElement
-    const kids = [...inner.children].map((c) => c.className.split(" ")[0])
+    const main = container.querySelector("main#ct-main") as HTMLElement
+    const inner = pastSummary(main)
+    const kids = inner.children.map((c) => c.className.split(" ")[0])
     expect(kids).toEqual([
       "headline",
       "strip",
       "moving",
       "split",
       "drill",
-      "sec", // every alert, one by one
-      "sec", // per-store ledger
+      "sec", // Stores tab: the per-store ledger
+      "sec", // Alerts & feeds tab: every alert, one by one
       "tri",
     ])
     for (const cls of [".headline", ".strip", ".moving", ".drill"]) {
       expect(inner.querySelector(cls)!.closest(".sec")).toBeNull()
     }
-    const seq = landmarks(inner)
+    const seq = tabPanels(main).slice(1).flatMap((p) => landmarks(p))
     expect(seq.indexOf("headline")).toBeLessThan(seq.indexOf("strip"))
     expect(seq.indexOf("strip")).toBeLessThan(seq.indexOf("moving"))
     expect(seq.indexOf("drill")).toBeLessThan(seq.lastIndexOf("queue"))
@@ -306,7 +310,8 @@ describe("Counter Overview", () => {
     )
     const head = container.querySelector(".headline") as HTMLElement
     expect(head.querySelectorAll(".fig")[0].querySelector(".v")!.textContent).toBe("$7,468")
-    expect(within(head as HTMLElement).getByRole("alert")).toBeTruthy()
+    // The head block sits in the Trends tab, hidden until opened.
+    expect(within(head as HTMLElement).getByRole("alert", { hidden: true })).toBeTruthy()
   })
 
   it("mounts no comparison drill at all when the comparison is off", () => {
@@ -445,7 +450,7 @@ describe("Counter Overview", () => {
         sections={{ ...sections, sales: failed("Otter sync timed out", "retrySync") }}
       />,
     )
-    expect(screen.getByRole("alert")).toBeTruthy()
+    expect(screen.getByRole("alert", { hidden: true })).toBeTruthy()
     // The store cards still rendered. "Hollywood" also appears in the rail's
     // store popover, which is always in the DOM, so this is scoped.
     expect(within(screen.getByText("Per-store ledger").closest(".sec")!).getByText("Hollywood"))

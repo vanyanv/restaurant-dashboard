@@ -173,6 +173,7 @@ a.cu-card:focus-visible,button.cu-card:focus-visible{outline:2px solid var(--acc
 /* PageTabs: a page split into tabs (DESIGN.md "Page layout"). The panel rises in on each switch. */
 .cu-pagetabs{display:grid;gap:16px;min-width:0}
 .cu-pagetabs__panel{display:grid;gap:16px;min-width:0;animation:ct-entry var(--ct-dur-rise) var(--ease) both}
+.cu-pagetabs__panel[hidden]{display:none}
 
 /* ---- Fold ---- */
 .cu-fold{border-top:1px solid var(--line)}

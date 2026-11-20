@@ -123,7 +123,7 @@ export function CounterMenuClient({
               <>
                 {/* The menu made plain (owner's go, 2026-11-19; mock
                     https://claude.ai/artifact/YNwJ7EneNdAaC7vDp4HhBe). Everything the
-                    page showed before is folded below it, unchanged. */}
+                    page showed before sits in named tabs beside it (DESIGN.md "Page layout"). */}
                 <Section
                   bare
                   title="The menu in a sentence"

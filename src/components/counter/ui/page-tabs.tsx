@@ -7,7 +7,6 @@ import { Tabs } from "./tabs"
 export type PageTab = {
   key: string
   label: string
-  /** Drawn only while this tab is open, so a closed tab's sections are not unwrapped. */
   content: ReactNode
 }
 
@@ -48,9 +47,11 @@ export function PageTabs({
     window.history.replaceState(null, "", qs ? `${pathname}?${qs}` : pathname)
   }
 
-  const open = tabs.find((t) => t.key === active)
   // One tab is no choice: draw its content without a row to pick from.
-  if (tabs.length === 1) return <div className="cu-pagetabs">{open?.content}</div>
+  if (tabs.length === 1) return <div className="cu-pagetabs">{tabs[0].content}</div>
+  // Every panel is drawn and the closed ones are `hidden`, the way a closed
+  // fold's content was: the sections stream in once, a switch is instant and
+  // keeps any half-typed input, and find-in-page still reaches every figure.
   return (
     <div className="cu-pagetabs">
       <Tabs
@@ -59,9 +60,11 @@ export function PageTabs({
         items={tabs.map(({ key, label }) => ({ key, label }))}
         onSelect={select}
       />
-      <div className="cu-pagetabs__panel" key={active}>
-        {open?.content}
-      </div>
+      {tabs.map((t) => (
+        <div key={t.key} className="cu-pagetabs__panel" data-tab={t.key} hidden={t.key !== active}>
+          {t.content}
+        </div>
+      ))}
     </div>
   )
 }

@@ -142,7 +142,7 @@ export function CounterOrderClient({
 
       {/* The order made plain (owner's go, 2026-11-18; mock
           https://claude.ai/artifact/Sr98ngzuijqUUhPbJNJAv4). The items, the
-          timeline and the platform detail are folded underneath. */}
+          timeline and the platform detail sit in named tabs beside it. */}
       <PageTabs
         label="Order views"
         tabs={[
@@ -210,28 +210,30 @@ export function CounterOrderClient({
             label: "Timeline",
             content: (
               <>
-                <Section title="Timeline" meta="from the POS" data={sections.timeline}>
-                  {(rows) => <Kv rows={rows} />}
-                </Section>
+                <div className="tri">
+                  <Section title="Timeline" meta="from the POS" data={sections.timeline}>
+                    {(rows) => <Kv rows={rows} />}
+                  </Section>
 
-                {/* `sec('Platform', 'DoorDash', …)` — the meta is the channel, which is
-                    the section's own first row. Read by label so an inserted row
-                    cannot make it print a fulfilment mode instead. */}
-                <Section title="Platform" meta={channel ?? undefined} data={sections.platform}>
-                  {(rows) => <Kv rows={rows} />}
-                </Section>
+                  {/* `sec('Platform', 'DoorDash', …)` — the meta is the channel, which is
+                      the section's own first row. Read by label so an inserted row
+                      cannot make it print a fulfilment mode instead. */}
+                  <Section title="Platform" meta={channel ?? undefined} data={sections.platform}>
+                    {(rows) => <Kv rows={rows} />}
+                  </Section>
 
-                {/* `sec('Needs you', '1', queue(…))` — the meta is how many. An order
-                    with nothing to fix arrives here as an EMPTY section, which is what
-                    the adapter means by it and what `Section` draws. */}
-                <Section
-                  fold="closed"
-                  title="Needs you"
-                  meta={countMeta(dataOf(sections.needsYou)?.length)}
-                  data={sections.needsYou}
-                >
-                  {(items) => <Queue items={items} />}
-                </Section>
+                  {/* `sec('Needs you', '1', queue(…))` — the meta is how many. An order
+                      with nothing to fix arrives here as an EMPTY section, which is what
+                      the adapter means by it and what `Section` draws. */}
+                  <Section
+                    fold="closed"
+                    title="Needs you"
+                    meta={countMeta(dataOf(sections.needsYou)?.length)}
+                    data={sections.needsYou}
+                  >
+                    {(items) => <Queue items={items} />}
+                  </Section>
+                </div>
               </>
             ),
           },

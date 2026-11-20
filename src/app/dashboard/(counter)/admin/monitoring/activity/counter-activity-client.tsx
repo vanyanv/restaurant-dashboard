@@ -12,6 +12,7 @@ import {
   usePageChrome,
   type Column,
 } from "@/components/counter"
+import { PageTabs } from "@/components/counter/ui"
 import { MONITORING_TABS } from "@/lib/counter/nav"
 import type { SectionSources } from "@/lib/counter/adapters/types"
 import type { ActivitySections } from "@/lib/counter/adapters/monitoring-people"
@@ -59,102 +60,131 @@ export function CounterActivityClient({
         <SubNav items={MONITORING_TABS} label="Monitoring" />
       </PageHead>
 
-      <Section bare title="Verdict" data={sections.headline} pending={pending}>
-        {(h) => (
-          <div className="sec">
-            <div className="sec__body">
-              <p className="verdictline" style={{ margin: 0 }}>
-                {h.verdict}
-              </p>
-            </div>
-          </div>
-        )}
-      </Section>
+      <PageTabs
+        label="Activity views"
+        tabs={[
+          {
+            key: "errors",
+            label: "Errors",
+            content: (
+              <>
+                <Section bare title="Verdict" data={sections.headline} pending={pending}>
+                  {(h) => (
+                    <div className="sec">
+                      <div className="sec__body">
+                        <p className="verdictline" style={{ margin: 0 }}>
+                          {h.verdict}
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                </Section>
 
-      <Section bare title="The figures" data={sections.headline} pending={pending}>
-        {(h) => <Strip cells={h.cells} />}
-      </Section>
+                <Section bare title="The figures" data={sections.headline} pending={pending}>
+                  {(h) => <Strip cells={h.cells} />}
+                </Section>
 
-      <Section
-        title="Errors by hour"
-        meta={(e) => e.meta}
-        data={sections.errors}
-        pending={pending}
-        askAbout="what failed in the last day"
-      >
-        {(e) => (
-          <>
-            <Chart {...e.chart} fmt={ERRORS} />
-            <Note>
-              {e.note}
-            </Note>
-          </>
-        )}
-      </Section>
+                <Section
+                  title="Errors by hour"
+                  meta={(e) => e.meta}
+                  data={sections.errors}
+                  pending={pending}
+                  askAbout="what failed in the last day"
+                >
+                  {(e) => (
+                    <>
+                      <Chart {...e.chart} fmt={ERRORS} />
+                      <Note>
+                        {e.note}
+                      </Note>
+                    </>
+                  )}
+                </Section>
 
-      {/* `P.monactivity` splits these. The shape of the day and the list of
-          what actually failed are two questions, and one section answering
-          both puts a table under a chart with no heading to say the subject
-          changed. */}
-      <Section
-        title="Recent errors"
-        meta={(e) => e.meta}
-        data={sections.errors}
-        pending={pending}
-        pad={false}
-      >
-        {(e) => <Table columns={ERROR_COLUMNS} rows={e.rows} />}
-      </Section>
+                {/* `P.monactivity` splits these. The shape of the day and the list of
+                    what actually failed are two questions, and one section answering
+                    both puts a table under a chart with no heading to say the subject
+                    changed. */}
+                <Section
+                  title="Recent errors"
+                  meta={(e) => e.meta}
+                  data={sections.errors}
+                  pending={pending}
+                  pad={false}
+                >
+                  {(e) => <Table columns={ERROR_COLUMNS} rows={e.rows} />}
+                </Section>
+              </>
+            ),
+          },
+          {
+            key: "stores",
+            label: "Stores",
+            content: (
+              <>
+                <Section
+                  title="Stores reporting"
+                  meta={(s) => s.meta}
+                  data={sections.stores}
+                  pending={pending}
+                  pad={false}
+                  askAbout="which stores are silent"
+                >
+                  {(s) => (
+                    <>
+                      <Table columns={STORE_COLUMNS} rows={s.rows} />
+                      <Note flush>
+                        {s.note}
+                      </Note>
+                    </>
+                  )}
+                </Section>
+                {/* `P.monactivity`'s "What happened". `.feedlist` and `.feedrow` already
+                    carry rules in the generated sheet and nothing rendered them until
+                    now — the same situation `.rankbar` was in. */}
+              </>
+            ),
+          },
+          {
+            key: "happened",
+            label: "What happened",
+            content: (
+              <>
+                <Section
+                  title="What happened"
+                  meta={(f) => f.meta}
+                  data={sections.feed}
+                  pending={pending}
+                  pad={false}
+                >
+                  {(f) => (
+                    <>
+                      {/* `pad={false}`: the prototype passes this body through `raw()`,
+                          so the section emits no `.sec__body` and the padding belongs to
+                          the content. */}
+                      <div className="feedlist" style={{ padding: "0 15px" }}>
+                        {f.rows.map((r) => (
+                          <div className="feedrow" key={r.key}>
+                            <span className="tm">{r.ago}</span>
+                            <span className="tx">
+                              <b>{r.title}</b> · {r.detail}
+                            </span>
+                            <span className={`fd fd--${r.tone}`} aria-hidden="true" />
+                          </div>
+                        ))}
+                      </div>
+                      <Note flush>
+                        {f.note}
+                      </Note>
+                    </>
+                  )}
+                </Section>
+              </>
+            ),
+          },
+        ]}
+      />
 
-      <Section
-        title="Stores reporting"
-        meta={(s) => s.meta}
-        data={sections.stores}
-        pending={pending}
-        pad={false}
-        askAbout="which stores are silent"
-      >
-        {(s) => (
-          <>
-            <Table columns={STORE_COLUMNS} rows={s.rows} />
-            <Note flush>
-              {s.note}
-            </Note>
-          </>
-        )}
-      </Section>
-      {/* `P.monactivity`'s "What happened". `.feedlist` and `.feedrow` already
-          carry rules in the generated sheet and nothing rendered them until
-          now — the same situation `.rankbar` was in. */}
-      <Section
-        title="What happened"
-        meta={(f) => f.meta}
-        data={sections.feed}
-        pending={pending}
-        pad={false}
-      >
-        {(f) => (
-          <>
-            {/* `pad={false}`: the prototype passes this body through `raw()`,
-                so the section emits no `.sec__body` and the padding belongs to
-                the content. */}
-            <div className="feedlist" style={{ padding: "0 15px" }}>
-              {f.rows.map((r) => (
-                <div className="feedrow" key={r.key}>
-                  <span className="tm">{r.ago}</span>
-                  <span className="tx">
-                    <b>{r.title}</b> · {r.detail}
-                  </span>
-                  <span className={`fd fd--${r.tone}`} aria-hidden="true" />
-                </div>
-              ))}
-            </div>
-            <Note flush>
-              {f.note}
-            </Note>
-          </>
-        )}
-      </Section>
     </>
   )
 }

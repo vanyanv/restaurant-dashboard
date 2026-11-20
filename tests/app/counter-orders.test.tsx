@@ -31,6 +31,7 @@ vi.mock("next/navigation", () => ({
   useSearchParams: () => new URLSearchParams(SEARCH),
 }))
 
+import { pastSummary, tabPanels } from "./page-tabs-support"
 import { AppShell } from "@/components/counter"
 import { CounterOrdersClient as OrdersIsland } from "@/app/dashboard/(counter)/orders/counter-orders-client"
 
@@ -145,8 +146,8 @@ const sections = (over: Partial<OrdersSections> = {}): OrdersSections => ({
   ...over,
 })
 
-/** The old page, folded under the plain answer. */
-const folded = (c: HTMLElement) => main(c).querySelector(":scope > .cu-fold > .cu-fold__in") as HTMLElement
+/** The old page, now in the tabs after Summary. */
+const folded = (c: HTMLElement) => pastSummary(main(c))
 
 beforeEach(() => push.mockClear())
 afterEach(() => vi.useRealTimers())
@@ -154,12 +155,12 @@ afterEach(() => vi.useRealTimers())
 describe("the orders desk composition", () => {
   it("composes the page in the prototype's order, with the strip OUTSIDE any section", () => {
     const { container } = render(<CounterOrdersClient {...base} sections={sections()} />)
-    // The plain answer leads; the old page is folded beneath it, unchanged.
+    // The plain answer leads the Summary tab; the old page sits in the tabs after it.
     expect([...main(container).children].map((c) => c.className.split(" ")[0])).toEqual([
       "pagehead",
-      "cu-stack",
-      "cu-fold",
+      "cu-pagetabs",
     ])
+    expect(tabPanels(main(container)).map((p) => p.dataset.tab)).toEqual(["summary", "orders", "hours"])
     const kids = [...folded(container).children].map((c) => c.className.split(" ")[0])
     expect(kids).toEqual([
       "strip", // page level — `strip([...])` precedes the first `<div class="sec">`

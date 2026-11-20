@@ -15,6 +15,7 @@ import {
   ThemeRow,
   type Column,
 } from "@/components/counter"
+import { PageTabs } from "@/components/counter/ui"
 import {
   saveNewPassword,
   saveNotificationPreferences,
@@ -272,165 +273,200 @@ export function CounterSettingsClient({
     <>
       <PageHead title="Settings" sub="Account, notifications, preferences" />
 
-      <Section title="Account" meta={(a) => a.meta} data={sections.account} pending={pending}>
-        {(a) => (
-          <>
-            {/* `P.settings`' Account is SETROWS, not a `.kv` — see
-                `SettingRow`. The two that carry a control (the timezone
-                select, the password button) are `AccountControls` below. */}
-            {a.rows.map((r) => (
-              <div className="setrow" key={r.label}>
-                <div className="tx">
-                  <b>{r.label}</b>
-                  <span>{r.detail}</span>
-                </div>
-                <span className="mono" style={toneStyle(r.tone)}>
-                  {r.value}
-                </span>
-              </div>
-            ))}
-            <AccountControls data={a} />
-            {a.clockWarning !== null ? (
-              <Note>
-                {a.clockWarning}
-              </Note>
-            ) : null}
-          </>
-        )}
-      </Section>
+      <PageTabs
+        label="Settings views"
+        tabs={[
+          {
+            key: "account",
+            label: "Account",
+            content: (
+              <>
+                <Section title="Account" meta={(a) => a.meta} data={sections.account} pending={pending}>
+                  {(a) => (
+                    <>
+                      {/* `P.settings`' Account is SETROWS, not a `.kv` — see
+                          `SettingRow`. The two that carry a control (the timezone
+                          select, the password button) are `AccountControls` below. */}
+                      {a.rows.map((r) => (
+                        <div className="setrow" key={r.label}>
+                          <div className="tx">
+                            <b>{r.label}</b>
+                            <span>{r.detail}</span>
+                          </div>
+                          <span className="mono" style={toneStyle(r.tone)}>
+                            {r.value}
+                          </span>
+                        </div>
+                      ))}
+                      <AccountControls data={a} />
+                      {a.clockWarning !== null ? (
+                        <Note>
+                          {a.clockWarning}
+                        </Note>
+                      ) : null}
+                    </>
+                  )}
+                </Section>
 
-      <Section
-        title="Notifications"
-        meta={(n) => n.meta}
-        data={sections.notifications}
-        pending={pending}
-      >
-        {(n) => <Notifications data={n} />}
-      </Section>
-
-      <Section
-        title="Where sign-ins came from"
-        meta={(s) => s.meta}
-        data={sections.signins}
-        pending={pending}
-        askAbout="who has signed in recently"
-      >
-        {(s) => (
-          <>
-            {/* `P.settings`' Sessions panel is setrows, one device a line.
-                Ours are the same rows read off the log — see the adapter for
-                why a live session list is not available. */}
-            {s.rows.map((r) => (
-              <div className="setrow" key={r.label}>
-                <div className="tx">
-                  <b>{r.label}</b>
-                  <span>{r.detail}</span>
-                </div>
-                <span className="mono">{r.value}</span>
-              </div>
-            ))}
-            {/* `P.settings`' Sessions panel closes with a `.btnrow` holding
-                "Sign out everywhere", then its note — this is that row, in
-                that position, holding the one of the two the product can
-                honour.
-
-                NOT "Sign out everywhere". Auth is `strategy: "jwt"` with no
-                session table, so there is no way to revoke a token this
-                browser is not holding, and a button that claimed to would be
-                lying about a security control — the same reason the manifest
-                declares "End" absent on every row above. Signing out HERE is
-                a cookie and needs none of that. The manifest's absence entry
-                is narrowed by one rather than deleted. */}
-            <div className="btnrow" style={{ marginTop: 12 }}>
-              <button
-                className="btn"
-                type="button"
-                onClick={() => signOut({ callbackUrl: "/login" })}
-              >
-                Sign out
-              </button>
-            </div>
-            <Note>
-              {s.note}
-            </Note>
-          </>
-        )}
-      </Section>
-
-      <Section
-        title="Preferences"
-        meta={(p) => p.meta}
-        data={sections.preferences}
-        pending={pending}
-      >
-        {(p) => (
-          <>
-            <Kv rows={p.rows} />
-            {/* The one preference that is a control, not a reading. Kept out of
-                the adapter's rows because a row is a string and this one is not. */}
-            <ThemeRow />
-            <Note>
-              {p.note}
-            </Note>
-          </>
-        )}
-      </Section>
-
-      {/* `P.settings`' "Brand". Static — it describes the design system, not
-          this account. The prototype's own copy claims the accent is sampled
-          from the wordmark; nothing here records that, so the panel says what
-          the colours are FOR instead. */}
-      <Section title="Brand" meta={() => "used on login and in the rail"} data={sections.brand} pending={pending}>
-        {(b) => (
-          <div style={{ display: "grid", gap: 12, justifyItems: "start" }}>
-            {/* The mark, not the name set in type. This panel's own meta line
-                says "used on login and in the rail", and login draws
-                `Logo` now — but the better reason is note 15's: "the wordmark
-                is the palette's alibi". Beside an Accent and a Signal swatch,
-                the artwork that IS that red and that yellow demonstrates the
-                claim; a line of Bricolage only asserts it. The rail still
-                draws the type, which is why the meta line still says both. */}
-            <Logo width={180} />
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-              {b.swatches.map((sw) => (
-                <span
-                  className="qbtn"
-                  key={sw.key}
-                  style={{ "--qc": `var(--${sw.token})` } as CSSProperties}
+                <Section
+                  title="Who can see this"
+                  meta={(t) => t.meta}
+                  data={sections.team}
+                  pending={pending}
+                  pad={false}
+                  askAbout="who can see this account"
                 >
-                  <i />
-                  {sw.label}
-                  <span className="n">{sw.what}</span>
-                </span>
-              ))}
-            </div>
-            <Note bare measure>{b.note}</Note>
-          </div>
-        )}
-      </Section>
+                  {(t) => (
+                    <>
+                      <Table columns={TEAM_COLUMNS} rows={t.rows} />
+                      {/* `P.settings` closes Team with a real `.sec__body` under the
+                          table — it holds the invite buttons there, and the note. We
+                          have the note; the buttons are declared in the manifest. */}
+                      <div className="sec__body">
+                        <Note bare>
+                          {t.note}
+                        </Note>
+                      </div>
+                    </>
+                  )}
+                </Section>
+              </>
+            ),
+          },
+          {
+            key: "notifications",
+            label: "Notifications",
+            content: (
+              <>
+                <Section
+                  title="Notifications"
+                  meta={(n) => n.meta}
+                  data={sections.notifications}
+                  pending={pending}
+                >
+                  {(n) => <Notifications data={n} />}
+                </Section>
+              </>
+            ),
+          },
+          {
+            key: "signins",
+            label: "Sign-ins",
+            content: (
+              <>
+                <Section
+                  title="Where sign-ins came from"
+                  meta={(s) => s.meta}
+                  data={sections.signins}
+                  pending={pending}
+                  askAbout="who has signed in recently"
+                >
+                  {(s) => (
+                    <>
+                      {/* `P.settings`' Sessions panel is setrows, one device a line.
+                          Ours are the same rows read off the log — see the adapter for
+                          why a live session list is not available. */}
+                      {s.rows.map((r) => (
+                        <div className="setrow" key={r.label}>
+                          <div className="tx">
+                            <b>{r.label}</b>
+                            <span>{r.detail}</span>
+                          </div>
+                          <span className="mono">{r.value}</span>
+                        </div>
+                      ))}
+                      {/* `P.settings`' Sessions panel closes with a `.btnrow` holding
+                          "Sign out everywhere", then its note — this is that row, in
+                          that position, holding the one of the two the product can
+                          honour.
 
-      <Section
-        title="Who can see this"
-        meta={(t) => t.meta}
-        data={sections.team}
-        pending={pending}
-        pad={false}
-        askAbout="who can see this account"
-      >
-        {(t) => (
-          <>
-            <Table columns={TEAM_COLUMNS} rows={t.rows} />
-            {/* `P.settings` closes Team with a real `.sec__body` under the
-                table — it holds the invite buttons there, and the note. We
-                have the note; the buttons are declared in the manifest. */}
-            <div className="sec__body">
-              <Note bare>
-                {t.note}
-              </Note>
-            </div>
-          </>
-        )}
-      </Section>
+                          NOT "Sign out everywhere". Auth is `strategy: "jwt"` with no
+                          session table, so there is no way to revoke a token this
+                          browser is not holding, and a button that claimed to would be
+                          lying about a security control — the same reason the manifest
+                          declares "End" absent on every row above. Signing out HERE is
+                          a cookie and needs none of that. The manifest's absence entry
+                          is narrowed by one rather than deleted. */}
+                      <div className="btnrow" style={{ marginTop: 12 }}>
+                        <button
+                          className="btn"
+                          type="button"
+                          onClick={() => signOut({ callbackUrl: "/login" })}
+                        >
+                          Sign out
+                        </button>
+                      </div>
+                      <Note>
+                        {s.note}
+                      </Note>
+                    </>
+                  )}
+                </Section>
+              </>
+            ),
+          },
+          {
+            key: "look",
+            label: "Look",
+            content: (
+              <>
+                <Section
+                  title="Preferences"
+                  meta={(p) => p.meta}
+                  data={sections.preferences}
+                  pending={pending}
+                >
+                  {(p) => (
+                    <>
+                      <Kv rows={p.rows} />
+                      {/* The one preference that is a control, not a reading. Kept out of
+                          the adapter's rows because a row is a string and this one is not. */}
+                      <ThemeRow />
+                      <Note>
+                        {p.note}
+                      </Note>
+                    </>
+                  )}
+                </Section>
+
+                {/* `P.settings`' "Brand". Static — it describes the design system, not
+                    this account. The prototype's own copy claims the accent is sampled
+                    from the wordmark; nothing here records that, so the panel says what
+                    the colours are FOR instead. */}
+                <Section title="Brand" meta={() => "used on login and in the rail"} data={sections.brand} pending={pending}>
+                  {(b) => (
+                    <div style={{ display: "grid", gap: 12, justifyItems: "start" }}>
+                      {/* The mark, not the name set in type. This panel's own meta line
+                          says "used on login and in the rail", and login draws
+                          `Logo` now — but the better reason is note 15's: "the wordmark
+                          is the palette's alibi". Beside an Accent and a Signal swatch,
+                          the artwork that IS that red and that yellow demonstrates the
+                          claim; a line of Bricolage only asserts it. The rail still
+                          draws the type, which is why the meta line still says both. */}
+                      <Logo width={180} />
+                      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                        {b.swatches.map((sw) => (
+                          <span
+                            className="qbtn"
+                            key={sw.key}
+                            style={{ "--qc": `var(--${sw.token})` } as CSSProperties}
+                          >
+                            <i />
+                            {sw.label}
+                            <span className="n">{sw.what}</span>
+                          </span>
+                        ))}
+                      </div>
+                      <Note bare measure>{b.note}</Note>
+                    </div>
+                  )}
+                </Section>
+              </>
+            ),
+          },
+        ]}
+      />
+
     </>
   )
 }

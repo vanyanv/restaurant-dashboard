@@ -220,7 +220,7 @@ export function CounterMenuItemClient({
 
       {/* Made plain (owner's go, 2026-11-19; mock
           https://claude.ai/artifact/YNwJ7EneNdAaC7vDp4HhBe): what one plate
-          keeps, by channel. The page as it was is folded below, unchanged. */}
+          keeps, by channel. The page as it was sits in named tabs beside it (DESIGN.md "Page layout"). */}
       <PageTabs
         label="Item views"
         tabs={[

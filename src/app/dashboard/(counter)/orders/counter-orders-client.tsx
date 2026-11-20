@@ -384,7 +384,7 @@ export function CounterOrdersClient({
 
       {/* The page made plain (owner's go, 2026-11-18; mock
           https://claude.ai/artifact/Sr98ngzuijqUUhPbJNJAv4). The figures, the
-          filters and every order are folded underneath, unchanged. */}
+          filters and every order sit in named tabs beside it (DESIGN.md "Page layout"). */}
       <PageTabs
         label="Order views"
         tabs={[

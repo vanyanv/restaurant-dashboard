@@ -326,7 +326,7 @@ export function CounterCatalogClient({
 
       {/* Made plain (owner's go, 2026-11-19; mock
           https://claude.ai/artifact/YNwJ7EneNdAaC7vDp4HhBe): the links first,
-          one tap each. The page as it was is folded below, unchanged. */}
+          one tap each. The page as it was sits in named tabs beside it (DESIGN.md "Page layout"). */}
       <PageTabs
         label="Catalog views"
         tabs={[

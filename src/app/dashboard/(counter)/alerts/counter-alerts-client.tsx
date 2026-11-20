@@ -527,7 +527,7 @@ export function CounterAlertsClient({
 
       {/* The page made plain (owner's go, 2026-11-18; mock
           https://claude.ai/artifact/Sr98ngzuijqUUhPbJNJAv4). The list it opens
-          is folded underneath and unfolds when an alert is picked. */}
+          sits in the Alerts and History tabs; picking an alert opens Alerts. */}
       <PageTabs
         label="Alert views"
         initial={selectedAlert !== null ? "alerts" : undefined}
@@ -547,7 +547,6 @@ export function CounterAlertsClient({
                   )}
                 </Section>
 
-                {/* Keyed on the selection so each newly opened alert opens the fold again. */}
               </>
             ),
           },

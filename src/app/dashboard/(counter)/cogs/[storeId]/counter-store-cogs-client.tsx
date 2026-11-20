@@ -188,7 +188,7 @@ export function CounterStoreCogsClient({
 
       {/* Food cost made plain (owner's go, 2026-11-18; mock
           https://claude.ai/artifact/Sr98ngzuijqUUhPbJNJAv4). Every figure
-          below is folded underneath, unchanged. */}
+          below sits in named tabs beside it (DESIGN.md "Page layout"). */}
       <PageTabs
         label="Food cost views"
         tabs={[
