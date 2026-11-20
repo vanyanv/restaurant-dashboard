@@ -305,14 +305,16 @@ export function CounterStoreLaborClient({
       {/* Labor made plain (owner's go, 2026-11-18; mock
           https://claude.ai/artifact/Sr98ngzuijqUUhPbJNJAv4). Every figure
           below is folded underneath, unchanged. */}
-      <Section bare title="Labor in a sentence" data={sections.plain} pending={pending}>
-        {(p) => <LaborPlainView p={p} />}
-      </Section>
-
       {/* The detail brought out of the fold (owner's go, 2026-11-20; mock
           https://claude.ai/artifact/VVoyXKUEykrCL6MK5K78ms): the weeks as
-          sales against labor with two side by side, then each day and the roles. */}
+          sales against labor with two side by side, each day and the roles, as three
+          short tabs (the owner found one scroll too long). */}
       <LaborDetail
+        lead={
+          <Section bare title="Labor in a sentence" data={sections.plain} pending={pending}>
+            {(p) => <LaborPlainView p={p} />}
+          </Section>
+        }
         sections={sections}
         pending={pending}
         onWeek={(next) => push({ range: next })}

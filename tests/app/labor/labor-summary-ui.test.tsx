@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { describe, expect, it, vi } from "vitest"
 import { fireEvent, render, screen } from "@testing-library/react"
-import { LaborDetailView, LaborWeeksBlock } from "@/app/dashboard/(counter)/labor/labor-summary-ui"
+import { LaborDetail, LaborDetailView, LaborWeeksBlock } from "@/app/dashboard/(counter)/labor/labor-summary-ui"
 import { buildLaborSummary, buildLaborWeeks } from "@/lib/counter/labor-summary"
 import type { LaborDay, LaborTrendWeek, LaborWeek } from "@/lib/counter/labor-week"
 
@@ -86,8 +86,8 @@ describe("Labor detail views", () => {
   it("draws each day, the stores and the roles, with missing said in words", () => {
     const onStore = vi.fn()
     const { container } = render(<LaborDetailView s={summary} onStore={onStore} />)
-    expect(container.querySelectorAll(".lb-day")).toHaveLength(7)
-    expect(container.querySelector('.lb-day[data-missing="true"] .lb-day__share')?.textContent).toBe("missing")
+    expect(container.querySelectorAll(".cu-bars--cells .cu-bar")).toHaveLength(7)
+    expect(container.querySelector('.cu-bar[data-hatched="true"] .cu-bar__value')?.textContent).toBe("missing")
     expect(screen.getByText("so far")).toBeTruthy()
     fireEvent.click(screen.getByText("Van Nuys"))
     expect(onStore).toHaveBeenCalledWith("v")
@@ -98,17 +98,41 @@ describe("Labor detail views", () => {
   it("opens a tapped week as a Monday-to-Sunday range and compares any two weeks", () => {
     const onWeek = vi.fn()
     const { container } = render(<LaborWeeksBlock w={weeks} onWeek={onWeek} />)
-    const bars = container.querySelectorAll<HTMLButtonElement>(".lb-wk")
+    const bars = container.querySelectorAll<HTMLButtonElement>(".cu-split__b")
     expect(bars).toHaveLength(12)
     expect(bars[11].getAttribute("aria-pressed")).toBe("true")
     fireEvent.click(bars[9])
     const r = onWeek.mock.calls[0][0] as { start: Date; end: Date }
     expect([r.start.getMonth(), r.start.getDate(), r.end.getMonth(), r.end.getDate()]).toEqual([9, 26, 10, 1])
 
-    const share = () => Array.from(container.querySelectorAll(".lb-cmp__row")).find((x) => x.textContent?.includes("share of sales"))
+    const share = () => Array.from(container.querySelectorAll(".cu-cmp__row")).find((x) => x.textContent?.includes("share of sales"))
     expect(share()?.textContent).toContain("28.0%26.9%▲ 1.1 pts")
     fireEvent.change(screen.getByLabelText("Against"), { target: { value: trend[3].key } })
     expect(share()?.textContent).toContain("28.0%missing")
 
+  })
+
+  it("splits the page into three short tabs and draws only the open one", () => {
+    const ready = <T,>(data: T) => ({ status: "ready" as const, data })
+    const { container } = render(
+      <LaborDetail
+        lead={<p>the sentence</p>}
+        sections={{ summary: ready(summary), weeks: ready(weeks) } as never}
+        pending={false}
+        onWeek={() => {}}
+        onStore={() => {}}
+      />,
+    )
+    expect(screen.getByText("the sentence")).toBeTruthy()
+    expect(container.querySelectorAll(".cu-bar")).toHaveLength(7)
+    expect(container.querySelector(".cu-split")).toBeNull()
+
+    fireEvent.click(screen.getByRole("button", { name: "Compare weeks" }))
+    expect(screen.queryByText("the sentence")).toBeNull()
+    expect(container.querySelectorAll(".cu-split__b")).toHaveLength(12)
+
+    fireEvent.click(screen.getByRole("button", { name: "Stores and roles" }))
+    expect(screen.getByText("Hollywood")).toBeTruthy()
+    expect(container.querySelector(".cu-split")).toBeNull()
   })
 })

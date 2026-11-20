@@ -147,12 +147,13 @@ export function CounterPhoneLaborClient({
       {/* Labor made plain (owner's go, 2026-11-18; mock
           https://claude.ai/artifact/Sr98ngzuijqUUhPbJNJAv4). Every figure
           below is folded underneath, unchanged. */}
-      <Section bare title="Labor in a sentence" data={sections.plain} pending={pending}>
-        {(p) => <LaborPlainView p={p} />}
-      </Section>
-
-      {/* The same detail the desk shows, from the same sections. */}
+      {/* The same three tabs the desk shows, from the same sections. */}
       <LaborDetail
+        lead={
+          <Section bare title="Labor in a sentence" data={sections.plain} pending={pending}>
+            {(p) => <LaborPlainView p={p} />}
+          </Section>
+        }
         sections={sections}
         pending={pending}
         onWeek={(next) => go({ range: next })}

@@ -1,8 +1,8 @@
 "use client"
 
-import { useId, useState, type CSSProperties } from "react"
+import { useState, type ReactNode } from "react"
 import { Section } from "@/components/counter"
-import { Answer, Card, StoreCard, StoreCardGrid } from "@/components/counter/ui"
+import { Answer, BarRows, Card, ChartKey, Compare, SplitBars, StoreCard, StoreCardGrid, Tabs } from "@/components/counter/ui"
 import type { LaborSections } from "@/lib/counter/adapters/labor"
 import type { SectionSources } from "@/lib/counter/adapters/types"
 import { parseIsoDay, type DateRange } from "@/lib/counter/date-range"
@@ -11,64 +11,58 @@ import { compareLaborWeeks, type LaborSummary, type LaborWeeksView } from "@/lib
 /**
  * The Labor page's detail, shared by the desk and the phone and by the group
  * and store pages (mock https://claude.ai/artifact/VVoyXKUEykrCL6MK5K78ms).
- * Every figure, word and bar length arrives from `labor-summary.ts`; this
- * file lays them out and keeps the one piece of state there is, which two
- * weeks are set side by side. Layout is `counter-labor.css` (`lb-`).
+ * Every figure, word and bar length arrives from `labor-summary.ts`. Every
+ * piece drawn is a shared block (`@/components/counter/ui`): this file only
+ * hands them their rows and keeps two pieces of state, the open tab and
+ * which two weeks are side by side. There is no stylesheet of its own.
  */
 
-/** Each day's share, the stores side by side, and the cost by role. */
-export function LaborDetailView({ s, onStore }: { s: LaborSummary; onStore?: (storeId: string) => void }) {
+/**
+ * Each day's share, the stores side by side, and the cost by role. `show`
+ * picks the half a tab draws; left out, all of it is drawn.
+ */
+export function LaborDetailView({
+  s,
+  onStore,
+  show,
+}: {
+  s: LaborSummary
+  onStore?: (storeId: string) => void
+  show?: "days" | "stores"
+}) {
+  const days = show !== "stores"
+  const rest = show !== "days"
   return (
     <div className="cu-stack">
-      {s.days.length > 0 ? (
-        <Card as="section" label="Each day">
-          <div className="lb-top">
-            <h3 className="lb-h">Each day</h3>
-            <span className="lb-key">
-              <span>
-                <i className="lb-sw lb-sw--labor" />
-                labor, share of sales
-              </span>
-              {s.dayMarkLabel ? (
-                <span>
-                  <i className="lb-sw lb-sw--mark" />
-                  the range, {s.dayMarkLabel}
-                </span>
-              ) : null}
-              {s.days.some((d) => d.missing) ? (
-                <span>
-                  <i className="lb-sw lb-sw--miss" />
-                  labor missing
-                </span>
-              ) : null}
-            </span>
-          </div>
-          <div className="lb-days">
-            <ul className="lb-days__in">
-              {s.days.map((d, i) => (
-                <li key={d.key} className="lb-day" data-missing={d.missing && d.fill === 0} aria-label={d.aria}>
-                  <span className="lb-day__dow">
-                    {d.dow}
-                    <small>{d.date}</small>
-                  </span>
-                  <span className="lb-day__trk" aria-hidden="true">
-                    {d.fill > 0 ? <i className="lb-day__fill" style={{ width: `${d.fill}%`, "--i": i } as CSSProperties} /> : null}
-                    {s.dayMark !== null && d.fill > 0 ? <i className="lb-day__mark" style={{ left: `${s.dayMark}%` }} /> : null}
-                  </span>
-                  <span className="lb-day__share">{d.share}</span>
-                  <span className="lb-day__det">
-                    {d.detail}
-                    {d.provisional ? <> <span className="lb-tag">so far</span></> : null}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          </div>
-          {s.dayNote ? <p className="lb-note">{s.dayNote}</p> : null}
+      {days && s.days.length > 0 ? (
+        <Card as="section" label="Each day" caption="Each day">
+          <ChartKey
+            items={[
+              { kind: "fill", label: "labor, share of sales" },
+              ...(s.dayMarkLabel ? [{ kind: "mark" as const, label: `the range, ${s.dayMarkLabel}` }] : []),
+              ...(s.days.some((d) => d.missing) ? [{ kind: "hatched" as const, label: "labor missing" }] : []),
+            ]}
+          />
+          <BarRows
+            cells
+            mark={s.dayMark}
+            rows={s.days.map((d) => ({
+              key: d.key,
+              title: d.dow,
+              sub: d.date,
+              value: d.share,
+              fill: d.fill,
+              detail: d.detail,
+              tag: d.provisional ? "so far" : undefined,
+              hatched: d.missing && d.fill === 0,
+              ariaLabel: d.aria,
+            }))}
+          />
+          {s.dayNote ? <p className="cu-note">{s.dayNote}</p> : null}
         </Card>
       ) : null}
 
-      {s.stores.length > 0 ? (
+      {rest && s.stores.length > 0 ? (
         <StoreCardGrid>
           {s.stores.map((st) => (
             <StoreCard
@@ -82,22 +76,10 @@ export function LaborDetailView({ s, onStore }: { s: LaborSummary; onStore?: (st
         </StoreCardGrid>
       ) : null}
 
-      {s.roles.length > 0 ? (
-        <Card as="section" label="What labor is made of">
-          <h3 className="lb-h">What labor is made of</h3>
-          <ul className="lb-roles">
-            {s.roles.map((r) => (
-              <li key={r.key} className="lb-role">
-                <span className="lb-role__name">{r.label}</span>
-                <span className="lb-role__cost">{r.cost}</span>
-                <span className="lb-role__trk" aria-hidden="true">
-                  <i style={{ width: `${r.fill}%` }} />
-                </span>
-                <span className="lb-role__det">{r.detail}</span>
-              </li>
-            ))}
-          </ul>
-          {s.rolesNote ? <p className="lb-note">{s.rolesNote}</p> : null}
+      {rest && s.roles.length > 0 ? (
+        <Card as="section" label="What labor is made of" caption="What labor is made of">
+          <BarRows rows={s.roles.map((r) => ({ key: r.key, title: r.label, value: r.cost, fill: r.fill, detail: r.detail }))} />
+          {s.rolesNote ? <p className="cu-note">{s.rolesNote}</p> : null}
         </Card>
       ) : null}
     </div>
@@ -106,8 +88,6 @@ export function LaborDetailView({ s, onStore }: { s: LaborSummary; onStore?: (st
 
 /** The weeks as sales against labor (tap one to open it), and two of them side by side. */
 export function LaborWeeksBlock({ w, onWeek }: { w: LaborWeeksView; onWeek: (range: DateRange) => void }) {
-  const idA = useId()
-  const idB = useId()
   const [picked, setPicked] = useState<{ a: string; b: string; under: string } | null>(null)
   // The picks belong to the week that was open when they were made: tap
   // another week and the comparison opens on that week and the one before.
@@ -116,153 +96,130 @@ export function LaborWeeksBlock({ w, onWeek }: { w: LaborWeeksView; onWeek: (ran
   const pair = picked !== null && picked.under === under && has(picked.a) && has(picked.b) ? picked : w.compare
   const a = pair ? w.weeks.find((x) => x.key === pair.a) : undefined
   const b = pair ? w.weeks.find((x) => x.key === pair.b) : undefined
-  const newestFirst = [...w.weeks].reverse()
+  const optionLabel = (x: LaborWeeksView["weeks"][number]) => `${x.name}${x.partWord ? ` (${x.partWord})` : ""}`
 
   return (
     <div className="cu-stack">
-      <Card as="section" label="Sales against labor, week by week">
-        <div className="lb-top">
-          <h3 className="lb-h">Sales against labor, week by week</h3>
-          <span className="lb-key">
-            <span>
-              <i className="lb-sw lb-sw--sales" />
-              sales
-            </span>
-            <span>
-              <i className="lb-sw lb-sw--labor" />
-              labor
-            </span>
-            {w.weeks.some((x) => x.missing) ? (
-              <span>
-                <i className="lb-sw lb-sw--miss" />
-                labor missing
-              </span>
-            ) : null}
-          </span>
-        </div>
-        <div className="lb-weeks">
-          <div className="lb-weeks__bars" style={{ gridTemplateColumns: `repeat(${w.weeks.length},minmax(0,1fr))` }}>
-            {w.weeks.map((x, i) => (
-              <button
-                key={x.key}
-                type="button"
-                className="lb-wk"
-                data-missing={x.missing}
-                aria-pressed={x.selected}
-                aria-label={x.aria}
-                onClick={() => {
-                  const start = parseIsoDay(x.key)
-                  const end = parseIsoDay(x.end)
-                  if (start && end) onWeek({ start, end })
-                }}
-              >
-                <span className="lb-wk__top">{x.top}</span>
-                <span className="lb-wk__trk">
-                  <span className="lb-wk__bar" style={{ height: `${Math.max(2, x.salesFill)}%`, "--i": i } as CSSProperties}>
-                    {x.laborFill > 0 ? <i style={{ height: `${x.laborFill}%` }} /> : null}
-                  </span>
-                </span>
-                <span className="lb-wk__lbl">{x.label}</span>
-              </button>
-            ))}
-          </div>
-        </div>
+      <Card as="section" label="Sales against labor, week by week" caption="Sales against labor, week by week · tap a week">
+        <ChartKey
+          items={[
+            { kind: "base", label: "sales" },
+            { kind: "fill", label: "labor" },
+            ...(w.weeks.some((x) => x.missing) ? [{ kind: "hatched" as const, label: "labor missing" }] : []),
+          ]}
+        />
+        <SplitBars
+          bars={w.weeks.map((x) => ({
+            key: x.key,
+            label: x.label,
+            top: x.top,
+            value: x.salesFill,
+            inner: x.laborFill,
+            hatched: x.missing,
+            selected: x.selected,
+            ariaLabel: x.aria,
+          }))}
+          onPick={(key) => {
+            const x = w.weeks.find((v) => v.key === key)
+            const start = x ? parseIsoDay(x.key) : null
+            const end = x ? parseIsoDay(x.end) : null
+            if (start && end) onWeek({ start, end })
+          }}
+        />
         <Answer>{w.sentence}</Answer>
-        <p className="lb-note">
-          Tap a week to open it. The whole bar is what the week sold and the filled part is what labor cost; the number
-          on top is labor as a share of sales. To go further back, open an older week: it and the eleven weeks before it are
-          drawn. The date arrows at the top of the page step forward again.
+        <p className="cu-note">
+          The whole bar is what the week sold and the filled part is what labor cost; the number on top is labor as a
+          share of sales. To go further back, open an older week: it and the eleven weeks before it are drawn. The date
+          arrows at the top of the page step forward again.
         </p>
       </Card>
 
       {a && b ? (
-        <Card as="section" label="Two weeks side by side">
-          <h3 className="lb-h">Two weeks side by side</h3>
-          <div className="lb-cmp">
-            <div className="lb-cmp__picks">
-              <label className="lb-cmp__pick" htmlFor={idA}>
-                <span>Week</span>
-                <select id={idA} value={a.key} onChange={(e) => setPicked({ a: e.target.value, b: b.key, under })}>
-                  {newestFirst.map((x) => (
-                    <option key={x.key} value={x.key}>
-                      {x.name}
-                      {x.partWord ? ` (${x.partWord})` : ""}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="lb-cmp__pick" htmlFor={idB}>
-                <span>Against</span>
-                <select id={idB} value={b.key} onChange={(e) => setPicked({ a: a.key, b: e.target.value, under })}>
-                  {newestFirst.map((x) => (
-                    <option key={x.key} value={x.key}>
-                      {x.name}
-                      {x.partWord ? ` (${x.partWord})` : ""}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            </div>
-            <table className="lb-cmp__rows">
-              <thead>
-                <tr className="lb-cmp__row lb-cmp__row--head">
-                  <th scope="col">Figure</th>
-                  <th scope="col">{a.name}</th>
-                  <th scope="col">{b.name}</th>
-                  <th scope="col">Change</th>
-                </tr>
-              </thead>
-              <tbody>
-                {compareLaborWeeks(a, b).map((r) => (
-                  <tr key={r.key} className="lb-cmp__row">
-                    <th scope="row">{r.label}</th>
-                    <td>{r.a}</td>
-                    <td>{r.b}</td>
-                    <td className="lb-cmp__chg" data-tone={r.tone}>
-                      {r.change}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            {a.missing || b.missing || a.running || b.running ? (
-              <p className="lb-note">
-                {a.running || b.running ? "A week marked so far or part week has fewer than seven days. " : ""}
-                {a.missing || b.missing
-                  ? "A week with labor missing shows less labor than was worked, and its share is on the days with labor."
-                  : ""}
-              </p>
-            ) : null}
-          </div>
+        <Card as="section" label="Two weeks side by side" caption="Two weeks side by side">
+          <Compare
+            a={{ key: a.key, label: a.name }}
+            b={{ key: b.key, label: b.name }}
+            rows={compareLaborWeeks(a, b)}
+            labels={{ a: "Week", b: "Against" }}
+            options={[...w.weeks].reverse().map((x) => ({ key: x.key, label: optionLabel(x) }))}
+            onPick={(next) => setPicked({ ...next, under })}
+          />
+          {a.missing || b.missing || a.running || b.running ? (
+            <p className="cu-note">
+              {a.running || b.running ? "A week marked so far or part week has fewer than seven days. " : ""}
+              {a.missing || b.missing
+                ? "A week with labor missing shows less labor than was worked, and its share is on the days with labor."
+                : ""}
+            </p>
+          ) : null}
         </Card>
       ) : null}
     </div>
   )
 }
 
+type LaborTab = "summary" | "weeks" | "stores"
+
 /**
- * The two sections every Labor page shows under its sentence, in one place so
- * the four pages (desk and phone, group and store) cannot drift apart.
+ * The Labor page as three short tabs, in one place so the four pages (desk
+ * and phone, group and store) cannot drift apart. The owner found the single
+ * scroll too long (2026-11-20), so each tab is one question:
+ *
+ * - Summary: the sentence (the page's own `lead`) and each day;
+ * - Compare weeks: sales against labor week by week, and two weeks side by side;
+ * - Stores and roles: the stores side by side and the cost by role.
+ *
+ * The tab is local state: opening another week or store keeps the reader on
+ * the tab they were on. A tab that is not open is not rendered, so its
+ * section is not read until it is asked for, and its blocks rise in when it
+ * opens (`cu-stack`).
  */
 export function LaborDetail({
+  lead,
   sections,
   pending,
   onWeek,
   onStore,
 }: {
+  /** The page's sentence card, drawn first on the Summary tab. */
+  lead: ReactNode
   sections: SectionSources<Pick<LaborSections, "summary" | "weeks">>
   pending: boolean
   onWeek: (range: DateRange) => void
+  /** Given on the all-stores page only; it is what makes the third tab "Stores and roles". */
   onStore?: (storeId: string) => void
 }) {
+  const [tab, setTab] = useState<LaborTab>("summary")
   return (
     <>
-      <Section bare title="Sales against labor, week by week" data={sections.weeks} pending={pending}>
-        {(w) => <LaborWeeksBlock w={w} onWeek={onWeek} />}
-      </Section>
-      <Section bare title="Each day, the stores and the roles" data={sections.summary} pending={pending}>
-        {(d) => <LaborDetailView s={d} onStore={onStore} />}
-      </Section>
+      <Tabs
+        label="Labor views"
+        active={tab}
+        onSelect={(k) => setTab(k as LaborTab)}
+        items={[
+          { key: "summary", label: "Summary" },
+          { key: "weeks", label: "Compare weeks" },
+          { key: "stores", label: onStore ? "Stores and roles" : "Roles" },
+        ]}
+      />
+      {tab === "summary" ? (
+        <>
+          {lead}
+          <Section bare title="Each day" data={sections.summary} pending={pending}>
+            {(d) => <LaborDetailView s={d} show="days" />}
+          </Section>
+        </>
+      ) : null}
+      {tab === "weeks" ? (
+        <Section bare title="Sales against labor, week by week" data={sections.weeks} pending={pending}>
+          {(w) => <LaborWeeksBlock w={w} onWeek={onWeek} />}
+        </Section>
+      ) : null}
+      {tab === "stores" ? (
+        <Section bare title={onStore ? "The stores and the roles" : "The roles"} data={sections.summary} pending={pending}>
+          {(d) => <LaborDetailView s={d} show="stores" onStore={onStore} />}
+        </Section>
+      ) : null}
     </>
   )
 }

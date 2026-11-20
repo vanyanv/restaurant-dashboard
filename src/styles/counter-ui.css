@@ -56,7 +56,7 @@ a.cu-status:focus-visible,button.cu-status:focus-visible{outline:2px solid var(-
    flex row or an auto grid track it shrinks to 0 and its buttons spill off the
    screen (the invoice decision bar, 2026-11-18). width:100% makes it take the
    line instead. */
-.cu-btnrow,.cu-bigs,.cu-stores,.cu-rows,.cu-needs__list,.cu-tabs,.cu-weeks,.cu-quad{width:100%;min-width:0}
+.cu-btnrow,.cu-bigs,.cu-stores,.cu-rows,.cu-needs__list,.cu-tabs,.cu-weeks,.cu-quad,.cu-bars,.cu-split,.cu-cmp{width:100%;min-width:0}
 .cu-btnrow{container-type:inline-size}
 .cu-btnrow__in{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
 @container (max-width:520px){
@@ -239,6 +239,84 @@ a.cu-tile:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .cu-cat__menu{position:absolute;right:-24px;top:-30px;padding:4px 8px;border:1px solid var(--line-strong);border-radius:var(--r-sm);background:var(--surface);font-size:var(--t-cap);white-space:nowrap;z-index:1}
 .cu-cat__frame--desk .cu-cat__body:has(.cu-cat__menu){padding-top:40px}
 
+/* ---- Small charts: key, bar rows, split bars, two periods side by side ----
+   (Labor, 2026-11-20.) The measured part is drawn in the labor colour of the
+   P&L; what it is measured against in the strong line colour; a missing
+   input is hatched; a reference mark is the accent. */
+.cu-note{margin:0;font-size:var(--t-cap);line-height:1.45;color:var(--ink-2);text-wrap:pretty}
+.cu-key{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:var(--t-cap);color:var(--ink-3)}
+.cu-key__sw{display:inline-block;width:12px;height:10px;border-radius:2px;vertical-align:-1px;margin-right:5px}
+.cu-key__sw--base{background:var(--line-strong)}
+.cu-key__sw--fill{background:var(--ct-pl-labor)}
+.cu-key__sw--hatched{background:repeating-linear-gradient(135deg,var(--ink-3) 0 3px,transparent 3px 6px);border:1px solid var(--ink-3)}
+.cu-key__sw--mark{background:var(--accent);width:2px;height:12px;vertical-align:-2px}
+
+.cu-bars{container-type:inline-size}
+.cu-bars__in{display:grid;gap:6px;margin:0;padding:0;list-style:none}
+.cu-bar{display:grid;grid-template-columns:minmax(52px,auto) minmax(0,1fr) auto;grid-template-areas:"title bar value" "det det det";gap:4px 10px;align-items:center;min-width:0;padding:8px 10px;border:1px solid var(--line);border-radius:var(--r-sm);background:var(--surface)}
+.cu-bar__title{grid-area:title;font-weight:600;font-size:var(--t-body);line-height:1.15;min-width:0;overflow-wrap:anywhere}
+.cu-bar__title small{display:block;font-family:var(--mono);font-weight:400;font-size:var(--t-micro);color:var(--ink-3)}
+.cu-bar__value{grid-area:value;font-weight:700;font-size:var(--t-body);font-variant-numeric:tabular-nums lining-nums;text-align:right;white-space:nowrap}
+.cu-bar[data-hatched="true"] .cu-bar__value{color:var(--warn);font-weight:600}
+.cu-bar__trk{grid-area:bar;position:relative;height:12px;border-radius:3px;background:var(--line)}
+.cu-bar__fill{position:absolute;inset:0 auto 0 0;border-radius:3px;background:var(--ct-pl-labor);transform-origin:left}
+.cu-bar[data-hatched="true"] .cu-bar__trk{background:repeating-linear-gradient(135deg,var(--ink-3) 0 3px,transparent 3px 6px);outline:1px solid var(--ink-3);outline-offset:-1px}
+.cu-bar__mark{position:absolute;top:-3px;bottom:-3px;width:2px;background:var(--accent)}
+.cu-bar__detail{grid-area:det;font-size:var(--t-cap);color:var(--ink-2);font-variant-numeric:tabular-nums lining-nums;min-width:0}
+.cu-bar__tag{font-family:var(--mono);font-size:var(--t-micro);letter-spacing:.06em;text-transform:uppercase;color:var(--ink-2);border:1px dashed var(--line-strong);border-radius:999px;padding:1px 6px;white-space:nowrap}
+@container (min-width:720px){
+  .cu-bars--cells .cu-bars__in{grid-template-columns:repeat(auto-fit,minmax(118px,1fr));gap:8px}
+  .cu-bars--cells .cu-bar{grid-template-columns:minmax(0,1fr) auto;grid-template-areas:"title value" "bar bar" "det det";padding:10px;align-content:start}
+  .cu-bars:not(.cu-bars--cells) .cu-bar{grid-template-columns:minmax(0,180px) minmax(0,1fr) auto minmax(0,150px);grid-template-areas:"title bar value det"}
+  .cu-bars:not(.cu-bars--cells) .cu-bar__detail{text-align:right}
+}
+
+.cu-split{container-type:inline-size}
+.cu-split__bars{display:grid;gap:6px;align-items:end;height:170px}
+.cu-split__b{display:flex;flex-direction:column;justify-content:flex-end;align-items:stretch;gap:4px;height:100%;min-width:0;padding:0;border:0;background:none;font:inherit;color:inherit;cursor:pointer;border-radius:var(--r-sm)}
+.cu-split__b:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.cu-split__top{font-size:var(--t-cap);font-weight:600;text-align:center;color:var(--ink-2);font-variant-numeric:tabular-nums lining-nums;white-space:nowrap;overflow:hidden;text-overflow:clip}
+.cu-split__trk{flex:1 1 0;min-height:0;display:flex;align-items:flex-end}
+.cu-split__bar{width:100%;display:flex;flex-direction:column;justify-content:flex-end;min-height:3px;border-radius:3px 3px 0 0;background:var(--line-strong);overflow:hidden;opacity:.62;transform-origin:bottom}
+.cu-split__bar i{display:block;background:var(--ct-pl-labor)}
+.cu-split__b[data-hatched="true"] .cu-split__bar{background:repeating-linear-gradient(135deg,var(--ink-3) 0 3px,transparent 3px 6px);outline:1px solid var(--ink-3);outline-offset:-1px}
+.cu-split__b[aria-pressed="true"] .cu-split__bar{opacity:1}
+.cu-split__b[aria-pressed="true"] .cu-split__top{color:var(--ink)}
+.cu-split__lbl{font-family:var(--mono);font-size:var(--t-micro);color:var(--ink-3);text-align:center;border-top:1px solid var(--line);padding-top:4px;white-space:nowrap;overflow:hidden}
+.cu-split__b[aria-pressed="true"] .cu-split__lbl{color:var(--ink);font-weight:500;border-top:2px solid var(--ink)}
+@container (max-width:520px){
+  .cu-split__bars{height:130px;gap:3px}
+  .cu-split__top,.cu-split__lbl{overflow:visible;display:flex;justify-content:center}
+  .cu-split__top{font-size:var(--t-micro);visibility:hidden}
+  .cu-split__b[aria-pressed="true"] .cu-split__top,.cu-split__bars:not(:has([aria-pressed="true"])) .cu-split__b:last-child .cu-split__top{visibility:visible}
+  .cu-split__b:not(:nth-child(3n+1)):not([aria-pressed="true"]) .cu-split__lbl{color:transparent}
+}
+
+.cu-cmp{container-type:inline-size;display:grid;gap:10px}
+.cu-cmp__picks{display:flex;flex-wrap:wrap;gap:8px 14px;align-items:end}
+.cu-cmp__pick{display:grid;gap:3px;min-width:0}
+.cu-cmp__pick span{font-family:var(--mono);font-size:var(--t-micro);color:var(--ink-3);letter-spacing:.06em;text-transform:uppercase}
+.cu-cmp__pick select{font:inherit;color:var(--ink);background:var(--surface);border:1px solid var(--line-strong);border-radius:var(--r-sm);padding:6px 8px;min-height:36px;max-width:100%}
+.cu-cmp__pick select:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.cu-cmp__t{display:grid;margin:0;border-collapse:collapse;width:100%}
+.cu-cmp__t thead,.cu-cmp__t tbody{display:grid}
+.cu-cmp__row{display:grid;grid-template-columns:minmax(0,1.4fr) repeat(3,minmax(0,1fr));gap:4px 10px;align-items:baseline;padding:7px 0;border-top:1px solid var(--line);font-variant-numeric:tabular-nums lining-nums}
+.cu-cmp__row th,.cu-cmp__row td{padding:0}
+.cu-cmp__row th[scope="row"],.cu-cmp__row--head th:first-child{font-size:var(--t-body);font-weight:400;color:var(--ink-2);min-width:0;text-align:left}
+.cu-cmp__row td,.cu-cmp__row--head th{text-align:right;min-width:0;white-space:nowrap}
+.cu-cmp__row td:first-of-type{font-weight:700}
+.cu-cmp__row--head{border-top:0;padding-top:0}
+.cu-cmp__row.cu-cmp__row--head th{font-family:var(--mono);font-size:var(--t-micro);font-weight:400;color:var(--ink-3);letter-spacing:.04em;text-transform:uppercase;white-space:normal}
+.cu-cmp__row .cu-cmp__chg{font-size:var(--t-cap);font-weight:600;color:var(--ink-2)}
+.cu-cmp__row .cu-cmp__chg[data-tone="up"]{color:var(--good)}
+.cu-cmp__row .cu-cmp__chg[data-tone="down"]{color:var(--bad)}
+@container (max-width:460px){
+  .cu-cmp__row{grid-template-columns:repeat(3,minmax(0,1fr))}
+  .cu-cmp__row th[scope="row"]{grid-column:1/-1}
+  .cu-cmp__row td,.cu-cmp__row--head th{text-align:left}
+  .cu-cmp__row--head th:first-child{display:none}
+}
+
 /* ---- Motion ----
    Every duration is a --ct-dur-* token (counter.css), and every token is 0
    under prefers-reduced-motion, so nothing here needs its own media query.
@@ -332,3 +410,13 @@ a.cu-tile:active,a.cu-card:active,button.cu-card:active{transform:translateY(1px
 .cu-quad__in{display:grid;gap:12px}
 @container (min-width:520px){.cu-quad__in{grid-template-columns:1fr 1fr}}
 .cu-quad__names{margin:0 0 8px;font-weight:600;line-height:1.4}
+
+/* Small charts in motion: bars grow from their base one after another, a
+   tapped bar presses and springs back, a new comparison rises in. Data moves
+   on the quiet curve; only the press release uses the spring. */
+.cu-bar__fill{animation:cngrowx calc(var(--ct-dur-rise)*2) var(--ease) both;animation-delay:calc(var(--i,0)*var(--ct-dur-step)*.72)}
+.cu-split__bar{animation:ct-bar-grow calc(var(--ct-dur-rise)*2) var(--ease) both;animation-delay:calc(var(--i,0)*var(--ct-dur-step)*.72);transition:opacity var(--ct-dur-quick) var(--ease)}
+.cu-split__b{transition:transform var(--ct-dur-spring) var(--ct-ease-spring)}
+.cu-split__b:active{transform:scale(var(--ct-press));transition-duration:var(--ct-dur-tap)}
+@media (hover:hover){.cu-split__b:hover .cu-split__bar{opacity:.85}}
+.cu-cmp__t tbody .cu-cmp__row{animation:ct-entry var(--ct-dur-rise) var(--ease) both;animation-delay:calc(var(--i,0)*var(--ct-dur-step))}
