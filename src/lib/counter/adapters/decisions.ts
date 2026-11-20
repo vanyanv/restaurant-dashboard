@@ -1684,17 +1684,32 @@ interface PlanStores {
 }
 
 /** Each store's fortnight (days only) and every store's closed days since last Monday. */
-async function loadPlanStores(asOfKey: string, accountId: string): Promise<PlanStores> {
+async function loadPlanStores(
+  asOfKey: string,
+  accountId: string,
+  /** The store in view. A saved link can point at an inactive one, which the all-stores list leaves out. */
+  selectedId: string | null,
+): Promise<PlanStores> {
   const asOf = parseDayKey(asOfKey)
   const resolved = await resolveStoreContext(undefined, accountId)
   if (asOf === null || !resolved.ok) return { asOf: asOfKey, stores: [], closed: new Map() }
-  const { storeIds, storeNameById } = resolved.ctx
+  const storeIds = [...resolved.ctx.storeIds]
+  const storeNameById = new Map(resolved.ctx.storeNameById)
+  if (selectedId !== null && !storeIds.includes(selectedId)) {
+    const sel = await resolveStoreContext(selectedId, accountId)
+    if (sel.ok) {
+      storeIds.push(selectedId)
+      storeNameById.set(selectedId, sel.ctx.storeName)
+    }
+  }
   const lastMonday = weekStartUTC(asOf)
   lastMonday.setUTCDate(lastMonday.getUTCDate() - 7)
   const [views, closed] = await Promise.all([
     Promise.all(
       storeIds.map((id) =>
-        getDecisionsView({ storeId: id, lite: true })
+        // The page's business day, not a fresh read of the clock: past midnight
+        // the two would disagree on which day is today.
+        getDecisionsView({ storeId: id, lite: true, asOf: asOfKey })
           .then((r) => (r.ok ? { days: r.data.ahead, failed: false } : { days: [] as DecisionDay[], failed: true }))
           // One store's read failing costs that store its card, not the page,
           // and is said as "didn't load", never as "no forecast".
@@ -1724,11 +1739,13 @@ function forwardStoreDay(d: DecisionDay): PlanStoreDayInput {
       d.labor.status === "unknown" && d.labor.scheduledHours <= 0 && d.predictedRevenue > 0
         ? "unscheduled"
         : d.labor.status,
-    // A day with no hourly forecast rows reads every hour as 0 orders, so 0
-    // needed: that is "not forecast by the hour", not "nothing needed".
-    hourly: d.hourly.hours.some((h) => h.predictedOrders > 0)
-      ? d.hourly.hours.map((h) => ({ hour: h.hour, needed: h.neededHours, staffed: h.staffedHours }))
-      : d.hourly.hours.map((h) => ({ hour: h.hour, needed: null, staffed: h.staffedHours })),
+    // An hour with no hourly forecast row reads as 0 orders, so 0 needed:
+    // that is "not forecast for that hour", not "nothing needed".
+    hourly: d.hourly.hours.map((h) => ({
+      hour: h.hour,
+      needed: h.forecast === false ? null : h.neededHours,
+      staffed: h.staffedHours,
+    })),
     worst: d.hourly.worstStretch
       ? { startHour: d.hourly.worstStretch.startHour, endHour: d.hourly.worstStretch.endHour }
       : null,
@@ -1791,7 +1808,32 @@ export function buildPlanFrom(
   })
 
   const scopedIds = storeId === null ? plan.stores.map((s) => s.id) : [storeId]
-  const scopedClosed = mergeClosedDays(scopedIds.map((id) => plan.closed.get(id) ?? []))
+  // Stores with no closed rows at all have never been forecast (not open
+  // yet): they add nothing to either week. Every other store must have a row
+  // for a day before that day counts as sold — one store's sales are not the
+  // whole scope's.
+  const scopedLists = scopedIds.map((id) => plan.closed.get(id) ?? []).filter((l) => l.length > 0)
+  const scopedClosed = mergeClosedDays(scopedLists)
+  const everyStoreHas = (date: string) => scopedLists.every((l) => l.some((d) => d.date === date))
+  const scopedLastWeek = (() => {
+    if (scopedLists.length === 0) return null
+    let total = 0
+    for (const l of scopedLists) {
+      const w = soldWeek(l, lastMonday)
+      if (w === null) return null
+      total += w
+    }
+    return total
+  })()
+  // In an all-stores view the reasons are shown only when every store with a
+  // forecast that day wrote them; otherwise the gap would read as the model's.
+  const whyCovered = (date: string) =>
+    storeId !== null ||
+    plan.stores.every((s) => {
+      if (s.failed) return false
+      const day = s.days.find((x) => x.date === date)
+      return day === undefined || day.predictedRevenue <= 0 || day.attribution !== null
+    })
   const sales: PlanSalesDayInput[] = [
     ...scopedClosed
       .filter((d) => d.date >= thisMonday && d.date < view.asOf)
@@ -1800,7 +1842,7 @@ export function buildPlanFrom(
         forecast: d.forecast,
         p10: d.p10,
         p90: d.p90,
-        actual: d.actual,
+        actual: everyStoreHas(d.date) ? d.actual : null,
         weatherPhrase: null,
         weatherHighC: null,
         event: null,
@@ -1815,7 +1857,8 @@ export function buildPlanFrom(
       weatherPhrase: d.weatherPhrase,
       weatherHighC: d.weatherHighC,
       event: d.majorEventCount > 0 ? d.topEventTitle : null,
-      attribution: d.attribution,
+      attribution: whyCovered(d.date) ? d.attribution : null,
+      partialWhy: d.attribution !== null && !whyCovered(d.date),
     })),
   ]
 
@@ -1824,7 +1867,7 @@ export function buildPlanFrom(
     asOf: view.asOf,
     storeId,
     sales,
-    lastWeek: soldWeek(scopedClosed, lastMonday),
+    lastWeek: scopedLastWeek,
     stores,
     runOut: runOut === null ? null : runOut.rows,
     runOutNote:
@@ -2027,7 +2070,7 @@ export function getDecisionsSectionPromises(
   const planStoresP: Promise<PlanStores> = lazy(() => viewP.then(async (sd) => {
     const view = dataOf(sd)
     if (view === null) return { asOf: "", stores: [], closed: new Map() }
-    return loadPlanStores(view.asOf, input.accountId)
+    return loadPlanStores(view.asOf, input.accountId, input.storeId ?? null)
   }))
 
   return {

@@ -34,6 +34,11 @@ export interface PlanSalesDayInput {
   /** Only an event the signal ranked major. */
   event: string | null
   attribution: { base: number; groups: Array<{ label: string; value: number }> } | null
+  /**
+   * True when some stores in view wrote reasons for this day and others did
+   * not, so `attribution` was withheld rather than shown as a partial story.
+   */
+  partialWhy?: boolean
 }
 
 export type PlanLaborStatus = "short" | "level" | "heavy" | "unscheduled" | "unknown"
@@ -302,6 +307,9 @@ function partOfDay(hour: number): string {
   return "evening"
 }
 
+/** Hours 0 and 1 close the trading day that opened the morning before. */
+const clockOrder = (hour: number) => (hour <= 1 ? hour + 24 : hour)
+
 export function buildWeekPlan(input: WeekPlanInput): WeekPlan {
   const asOfDate = parseDayKey(input.asOf)
   const thisKeys = asOfDate === null ? [] : weekDayKeys(asOfDate)
@@ -356,6 +364,12 @@ export function buildWeekPlan(input: WeekPlanInput): WeekPlan {
     const storeDay = (s: PlanStoreInput, k: string) => s.days.find((d) => d.key === k)
     // Days whose hours can still change: today and after.
     const aheadKeys = keys.filter((k) => k >= input.asOf)
+    // Orders belong to the week they are due in. This week also keeps the
+    // undated and the overdue ones; next week only shows its own.
+    const lastKey = keys[keys.length - 1] ?? ""
+    const weekOrders = orderTodos.filter((t) =>
+      key === "this" ? t.due === null || t.due <= lastKey : t.due !== null && keys.includes(t.due),
+    )
 
     /* ── To-dos for this week's window ── */
     const scheduleTodos: PlanTodo[] = []
@@ -396,7 +410,7 @@ export function buildWeekPlan(input: WeekPlanInput): WeekPlan {
       }
     }
     scheduleTodos.sort((a, b) => (a.due ?? "").localeCompare(b.due ?? ""))
-    const todos = [...orderTodos, ...scheduleTodos, ...callTodos]
+    const todos = [...weekOrders, ...scheduleTodos, ...callTodos]
 
     /* ── Days ── */
     const days: PlanDay[] = keys.map((k) => {
@@ -456,6 +470,8 @@ export function buildWeekPlan(input: WeekPlanInput): WeekPlan {
         }
       } else if (s?.forecast == null) {
         whyNote = "No forecast has been made for this day yet."
+      } else if (s.partialWhy) {
+        whyNote = "The forecast wrote its reasons for only some stores this day. Pick one store to see them."
       } else if (s.attribution) {
         const a = s.attribution
         const rows = [{ label: "An average day", value: money(a.base) }]
@@ -500,14 +516,17 @@ export function buildWeekPlan(input: WeekPlanInput): WeekPlan {
           const byHour = new Map<number, { staffed: number; short: number }>()
           for (const { d } of counted) {
             for (const h of d!.hourly) {
+              // An hour the forecast did not cover is left out, not drawn as
+              // "nothing needed".
+              if (h.needed === null) continue
               const cur = byHour.get(h.hour) ?? { staffed: 0, short: 0 }
               cur.staffed += h.staffed
-              const gap = (h.needed ?? 0) - h.staffed
-              if (h.needed !== null && gap > 0.25) cur.short += gap
+              const gap = h.needed - h.staffed
+              if (gap > 0.25) cur.short += gap
               byHour.set(h.hour, cur)
             }
           }
-          hours = [...byHour.entries()].map(([hour, v]) => ({
+          hours = [...byHour.entries()].sort((x, y) => clockOrder(x[0]) - clockOrder(y[0])).map(([hour, v]) => ({
             hour,
             label: clockWord(hour),
             staffed: Math.round(v.staffed * 10) / 10,
@@ -557,7 +576,7 @@ export function buildWeekPlan(input: WeekPlanInput): WeekPlan {
         weather: s ? weatherWords(s.weatherPhrase, s.weatherHighC) : null,
         event: s?.event ?? null,
         staffing,
-        ordersDue: orderTodos.filter((t) => t.due === k).length,
+        ordersDue: weekOrders.filter((t) => t.due === k).length,
         detail: { why, whyNote, range, hours, hoursNotes, stores: detailStores },
       }
     })
@@ -572,10 +591,20 @@ export function buildWeekPlan(input: WeekPlanInput): WeekPlan {
     const noForecast = scoped.filter(
       (s) => !s.failed && aheadKeys.length > 0 && aheadKeys.every((k) => (storeDay(s, k)?.forecast ?? null) === null),
     )
+    // A store forecast for some of the days ahead but not all of them: its
+    // other days are in the total, these are not.
+    const fcGap = (s: PlanStoreInput) => aheadKeys.filter((k) => (storeDay(s, k)?.forecast ?? null) === null)
+    const partFc = scoped.filter((s) => !s.failed && !noForecast.includes(s) && fcGap(s).length > 0)
+    const partDays = aheadKeys.filter((k) => partFc.some((s) => fcGap(s).includes(k)))
     // Like for like or not at all: a closed day not counted yet, or a store
-    // left out of the total, would make the change compare different weeks.
+    // or a day left out of the total, would make the change compare different weeks.
     const change =
-      total !== null && input.lastWeek !== null && input.lastWeek > 0 && pendingSold === 0 && noForecast.length === 0
+      total !== null &&
+      input.lastWeek !== null &&
+      input.lastWeek > 0 &&
+      pendingSold === 0 &&
+      noForecast.length === 0 &&
+      partFc.length === 0
         ? (total - input.lastWeek) / input.lastWeek
         : null
 
@@ -603,6 +632,9 @@ export function buildWeekPlan(input: WeekPlanInput): WeekPlan {
           : [
               pendingSold > 0 ? `${count(pendingSold)} closed ${pendingSold === 1 ? "day" : "days"} not counted yet` : null,
               noForecast.length > 0 ? `${listWords(noForecast.map((s) => s.name))} not forecast yet` : null,
+              partFc.length > 0
+                ? `${listWords(partFc.map((s) => s.name))} not forecast for ${listWords(partDays.map(weekdayOf))} yet`
+                : null,
               input.lastWeek === null ? "last week not counted yet" : null,
             ]
               .filter(Boolean)
@@ -715,7 +747,7 @@ export function buildWeekPlan(input: WeekPlanInput): WeekPlan {
       say("no schedule in Harri", true)
       say(", so those hours can't be checked. ")
     }
-    const firstOrder = orderTodos.find((t) => t.bad) ?? null
+    const firstOrder = weekOrders.find((t) => t.bad) ?? null
     if (firstOrder && key === "this") {
       const row = shelfRows.find((r) => `order-${r.key}` === firstOrder.key)!
       const store = storeOfRow(row)
@@ -739,10 +771,15 @@ export function buildWeekPlan(input: WeekPlanInput): WeekPlan {
       const posted = ahead.filter((d) => d!.status !== "unscheduled" && d!.status !== "unknown" && d!.needed !== null)
       const sh = ahead.reduce((a, d) => a + shortOf(d), 0)
       const unposted = ahead.some((d) => d!.status === "unscheduled")
-      const pending = keys.some((k) => k < input.asOf && (storeDay(s, k)?.actual ?? null) === null && storeDay(s, k) !== undefined)
+      // A closed day with no row at all is as uncounted as one not reconciled yet.
+      const pending = keys.some((k) => k < input.asOf && (storeDay(s, k)?.actual ?? null) === null)
+      // Every day ahead forecast, or no comparison: a missing day is not a slow one.
+      const gaps = aheadKeys.some((k) => (storeDay(s, k)?.forecast ?? null) === null)
       const c =
-        tot !== null && s.lastWeek !== null && s.lastWeek > 0 && !pending ? (tot - s.lastWeek) / s.lastWeek : null
-      const orders = orderTodos.filter((t) => {
+        tot !== null && s.lastWeek !== null && s.lastWeek > 0 && !pending && !gaps
+          ? (tot - s.lastWeek) / s.lastWeek
+          : null
+      const orders = weekOrders.filter((t) => {
         const row = shelfRows.find((r) => `order-${r.key}` === t.key)
         return row ? storeOfRow(row) === s.name : false
       }).length

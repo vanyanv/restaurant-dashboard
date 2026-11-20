@@ -267,6 +267,11 @@ export async function getDecisionsView(input: {
    * each of those generators already fails closed to null or [] here.
    */
   lite?: boolean
+  /**
+   * The business day to read from (YYYY-MM-DD). A caller that already
+   * fixed "today" passes it so its reads and this one agree across midnight.
+   */
+  asOf?: string
 } = {}): Promise<GetDecisionsViewResult> {
   const session = await getSession()
   if (!session?.user) return { ok: false, error: "no_session" }
@@ -282,7 +287,10 @@ export async function getDecisionsView(input: {
 
   const isAggregate = storeIdOut == null
   const lite = input.lite === true
-  const today = businessQueryDate(new Date())
+  const given = input.asOf !== undefined && /^\d{4}-\d{2}-\d{2}$/.test(input.asOf)
+    ? new Date(`${input.asOf}T00:00:00.000Z`)
+    : null
+  const today = given !== null && !Number.isNaN(given.getTime()) ? given : businessQueryDate(new Date())
   const todayKey = ymd(today)
 
   const [
@@ -586,6 +594,7 @@ export async function getDecisionsView(input: {
         return {
           hour,
           predictedOrders: hourlyByDate.get(srcKey)?.get(hour) ?? 0,
+          forecast: hourlyByDate.get(srcKey)?.has(hour) ?? false,
           staffedHours: staffedByDate.get(srcKey)?.[hour] ?? 0,
         }
       }),

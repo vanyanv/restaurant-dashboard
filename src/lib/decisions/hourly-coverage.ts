@@ -25,6 +25,12 @@ export const OPERATING_HOURS = [
 export interface HourInput {
   hour: number
   predictedOrders: number
+  /**
+   * False when the hourly forecast has no row for this hour, so
+   * `predictedOrders` is a filled-in 0 rather than a forecast of none.
+   * Absent means the caller did not say.
+   */
+  forecast?: boolean
   /** Labor hours posted for this clock hour, from bucketShiftHours. */
   staffedHours: number
 }

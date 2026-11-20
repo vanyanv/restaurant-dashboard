@@ -242,4 +242,37 @@ describe("week plan", () => {
     expect(w.sales.missing).toBe("no forecast yet")
     expect(w.days.every((d) => d.kind === "none" && d.amount === null)).toBe(true)
   })
+  it("keeps an order in the week it is due, not the week after", () => {
+    const plan = buildWeekPlan(base())
+    expect(plan.weeks.this.todos.some((t) => t.kind === "Order")).toBe(true)
+    expect(plan.weeks.next.todos.some((t) => t.kind === "Order")).toBe(false)
+  })
+
+  it("drops the change on last week when a store is missing some days ahead", () => {
+    const input = base()
+    const hw = input.stores[0]
+    hw.days = hw.days.map((d) => (d.key === "2026-11-29" ? { ...d, forecast: null } : d))
+    const w = buildWeekPlan(input).weeks.next
+    expect(w.sales.vs).toBeNull()
+    expect(w.sales.missing).toContain("Hollywood not forecast for Sunday yet")
+    expect(w.stores.find((s) => s.id === "hw")!.figures.find((f) => f.label === "Vs last week")!.value).toBe("not counted")
+  })
+
+  it("leaves an hour out of the chart when the forecast has no row for it", () => {
+    const input = base()
+    const hw = input.stores[0]
+    hw.days = hw.days.map((d) =>
+      d.key === "2026-11-27" ? { ...d, hourly: [{ hour: 17, needed: 8, staffed: 5 }, { hour: 18, needed: null, staffed: 5 }] } : d,
+    )
+    const fri = buildWeekPlan(input).weeks.next.days.find((d) => d.key === "2026-11-27")!
+    expect(fri.detail.hours!.map((h) => h.hour)).toEqual([17])
+  })
+
+  it("asks for one store when only some stores wrote their reasons", () => {
+    const input = base()
+    input.sales = input.sales.map((d) => (d.key === "2026-11-27" ? { ...d, attribution: null, partialWhy: true } : d))
+    const fri = buildWeekPlan(input).weeks.next.days.find((d) => d.key === "2026-11-27")!
+    expect(fri.detail.why).toBeNull()
+    expect(fri.detail.whyNote).toContain("only some stores")
+  })
 })
