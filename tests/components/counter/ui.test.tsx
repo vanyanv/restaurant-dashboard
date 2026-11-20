@@ -10,6 +10,9 @@ import { join } from "node:path"
 import { render, screen, fireEvent, renderHook, act as rtlAct } from "@testing-library/react"
 import {
   Answer,
+  BarRows,
+  Compare,
+  SplitBars,
   BigNumber,
   BigNumbers,
   Button,
@@ -165,6 +168,62 @@ describe("shared blocks", () => {
     fireEvent.click(screen.getByRole("button", { name: "a" }))
     expect(onPick).toHaveBeenCalledWith("a")
     expect(container.querySelector(".cu-weeks__key")?.textContent).toContain("labor missing")
+  })
+
+  it("BarRows: a hatched row draws no fill, and the mark sits on rows that have one", () => {
+    const { container } = render(
+      <BarRows
+        mark={50}
+        rows={[
+          { key: "a", title: "Mon", value: "32.0%", fill: 80, tag: "so far" },
+          { key: "b", title: "Tue", value: "missing", fill: 0, hatched: true },
+        ]}
+      />,
+    )
+    const rows = container.querySelectorAll(".cu-bar")
+    expect((rows[0].querySelector(".cu-bar__fill") as HTMLElement).style.width).toBe("80%")
+    expect(rows[0].querySelector(".cu-bar__mark")).not.toBeNull()
+    expect(rows[0].querySelector(".cu-bar__tag")?.textContent).toBe("so far")
+    expect(rows[1].getAttribute("data-hatched")).toBe("true")
+    expect(rows[1].querySelector(".cu-bar__fill")).toBeNull()
+    expect(rows[1].querySelector(".cu-bar__mark")).toBeNull()
+  })
+
+  it("SplitBars: the bar scales inside its own track, the filled part inside the bar, a tap reports the key", () => {
+    const onPick = vi.fn()
+    const { container } = render(
+      <SplitBars
+        onPick={onPick}
+        bars={[
+          { key: "a", label: "11/2", top: "26.9%", value: 80, inner: 27, ariaLabel: "Week of Nov 2" },
+          { key: "b", label: "11/9", top: "28.0%", value: 100, inner: 28, selected: true, hatched: true, ariaLabel: "Week of Nov 9" },
+        ]}
+      />,
+    )
+    const bars = container.querySelectorAll<HTMLElement>(".cu-split__trk > .cu-split__bar")
+    expect([bars[0].style.height, bars[1].style.height]).toEqual(["80%", "100%"])
+    expect((bars[0].firstElementChild as HTMLElement).style.height).toBe("27%")
+    fireEvent.click(screen.getByLabelText("Week of Nov 2"))
+    expect(onPick).toHaveBeenCalledWith("a")
+    expect(screen.getByLabelText("Week of Nov 9").getAttribute("aria-pressed")).toBe("true")
+  })
+
+  it("Compare: a real table with row headers, and the pickers report the new pair", () => {
+    const onPick = vi.fn()
+    const { container } = render(
+      <Compare
+        a={{ key: "a", label: "Week of Nov 9" }}
+        b={{ key: "b", label: "Week of Nov 2" }}
+        options={[{ key: "a", label: "Week of Nov 9" }, { key: "b", label: "Week of Nov 2" }, { key: "c", label: "Week of Oct 26" }]}
+        onPick={onPick}
+        rows={[{ key: "share", label: "Share", a: "28.0%", b: "26.9%", change: "▲ 1.1 pts", tone: "down" }]}
+      />,
+    )
+    expect(container.querySelectorAll("thead th[scope=col]")).toHaveLength(4)
+    expect(container.querySelector("tbody th[scope=row]")?.textContent).toBe("Share")
+    expect(container.querySelector(".cu-cmp__chg")?.getAttribute("data-tone")).toBe("down")
+    fireEvent.change(screen.getByLabelText("Against"), { target: { value: "c" } })
+    expect(onPick).toHaveBeenCalledWith({ a: "a", b: "c" })
   })
 
   it("the stylesheet uses only tokens: no colour literals", () => {

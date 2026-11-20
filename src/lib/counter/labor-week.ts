@@ -171,9 +171,18 @@ export interface LaborRole {
 export interface LaborTrendWeek {
   /** Monday of the week, `YYYY-MM-DD`. */
   key: string
+  /** The week's last day inside the data, `YYYY-MM-DD`: Sunday, or the range's end on a part week. */
+  end: string
   label: string
   cost: number
   hours: number
+  /**
+   * The week's Total Sales, every day that has a figure, whether or not labor
+   * is on file for it: what the week sold. `laborPct` divides the RATED sales
+   * instead; with `missingStoreDays > 0` the two differ, and the page says so.
+   * `null` when no day of the week has a sales figure.
+   */
+  sales: number | null
   /**
    * Over TOTAL SALES — the identical denominator `LaborWeek.laborPct` uses,
    * fed in by the adapter as this week's slice of the SAME statement
@@ -559,6 +568,8 @@ export function laborTrendWeek(
     d.sales === null || !Number.isFinite(d.sales) ? null : Math.max(0, d.sales - d.missingSales),
   )
   const known = rated.filter((r): r is number => r !== null)
+  const sold = days.map((d) => d.sales).filter((v): v is number => v !== null && Number.isFinite(v))
+  const totalSales = sold.length === 0 ? null : sum(sold)
   const ratedTotal = known.length === 0 ? null : sum(known)
   const paired = days.filter((d, i) => rated[i] !== null && d.hours > 0)
   const pairedHours = sum(paired.map((d) => d.hours))
@@ -566,9 +577,11 @@ export function laborTrendWeek(
 
   return {
     key: isoDay(weekStart),
+    end: isoDay(addDays(weekStart, Math.max(0, days.length - 1))),
     label: monthDay(weekStart),
     cost,
     hours,
+    sales: totalSales,
     laborPct: pctOfSales(cost, ratedTotal),
     splh: pairedHours > 0 ? pairedSales / pairedHours : null,
     missingStoreDays: sum(days.map((d) => d.missingStoreDays)),

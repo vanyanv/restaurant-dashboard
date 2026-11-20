@@ -27,6 +27,7 @@ import { salesByDayOf, salesByStoreDayOf } from "@/lib/counter/labor-figures"
 import { loadScheduleGap, loadStaffingCurve, type StaffingCurve } from "@/lib/counter/staffing-curve"
 import { count, money, pct, plural, points } from "@/lib/counter/format"
 import { buildLaborPlain, listDays, type LaborPlain } from "@/lib/counter/labor-plain"
+import { buildLaborSummary, buildLaborWeeks, type LaborSummary, type LaborWeeksView } from "@/lib/counter/labor-summary"
 import {
   dayCount,
   isoDay,
@@ -335,6 +336,10 @@ export interface TrendSection {
 export interface LaborSections {
   /** The page made plain: the share of sales, the schedule, what is missing, last week. */
   plain: SectionData<LaborPlain>
+  /** Each day's share, the stores side by side and the cost by role (`labor-summary.ts`). */
+  summary: SectionData<LaborSummary>
+  /** The trend's weeks as sales against labor, the week picker and the two-week comparison. */
+  weeks: SectionData<LaborWeeksView>
   headline: SectionData<LaborHeadline>
   week: SectionData<LaborWeekStrip>
   schedule: SectionData<ScheduleSection>
@@ -349,6 +354,9 @@ export interface LaborSections {
 export interface StoreLaborSections {
   /** One store's labor made plain, from the same builders. */
   plain: SectionData<LaborPlain>
+  /** The same days and roles as the group page; no store cards, there is one store. */
+  summary: SectionData<LaborSummary>
+  weeks: SectionData<LaborWeeksView>
   headline: SectionData<LaborHeadline>
   schedule: SectionData<ScheduleSection>
   roles: SectionData<RolesSection>
@@ -1775,6 +1783,33 @@ function plainSection(
   })
 }
 
+/** The days, stores and roles brought out of the fold, on either route. */
+function summarySection(laborSd: SectionData<LaborData>): SectionData<LaborSummary> {
+  return laborSection(laborSd, NO_HARRI_OWED, (d) =>
+    buildLaborSummary({
+      days: d.days,
+      week: d.week,
+      roles: d.roles,
+      storeShares: d.storeShares,
+      incompleteStoreIds: incompleteLaborStores(d.storeShares).map((s) => s.storeId),
+    }),
+  )
+}
+
+/**
+ * The weeks as sales against labor, on either route: the same trend weeks the
+ * folded chart draws, so a week tapped here and the bar below cannot disagree.
+ */
+function weeksSection(sd: SectionData<LaborTrendWeek[]>, range: DateRange, today: Date): SectionData<LaborWeeksView> {
+  return mapReadyTo(sd, (weeks) =>
+    weeks.length === 0 || weeks.every((w) => w.cost === 0 && w.hours === 0 && (w.sales ?? 0) === 0)
+      ? notComputed<LaborWeeksView>(
+          `No sales or labor are on file for the last ${TREND_WEEKS} weeks, so there are no weeks to compare.`,
+        )
+      : ready(buildLaborWeeks(weeks, isoDay(range.start), isoDay(range.end), isoDay(today))),
+  )
+}
+
 /** The leak section, on either route. */
 function leaksSection(
   laborSd: SectionData<LaborData>,
@@ -1837,7 +1872,7 @@ function trendSection(sd: SectionData<LaborTrendWeek[]>): SectionData<TrendSecti
  * `chooseSections(sections, PHONE_LABOR_SECTIONS)` to its client, so the loads only the
  * desk reads never run on a phone.
  */
-export const PHONE_LABOR_SECTIONS = ["plain", "headline", "decision", "schedule", "roles"] as const satisfies ReadonlyArray<keyof LaborSections>
+export const PHONE_LABOR_SECTIONS = ["plain", "summary", "weeks", "headline", "decision", "schedule", "roles"] as const satisfies ReadonlyArray<keyof LaborSections>
 export type PhoneLaborSections = Pick<LaborSections, (typeof PHONE_LABOR_SECTIONS)[number]>
 
 /**
@@ -1867,6 +1902,15 @@ export function getLaborSectionPromises(
         plainSection(laborSd, leakSd, gate(scopeSd, trendSd), range),
       ),
       "retryLabor",
+    )),
+
+    summary: lazy(() => guardSection(laborP.then(summarySection), "retryLabor")),
+
+    weeks: lazy(() => guardSection(
+      Promise.all([scopeP, trendLoadP]).then(([scopeSd, trendSd]) =>
+        weeksSection(gate(scopeSd, trendSd), range, input.today),
+      ),
+      "retryTrend",
     )),
 
     headline: lazy(() => guardSection(
@@ -1951,7 +1995,7 @@ export async function getLaborSections(input: LaborSectionsInput): Promise<Labor
  * `chooseSections(sections, PHONE_STORE_LABOR_SECTIONS)` to its client, so the loads only the
  * desk reads never run on a phone.
  */
-export const PHONE_STORE_LABOR_SECTIONS = ["plain", "headline", "schedule", "roles"] as const satisfies ReadonlyArray<keyof StoreLaborSections>
+export const PHONE_STORE_LABOR_SECTIONS = ["plain", "summary", "weeks", "headline", "schedule", "roles"] as const satisfies ReadonlyArray<keyof StoreLaborSections>
 export type PhoneStoreLaborSections = Pick<StoreLaborSections, (typeof PHONE_STORE_LABOR_SECTIONS)[number]>
 
 /**
@@ -1976,6 +2020,15 @@ export function getStoreLaborSectionPromises(
         plainSection(laborSd, leakSd, gate(scopeSd, trendSd), range),
       ),
       "retryLabor",
+    )),
+
+    summary: lazy(() => guardSection(laborP.then(summarySection), "retryLabor")),
+
+    weeks: lazy(() => guardSection(
+      Promise.all([scopeP, trendLoadP]).then(([scopeSd, trendSd]) =>
+        weeksSection(gate(scopeSd, trendSd), range, input.today),
+      ),
+      "retryTrend",
     )),
 
     headline: lazy(() => guardSection(

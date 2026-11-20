@@ -18,6 +18,10 @@ import {
   Tile,
   Tiles,
   WeekBars,
+  BarRows,
+  ChartKey,
+  Compare,
+  SplitBars,
   NeedsYouItem,
   NeedsYouList,
   Notice,
@@ -208,6 +212,39 @@ export function BlocksCatalogue() {
       <Both name="WeekBars" replaces=".pl-weeks .pl-wk" note="The last weeks as bars that pick the week. A hatched bar is an at-most figure.">
         <CatWeeks />
       </Both>
+
+      <Both name="SplitBars" replaces="a one-off week chart" note="Periods where the whole bar is one figure and the filled part another. Tap a bar to open it; a hatched bar has an input missing.">
+        <CatSplit />
+      </Both>
+
+      <Both name="BarRows" replaces="one-off bar lists" note="A name, a bar and a figure per line, with one reference mark. Rows on a phone; with cells, side by side on a desk.">
+        <Card>
+          <ChartKey items={[{ kind: "fill", label: "labor, share of sales" }, { kind: "mark", label: "the week, 28.0%" }, { kind: "hatched", label: "labor missing" }]} />
+          <BarRows
+            cells
+            mark={66}
+            rows={[
+              { key: "mon", title: "Mon", sub: "Nov 9", value: "32.0%", fill: 76, detail: "$2,050 on $6,400 · 112 h" },
+              { key: "tue", title: "Tue", sub: "Nov 10", value: "25.0%", fill: 59, detail: "$2,450 on $9,800 · 132 h", tag: "so far" },
+              { key: "wed", title: "Wed", sub: "Nov 11", value: "missing", fill: 0, hatched: true, detail: "sold $8,700 · no labor from Harri" },
+            ]}
+          />
+        </Card>
+      </Both>
+
+      <Both name="Compare" replaces="one-off comparison tables" note="Two periods side by side with the change. A missing side leaves the change blank.">
+        <Card>
+          <Compare
+            a={{ key: "a", label: "Week of Nov 9" }}
+            b={{ key: "b", label: "Week of Nov 2" }}
+            rows={[
+              { key: "sales", label: "Sales", a: "$55,800", b: "$52,000", change: "▲ $3,800", tone: "up" },
+              { key: "share", label: "Labor, share of sales", a: "28.0%", b: "26.9%", change: "▲ 1.1 pts", tone: "down" },
+              { key: "hours", label: "Hours worked", a: "850 h", b: "missing", change: "", tone: "flat" },
+            ]}
+          />
+        </Card>
+      </Both>
     </div>
   )
 }
@@ -235,5 +272,33 @@ function CatWeeks() {
       }))}
       onPick={setPicked}
     />
+  )
+}
+
+const SPLIT = [
+  { key: "10/26", value: 92, inner: 27, hatched: false },
+  { key: "11/2", value: 86, inner: 27, hatched: true },
+  { key: "11/9", value: 100, inner: 28, hatched: false },
+]
+
+function CatSplit() {
+  const [picked, setPicked] = useState("11/9")
+  return (
+    <Card>
+      <ChartKey items={[{ kind: "base", label: "sales" }, { kind: "fill", label: "labor" }, { kind: "hatched", label: "labor missing" }]} />
+      <SplitBars
+        bars={SPLIT.map((w) => ({
+          key: w.key,
+          label: w.key,
+          top: `${w.inner}.0%`,
+          value: w.value,
+          inner: w.inner,
+          hatched: w.hatched,
+          selected: w.key === picked,
+          ariaLabel: `Week of ${w.key}`,
+        }))}
+        onPick={setPicked}
+      />
+    </Card>
   )
 }
