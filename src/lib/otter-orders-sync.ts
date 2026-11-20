@@ -16,12 +16,20 @@ import { shouldSyncStore } from "@/lib/store-lifecycle"
  * Pre-generates item ids so the whole set writes as two bulk createMany calls
  * (items, then sub-items) instead of a create-per-item round-trip. Shared by
  * the windowed sync, the historical drain, and the manual refetch action.
+ *
+ * Locks the parent OtterOrder row first (`SELECT ... FOR UPDATE`). Under READ
+ * COMMITTED two transactions replacing the same order's lines (the sync's
+ * Phase 2 and an owner pressing "refetch", or two overlapping runs) could
+ * each delete the lines the other had not committed yet and then both
+ * insert, leaving every line twice. With the lock the second waits for the
+ * first to commit, then deletes its lines and writes one set.
  */
 export async function persistOrderItems(
   tx: Prisma.TransactionClient,
   orderId: string,
   items: OrderDetailsPayload["items"],
 ): Promise<void> {
+  await tx.$queryRaw`SELECT "id" FROM "OtterOrder" WHERE "id" = ${orderId} FOR UPDATE`
   await tx.otterOrderItem.deleteMany({ where: { orderId } })
   if (items.length === 0) return
 
@@ -135,9 +143,9 @@ function asNumber(v: any): number {
  * the row was enriched, false if the API returned no payload.
  *
  * Used by both Phase 2 of runOrdersSync (windowed) and runDetailsDrain
- * (historical backlog). The transaction is idempotent: deleteMany +
- * createMany inside a single $transaction means a concurrent caller hitting
- * the same orderId would just rewrite the same rows.
+ * (historical backlog). `persistOrderItems` locks the order row before its
+ * delete + insert, so a concurrent caller on the same orderId waits and then
+ * rewrites the same rows rather than adding a second set.
  */
 async function fetchAndPersistDetails(
   internalId: string,
@@ -209,6 +217,52 @@ export async function runOrdersSync(
   )
 }
 
+/**
+ * customer_orders headers for the window, one request per UTC day.
+ *
+ * `queryOtterEndpoint` reads a single response page, so the body's `limit`
+ * (5000) is a hard cap, not a page size: the whole window used to go in one
+ * request, and a busy enough window would have dropped every order past the
+ * 5000th without a word. One day of all stores is far under the cap; a day
+ * that still lands on it throws, failing the run (and its JobRun) rather
+ * than writing an undercounted day. Same rule as `hourly-sync.ts`.
+ */
+async function fetchOrderHeaders(
+  otterStoreIds: string[],
+  startDate: Date,
+  endDate: Date,
+): Promise<Awaited<ReturnType<typeof queryMetrics>>> {
+  const days: Date[] = []
+  const cur = new Date(startDate)
+  cur.setUTCHours(0, 0, 0, 0)
+  const last = new Date(endDate)
+  last.setUTCHours(0, 0, 0, 0)
+  while (cur <= last) {
+    days.push(new Date(cur))
+    cur.setUTCDate(cur.getUTCDate() + 1)
+  }
+
+  const perDay = await withConcurrency(
+    days.map((day) => async () => {
+      const dayEnd = new Date(day)
+      dayEnd.setUTCHours(23, 59, 59, 999)
+      const body = buildCustomerOrdersBody(otterStoreIds, day, dayEnd)
+      const dayRows = await queryMetrics(body)
+      const limit = (body as { limit?: unknown }).limit
+      if (typeof limit === "number" && dayRows.length >= limit) {
+        throw new Error(
+          `[otter.orders.sync] row cap hit: Otter returned ${dayRows.length} orders for ` +
+            `${day.toISOString().slice(0, 10)}, which equals the request limit (${limit}). ` +
+            `The day is truncated; nothing was written for this run.`,
+        )
+      }
+      return dayRows
+    }),
+    3,
+  )
+  return perDay.flat()
+}
+
 async function runOrdersSyncInner(
   days: number,
   endDateOverride?: Date
@@ -247,11 +301,10 @@ async function runOrdersSyncInner(
   startDate.setUTCHours(0, 0, 0, 0)
 
   // ─── Phase 1: Fetch customer_orders headers ───
-  const body = buildCustomerOrdersBody(otterStoreIds, startDate, endDate)
-  const rows = await queryMetrics(body)
+  const rows = await fetchOrderHeaders(otterStoreIds, startDate, endDate)
 
   const syncedAt = new Date()
-  const parsed: OrderHeaderData[] = []
+  const parsedById = new Map<string, OrderHeaderData>()
 
   for (const row of rows) {
     const otterStoreId = asString(row["store_id"])
@@ -273,7 +326,10 @@ async function runOrdersSyncInner(
     const restaurantDiscount = asNumber(row["restaurant_funded_discount"])
     const ofoDiscount = asNumber(row["ofo_funded_discount"])
 
-    parsed.push({
+    // Keyed by order id: one INSERT ... ON CONFLICT cannot touch the same
+    // order twice, and the per-day requests could in principle both return
+    // an order sitting on a day boundary.
+    parsedById.set(orderId, {
       otterOrderId: orderId,
       externalDisplayId: asString(row["external_order_display_id"]),
       storeId: internalStoreId,
@@ -291,6 +347,7 @@ async function runOrdersSyncInner(
       total: asNumber(row["total_with_tip"]),
     })
   }
+  const parsed = [...parsedById.values()]
 
   // Look up which orders already exist so we can report created vs updated
   // counts — the per-row findUnique this replaces existed only for that split.

@@ -3,6 +3,7 @@ import { money } from "@/lib/counter/format"
 import type { Statement, StatementLines } from "@/lib/counter/statement"
 import { serializeWeekWindow, type SerializedWeekWindow, type WeekWindow } from "@/lib/counter/date-range"
 import type { ElapsedCompare } from "@/lib/counter/elapsed-compare"
+import { foodGapParts, pctWords, uncostedShare } from "@/lib/counter/food-coverage"
 
 /**
  * The P&L "made plain" — the owner-approved redesign of 2026-11-03 (thread
@@ -288,16 +289,6 @@ function rateShare(l: StatementLines): number | null {
 /** Above this share of app orders at the store's rates, the fee line is called estimated. */
 export const FEES_ESTIMATED_WARN = 0.1
 
-/** Share of sales whose food cost is not fully counted, or null with no sales. */
-function uncostedShare(l: StatementLines): number | null {
-  return l.grossSales > 0 ? Math.min(1, Math.max(0, l.uncostedSales) / l.grossSales) : null
-}
-
-/** "12%", or "under 1%" for a share that rounds to nothing but is not nothing. */
-function pctWords(v: number): string {
-  const r = Math.round(v * 100)
-  return r === 0 && v > 0 ? "under 1%" : `${r}%`
-}
 
 /**
  * The inputs counted as $0 for want of data, in the words the line beside
@@ -311,9 +302,9 @@ export function upperBoundCauses(
   const out: string[] = []
   if (opts.laborMissing) out.push(...opts.laborMissing)
   else if (l.laborMissingDays > 0) out.push(`${plural(l.laborMissingDays, "day")} of labor missing`)
-  if (l.cogsMissingDays > 0) out.push(`${plural(l.cogsMissingDays, "day")} with no food cost`)
-  const u = uncostedShare(l)
-  if (u !== null && u > 0) out.push(`${pctWords(u)} of sales not fully costed`)
+  // The food half's words are the shared rule's, so the P&L, Overview and
+  // Analytics label a partial food cost exactly as this line does.
+  out.push(...foodGapParts(l))
   if (opts.fixedNotOnFile === null) out.push("store settings did not load")
   else if (opts.fixedNotOnFile) out.push(`${plural(opts.fixedNotOnFile, "fixed cost")} not on file`)
   if (l.commission.unknownOrders > 0) out.push(`${plural(l.commission.unknownOrders, "app order")} with no fee`)
@@ -354,10 +345,9 @@ function feesHow(l: StatementLines): [string, PlainTone] {
 
 /** The food line's words and tone: whole, or how much of what sold has no cost behind it. */
 function foodHow(l: StatementLines): [string, PlainTone] {
-  if (l.cogsMissingDays > 0) return [`${plural(l.cogsMissingDays, "day")} with no food cost`, "bad"]
-  const u = uncostedShare(l)
-  if (u !== null && u > 0) return [`${pctWords(u)} of sales not fully costed`, "warn"]
-  return ["recipe cost of what sold", "ok"]
+  const gap = foodGapParts(l)
+  if (gap.length === 0) return ["recipe cost of what sold", "ok"]
+  return [gap[0], l.cogsMissingDays > 0 ? "bad" : "warn"]
 }
 
 function lineSet(l: StatementLines, prior: StatementLines | null, how: Record<PlainKey, [string, PlainTone]>): PlainLine[] {

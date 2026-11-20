@@ -42,6 +42,7 @@ import { getScopedStores } from "@/lib/account-stores"
 import { loadStripTargets } from "@/lib/counter/targets"
 import { buildLaborSummary, buildLaborWeeks, type LaborSummary, type LaborWeeksView } from "@/lib/counter/labor-summary"
 import {
+  COUNTER_WEEK_STARTS_ON,
   dayCount,
   isoDay,
   rangeLabel,
@@ -1103,7 +1104,7 @@ function foldHours(
   }
 
   const { startDate, endDate } = toQueryBounds(range)
-  const display = buildPeriods(startDate, endDate, granularity)
+  const display = buildPeriods(startDate, endDate, granularity, COUNTER_WEEK_STARTS_ON)
   if (display.length === 0) {
     return {
       labels: days.map((d) => d.label),
@@ -1628,12 +1629,10 @@ function loadEverything(input: LaborSectionsInput) {
    * The trend's own per-week Total Sales (L-R2 / task 4b). Loaded off the
    * SAME `loadStatement` + `rowValues(TOTAL_SALES_CODE)` construct
    * `salesByDayOf` above already reads for the headline — DAILY granularity,
-   * not `loadStatement`'s "weekly" one: `buildPeriods`'s weekly buckets start
-   * on SUNDAY (`src/lib/pnl.ts`), while the trend's own weeks
-   * (`trailingWeeks`, note 53) start on MONDAY. Asking for "weekly" here would
-   * fold this page's Monday weeks against the rollup's Sunday ones and
-   * mislabel every bar — the exact hazard this module's own comment on
-   * `loadLaborTrend` already flags. Daily sidesteps it: it is the identical
+   * not `loadStatement`'s "weekly" one. `loadStatement`'s weekly buckets now
+   * start on Monday too (`COUNTER_WEEK_STARTS_ON`, 2026-11-20; they were Sunday
+   * before), but they are clipped to the RANGE, while the trend's windows
+   * (`trailingWeeks`, note 53) are whole weeks of their own. Daily sidesteps it: it is the identical
    * per-day figure the headline reads, summed into the trend's own windows
    * (`weeklySalesOf`) instead of the rollup's.
    *

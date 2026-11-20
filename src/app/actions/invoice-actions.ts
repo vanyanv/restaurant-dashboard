@@ -179,10 +179,6 @@ export async function setInvoiceIsReturn(
       taxAmount: true,
       lineItems: {
         select: {
-          id: true,
-          quantity: true,
-          unitPrice: true,
-          extendedPrice: true,
           canonicalIngredientId: true,
         },
       },
@@ -203,17 +199,15 @@ export async function setInvoiceIsReturn(
         taxAmount: invoice.taxAmount === null ? null : Math.abs(invoice.taxAmount) * sign,
       },
     }),
-    ...invoice.lineItems.map((li) =>
-      prisma.invoiceLineItem.update({
-        where: { id: li.id },
-        data: {
-          quantity: Math.abs(li.quantity) * sign,
-          // unitPrice stays positive — only quantity flips. extendedPrice
-          // mirrors the (signed) total so quantity * unitPrice = extendedPrice.
-          extendedPrice: Math.abs(li.extendedPrice) * sign,
-        },
-      }),
-    ),
+    // Every line in one statement (it was one UPDATE per line). unitPrice
+    // stays positive — only quantity flips. extendedPrice mirrors the
+    // (signed) total so quantity * unitPrice = extendedPrice. Same
+    // abs-times-sign as the header, so toggling twice is still a no-op.
+    prisma.$executeRaw`
+      UPDATE "InvoiceLineItem" SET
+        "quantity" = ABS("quantity") * ${sign}::float8,
+        "extendedPrice" = ABS("extendedPrice") * ${sign}::float8
+      WHERE "invoiceId" = ${invoice.id}`,
   ])
 
   // Re-derive canonical cost for any matched ingredient touched by this

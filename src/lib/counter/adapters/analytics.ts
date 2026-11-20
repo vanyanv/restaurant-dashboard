@@ -46,7 +46,9 @@ import {
   type ComparisonContext,
 } from "@/lib/counter/comparison"
 import { count, delta, money, pct, plural, points } from "@/lib/counter/format"
+import { foodGapNote, foodKnown, NO_FOOD_COST } from "@/lib/counter/food-coverage"
 import {
+  COUNTER_WEEK_STARTS_ON,
   dayCount,
   isoDay,
   rangeLabel,
@@ -442,7 +444,7 @@ function foldStatement(
   if (granularity === "daily") return daily
 
   const { startDate, endDate } = toQueryBounds(range)
-  const display = buildPeriods(startDate, endDate, granularity)
+  const display = buildPeriods(startDate, endDate, granularity, COUNTER_WEEK_STARTS_ON)
   if (display.length === 0) return daily
 
   // Which display bucket each daily period lands in. A period that lands
@@ -1039,7 +1041,8 @@ function buildService(profile: ServiceProfile): ServiceSection {
  * NOTHING there — the qualifier was invisible on the phone and an extra
  * landmark on the desk, one slot fixing both.)
  */
-function buildStoreStrip(
+/** Exported for its test; the store adapter is its only caller. */
+export function buildStoreStrip(
   p: Statement,
   orders: number | null,
   cmp: ComparisonContext,
@@ -1052,10 +1055,19 @@ function buildStoreStrip(
     delta: sales.text,
     deltaTone: sales.tone,
   }
+  // The P&L's and Overview's gate (`food-coverage.ts`): with sales and no food
+  // posted, `cogsPct` is a confident 0.0% that is really an absence — a dash,
+  // labelled. A known but partial food cost keeps its figure and says so.
+  const food = foodKnown(p)
+  const gap = foodGapNote(p)
   const foodCell: StripCell = {
     label: "Food cost",
-    value: pct(p.prime.cogsPct, { scaled: true }),
-    delta: money(p.cogsValue),
+    value: food ? pct(p.prime.cogsPct, { scaled: true }) : DASH,
+    delta: !food
+      ? NO_FOOD_COST
+      : gap === null
+        ? money(p.cogsValue)
+        : `${money(p.cogsValue)} · ${gap}`,
     // `is-flat` on all three qualifiers below, and it is not decoration.
     // `.strip .d` with no tone class is `var(--good)` (counter-components.css
     // line 180), so a delta slot holding a QUALIFIER rather than a movement —

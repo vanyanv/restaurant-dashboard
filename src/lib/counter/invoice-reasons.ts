@@ -14,6 +14,8 @@ export const REASON_LABEL: Record<string, string> = {
   no_store_match: "No store matched the address",
   not_a_supplier: "Not a supply delivery",
   not_an_invoice: "Not an invoice",
+  duplicate_bill: "A copy of a bill already stored",
+  unreadable_pdf: "The PDF could not be read",
   unknown: "Flagged",
 }
 

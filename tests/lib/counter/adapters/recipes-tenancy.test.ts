@@ -22,6 +22,7 @@ import { prisma } from "@/lib/prisma"
 import { getScopedStores } from "@/lib/account-stores"
 import { batchRecipeCosts } from "@/lib/recipe-cost"
 import { getRecipesSectionPromises } from "@/lib/counter/adapters/recipes"
+import { toQueryBounds } from "@/lib/counter/date-range"
 
 const asMock = (fn: unknown) => fn as ReturnType<typeof vi.fn>
 
@@ -91,5 +92,28 @@ describe("recipes adapter · partial-cost scan store scope", () => {
       return strings.join(" ").includes("partialCost")
     })
     expect(partialCall).toBeUndefined()
+  })
+
+  it("bounds the partial-cost scan to the page's range and counts distinct days", async () => {
+    const range = { start: new Date(2026, 9, 1), end: new Date(2026, 9, 31) }
+    const sections = getRecipesSectionPromises({
+      storeId: null,
+      accountId: "acct_ours",
+      range,
+      today: new Date(2026, 10, 1),
+    })
+    await sections.headline
+
+    const partialCall = asMock(prisma.$queryRaw).mock.calls.find((c) =>
+      (c[0] as TemplateStringsArray).join(" ").includes("partialCost"),
+    )
+    expect(partialCall).toBeDefined()
+    const text = (partialCall![0] as TemplateStringsArray).join("?")
+    expect(text).toContain('COUNT(DISTINCT "date")')
+    expect(text).toContain('"date" >= ?')
+    expect(text).toContain('"date" <= ?')
+    const { startDate, endDate } = toQueryBounds(range)
+    expect(partialCall!.slice(1)).toContainEqual(startDate)
+    expect(partialCall!.slice(1)).toContainEqual(endDate)
   })
 })

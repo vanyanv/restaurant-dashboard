@@ -125,6 +125,7 @@ async function main() {
       invoice: {
         select: {
           ownerId: true,
+          accountId: true,
           vendorName: true,
           storeId: true,
         },
@@ -137,6 +138,7 @@ async function main() {
   type LineInfo = typeof lineItems[number]
   type Group = {
     ownerId: string
+    accountId: string
     vendor: string
     sku: string
     lineItems: LineInfo[]
@@ -152,6 +154,7 @@ async function main() {
     if (!g) {
       g = {
         ownerId: li.invoice.ownerId,
+        accountId: li.invoice.accountId,
         vendor,
         sku: li.sku,
         lineItems: [],
@@ -503,8 +506,10 @@ async function main() {
       const firstLine = g.lineItems[0]
       await tx.ingredientSkuMatch.upsert({
         where: {
-          ownerId_vendorKey_sku: {
-            ownerId: g.ownerId,
+          // The account key: (accountId, vendorKey, sku) is the tenancy
+          // identity, and another owner of the account may hold the row.
+          accountId_vendorKey_sku: {
+            accountId: g.accountId,
             vendorKey: vendorMatchKey(g.vendor),
             sku: g.sku,
           },
@@ -515,6 +520,7 @@ async function main() {
         },
         create: {
           ownerId: g.ownerId,
+          accountId: g.accountId,
           vendorName: g.vendor,
           vendorKey: vendorMatchKey(g.vendor),
           sku: g.sku,

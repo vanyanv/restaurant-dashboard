@@ -90,16 +90,30 @@ export async function runHarriScheduleSync(opts: {
 
         weeksOk += 1
         const rows = flattenSchedule(data, weekStart)
-        if (rows.length === 0) {
-          weeksEmpty += 1
-          continue
-        }
 
         // Replace the week wholesale: a manager editing the published schedule
         // can delete shifts, and an upsert-only pass would leave the deleted
-        // ones behind as phantom staffed hours.
+        // ones behind as phantom staffed hours. That includes deleting every
+        // shift of a week: a week Harri served with no shifts is cleared, not
+        // skipped (a failed request never reaches here, so a gateway error
+        // cannot wipe a week).
+        if (rows.length === 0) {
+          weeksEmpty += 1
+          await prisma.harriShift.deleteMany({ where: { storeId, weekStart } })
+          continue
+        }
+
+        // harriShiftId is unique across weeks. A shift Harri now files under
+        // this week but that we stored under another weekStart would be
+        // skipped by skipDuplicates and stay in the old week; delete those
+        // ids too so the shift moves.
         await prisma.$transaction([
-          prisma.harriShift.deleteMany({ where: { storeId, weekStart } }),
+          prisma.harriShift.deleteMany({
+            where: {
+              storeId,
+              OR: [{ weekStart }, { harriShiftId: { in: rows.map((r) => r.harriShiftId) } }],
+            },
+          }),
           prisma.harriShift.createMany({
             data: rows.map((r) => ({ storeId, ...r })),
             skipDuplicates: true,

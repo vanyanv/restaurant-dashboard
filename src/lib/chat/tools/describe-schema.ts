@@ -66,7 +66,7 @@ const CATALOG: SchemaDomain[] = [
       { name: "compareSales", useFor: "two-period A/B comparisons" },
       { name: "getPlatformBreakdown", useFor: "per-platform totals (DoorDash / UberEats / first-party)" },
       { name: "getStoreBreakdown", useFor: "side-by-side per-store totals" },
-      { name: "getOperationalCosts", useFor: "fees, refunds, discounts, lost revenue per store" },
+      { name: "getOperationalCosts", useFor: "fixed monthly costs (rent, salaried labor, towels, cleaning, other fixed-expense lines), commission rates and COGS target per store" },
       // Absent from this catalogue until 2026-09-19, while the prompt carried
       // a routing rule for it — so the one tool the model is sent here to
       // check for was the one it could not find. `tests/lib/chat/tools/

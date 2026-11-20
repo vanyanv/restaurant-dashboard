@@ -120,6 +120,7 @@ function listResponse(over: Partial<OrderListResponse> = {}): OrderListResponse 
     totalCount: 187,
     undrainedCount: 0,
     totals: {
+      orders: 187,
       netSales: 4_812.5,
       commission: 684,
       commissionRecorded: 0,
@@ -259,6 +260,7 @@ describe("buildOrdersStrip", () => {
       listResponse({
         totalCount: 170,
         totals: {
+          orders: 170,
           netSales: 4_400,
           commission: 600,
           commissionRecorded: 600,
@@ -1029,6 +1031,7 @@ describe("money that moves the right way", () => {
     const cells = buildOrdersStrip(
       listResponse({
         totals: {
+          orders: 187,
           netSales: 1000,
           commission: 250,
           commissionRecorded: 250,
@@ -1060,6 +1063,7 @@ describe("fees the marketplace did not record", () => {
     buildOrdersStrip(
       listResponse({
         totals: {
+          orders: 187,
           netSales: 8000,
           commission: 0,
           commissionRecorded: 0,

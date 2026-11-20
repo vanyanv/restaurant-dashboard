@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma"
+import { PACKAGING_CATEGORY } from "@/lib/counter/food-cost-scope"
 import { getScopedStores } from "@/lib/account-stores"
 import { count, money, pct } from "@/lib/counter/format"
 import { toQueryBounds, type DateRange } from "@/lib/counter/date-range"
@@ -149,7 +150,11 @@ export async function loadMenuItems(input: MenuItemsInput): Promise<MenuItemsDat
     }),
     storeIds.length
       ? prisma.dailyCogsItem.findMany({
-          where: { storeId: { in: storeIds }, date: { gte: startDate, lte: endDate } },
+          // Packaging rows ("Packaging - 9x6", one per container group) are
+          // never a dish: without this they landed under "no recipe" and in
+          // the not-costed count. Always out here, whatever
+          // `PACKAGING_IN_FOOD_COST` says about the food-cost figures.
+          where: { storeId: { in: storeIds }, date: { gte: startDate, lte: endDate }, category: { not: PACKAGING_CATEGORY } },
           select: {
             recipeId: true,
             itemName: true,

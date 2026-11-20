@@ -42,13 +42,16 @@ export type AsOfSource =
   | "labor"
   | "ratings"
   | "alerts"
+  | "storeSettings"
 
 /**
  * Table and freshness column per source. Module constants, never request
  * input — which is what makes the `Prisma.raw` interpolation below safe, the
  * same argument the staleness cron makes for the same query shape.
  */
-const SOURCE_TABLES: Record<AsOfSource, { table: string; column: string }> = {
+type SourceTable = { table: string; column: string }
+
+const SOURCE_TABLES: Record<AsOfSource, SourceTable | readonly SourceTable[]> = {
   otterDaily: { table: "OtterDailySummary", column: "syncedAt" },
   otterHourly: { table: "OtterHourlySummary", column: "updatedAt" },
   otterOrders: { table: "OtterOrder", column: "syncedAt" },
@@ -64,6 +67,16 @@ const SOURCE_TABLES: Record<AsOfSource, { table: string; column: string }> = {
   // `detectedAt`, not `occurredAt`: the question is when the inbox was last
   // written, and an alert about last Tuesday can be raised tonight.
   alerts: { table: "Alert", column: "detectedAt" },
+  // What the owner typed into store settings: the `Store` row (rent, labor,
+  // towels, cleaning, commission rates, payroll tax, COGS target) and its
+  // fixed-expense lines. Edited by hand, so the newest `updatedAt` across the
+  // two is the stamp. Both tables hold a handful of rows per account. A
+  // deleted expense line touches its store's row (`fixed-expense-actions`),
+  // so a delete moves this stamp too.
+  storeSettings: [
+    { table: "Store", column: "updatedAt" },
+    { table: "StoreFixedExpense", column: "updatedAt" },
+  ],
 }
 
 /**
@@ -80,13 +93,15 @@ const SOURCE_TABLES: Record<AsOfSource, { table: string; column: string }> = {
  * and the menu/recipe/ingredient catalogue tools, which are edited by hand
  * rather than synced and so have no refresh moment to report.
  */
-export const TOOL_AS_OF: Partial<Record<ChatToolName, AsOfSource>> = {
+export const TOOL_AS_OF: Partial<Record<ChatToolName, AsOfSource | readonly AsOfSource[]>> = {
   // Sales — the daily rollup, except the hour-of-day view.
   getDailySales: "otterDaily",
   compareSales: "otterDaily",
   getPlatformBreakdown: "otterDaily",
   getStoreBreakdown: "otterDaily",
-  getChannelMix: "otterDaily",
+  // Fees come from the order rows priced at the store's rates, the same
+  // commission function the P&L uses.
+  getChannelMix: ["otterDaily", "otterOrders", "storeSettings"],
   getHourlyTrend: "otterHourly",
   // Order-level drilldown reads the order rows themselves.
   getOrderById: "otterOrders",
@@ -106,11 +121,15 @@ export const TOOL_AS_OF: Partial<Record<ChatToolName, AsOfSource>> = {
   // The COGS sweep's own output.
   getCogsByItem: "cogs",
   getMenuMargin: "cogs",
-  // P&L stands on the daily rollup plus the sweep; the rollup is the one that
-  // moves on a backfill, so it is the honest stamp.
-  getPnlSummary: "otterDaily",
+  // P&L stands on the daily rollup, the COGS sweep, Harri labour and the
+  // store settings (fixed costs, expense lines, commission rates). Any one of
+  // them moving changes the statement, so the key carries all four — with
+  // the rollup alone, a COGS recompute, a Harri sync or a rent edit kept
+  // serving the statement from before it.
+  getPnlSummary: ["otterDaily", "cogs", "labor", "storeSettings"],
   searchPnlHistory: "otterDaily",
-  getOperationalCosts: "otterDaily",
+  // Store settings only: rent, fixed lines, rates, COGS target.
+  getOperationalCosts: "storeSettings",
   getTopMenuItems: "otterDaily",
   // Labour. `getLaborActuals` is deliberately absent: its labour % and SPLH
   // divide Harri by Otter sales, so either sync can change the answer and a
@@ -190,6 +209,23 @@ const TTL_MS = 5 * 60_000
 const cache = new Map<AsOfSource, { at: number; value: Date | null }>()
 const inflight = new Map<AsOfSource, Promise<Date | null>>()
 
+/** `MAX(col)` over one table, or the newest across several (`GREATEST` ignores nulls). */
+function maxSql(tables: readonly SourceTable[]): Prisma.Sql {
+  const one = ({ table, column }: SourceTable) =>
+    Prisma.sql`SELECT MAX(${Prisma.raw(`"${column}"`)}) AS max FROM ${Prisma.raw(`"${table}"`)}`
+  if (tables.length === 1) return one(tables[0])
+  return Prisma.sql`SELECT GREATEST(${Prisma.join(
+    tables.map((t) => Prisma.sql`(${one(t)})`),
+  )}) AS max`
+}
+
+/** A tool's sources as a list. */
+function sourcesOf(toolName: string): readonly AsOfSource[] {
+  const s = TOOL_AS_OF[toolName as ChatToolName]
+  if (!s) return []
+  return typeof s === "string" ? [s] : s
+}
+
 async function readSource(source: AsOfSource): Promise<Date | null> {
   const hit = cache.get(source)
   if (hit && Date.now() - hit.at < TTL_MS) return hit.value
@@ -197,7 +233,8 @@ async function readSource(source: AsOfSource): Promise<Date | null> {
   const existing = inflight.get(source)
   if (existing) return existing
 
-  const { table, column } = SOURCE_TABLES[source]
+  const def = SOURCE_TABLES[source]
+  const tables: readonly SourceTable[] = Array.isArray(def) ? def : [def as SourceTable]
   const jobs = SOURCE_JOBS[source]
   const p = (async () => {
     try {
@@ -208,9 +245,7 @@ async function readSource(source: AsOfSource): Promise<Date | null> {
         cache.set(source, { at: Date.now(), value: fromJobs })
         return fromJobs
       }
-      const rows = await prisma.$queryRaw<{ max: Date | null }[]>(
-        Prisma.sql`SELECT MAX(${Prisma.raw(`"${column}"`)}) AS max FROM ${Prisma.raw(`"${table}"`)}`,
-      )
+      const rows = await prisma.$queryRaw<{ max: Date | null }[]>(maxSql(tables))
       const value = rows[0]?.max ?? null
       cache.set(source, { at: Date.now(), value })
       return value
@@ -237,10 +272,7 @@ async function readSource(source: AsOfSource): Promise<Date | null> {
  */
 export async function maxAsOfForTools(toolNames: readonly string[]): Promise<string | null> {
   const sources = new Set<AsOfSource>()
-  for (const n of toolNames) {
-    const s = TOOL_AS_OF[n as ChatToolName]
-    if (s) sources.add(s)
-  }
+  for (const n of toolNames) for (const s of sourcesOf(n)) sources.add(s)
   if (sources.size === 0) return null
   const reads = await Promise.all([...sources].map(readSource))
   const newest = reads.reduce<Date | null>(
@@ -281,10 +313,24 @@ export function everyToolStamped(toolNames: readonly string[]): boolean {
  */
 const READS_NO_FIGURES: ReadonlySet<ChatToolName> = new Set<ChatToolName>(["fileReturn"])
 
-/** The freshness stamp for one tool, or null when it reports none. */
+/**
+ * The freshness stamp for one tool, shown to the owner beside its figures, or
+ * null when it reports none.
+ *
+ * Unlike the cache key, this is the OLDEST of the tool's synced sources: a P&L
+ * built from Otter (today) and labor (two days old) is only as fresh as its
+ * labor. `storeSettings` is left out of the reading when the tool has a synced
+ * source too, because a rent edit is not when the figures were last synced; a
+ * tool that reads settings alone reports the settings stamp.
+ */
 export async function asOfForTool(toolName: string): Promise<string | null> {
-  const source = TOOL_AS_OF[toolName as ChatToolName]
-  if (!source) return null
-  const at = await readSource(source)
-  return at ? at.toISOString() : null
+  const all = sourcesOf(toolName)
+  if (all.length === 0) return null
+  const synced = all.filter((s) => s !== "storeSettings")
+  const sources = synced.length > 0 ? synced : all
+  const reads = await Promise.all(sources.map(readSource))
+  const known = reads.filter((d): d is Date => d != null)
+  if (known.length === 0) return null
+  const oldest = known.reduce((acc, d) => (d < acc ? d : acc))
+  return oldest.toISOString()
 }

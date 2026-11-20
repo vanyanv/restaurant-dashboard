@@ -180,8 +180,10 @@ export type ChannelMixChatRow = {
   platform: string
   isFirstParty: boolean
   grossSales: number
-  fees: number
-  netToOperator: number
+  /** Null when no order on the platform could be priced. */
+  fees: number | null
+  feesBasis: string | null
+  netToOperator: number | null
   takeRatePct: number | null
   netRatePct: number | null
   orderCount: number
@@ -193,8 +195,8 @@ export type ChannelMixChatResult = {
   windowStart: string
   windowEnd: string
   totalGross: number
-  totalFees: number
-  totalNet: number
+  totalFees: number | null
+  totalNet: number | null
   blendedNetRatePct: number | null
   rows: ChannelMixChatRow[]
   simulation: {
@@ -238,6 +240,7 @@ export const getChannelMixTool: ChatTool<
         isFirstParty: r.isFirstParty,
         grossSales: r.grossSales,
         fees: r.fees,
+        feesBasis: r.feesBasis,
         netToOperator: r.netToOperator,
         takeRatePct: r.takeRatePct,
         netRatePct: r.netRatePct,

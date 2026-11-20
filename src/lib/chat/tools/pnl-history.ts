@@ -1,6 +1,6 @@
 import { z } from "zod"
 import { embed, toVectorLiteral } from "@/lib/chat/embeddings"
-import { resolveStoreIds, storeIdsSchema } from "./_shared"
+import { isStoreScoped, resolveStoreIds, storeIdsSchema } from "./_shared"
 import type { ChatTool } from "./types"
 
 /**
@@ -44,14 +44,14 @@ export const searchPnlHistory: ChatTool<typeof params, PnlHistoryRow[]> = {
   parameters: params,
   async execute(args, ctx) {
     const requestedStoreIds = await resolveStoreIds(ctx, args.storeIds)
-    const vec = await embed(args.query)
+    const vec = await embed(args.query, { feature: "chat-search", userId: ctx.ownerId })
     const lit = toVectorLiteral(vec)
     const limit = args.limit ?? 5
 
-    // Match either (a) a store-scoped snapshot for one of the requested
-    // stores, or (b) the all-stores rollup for this account. The latter is
-    // returned regardless of which storeIds the user named — it carries
-    // useful cross-store context.
+    // A store-scoped question (the model named stores) matches only those
+    // stores' snapshots. The all-stores rollup used to be included regardless
+    // and competed for the LIMIT, so "Hollywood's worst week" could come back
+    // as account-wide weeks. The every-store question keeps both.
     const rows = await ctx.prisma.$queryRawUnsafe<
       Array<{
         snapshotId: string
@@ -71,13 +71,14 @@ export const searchPnlHistory: ChatTool<typeof params, PnlHistoryRow[]> = {
          FROM "PnlNarrativeEmbedding" e
          LEFT JOIN "Store" s ON s.id = e."storeId"
         WHERE e."accountId" = $2
-          AND (e."storeId" IS NULL OR e."storeId" = ANY($3::text[]))
+          AND (($5::boolean = false AND e."storeId" IS NULL) OR e."storeId" = ANY($3::text[]))
         ORDER BY e.embedding <=> $1::vector
         LIMIT $4`,
       lit,
       ctx.accountId,
       requestedStoreIds,
       limit,
+      isStoreScoped(args.storeIds),
     )
 
     return rows.map((r) => ({

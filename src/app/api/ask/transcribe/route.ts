@@ -5,6 +5,7 @@ import { rateLimit, RATE_LIMIT_TIERS } from "@/lib/rate-limit"
 import { getChatOpenAIClient } from "@/lib/chat/openai-client"
 import { PRICING_PER_MINUTE, recordAiUsage } from "@/lib/monitoring/ai-usage"
 import { logger } from "@/lib/logger"
+import { checkDailyBudget } from "@/lib/chat/spend-cap"
 
 /**
  * POST /api/ask/transcribe — the composer's mic.
@@ -22,6 +23,14 @@ import { logger } from "@/lib/logger"
  *
  * Priced per minute (`PRICING_PER_MINUTE`), and recorded as its own feature
  * so the monitoring page can tell a spoken question from a typed one.
+ *
+ * The cost is never taken from the client. The form's `seconds` field is the
+ * browser's own claim and is ignored: the duration comes from OpenAI's usage
+ * block when it reports one (`type: "duration"`); when it reports tokens
+ * instead, the tokens are recorded and priced by the token table, which
+ * fails loudly for this model until its token price is entered (see
+ * `computeCostUsd`). And the daily AI cap is checked BEFORE the call, as the
+ * chat route does — a spoken question is spend like a typed one.
  */
 export const maxDuration = 60
 
@@ -47,36 +56,73 @@ export async function POST(req: Request) {
   if (audio.size > MAX_BYTES) {
     return NextResponse.json({ error: "That recording is too long" }, { status: 413 })
   }
-  // The recorder reports its own duration in the form; the price is per
-  // minute and the blob's byte length says nothing reliable about seconds.
-  const seconds = Number(form.get("seconds") ?? 0)
+
+  const budget = await checkDailyBudget(session.user.accountId)
+  if (budget.overBudget) {
+    logger.warn(
+      `[ask-transcribe] accountId=${session.user.accountId} over daily AI budget ` +
+        `spent=${budget.spentUsd} budget=${budget.budgetUsd}`,
+    )
+    return NextResponse.json(
+      {
+        error:
+          `This account has reached its daily AI limit of $${budget.budgetUsd.toFixed(2)}. ` +
+          `The mic works again after midnight; you can still type the question.`,
+      },
+      { status: 429, headers: { "Retry-After": "3600" } },
+    )
+  }
 
   const started = Date.now()
   try {
+    // `json`, not `text`: only the object form carries the usage block the
+    // cost is read from.
     const result = await getChatOpenAIClient().audio.transcriptions.create({
       file: audio,
       model: MODEL,
-      response_format: "text",
+      response_format: "json",
     })
-    // `response_format: "text"` types the result as a string; the object
-    // form is kept for the day the format changes.
-    const text = (
-      typeof result === "string" ? result : ((result as { text?: string }).text ?? "")
-    ).trim()
-    const minutes = Number.isFinite(seconds) && seconds > 0 ? seconds / 60 : 0
+    const text = (result.text ?? "").trim()
     await recordAiUsage({
       feature: "ask-transcribe",
       provider: "openai",
       model: MODEL,
-      inputTokens: 0,
-      outputTokens: 0,
       userId: session.user.id,
       durationMs: Date.now() - started,
-      costUsd: minutes * PRICING_PER_MINUTE[MODEL],
+      ...transcriptionCost(result.usage),
     })
     return NextResponse.json({ text })
   } catch (err) {
     logger.error("[ask-transcribe] failed", err)
     return NextResponse.json({ error: "The recording could not be transcribed" }, { status: 502 })
   }
+}
+
+type TranscriptionUsage =
+  | { type: "duration"; seconds: number }
+  | { type: "tokens"; input_tokens: number; output_tokens: number }
+  | undefined
+
+/**
+ * What a transcription cost, from OpenAI's own usage block — never from the
+ * client. A duration is priced per minute; a token count is recorded as
+ * tokens and priced by `computeCostUsd`, which books an unpriced model at the
+ * dearest known rate and says so rather than recording $0.
+ */
+function transcriptionCost(usage: TranscriptionUsage | { type?: string }): {
+  inputTokens: number
+  outputTokens: number
+  costUsd?: number
+} {
+  const u = usage as TranscriptionUsage
+  if (u?.type === "duration" && Number.isFinite(u.seconds) && u.seconds >= 0) {
+    return { inputTokens: 0, outputTokens: 0, costUsd: (u.seconds / 60) * PRICING_PER_MINUTE[MODEL] }
+  }
+  if (u?.type === "tokens") {
+    return { inputTokens: u.input_tokens ?? 0, outputTokens: u.output_tokens ?? 0 }
+  }
+  logger.error(
+    `[ask-transcribe] no usage block on the response; recording it unpriced so it is visible`,
+  )
+  return { inputTokens: 0, outputTokens: 0 }
 }

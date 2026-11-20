@@ -56,8 +56,10 @@ describe("confirmSkuMatch vendor identity", () => {
     expect(prisma.ingredientSkuMatch.upsert).toHaveBeenCalledWith(
       expect.objectContaining({
         where: {
-          ownerId_vendorKey_sku: {
-            ownerId: "owner-1",
+          // The account key, not the owner key: another owner of the
+          // account may already have taught this SKU.
+          accountId_vendorKey_sku: {
+            accountId: "acct-A",
             vendorKey: "vitco foodservice",
             sku: "15726",
           },

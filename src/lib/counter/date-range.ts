@@ -42,8 +42,15 @@ export interface Preset {
   menu: boolean
 }
 
-/** Monday. The trade runs on a Monday-start week (note 53: weekly is the cadence). */
-const weekStart = (d: Date) => startOfWeek(d, { weekStartsOn: 1 })
+/**
+ * Monday. The trade runs on a Monday-start week (note 53: weekly is the
+ * cadence). Exported so every Counter bucketing of weeks — the rollup's weekly
+ * periods (`buildPeriods`), the chart folds — starts on the same day as
+ * `trailingWeeks`.
+ */
+export const COUNTER_WEEK_STARTS_ON = 1 as const
+
+const weekStart = (d: Date) => startOfWeek(d, { weekStartsOn: COUNTER_WEEK_STARTS_ON })
 
 /**
  * The last day of `d`'s month at local MIDNIGHT. Not date-fns `endOfMonth`,

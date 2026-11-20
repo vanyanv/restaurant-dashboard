@@ -147,7 +147,13 @@ export async function deleteStoreFixedExpense(
     })
     if (!existing) return { error: "Fixed expense not found or access denied" }
 
-    await prisma.storeFixedExpense.delete({ where: { id: existing.id } })
+    // Touch the store row in the same transaction: the chat's answer cache
+    // stamps store settings by the newest `updatedAt` (`data-as-of.ts`), and
+    // a deleted line leaves no row behind to move it.
+    await prisma.$transaction([
+      prisma.storeFixedExpense.delete({ where: { id: existing.id } }),
+      prisma.store.update({ where: { id: existing.storeId }, data: { updatedAt: new Date() } }),
+    ])
 
     revalidateAfterExpenseChange(session.user.accountId, existing.storeId)
     return { success: true }

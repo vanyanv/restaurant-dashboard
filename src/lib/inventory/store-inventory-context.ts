@@ -14,7 +14,21 @@ import {
   type SoldItem,
 } from "./usage-math"
 import type { RunningOnHandResult } from "./running-on-hand"
-import type { DailyDepletionRateResult } from "./depletion-rate"
+
+/**
+ * Trailing-average daily depletion in `recipeUnit / day`. Its per-ingredient
+ * loader (`computeDailyDepletionRate`, `depletion-rate.ts`) had no callers
+ * left and was deleted on 2026-11-20; the batched maths below is the one copy.
+ */
+export interface DailyDepletionRateResult {
+  asOf: Date
+  storeId: string
+  ingredientId: string
+  windowStart: Date
+  windowDays: number
+  depletionQty: number
+  ratePerDay: number
+}
 
 /**
  * Store-wide prefetch for the inventory dashboard.

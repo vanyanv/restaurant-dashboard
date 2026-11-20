@@ -70,6 +70,41 @@ describe("asOfForTool from JobRun", () => {
     expect(await asOfForTool("getDailySales")).toBeNull()
   })
 
+  it("getPnlSummary's stamp moves when COGS, Harri labour or store settings move, not only Otter", async () => {
+    // Otter and Harri from JobRun; COGS and settings from the table read.
+    findFirst.mockImplementation(async ({ where }) =>
+      where.jobName === "harri-labor-sync"
+        ? { completedAt: new Date("2026-11-20T06:00:00Z") }
+        : { completedAt: new Date("2026-11-20T04:00:00Z") },
+    )
+    queryRaw.mockImplementation(async (sql: { sql?: string; strings?: string[] }) => {
+      const text = JSON.stringify(sql)
+      if (text.includes("DailyCogsItem")) return [{ max: new Date("2026-11-20T05:00:00Z") }]
+      if (text.includes("StoreFixedExpense")) return [{ max: new Date("2026-11-20T07:30:00Z") }]
+      return [{ max: null }]
+    })
+    const { maxAsOfForTools, asOfForTool } = await load()
+    // A rent edit at 07:30 is newer than every sync, so it is the key.
+    expect(await maxAsOfForTools(["getPnlSummary"])).toBe("2026-11-20T07:30:00.000Z")
+    // Shown to the owner: the oldest SYNCED source (Otter 04:00), not the rent edit.
+    expect(await asOfForTool("getPnlSummary")).toBe("2026-11-20T04:00:00.000Z")
+    const jobs = findFirst.mock.calls.map((c) => c[0].where.jobName).sort()
+    expect(jobs).toEqual(["harri-labor-sync", "otter.metrics.sync"])
+    const texts = queryRaw.mock.calls.map((c) => JSON.stringify(c[0]))
+    expect(texts.some((t) => t.includes("DailyCogsItem"))).toBe(true)
+    // One read for settings, across Store and StoreFixedExpense together.
+    const settings = texts.filter((t) => t.includes("StoreFixedExpense"))
+    expect(settings).toHaveLength(1)
+    expect(settings[0]).toContain('\\"Store\\"')
+  })
+
+  it("getOperationalCosts is stamped by store settings, not the Otter rollup", async () => {
+    queryRaw.mockResolvedValue([{ max: new Date("2026-11-19T12:00:00Z") }])
+    const { asOfForTool } = await load()
+    expect(await asOfForTool("getOperationalCosts")).toBe("2026-11-19T12:00:00.000Z")
+    expect(findFirst).not.toHaveBeenCalled()
+  })
+
   it("maxAsOfForTools returns the newest across sources, one read per source", async () => {
     findFirst.mockImplementation(async ({ where }) =>
       where.jobName === "otter.hourly.sync"

@@ -44,36 +44,41 @@ async function persistSuggestions(
   let written = 0
   for (const s of suggestions) {
     try {
-      await prisma.ingredientMatchDecision.deleteMany({
-        where: { accountId, groupKey: s.group.groupKey, status: "SUGGESTED" },
-      })
-      await prisma.ingredientMatchDecision.create({
-        data: {
-          accountId,
-          groupKey: s.group.groupKey,
-          vendorName: s.group.vendorName,
-          sku: s.group.sku,
-          productName: s.group.productName,
-          layer: s.layer,
-          // A similarity score, not a model confidence — the column is
-          // shared, and the `layer` prefix is what tells them apart.
-          confidence: s.score,
-          topScore: s.score,
-          margin: null,
-          reasoning: s.reasoning,
-          model: s.model,
-          candidates: s.candidates.map((c) => ({
-            id: c.canonicalIngredientId,
-            name: c.name,
-            score: c.score,
-          })),
-          canonicalIngredientId: s.canonicalIngredientId,
-          createdCanonical: false,
-          linkedLineItemIds: [],
-          linkedLineItemCount: 0,
-          status: "SUGGESTED",
-        },
-      })
+      // One transaction: a create that failed after the delete left the
+      // group with no suggestion at all, and two syncs interleaving could
+      // leave two.
+      await prisma.$transaction([
+        prisma.ingredientMatchDecision.deleteMany({
+          where: { accountId, groupKey: s.group.groupKey, status: "SUGGESTED" },
+        }),
+        prisma.ingredientMatchDecision.create({
+          data: {
+            accountId,
+            groupKey: s.group.groupKey,
+            vendorName: s.group.vendorName,
+            sku: s.group.sku,
+            productName: s.group.productName,
+            layer: s.layer,
+            // A similarity score, not a model confidence — the column is
+            // shared, and the `layer` prefix is what tells them apart.
+            confidence: s.score,
+            topScore: s.score,
+            margin: null,
+            reasoning: s.reasoning,
+            model: s.model,
+            candidates: s.candidates.map((c) => ({
+              id: c.canonicalIngredientId,
+              name: c.name,
+              score: c.score,
+            })),
+            canonicalIngredientId: s.canonicalIngredientId,
+            createdCanonical: false,
+            linkedLineItemIds: [],
+            linkedLineItemCount: 0,
+            status: "SUGGESTED",
+          },
+        }),
+      ])
       written++
     } catch (e) {
       console.warn(
@@ -127,8 +132,10 @@ export async function persistResolvedGroups(input: {
         if (r.group.sku) {
           await tx.ingredientSkuMatch.upsert({
             where: {
-              ownerId_vendorKey_sku: {
-                ownerId,
+              // The account key, as confirmSkuMatch: a SKU taught by another
+              // owner of this account is this account's row.
+              accountId_vendorKey_sku: {
+                accountId,
                 vendorKey: vendorMatchKey(r.group.vendorName),
                 sku: r.group.sku,
               },

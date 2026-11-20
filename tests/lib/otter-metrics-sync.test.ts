@@ -160,7 +160,12 @@ describe("runMetricsSyncForStore — store-scoping invariant", () => {
     const writes = rawWrites()
     expect(writes.length).toBeGreaterThan(0)
     for (const w of writes) {
-      expect(w.sql).toMatch(/IS DISTINCT FROM/)
+      // upserts are change-only; the reconcile DELETE is scoped to the store
+      if (w.sql.includes("DELETE FROM")) {
+        expect(w.sql).toContain(`t."storeId" = `)
+      } else {
+        expect(w.sql).toMatch(/IS DISTINCT FROM/)
+      }
       expect(w.values).toContain(STORE_A)
       expect(w.values).not.toContain(STORE_B)
       // the foreign row's figure never reaches a write
@@ -261,9 +266,9 @@ describe("runMetricsSyncForStore — writes only what changed", () => {
       triggeredBy: "manual",
       includeRatings: true,
     })
-    expect(result.daily).toEqual({ synced: 1, failed: 0, changed: 1 })
-    expect(result.items).toEqual({ synced: 1, failed: 0, changed: 0 })
-    expect(result.ratings).toEqual({ synced: 1, failed: 0, changed: 0 })
+    expect(result.daily).toEqual({ synced: 1, failed: 0, changed: 1, removed: 0, fetchFailed: 0 })
+    expect(result.items).toEqual({ synced: 1, failed: 0, changed: 0, removed: 0, fetchFailed: 0 })
+    expect(result.ratings).toEqual({ synced: 1, failed: 0, changed: 0, removed: 0, fetchFailed: 0 })
     expect(totalChangedRows(result)).toBe(1)
   })
 
@@ -289,7 +294,189 @@ describe("runMetricsSyncForStore — writes only what changed", () => {
       triggeredBy: "manual",
     })
     spy.mockRestore()
-    expect(result.categories).toEqual({ synced: 0, failed: 1, changed: 0 })
-    expect(result.items).toEqual({ synced: 1, failed: 0, changed: 1 })
+    // The phase's upserts and its reconcile DELETE share one transaction, so
+    // a failing statement fails the whole phase (nothing half-replaced).
+    expect(result.categories).toEqual({ synced: 0, failed: 1, changed: 0, removed: 0, fetchFailed: 0 })
+    expect(result.items).toEqual({ synced: 1, failed: 0, changed: 1, removed: 1, fetchFailed: 0 })
+    expect(result.problems).toEqual(["categories: 1 rows failed to write"])
+  })
+})
+
+describe("runMetricsSyncForStore — reconciles what Otter stopped returning", () => {
+  const windowStart = new Date("2026-05-01T00:00:00.000Z")
+  const windowEnd = new Date("2026-05-02T23:59:59.999Z")
+  const deletesFrom = (table: string) =>
+    rawWrites().filter((w) => w.sql.includes(`DELETE FROM "${table}"`))
+  const jobRunStatuses = () =>
+    prismaCalls
+      .filter((c) => c.method === "jobRun.update")
+      .map((c) => (c.args as { data: { status?: string } }).data.status)
+      .filter(Boolean)
+
+  beforeEach(() => {
+    vi.mocked(otter.queryRatings).mockResolvedValue([])
+  })
+
+  it("deletes stale rows per phase for the fetched dates, in one transaction with the upserts", async () => {
+    vi.mocked(otter.queryMetrics).mockResolvedValue([
+      {
+        store: UUID_A,
+        eod_date_with_timezone: "2026-05-01",
+        pos_summary_ofo: "css-pos",
+        multi_value_pos_payment_method: "CARD",
+        menu_parent_entity_name: "Sliders",
+        item: "Classic",
+        fp_order_items_quantity_sold: 3,
+      },
+    ])
+    const result = await runMetricsSyncForStore(STORE_A, [UUID_A], windowStart, windowEnd, {
+      triggeredBy: "manual",
+      includeRatings: true,
+    })
+
+    for (const table of ["OtterDailySummary", "OtterMenuCategory"]) {
+      const [del] = deletesFrom(table)
+      expect(del, table).toBeDefined()
+      expect(del.sql).toContain("NOT EXISTS")
+      expect(del.values).toContain(STORE_A)
+    }
+    // The daily request covers the window and only 05-01 came back with rows,
+    // so only 05-01 is reconciled; a day with no rows is never wiped.
+    expect(deletesFrom("OtterDailySummary")[0].values).toContainEqual(["2026-05-01"])
+    // Categories are fetched per day and both days answered with a row.
+    expect(deletesFrom("OtterMenuCategory")[0].values).toContainEqual(["2026-05-01", "2026-05-02"])
+    // items and modifiers each reconcile only their own half of the table
+    const menuDeletes = deletesFrom("OtterMenuItem")
+    expect(menuDeletes).toHaveLength(2)
+    expect(menuDeletes[0].values).toContain(false)
+    expect(menuDeletes[1].values).toContain(true)
+    // the kept keys travel as arrays: the Classic row on both days survives
+    expect(menuDeletes[0].values).toContainEqual(["Classic", "Classic"])
+    // ratings are individual reviews: never reconciled
+    expect(deletesFrom("OtterRating")).toHaveLength(0)
+    // every upsert + delete pair went through a transaction
+    const { prisma } = await import("@/lib/prisma")
+    expect(prisma.$transaction).toHaveBeenCalledTimes(4)
+    expect(result.problems).toEqual([])
+    expect(jobRunStatuses()).toEqual(["SUCCESS"])
+  })
+
+  it("counts removed rows as changes", async () => {
+    vi.mocked(otter.queryMetrics).mockResolvedValue([
+      { store: UUID_A, menu_parent_entity_name: "Sliders", item: "Classic", fp_order_items_quantity_sold: 1 },
+    ])
+    executeRawImpl = async (sql) => (sql.sql.includes(`DELETE FROM "OtterMenuCategory"`) ? 4 : 0)
+    const result = await runMetricsSyncForStore(STORE_A, [UUID_A], windowStart, windowEnd, {
+      triggeredBy: "manual",
+    })
+    expect(result.categories.removed).toBe(4)
+    expect(totalChangedRows(result)).toBe(4)
+  })
+
+  it("never reconciles a day whose fetch failed, and records the run PARTIAL", async () => {
+    // Categories: day 1 fails, day 2 answers.
+    vi.mocked(otter.buildMenuCategoryBatchBody)
+      .mockReturnValueOnce({ phase: "cat", day: 1 })
+      .mockReturnValueOnce({ phase: "cat", day: 2 })
+    vi.mocked(otter.queryMetrics).mockImplementation(async (body: object) => {
+      const b = body as { phase?: string; day?: number }
+      if (b.phase === "cat" && b.day === 1) throw new Error("Otter API error 503")
+      if (b.phase === "cat") return [{ store: UUID_A, menu_parent_entity_name: "Sliders" }]
+      return []
+    })
+    const spy = vi.spyOn(console, "error").mockImplementation(() => {})
+    const result = await runMetricsSyncForStore(STORE_A, [UUID_A], windowStart, windowEnd, {
+      triggeredBy: "cron",
+      includeRatings: true,
+    })
+    spy.mockRestore()
+
+    const [catDelete] = deletesFrom("OtterMenuCategory")
+    expect(catDelete.values).toContainEqual(["2026-05-02"])
+    expect(JSON.stringify(catDelete.values)).not.toContain("2026-05-01")
+    expect(result.categories.fetchFailed).toBe(1)
+    expect(result.problems.join(" ")).toMatch(/categories: fetch failed for 1\/2 days \(2026-05-01\)/)
+
+    // Not SUCCESS, so it can never stand in for the scheduled sync.
+    expect(jobRunStatuses()).toEqual(["PARTIAL"])
+    const metaUpdate = prismaCalls.find(
+      (c) => c.method === "jobRun.update" && (c.args as { data: { metadata?: unknown } }).data.metadata,
+    )
+    expect(
+      (metaUpdate!.args as { data: { metadata: { problems: string[] } } }).data.metadata.problems,
+    ).toHaveLength(1)
+    // lastSyncAt does not move for an incomplete run
+    expect(prismaCalls.filter((c) => c.method === "otterStore.updateMany")).toHaveLength(0)
+  })
+
+  it("does not wipe a day that a clean fetch answered with no rows", async () => {
+    vi.mocked(otter.queryMetrics).mockResolvedValue([])
+    await runMetricsSyncForStore(STORE_A, [UUID_A], windowStart, windowEnd, { triggeredBy: "cron" })
+    for (const table of ["OtterDailySummary", "OtterMenuCategory", "OtterMenuItem"]) {
+      for (const del of deletesFrom(table)) {
+        expect(JSON.stringify(del.values), table).not.toContain("2026-05-0")
+      }
+    }
+  })
+
+  it("treats a failed ratings fetch as a failure", async () => {
+    vi.mocked(otter.queryMetrics).mockResolvedValue([])
+    vi.mocked(otter.queryRatings).mockRejectedValue(new Error("timeout"))
+    const spy = vi.spyOn(console, "error").mockImplementation(() => {})
+    const result = await runMetricsSyncForStore(STORE_A, [UUID_A], windowStart, windowEnd, {
+      triggeredBy: "cron",
+      includeRatings: true,
+    })
+    spy.mockRestore()
+    expect(result.ratings.fetchFailed).toBe(1)
+    expect(jobRunStatuses()).toEqual(["PARTIAL"])
+  })
+
+  it("treats a response at its row cap as truncated: not written, not reconciled", async () => {
+    vi.mocked(otter.buildMenuItemSyncBody)
+      .mockReturnValueOnce({ phase: "item", limit: 1 })
+      .mockReturnValueOnce({ phase: "item", limit: 1 })
+    vi.mocked(otter.queryMetrics).mockImplementation(async (body: object) =>
+      (body as { phase?: string }).phase === "item"
+        ? [{ menu_parent_entity_name: "Sliders", item: "Classic", fp_order_items_quantity_sold: 1 }]
+        : [],
+    )
+    const spy = vi.spyOn(console, "error").mockImplementation(() => {})
+    const result = await runMetricsSyncForStore(STORE_A, [UUID_A], windowStart, windowEnd, {
+      triggeredBy: "cron",
+    })
+    spy.mockRestore()
+    expect(result.items.fetchFailed).toBe(2)
+    expect(result.items.synced).toBe(0)
+    expect(deletesFrom("OtterMenuItem").find((d) => d.values.includes(false))).toBeUndefined()
+    expect(jobRunStatuses()).toEqual(["PARTIAL"])
+  })
+})
+
+describe("runMetricsSyncForStore — a store with two Otter UUIDs", () => {
+  it("adds the two UUIDs' category rows instead of keeping the last", async () => {
+    const UUID_A2 = "uuid-A2"
+    vi.mocked(otter.queryRatings).mockResolvedValue([])
+    vi.mocked(otter.buildMenuCategoryBatchBody).mockReturnValueOnce({ phase: "cat" })
+    vi.mocked(otter.queryMetrics).mockImplementation(async (body: object) =>
+      (body as { phase?: string }).phase === "cat"
+        ? [
+            { store: UUID_A, menu_parent_entity_name: "Sliders", fp_order_items_total_sales: 100, fp_order_items_quantity_sold: 10 },
+            { store: UUID_A2, menu_parent_entity_name: "Sliders", fp_order_items_total_sales: 40, fp_order_items_quantity_sold: 4 },
+          ]
+        : [],
+    )
+    const result = await runMetricsSyncForStore(
+      STORE_A,
+      [UUID_A, UUID_A2],
+      new Date("2026-05-01T00:00:00.000Z"),
+      new Date("2026-05-01T23:59:59.999Z"),
+      { triggeredBy: "manual" },
+    )
+    expect(result.categories.synced).toBe(1)
+    const [catWrite] = writesTo("OtterMenuCategory")
+    expect(catWrite.values).toContain(140)
+    expect(catWrite.values).toContain(14)
+    expect(catWrite.values).not.toContain(40)
   })
 })

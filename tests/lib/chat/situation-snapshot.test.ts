@@ -47,6 +47,32 @@ describe("situation snapshot · business days", () => {
     expect(text).toContain("2026-10-13 → 2026-10-20")
   })
 
+  it("net is the P&L's rowSales net, not Otter's fpNetSales + tpNetSales", async () => {
+    asMock(prisma.otterDailySummary.groupBy).mockResolvedValue([
+      {
+        storeId: "holly",
+        platform: "css-pos",
+        _sum: {
+          fpGrossSales: 1000, tpGrossSales: 0, fpServiceCharges: 20, tpServiceCharges: 0,
+          fpDiscounts: -50, tpDiscounts: 0, tpRefundsAdjustments: 0, fpOrderCount: 40, tpOrderCount: 0,
+        },
+      },
+      {
+        storeId: "holly",
+        platform: "doordash",
+        _sum: {
+          fpGrossSales: 0, tpGrossSales: 500, fpServiceCharges: 0, tpServiceCharges: 0,
+          fpDiscounts: 0, tpDiscounts: -25, tpRefundsAdjustments: -10, fpOrderCount: 0, tpOrderCount: 20,
+        },
+      },
+    ])
+    const text = await buildSituationSnapshot("acct_net", new Date("2026-10-20T16:00:00Z"))
+    const args = asMock(prisma.otterDailySummary.groupBy).mock.calls[0][0]
+    expect(args.by).toEqual(["storeId", "platform"])
+    // 970 + 465
+    expect(text).toContain("net $1,435 across 60 orders")
+  })
+
   it("in the morning the window is the same seven days", async () => {
     await buildSituationSnapshot("acct_morning", new Date("2026-10-20T16:00:00Z"))
     const where = asMock(prisma.otterDailySummary.groupBy).mock.calls[0][0].where

@@ -9,6 +9,7 @@ import {
 import { isLinePriceable, PRICED_INVOICE_STATUSES } from "@/lib/invoice-verify"
 import { canonicalizeUnit } from "@/lib/unit-conversion"
 import { logger } from "@/lib/logger"
+import { linkLineItems, type LineLink } from "@/lib/ingredient-matching"
 
 /**
  * Normalize an invoice-line unit into the canonical token we want stored on
@@ -117,6 +118,8 @@ export async function seedCanonicalIngredientsFromInvoices(
     })
     if (lineItems.length === 0) break
     lastId = lineItems[lineItems.length - 1].id
+    // This batch's line links, written in one statement at the end of the batch.
+    const links: LineLink[] = []
 
     for (const li of lineItems) {
       const vendor = normalizeVendorName(li.invoice.vendorName)
@@ -146,9 +149,11 @@ export async function seedCanonicalIngredientsFromInvoices(
             canonicalsCreated++
           }
           const normalizedUnit = normalizeUnitToken(li.unit)
+          // The account key: (accountId, vendorKey, sku) is the tenancy
+          // identity; another owner of the account may have taught this SKU.
           await prisma.ingredientSkuMatch.upsert({
             where: {
-              ownerId_vendorKey_sku: { ownerId, vendorKey, sku: li.sku },
+              accountId_vendorKey_sku: { accountId, vendorKey, sku: li.sku },
             },
             update: { canonicalIngredientId: canonicalId, vendorName: vendor, confirmedAt: now },
             create: {
@@ -168,10 +173,7 @@ export async function seedCanonicalIngredientsFromInvoices(
           skuMatchesCreated++
         }
 
-        await prisma.invoiceLineItem.update({
-          where: { id: li.id },
-          data: { canonicalIngredientId: canonicalId, matchSource: "sku", matchedAt: now },
-        })
+        links.push({ id: li.id, canonicalIngredientId: canonicalId, matchSource: "sku" })
         continue
       }
 
@@ -214,13 +216,12 @@ export async function seedCanonicalIngredientsFromInvoices(
           conversionFactor: 1,
         },
       })
-      await prisma.invoiceLineItem.update({
-        where: { id: li.id },
-        data: { canonicalIngredientId: canonicalId, matchSource: "alias", matchedAt: now },
-      })
+      links.push({ id: li.id, canonicalIngredientId: canonicalId, matchSource: "alias" })
       seenAlias.add(aliasKey)
       aliasesCreated++
     }
+
+    await linkLineItems(links, new Date())
 
     if (lineItems.length < SEED_SCAN_BATCH) break
   }

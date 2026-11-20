@@ -10,6 +10,7 @@
 import { prisma } from "@/lib/prisma"
 import { getAccountStores } from "@/lib/account-stores"
 import { businessQueryDate } from "@/lib/counter/business-date"
+import { rowSales } from "@/lib/pnl"
 
 const SNAPSHOT_TTL_MS = 60_000
 
@@ -52,14 +53,19 @@ export async function buildSituationSnapshot(accountId: string, now: Date = new 
   // Run the three reads in parallel.
   const [salesByStore, openAnomalies, latestForecast] = await Promise.all([
     prisma.otterDailySummary.groupBy({
-      by: ["storeId"],
+      by: ["storeId", "platform"],
       where: {
         storeId: { in: storeIds },
         date: { gte: sevenDaysAgo, lt: today },
       },
       _sum: {
-        fpNetSales: true,
-        tpNetSales: true,
+        fpGrossSales: true,
+        tpGrossSales: true,
+        fpServiceCharges: true,
+        tpServiceCharges: true,
+        fpDiscounts: true,
+        tpDiscounts: true,
+        tpRefundsAdjustments: true,
         fpOrderCount: true,
         tpOrderCount: true,
       },
@@ -78,12 +84,21 @@ export async function buildSituationSnapshot(accountId: string, now: Date = new 
     }),
   ])
 
-  const last7d: StoreLast7d[] = salesByStore.map((row) => ({
-    storeId: row.storeId,
-    storeName: storeNameById.get(row.storeId) ?? row.storeId,
-    net7d: (row._sum.fpNetSales ?? 0) + (row._sum.tpNetSales ?? 0),
-    txns7d: (row._sum.fpOrderCount ?? 0) + (row._sum.tpOrderCount ?? 0),
-  }))
+  // Net sales by the statement's own definition (`rowSales`), summed over
+  // each store's platform rows, so this figure and the P&L agree.
+  const byStore = new Map<string, StoreLast7d>()
+  for (const row of salesByStore) {
+    const cur = byStore.get(row.storeId) ?? {
+      storeId: row.storeId,
+      storeName: storeNameById.get(row.storeId) ?? row.storeId,
+      net7d: 0,
+      txns7d: 0,
+    }
+    cur.net7d += rowSales({ platform: row.platform, fpTaxCollected: null, tpTaxCollected: null, ...row._sum }).net
+    cur.txns7d += (row._sum.fpOrderCount ?? 0) + (row._sum.tpOrderCount ?? 0)
+    byStore.set(row.storeId, cur)
+  }
+  const last7d: StoreLast7d[] = Array.from(byStore.values())
 
   const totalNet = last7d.reduce((acc, r) => acc + r.net7d, 0)
   const totalTxns = last7d.reduce((acc, r) => acc + r.txns7d, 0)

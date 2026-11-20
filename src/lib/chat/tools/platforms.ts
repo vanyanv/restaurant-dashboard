@@ -6,6 +6,7 @@ import {
   storeIdsSchema,
 } from "./_shared"
 import type { ChatTool } from "./types"
+import { rowSales } from "@/lib/pnl"
 
 const params = z
   .object({
@@ -44,8 +45,11 @@ export const getPlatformBreakdown: ChatTool<
       _sum: {
         fpGrossSales: true,
         tpGrossSales: true,
-        fpNetSales: true,
-        tpNetSales: true,
+        fpServiceCharges: true,
+        tpServiceCharges: true,
+        fpDiscounts: true,
+        tpDiscounts: true,
+        tpRefundsAdjustments: true,
         fpOrderCount: true,
         tpOrderCount: true,
       },
@@ -53,8 +57,10 @@ export const getPlatformBreakdown: ChatTool<
 
     const rows = grouped.map((row) => {
       const s = row._sum
-      const gross = (s.fpGrossSales ?? 0) + (s.tpGrossSales ?? 0)
-      const net = (s.fpNetSales ?? 0) + (s.tpNetSales ?? 0)
+      // The statement's own definition (`rowSales` in `@/lib/pnl`): gross is
+      // the platform's own side (fp in-house, tp on a marketplace); net adds
+      // service charges, discounts and refunds — so chat matches the P&L.
+      const { gross, net } = rowSales({ platform: row.platform, fpTaxCollected: null, tpTaxCollected: null, ...s })
       const count = (s.fpOrderCount ?? 0) + (s.tpOrderCount ?? 0)
       return { platform: row.platform, gross, net, count }
     })

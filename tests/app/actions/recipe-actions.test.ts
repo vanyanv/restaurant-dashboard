@@ -10,16 +10,6 @@ import { describe, it, expect, vi, beforeEach } from "vitest"
 
 vi.mock("@/lib/auth-scope", () => ({ getAuthScope: vi.fn() }))
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }))
-vi.mock("@/lib/cached", () => ({
-  costRecipeCached: vi.fn(),
-  costIngredientCached: vi.fn(),
-}))
-vi.mock("@/lib/recipe-cost-batch", () => ({ batchRecipeCosts: vi.fn() }))
-vi.mock("@/lib/menu-sell-price", () => ({ resolveSellPriceForRecipe: vi.fn() }))
-vi.mock("@/app/actions/menu-item-actions", () => ({
-  getMenuItemSellPrices: vi.fn(),
-  getMenuItemsForCatalog: vi.fn(),
-}))
 vi.mock("@/lib/recipe-cost", () => {
   class RecipeCycleError extends Error {
     constructor(public cycle: string[] = []) {

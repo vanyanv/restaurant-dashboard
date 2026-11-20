@@ -5,6 +5,7 @@ import { runHarriScheduleSync } from "@/lib/harri-schedule-sync"
 import { scheduleSyncWindow } from "@/lib/harri-schedule"
 import { bustTags, monthTagsForRange } from "@/lib/cache/cached"
 import { laIsoWeeksSpanning, withScopedWrites } from "@/lib/cache/closed-range"
+import { businessQueryDate } from "@/lib/counter/business-date"
 
 // Raised from 60 when the schedule sync joined this route: it adds four
 // week-addressable gateway calls plus a transaction each, on top of the labor
@@ -37,8 +38,10 @@ export const POST = withCronAuth(
     }
 
     const days = Math.max(1, Math.min(14, body.days ?? 3))
-    const endDate = new Date()
-    endDate.setUTCHours(0, 0, 0, 0)
+    // Today's LA business date, in the @db.Date encoding. UTC midnight was
+    // already tomorrow from 4-5pm Pacific, so every evening run wrote a labor
+    // row for a day that had not started.
+    const endDate = businessQueryDate(new Date())
     const startDate = new Date(endDate)
     startDate.setUTCDate(startDate.getUTCDate() - (days - 1))
 

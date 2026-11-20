@@ -221,7 +221,7 @@ export const searchRecipes: ChatTool<typeof searchParams, RecipeSearchRow[]> = {
     "Vector search across the owner's built kitchen recipes. Use this only for recipe, ingredient-breakdown, food-cost, or margin questions when the phrasing doesn't exactly match a recipe name. Do not use this for menu price, live menu search, or menu item performance questions; those are searchMenuItems/getMenuPrices/getMenuItemDetails. Returns top hits; pair with getRecipeById to load one in full.",
   parameters: searchParams,
   async execute(args, ctx) {
-    const vec = await embed(args.query)
+    const vec = await embed(args.query, { feature: "chat-search", userId: ctx.ownerId })
     const lit = toVectorLiteral(vec)
 
     const rows = await ctx.prisma.$queryRawUnsafe<

@@ -122,3 +122,31 @@ describe("buildPeriods — a one-day range", () => {
     expect(periods[0].label).toBe("Thu Aug 20")
   })
 })
+
+describe("buildPeriods — weekly buckets start on the day asked for", () => {
+  // Thu 2026-03-05 → Wed 2026-03-18.
+  const start = utcDay(2026, 2, 5)
+  const end = utcDay(2026, 2, 18)
+
+  it("defaults to Sunday for the legacy callers", () => {
+    const periods = buildPeriods(start, end, "weekly")
+    expect(periods.map((p) => p.startDate.toISOString().slice(0, 10))).toEqual([
+      "2026-03-05",
+      "2026-03-08",
+      "2026-03-15",
+    ])
+  })
+
+  it("starts Monday when Counter asks (COUNTER_WEEK_STARTS_ON)", () => {
+    const periods = buildPeriods(start, end, "weekly", 1)
+    expect(
+      periods.map((p) => [p.startDate.toISOString().slice(0, 10), p.endDate.toISOString().slice(0, 10)]),
+    ).toEqual([
+      ["2026-03-05", "2026-03-08"],
+      ["2026-03-09", "2026-03-15"],
+      ["2026-03-16", "2026-03-18"],
+    ])
+    expect(periods[1].label).toBe("Week of Mar 9")
+    expect(periods.map((p) => p.days)).toEqual([4, 7, 3])
+  })
+})

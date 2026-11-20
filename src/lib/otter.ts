@@ -1,3 +1,5 @@
+import { fetchWithTimeout } from "@/lib/fetch-with-timeout"
+
 /** Build UTC midnight ISO strings for a local calendar date (matches Otter's format). */
 export function utcDayRange(date: Date): { minDate: string; maxDate: string } {
   const yyyy = date.getUTCFullYear()
@@ -208,6 +210,7 @@ export interface OtterRow {
 
 // --- Auto-login JWT cache ---
 const SIGN_IN_URL = "https://manager.tryotter.com/api/users/sign_in"
+const SIGN_IN_TIMEOUT_MS = 15_000
 let cachedJwt: string | null = null
 let cachedJwtExp = 0 // unix seconds
 
@@ -229,17 +232,23 @@ async function signInForOtterJwt(): Promise<string> {
     )
   }
 
-  const res = await fetch(SIGN_IN_URL, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "Accept": "*/*",
-      "Origin": "https://manager.tryotter.com",
-      "Referer": "https://manager.tryotter.com/",
-      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36",
+  // A hung sign-in would otherwise hold every sync that needs a fresh token
+  // until the function's own deadline.
+  const res = await fetchWithTimeout(
+    SIGN_IN_URL,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Accept": "*/*",
+        "Origin": "https://manager.tryotter.com",
+        "Referer": "https://manager.tryotter.com/",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36",
+      },
+      body: JSON.stringify({ email, password }),
     },
-    body: JSON.stringify({ email, password }),
-  })
+    SIGN_IN_TIMEOUT_MS,
+  )
 
   if (!res.ok) {
     const text = await res.text()
@@ -357,7 +366,7 @@ async function queryOtterEndpoint(url: string, body: object): Promise<OtterRow[]
     // that clear within seconds, so a throw on the first one fails the whole
     // cron unnecessarily (see incident #39).
     if (RETRYABLE_STATUSES.has(response.status) && attempt < MAX_RETRIES) {
-      const backoff = RETRY_BASE_MS * attempt
+      const backoff = retryDelayMs(response.headers.get("retry-after"), attempt)
       console.log(
         `Otter API ${response.status} — retrying in ${backoff / 1000}s (attempt ${attempt}/${MAX_RETRIES})`
       )
@@ -568,6 +577,29 @@ export type OrderDetailsPayload = {
   }>
 }
 
+/** The longest a Retry-After header may make one retry wait. */
+const MAX_RETRY_AFTER_MS = 30_000
+
+/**
+ * How long to wait before retry `attempt` (1-based): the server's
+ * Retry-After (seconds or an HTTP date) when it sends one, capped at 30s,
+ * else the linear backoff the metrics endpoint uses.
+ */
+export function retryDelayMs(retryAfter: string | null, attempt: number, now = Date.now()): number {
+  const fallback = RETRY_BASE_MS * attempt
+  if (!retryAfter) return fallback
+  const trimmed = retryAfter.trim()
+  let ms: number
+  if (/^\d+(\.\d+)?$/.test(trimmed)) {
+    ms = Number(trimmed) * 1000
+  } else {
+    const at = Date.parse(trimmed)
+    if (!Number.isFinite(at)) return fallback
+    ms = at - now
+  }
+  return Math.min(Math.max(ms, 0), MAX_RETRY_AFTER_MS)
+}
+
 /** POST a GraphQL operation to Otter. Shares the retry + timeout pattern of queryOtterEndpoint. */
 async function queryOtterGraphQL<T>(
   operationName: string,
@@ -605,8 +637,14 @@ async function queryOtterGraphQL<T>(
       continue
     }
 
-    if (response.status === 403 && attempt < MAX_RETRIES) {
-      await new Promise((r) => setTimeout(r, RETRY_BASE_MS * attempt))
+    // 403 (transient access-denied), 429 (rate limit) and 5xx (upstream blip)
+    // back off and retry, as the metrics endpoint does. The details sync runs
+    // five at a time, so a 429 that failed outright used to drop a batch of
+    // orders back to "details pending" until the next run.
+    if (RETRYABLE_STATUSES.has(response.status) && attempt < MAX_RETRIES) {
+      await new Promise((r) =>
+        setTimeout(r, retryDelayMs(response.headers.get("retry-after"), attempt)),
+      )
       continue
     }
 

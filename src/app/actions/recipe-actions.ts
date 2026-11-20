@@ -10,15 +10,8 @@ import {
   type RecipeCostResult,
 } from "@/lib/recipe-cost"
 import { assertYieldUnitChangeSafe, validateRecipeShape } from "@/lib/recipe-validation"
-import { costRecipeCached } from "@/lib/cached"
-import { batchRecipeCosts } from "@/lib/recipe-cost-batch"
 import { revalidatePath } from "next/cache"
-import type { RecipeInput, RecipeSummary } from "@/types/recipe"
-import {
-  getMenuItemSellPrices,
-  getMenuItemsForCatalog,
-} from "@/app/actions/menu-item-actions"
-import { resolveSellPriceForRecipe } from "@/lib/menu-sell-price"
+import type { RecipeInput } from "@/types/recipe"
 
 /**
  * The desk pages a recipe save moves: the recipe list, the catalogue's plate
@@ -29,69 +22,6 @@ function revalidateRecipePages({ ingredients = true }: { ingredients?: boolean }
   revalidatePath("/dashboard/recipes")
   revalidatePath("/dashboard/menu/catalog")
   if (ingredients) revalidatePath("/dashboard/ingredients")
-}
-
-export async function listRecipes(): Promise<RecipeSummary[]> {
-  const scope = await getAuthScope()
-  if (!scope) return []
-  const { accountId } = scope
-
-  const recipes = await prisma.recipe.findMany({
-    where: { accountId, category: { not: "Uncategorized" } },
-    orderBy: [{ isSellable: "desc" }, { itemName: "asc" }],
-    select: {
-      id: true,
-      itemName: true,
-      category: true,
-      isSellable: true,
-      isConfirmed: true,
-      updatedAt: true,
-      ingredients: { select: { id: true } },
-    },
-  })
-
-  const costs = await batchRecipeCosts(accountId)
-
-  return recipes.map((r) => {
-    const cost = costs.get(r.id)
-    return {
-      id: r.id,
-      itemName: r.itemName,
-      category: r.category,
-      isSellable: r.isSellable,
-      isConfirmed: r.isConfirmed,
-      ingredientCount: r.ingredients.length,
-      computedCost: cost?.totalCost ?? null,
-      partialCost: cost?.partial ?? true,
-      updatedAt: r.updatedAt,
-    }
-  })
-}
-
-export async function getRecipeDetail(recipeId: string) {
-  const scope = await getAuthScope()
-  if (!scope) return null
-  const { ownerId, accountId } = scope
-  void ownerId
-  if (!ownerId) return null
-
-  const recipe = await prisma.recipe.findFirst({
-    where: { id: recipeId, accountId },
-    include: {
-      ingredients: {
-        include: {
-          canonicalIngredient: true,
-          componentRecipe: {
-            select: { id: true, itemName: true, category: true },
-          },
-        },
-      },
-    },
-  })
-  if (!recipe) return null
-
-  const cost = await costRecipeCached(recipeId).catch(() => null)
-  return { recipe, cost }
 }
 
 export async function upsertRecipe(
@@ -314,68 +244,4 @@ export async function confirmRecipe(
   void recipe
   // Confirming changes no line, so no ingredient's usage moves.
   revalidateRecipePages({ ingredients: false })
-}
-
-export type RecipeCatalogSummary = {
-  id: string
-  itemName: string
-  category: string
-  isConfirmed: boolean
-  ingredientCount: number
-  computedCost: number | null
-  partialCost: boolean
-  updatedAt: Date
-  sellPrice: number | null
-  qtySold: number
-  sellSourceName: string | null
-}
-
-export async function getRecipeCatalogSummary(
-  recipeId: string
-): Promise<RecipeCatalogSummary | null> {
-  const scope = await getAuthScope()
-  if (!scope) return null
-  const { ownerId, accountId } = scope
-  void ownerId
-  if (!ownerId) return null
-
-  const recipe = await prisma.recipe.findFirst({
-    where: { id: recipeId, accountId },
-    select: {
-      id: true,
-      itemName: true,
-      category: true,
-      isConfirmed: true,
-      updatedAt: true,
-      ingredients: { select: { id: true } },
-    },
-  })
-  if (!recipe) return null
-
-  const [cost, sellPrices, otterMappings] = await Promise.all([
-    costRecipeCached(recipe.id).catch(() => null),
-    getMenuItemSellPrices(30),
-    getMenuItemsForCatalog(),
-  ])
-
-  const resolved = resolveSellPriceForRecipe(
-    recipe.id,
-    recipe.itemName,
-    sellPrices,
-    otterMappings
-  )
-
-  return {
-    id: recipe.id,
-    itemName: recipe.itemName,
-    category: recipe.category,
-    isConfirmed: recipe.isConfirmed,
-    ingredientCount: recipe.ingredients.length,
-    computedCost: cost?.totalCost ?? null,
-    partialCost: cost?.partial ?? true,
-    updatedAt: recipe.updatedAt,
-    sellPrice: resolved?.avgPrice ?? null,
-    qtySold: resolved?.qtySold ?? 0,
-    sellSourceName: resolved?.sourceOtterName ?? null,
-  }
 }

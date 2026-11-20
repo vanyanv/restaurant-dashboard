@@ -20,6 +20,7 @@ import {
   type ChannelReading,
 } from "@/lib/counter/channel-mix"
 import { addCommission } from "@/lib/counter/commission-core"
+import { foodKnown, withFoodGap } from "@/lib/counter/food-coverage"
 import { loadStripTargets, type StripTargets, type Target } from "@/lib/counter/targets"
 import {
   granularityFor,
@@ -610,15 +611,17 @@ function buildStrip(
    * Rounded once, at the figure — the delta beside a printed 28.4 must be
    * derivable from 28.4, the same rule primeCost() applies to roomPp.
    */
-  const foodKnown = p.grossSales > 0 && p.cogsValue > 0
-  const foodPct = foodKnown ? Math.round(p.cogsPct * 1000) / 10 : null
+  const foodIsKnown = foodKnown(p)
+  const foodPct = foodIsKnown ? Math.round(p.cogsPct * 1000) / 10 : null
   if (foodPct !== null) {
     const plan = targets?.foodCost ?? null
     cells.push({
       label: "Food cost",
       value: pct(foodPct, { scaled: true }),
       arrive: { value: foodPct, as: "pct" },
-      caption: plan?.kind === "target" ? `Plan ${pct(plan.value, { scaled: true })}` : undefined,
+      // A known but partial food cost — days with no food cost, sales not
+      // fully costed — says so, in the P&L plain page's words.
+      caption: withFoodGap(plan?.kind === "target" ? `Plan ${pct(plan.value, { scaled: true })}` : undefined, p),
       delta:
         plan?.kind === "target"
           ? `${(foodPct - plan.value).toFixed(1)} pts vs plan`
@@ -647,7 +650,7 @@ function buildStrip(
   // Prime is food PLUS labour, so it needs both halves to be real. It was
   // gated on labour alone, which let a missing COGS line through as a zero and
   // printed the sum of one of its two terms as though it were the sum.
-  const prime = laborKnown && foodKnown ? p.prime : null
+  const prime = laborKnown && foodIsKnown ? p.prime : null
   if (prime?.primePct != null) {
     const cogsSeries = rowPercents(p.rows, COGS_CODE)
     const laborSeries = rowPercents(p.rows, LABOR_CODE)
@@ -655,7 +658,7 @@ function buildStrip(
       label: "Prime cost",
       value: pct(prime.primePct, { scaled: true }),
       arrive: { value: prime.primePct, as: "pct" },
-      caption: `Ceiling ${pct(prime.ceilingPct, { scaled: true })}`,
+      caption: withFoodGap(`Ceiling ${pct(prime.ceilingPct, { scaled: true })}`, p),
       delta: prime.roomPp != null ? `${prime.roomPp.toFixed(1)} pts of room` : undefined,
       reference: {
         v: prime.primePct,
@@ -1031,7 +1034,11 @@ function buildComparison(
     bad: thenSales > 0 && now.grossSales < thenSales,
   })
 
-  if (now.grossSales > 0 && then.grossSales > 0) {
+  // Same guard as the strip's, on each side: zero food over a range with
+  // sales is food not posted, not a kitchen that bought nothing — a 0.0% here
+  // read as a 30-point improvement.
+  const foodBoth = foodKnown(now) && foodKnown(then)
+  if (foodBoth) {
     rows.push(pointsRow("food", "Food cost", now.cogsPct * 100, then.cogsPct * 100))
   }
 
@@ -1041,8 +1048,9 @@ function buildComparison(
     rows.push(pointsRow("labor", "Labor", now.laborPct * 100, then.laborPct * 100))
 
     // Both sides' prime cost came from `statement.ts`, on their own
-    // denominators — the same figures the strip above prints.
-    if (now.prime.primePct != null && then.prime.primePct != null) {
+    // denominators — the same figures the strip above prints. Prime is food
+    // plus labour, so it needs both halves known on both sides.
+    if (foodBoth && now.prime.primePct != null && then.prime.primePct != null) {
       rows.push(pointsRow("prime", "Prime cost", now.prime.primePct, then.prime.primePct))
     }
   }

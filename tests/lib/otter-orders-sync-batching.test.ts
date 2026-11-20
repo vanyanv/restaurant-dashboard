@@ -43,7 +43,7 @@ vi.mock("@/lib/prisma", () => ({
 }))
 
 import { prisma } from "@/lib/prisma"
-import { queryMetrics } from "@/lib/otter"
+import { buildCustomerOrdersBody, queryMetrics } from "@/lib/otter"
 import { runOrdersSync, persistOrderItems } from "@/lib/otter-orders-sync"
 
 const UUID_A = "uuid-A"
@@ -136,6 +136,7 @@ describe("runOrdersSync — Phase 1 batches order upserts", () => {
 describe("persistOrderItems — bulk item writes", () => {
   function fakeTx() {
     return {
+      $queryRaw: vi.fn(async (..._a: unknown[]) => [{ id: "locked" }]),
       otterOrderItem: {
         deleteMany: vi.fn(async (_a: { where: unknown }) => ({})),
         createMany: vi.fn(async (_a: { data: unknown[] }) => ({})),
@@ -202,5 +203,60 @@ describe("persistOrderItems — bulk item writes", () => {
     expect(tx.otterOrderItem.deleteMany).toHaveBeenCalledTimes(1)
     expect(tx.otterOrderItem.createMany).not.toHaveBeenCalled()
     expect(tx.otterOrderSubItem.createMany).not.toHaveBeenCalled()
+  })
+
+  it("locks the parent order row before deleting its lines", async () => {
+    const tx = fakeTx()
+    const order: string[] = []
+    tx.$queryRaw.mockImplementation(async () => {
+      order.push("lock")
+      return [{ id: "order-Z" }]
+    })
+    tx.otterOrderItem.deleteMany.mockImplementation(async () => {
+      order.push("delete")
+      return {}
+    })
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await persistOrderItems(tx as any, "order-Z", [])
+    expect(order).toEqual(["lock", "delete"])
+    const [strings, ...values] = tx.$queryRaw.mock.calls[0] as [TemplateStringsArray, ...unknown[]]
+    expect(strings.join("?")).toMatch(/FROM "OtterOrder" WHERE "id" = \? FOR UPDATE/)
+    expect(values).toEqual(["order-Z"])
+  })
+})
+
+describe("runOrdersSync — Phase 1 fetches one day per request", () => {
+  beforeEach(() => {
+    vi.mocked(prisma.otterOrder.findMany).mockResolvedValue([] as never)
+  })
+
+  it("splits a 3-day window into three day requests and writes each order once", async () => {
+    vi.mocked(buildCustomerOrdersBody).mockImplementation(((_ids: string[], start: Date) => ({
+      day: start.toISOString().slice(0, 10),
+    })) as never)
+    vi.mocked(queryMetrics).mockImplementation((async (body: { day: string }) =>
+      // the same order on two adjacent days is written once
+      body.day === "2026-06-09" ? [orderRow("order-1")] : [orderRow("order-1"), orderRow(`o-${body.day}`)]
+    ) as never)
+
+    const result = await runOrdersSync(3, new Date("2026-06-10T23:59:59.999Z"), {
+      triggeredBy: "manual",
+    })
+
+    const days = vi.mocked(buildCustomerOrdersBody).mock.calls.map(([, s]) =>
+      (s as Date).toISOString().slice(0, 10),
+    )
+    expect(days).toEqual(["2026-06-08", "2026-06-09", "2026-06-10"])
+    expect(result.ordersFetched).toBe(5)
+    expect(result.ordersCreated).toBe(3) // order-1, o-2026-06-08, o-2026-06-10
+  })
+
+  it("fails loudly when a day's response lands on the request limit", async () => {
+    vi.mocked(buildCustomerOrdersBody).mockImplementation((() => ({ limit: 2 })) as never)
+    vi.mocked(queryMetrics).mockResolvedValue([orderRow("a"), orderRow("b")] as never)
+    await expect(runOrdersSync(1, undefined, { triggeredBy: "manual" })).rejects.toThrow(
+      /row cap hit/,
+    )
+    expect(prisma.$executeRaw).not.toHaveBeenCalled()
   })
 })

@@ -262,6 +262,8 @@ export interface ReviewReason {
     | "no_store_match"
     | "not_a_supplier"
     | "not_an_invoice"
+    | "duplicate_bill"
+    | "unreadable_pdf"
     | "unknown"
   /** Owner-facing sentence. Amounts pre-formatted; no jargon. */
   message: string

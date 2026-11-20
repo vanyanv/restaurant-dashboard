@@ -1,3 +1,4 @@
+import { Prisma } from "@/generated/prisma/client"
 import { z } from "zod"
 import { embed, toVectorLiteral } from "@/lib/chat/embeddings"
 import { resolveStoreIds, storeIdsSchema, ymd } from "./_shared"
@@ -78,32 +79,36 @@ export const getIngredientPrices: ChatTool<typeof pricesParams, IngredientPriceR
 
     if (canonicals.length === 0) return []
 
+    // The newest linked invoice per ingredient, for all of them in ONE read
+    // (it was a `findFirst` per ingredient, up to 25 round trips). `DISTINCT
+    // ON` keeps the first row per ingredient in `invoiceDate DESC` order —
+    // the same row the per-ingredient `findFirst` picked (Postgres DESC puts
+    // a null date first, as Prisma's `desc` did).
+    const ids = canonicals.map((c) => c.id)
+    const lastLines = await ctx.prisma.$queryRaw<
+      Array<{ canonicalIngredientId: string; vendorName: string; invoiceDate: Date | null }>
+    >(Prisma.sql`
+      SELECT DISTINCT ON (li."canonicalIngredientId")
+             li."canonicalIngredientId", i."vendorName", i."invoiceDate"
+        FROM "InvoiceLineItem" li
+        JOIN "Invoice" i ON i.id = li."invoiceId"
+       WHERE li."canonicalIngredientId" IN (${Prisma.join(ids)})
+         AND i."accountId" = ${ctx.accountId}
+       ORDER BY li."canonicalIngredientId", i."invoiceDate" DESC
+    `)
+    const lastById = new Map(lastLines.map((l) => [l.canonicalIngredientId, l]))
+
     const results: IngredientPriceRow[] = []
     for (const c of canonicals) {
-      const lastLine = await ctx.prisma.invoiceLineItem.findFirst({
-        where: {
-          canonicalIngredientId: c.id,
-          invoice: { accountId: ctx.accountId },
-        },
-        orderBy: { invoice: { invoiceDate: "desc" } },
-        select: {
-          invoice: {
-            select: { vendorName: true, invoiceDate: true },
-          },
-        },
-      })
-
+      const lastLine = lastById.get(c.id)
       const source = c.costSource as IngredientPriceRow["costSource"]
       results.push({
         ingredient: c.name,
         unit: c.recipeUnit ?? c.defaultUnit,
         currentCost: c.costPerRecipeUnit ?? null,
         costSource: source === "manual" || source === "invoice" ? source : null,
-        lastInvoiceDate:
-          lastLine?.invoice.invoiceDate
-            ? ymd(lastLine.invoice.invoiceDate)
-            : null,
-        vendor: lastLine?.invoice.vendorName ?? null,
+        lastInvoiceDate: lastLine?.invoiceDate ? ymd(lastLine.invoiceDate) : null,
+        vendor: lastLine?.vendorName ?? null,
       })
     }
     return results
@@ -134,7 +139,7 @@ export const searchCanonicalIngredients: ChatTool<typeof searchParams, Canonical
     "Vector search across the owner's canonical ingredients (with per-store aliases folded in). Use this when the user's phrasing uses vendor jargon or doesn't match the canonical's own name, and also before vendor comparison or reverse recipe lookup when you need a canonical id. Examples: 'fine grnd 73/27' -> 'ground beef fine grnd 73/27 creekstone', 'soft serve mix' -> 'soft serve vanilla mix'. Pair with getIngredientPrices / getIngredientPrice / getIngredientPriceHistory / compareVendorPrices / listRecipesByIngredient.",
   parameters: searchParams,
   async execute(args, ctx) {
-    const vec = await embed(args.query)
+    const vec = await embed(args.query, { feature: "chat-search", userId: ctx.ownerId })
     const lit = toVectorLiteral(vec)
 
     const rows = await ctx.prisma.$queryRawUnsafe<

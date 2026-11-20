@@ -5,7 +5,7 @@ import "server-only"
 import { getSession } from "@/lib/auth-scope"
 import { unstable_cache } from "next/cache"
 import { prisma } from "@/lib/prisma"
-import { getAccountStoreRows } from "@/lib/account-stores"
+import { getAccountStoreRows, getAccountStores } from "@/lib/account-stores"
 import { Prisma } from "@/generated/prisma/client"
 import { persistOrderItems } from "@/lib/otter-orders-sync"
 import { HOUSE_PLATFORMS } from "@/lib/counter/channel-mix"
@@ -95,7 +95,23 @@ export type OrderListRow = {
 }
 
 export type OrderListTotals = {
-  /** Σ subtotal + Σ discount — the column is stored NEGATIVE. See `order-signs.ts`. */
+  /**
+   * Orders that count: matched orders less cancelled ones. `totalCount` is
+   * every matched ROW (the list shows cancelled orders, struck through); this
+   * is the figure the strip's Orders and Avg ticket read, and the population
+   * `netSales` is summed over.
+   */
+  orders: number
+  /**
+   * Σ subtotal + Σ discount over the same not-cancelled orders — the discount
+   * column is stored NEGATIVE. See `order-signs.ts`.
+   *
+   * Closest to the P&L's net sales (`rowSales` in `@/lib/pnl`) that an order
+   * row can get: the P&L reads `OtterDailySummary`, which also carries service
+   * charges and marketplace refunds/adjustments, and `OtterOrder` has neither
+   * column. So this runs above the P&L by the refunds and below it by the
+   * service charges on the same range.
+   */
   netSales: number
   /**
    * What the marketplaces took, by the one commission rule
@@ -112,7 +128,7 @@ export type OrderListTotals = {
   thirdPartyEstimatedCount: number
   /** Marketplace orders with no recorded fee and no rate on file. */
   thirdPartyUnknownCount: number
-  /** Σ subtotal + Σ discount, over matched orders whose platform is not in-house. */
+  /** Σ subtotal + Σ discount, over not-cancelled matched orders whose platform is not in-house. */
   thirdPartyNetSales: number
   /**
    * How many matched orders are on a marketplace at all, and how many of those
@@ -130,6 +146,7 @@ export type OrderListTotals = {
 }
 
 const ZERO_TOTALS: OrderListTotals = {
+  orders: 0,
   netSales: 0,
   commission: 0,
   commissionRecorded: 0,
@@ -165,6 +182,9 @@ type RangeFigureRow = {
   subtotal: number | null
   discount: number | null
   commission: number | null
+  live_n: number
+  live_subtotal: number | null
+  live_discount: number | null
   tp_n: number
   tp_subtotal: number | null
   tp_discount: number | null
@@ -178,6 +198,11 @@ type RangeFigureRow = {
  * the totals describe different orders than the rows beside them.
  */
 const containsPattern = (term: string): string => `%${term}%`
+
+/** Not cancelled — the same test as `live` in the grouped read and `./commission`. */
+const NOT_CANCELLED: Prisma.OtterOrderWhereInput = {
+  OR: [{ orderStatus: null }, { orderStatus: { not: "OFO_STATUS_CANCELED" } }],
+}
 
 /**
  * The filters `getOrdersList` hands Prisma as `where`, as a SQL fragment over
@@ -223,9 +248,11 @@ export async function getOrdersList(
     }
   }
 
-  // The one store query a request makes — see `@/lib/account-stores`. Whole
-  // rows and no `isActive` filter, which is what this call already asked for.
-  const stores = await getAccountStoreRows(session.user.accountId)
+  // The one store query a request makes — see `@/lib/account-stores`. Active
+  // stores only, like the P&L (`pnlStoresCached`) and every store picker
+  // (`getStores`): a deactivated store is a deleted one, and its orders were
+  // in these totals while it was out of every other page's.
+  const stores = await getAccountStores(session.user.accountId)
   const storeIds = stores.map((s) => s.id)
   if (storeIds.length === 0) {
     return {
@@ -374,9 +401,12 @@ export async function getOrdersList(
              SUM("subtotal")::float8 AS subtotal,
              SUM("discount")::float8 AS discount,
              SUM("commission")::float8 AS commission,
-             COUNT(*) FILTER (WHERE tp)::int AS tp_n,
-             SUM("subtotal") FILTER (WHERE tp)::float8 AS tp_subtotal,
-             SUM("discount") FILTER (WHERE tp)::float8 AS tp_discount,
+             COUNT(*) FILTER (WHERE live)::int AS live_n,
+             SUM("subtotal") FILTER (WHERE live)::float8 AS live_subtotal,
+             SUM("discount") FILTER (WHERE live)::float8 AS live_discount,
+             COUNT(*) FILTER (WHERE tp AND live)::int AS tp_n,
+             SUM("subtotal") FILTER (WHERE tp AND live)::float8 AS tp_subtotal,
+             SUM("discount") FILTER (WHERE tp AND live)::float8 AS tp_discount,
              COUNT(*) FILTER (WHERE tp AND live AND recorded)::int AS tp_fee_n
       FROM t
       GROUP BY GROUPING SETS ((), ("storeId", "platform", "fulfillmentMode", live, recorded, tp))`
@@ -396,11 +426,13 @@ export async function getOrdersList(
         ? Promise.resolve([] as string[])
         : getPlatformsForAccount(session.user.accountId),
       summaryOnly ? Promise.resolve([] as RangeFigureRow[]) : rangeFigures(),
-      // The comparison range's load: `totalCount` and the net-sales sums, from
-      // one aggregate and nothing else.
+      // The comparison range's load: the order count and the net-sales sums,
+      // from one aggregate and nothing else — over NOT-CANCELLED orders, the
+      // same population the selected range's strip reads (`live` above).
+      // `AND`, not a spread: `where.OR` may already hold the search.
       summaryOnly
         ? prisma.otterOrder.aggregate({
-            where,
+            where: { AND: [where, NOT_CANCELLED] },
             _count: true,
             _sum: { subtotal: true, discount: true, commission: true },
           })
@@ -408,11 +440,14 @@ export async function getOrdersList(
     ])
 
   const totalRow = figureRows.find((r) => r.total_row === 1)
-  const overallSums = summarySums ?? {
-    _count: totalRow?.n ?? 0,
+  // Every matched row, cancelled included — the list's own count.
+  const matchedCount = summarySums?._count ?? totalRow?.n ?? 0
+  // Not-cancelled orders: what the strip counts and sums.
+  const liveSums = summarySums ?? {
+    _count: totalRow?.live_n ?? 0,
     _sum: {
-      subtotal: totalRow?.subtotal ?? null,
-      discount: totalRow?.discount ?? null,
+      subtotal: totalRow?.live_subtotal ?? null,
+      discount: totalRow?.live_discount ?? null,
       commission: totalRow?.commission ?? null,
     },
   }
@@ -447,7 +482,9 @@ export async function getOrdersList(
     new Map<string, StoreCommissionRates>(stores.map((s) => [s.id, s])),
   )
 
-  const totalCount = overallSums._count
+  // A summary load counted not-cancelled orders only and has no list, so
+  // its row count IS its order count.
+  const totalCount = matchedCount
   const thirdPartyCount = thirdPartySums?._count ?? 0
 
   const hasMore = rows.length > limit
@@ -482,12 +519,13 @@ export async function getOrdersList(
       // `+ discount`, not `−`: the column is stored NEGATIVE (0 positive rows
       // of 40,055 on 2026-08-26). Subtracting it inflated every range's net
       // sales by twice the discounts given. See `src/lib/counter/order-signs.ts`.
-      netSales: (overallSums._sum.subtotal ?? 0) + (overallSums._sum.discount ?? 0),
+      orders: liveSums._count,
+      netSales: (liveSums._sum.subtotal ?? 0) + (liveSums._sum.discount ?? 0),
       // Reported as the POSITIVE amount the marketplaces took, so the strip's
       // "Marketplace fees" is a fee and not a negative number. A summary load
       // fetched no groups and keeps the recorded sum alone.
-      commission: summaryOnly ? Math.max(0, -(overallSums._sum.commission ?? 0)) : fees.amount,
-      commissionRecorded: summaryOnly ? Math.max(0, -(overallSums._sum.commission ?? 0)) : fees.recorded,
+      commission: summaryOnly ? Math.max(0, -(liveSums._sum.commission ?? 0)) : fees.amount,
+      commissionRecorded: summaryOnly ? Math.max(0, -(liveSums._sum.commission ?? 0)) : fees.recorded,
       commissionEstimated: fees.estimated,
       thirdPartyEstimatedCount: fees.ordersEstimated,
       thirdPartyUnknownCount: fees.unknownOrders,

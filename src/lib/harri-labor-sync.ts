@@ -16,7 +16,9 @@ import { Prisma } from "@/generated/prisma/client"
 import { withJobRun } from "@/lib/monitoring/job-run"
 import { isoWeekStartsCovering } from "@/lib/labor-week"
 import {
+  buildDeleteMissingSql,
   dedupeByKey,
+  planChangedUpserts,
   upsertChangedRows,
   type ChangedUpsertSpec,
   type UpsertRow,
@@ -305,7 +307,11 @@ export async function runHarriLaborSync(opts: RunHarriLaborSyncOpts): Promise<Ha
         now,
       })
 
-      // Per-position rows from whichever weeks Harri returned.
+      // Per-position rows from whichever weeks Harri returned. Each returned
+      // week is the whole truth for its days, so a position that no longer
+      // appears on one of them (a shift moved to another position, a pay type
+      // corrected) is deleted in the same transaction as the upsert. A week
+      // whose request failed returns no days, so its rows are kept.
       const positionRows: UpsertRow[] = dedupeByKey(
         positionsByDay.flatMap((result) =>
           result.ok
@@ -319,9 +325,23 @@ export async function runHarriLaborSync(opts: RunHarriLaborSyncOpts): Promise<Ha
           `${r.date.toISOString()}|${r.categoryCode}|${r.positionCode}|${r.payType}`,
       )
       const positionsWritten = positionRows.length
-      rowsChanged += await upsertChangedRows(prisma, HARRI_POSITION_DAILY_UPSERT, positionRows, {
-        now,
+      const reconciledDates = positionsByDay.flatMap((result) =>
+        result.ok ? result.data.days.map((day) => day.date) : [],
+      )
+      const deleteStalePositions = buildDeleteMissingSql({
+        table: HARRI_POSITION_DAILY_UPSERT.table,
+        where: [{ column: { name: "storeId", type: "text" }, value: storeId }],
+        dates: { column: "date", values: reconciledDates },
+        key: HARRI_POSITION_DAILY_UPSERT.conflict.filter((c) => c.name !== "storeId"),
+        keep: positionRows,
       })
+      const positionWrites = await prisma.$transaction([
+        ...planChangedUpserts(HARRI_POSITION_DAILY_UPSERT, positionRows, { now }).map(({ sql }) =>
+          prisma.$executeRaw(sql),
+        ),
+        ...(deleteStalePositions ? [prisma.$executeRaw(deleteStalePositions)] : []),
+      ])
+      rowsChanged += positionWrites.reduce((sum, n) => sum + n, 0)
 
       // Alerts. A repeated alert id keeps its first sighting's insert-only
       // fields and its last sighting's timing fields — what the sequential

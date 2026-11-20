@@ -19,6 +19,7 @@ import {
   type ComparisonContext,
 } from "@/lib/counter/comparison"
 import { PRIME_CEILING_PCT } from "@/lib/counter/prime-cost"
+import { foodKnown, NO_FOOD_COST, withFoodGap } from "@/lib/counter/food-coverage"
 import { LABOR_CODE } from "@/lib/pnl"
 import { count, delta, money, pct, plural, points } from "@/lib/counter/format"
 import {
@@ -368,7 +369,7 @@ function laborKnown(s: Statement | StoreStatement): boolean {
 }
 
 /**
- * The same gate on the food half.
+ * Prime cost's gate: the labour gate above AND the same gate on the food half.
  *
  * `primeCost` withholds its percentages only when the DENOMINATOR is missing.
  * With sales on the books and no COGS posted yet — the materializer has not
@@ -379,10 +380,13 @@ function laborKnown(s: Statement | StoreStatement): boolean {
  *
  * The Overview grew this guard first. This page had only the labour half, so
  * the identical hole stayed open on the food half and on the prime cost that
- * depends on both.
+ * depends on both. The food rule itself is `foodKnown` in
+ * `@/lib/counter/food-coverage` — one function for the P&L, the Overview and
+ * Analytics — and this is the pair of them that prime cost needs.
  */
-function foodKnown(s: Statement | StoreStatement): boolean {
-  return s.grossSales > 0 && s.cogsValue > 0
+function primeKnown(s: Statement | StoreStatement): boolean {
+  // Prime is food PLUS labour: a reading only when both halves are.
+  return laborKnown(s) && foodKnown(s)
 }
 
 /** The margin in POINTS. `Statement.marginPct` is the rollup's raw fraction. */
@@ -527,7 +531,9 @@ function buildStrip(
       value: pct(prime.primePct, { scaled: true }),
       delta: move === null ? undefined : `${points(move)} vs ${cmp.short}`,
       deltaTone: move !== null && move > 0 ? "is-down" : undefined,
-      caption: `Ceiling ${pct(prime.ceilingPct, { scaled: true })}`,
+      // Partial food under a known one — days with no food cost, sales not
+      // fully costed — labelled in the plain page's words (`food-coverage.ts`).
+      caption: withFoodGap(`Ceiling ${pct(prime.ceilingPct, { scaled: true })}`, p),
       reference: {
         v: prime.primePct,
         target: prime.ceilingPct,
@@ -549,8 +555,10 @@ function buildStrip(
       value,
       delta: move === null ? undefined : `${points(move)} vs ${cmp.short}`,
       deltaTone: move !== null && move > 0 ? "is-down" : undefined,
-      caption:
+      caption: withFoodGap(
         foodPlan?.kind === "target" ? `Target ${pct(foodPlan.value, { scaled: true })}` : undefined,
+        p,
+      ),
       reference: referenceFor(p.prime.cogsPct, foodPlan, "low", `Food cost ${value}`, foodTrail),
     })
   }
@@ -649,6 +657,10 @@ function buildPhoneStrip(p: Statement): StripCell[] {
         ? `${Math.abs(room).toFixed(1)} pts over the ceiling`
         : `${room.toFixed(1)} pts of room`,
       deltaTone: prime.overCeiling ? "is-down" : undefined,
+      // No caption on a whole figure (the prototype's phone has none). A
+      // partial food cost is the exception: an incomplete figure is labelled
+      // on every screen that shows it.
+      caption: withFoodGap(undefined, p),
       reference: {
         v: prime.primePct,
         target: prime.ceilingPct,
@@ -1012,14 +1024,19 @@ function buildStatement(
     line("net", "Net revenue", p.grossSales - p.commissions, sharePct(p.grossSales - p.commissions, p), c ? sharePct(c.grossSales - c.commissions, c) : null, {
       strong: true,
     }),
-    line("food", "Food", p.cogsValue, p.prime.cogsPct, c?.prime.cogsPct, {
+    // Same gates as the strip: a food share only when food is posted, a prime
+    // share only when BOTH halves are. A missing half prints a dash and says
+    // why, never a 0.0% share or a prime cost of labour alone.
+    line("food", "Food", p.cogsValue, foodKnown(p) ? p.prime.cogsPct : null, c && foodKnown(c) ? c.prime.cogsPct : null, {
       negative: true,
       act: ACT_PTS.food,
-      sub: foodPlan?.kind === "target" ? `target ${pct(foodPlan.value, { scaled: true })}` : undefined,
+      sub: !foodKnown(p)
+        ? NO_FOOD_COST
+        : withFoodGap(foodPlan?.kind === "target" ? `target ${pct(foodPlan.value, { scaled: true })}` : undefined, p),
       // The same judgement the cascade paints one cut red for, and the only
       // one on this table: a target on file, and a figure past it.
       over:
-        foodPlan?.kind === "target" && p.prime.cogsPct != null
+        foodPlan?.kind === "target" && foodKnown(p) && p.prime.cogsPct != null
           ? p.prime.cogsPct > foodPlan.value
           : undefined,
       href: "/dashboard/cogs",
@@ -1030,10 +1047,12 @@ function buildStatement(
       sub: laborSub(p, "clock-ins plus the store file"),
       href: "/dashboard/labor",
     }),
-    line("prime", "Prime cost", p.prime.primeValue, laborKnown(p) ? p.prime.primePct : null, c && laborKnown(c) ? c.prime.primePct : null, {
+    line("prime", "Prime cost", p.prime.primeValue, primeKnown(p) ? p.prime.primePct : null, c && primeKnown(c) ? c.prime.primePct : null, {
       strong: true,
       act: ACT_PTS.prime,
-      sub: `ceiling ${pct(PRIME_CEILING_PCT, { scaled: true })}`,
+      sub: primeKnown(p)
+        ? withFoodGap(`ceiling ${pct(PRIME_CEILING_PCT, { scaled: true })}`, p)
+        : `ceiling ${pct(PRIME_CEILING_PCT, { scaled: true })} · ${!foodKnown(p) ? NO_FOOD_COST : "no labor posted"}`,
     }),
     line("occupancy", "Occupancy", p.occupancy, sharePct(p.occupancy, p), sharePct(c?.occupancy, c), {
       negative: true,
@@ -1090,9 +1109,11 @@ function buildWeeks(windows: WeekWindow[], weeks: Statement[]): WeekRow[] {
     return {
       window: serializeWeekWindow(window),
       grossSales: s.grossSales,
-      cogsPct: s.prime.cogsPct,
+      // A week with no food posted has no food share — a dash, never 0.0% —
+      // and no prime cost either: the same gates as the strip.
+      cogsPct: foodKnown(s) ? s.prime.cogsPct : null,
       laborPct: known ? s.prime.laborPct : null,
-      primePct: known ? s.prime.primePct : null,
+      primePct: primeKnown(s) ? s.prime.primePct : null,
       bottomLine: s.bottomLine,
       marginPct: marginPoints(s),
     }
@@ -1128,7 +1149,7 @@ function buildByStore(files: StoreFile[], rollup: StoreStatement[]): PnlStoreLin
       name: f.name,
       stage: STAGE_FOR[f.lifecycleStage],
       grossSales: traded ? s.grossSales : null,
-      primePct: s && laborKnown(s) ? s.prime.primePct : null,
+      primePct: s && primeKnown(s) ? s.prime.primePct : null,
       // The rollup's own prorated rent for this range. Absent when the file
       // carries no rent at all — which is a different thing from $0 of rent,
       // and is the single field that keeps a store out of the statement above.

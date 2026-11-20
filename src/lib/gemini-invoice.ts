@@ -433,36 +433,181 @@ Return valid JSON matching this schema EXACTLY (every field must be present):
 }` + (problems && problems.length > 0 ? rereadAddendum(problems) : "")
 }
 
+/**
+ * Per-call time limits. The sync gives one PDF 60s in all (withConcurrency's
+ * task timeout, which maxDuration = 120 and the workflow's 115s curl leave no
+ * room to raise) and asks extraction to finish inside its budget (the route
+ * passes 52s; `DEFAULT_BUDGET_MS` otherwise), leaving the rest for the PDF
+ * upload. Before 2026-11-20 the OpenAI client waited 60s and retried twice
+ * on its own, so a slow read used the whole task and the fallback never ran.
+ *
+ * The numbers: the only read times recorded in this repo are the route's
+ * notes that reads run 10–25s and that 12 emails took 104–116s end to end
+ * with extraction inside a 45s budget (2026-09-11). Every read's real time is
+ * logged per call to AiUsageEvent.durationMs (feature "invoice-ocr"); check
+ * it before tightening these. So the primary read gets 40s, well past the
+ * longest read seen, so a long multi-page bill that used to succeed still
+ * does. The fallback gets whatever is left, capped at 45s: after a fast
+ * failure (429, 5xx, a cut-off answer — the outages the fallback exists for)
+ * that is nearly the whole budget; after a primary that ran its full 40s it
+ * is about 12s, and below `MIN_FALLBACK_MS` it is not started at all.
+ */
+export const PRIMARY_TIMEOUT_MS = 40_000
+export const FALLBACK_TIMEOUT_MS = 45_000
+export const DEFAULT_BUDGET_MS = 52_000
+/** Below this much time left, a fallback read is not started: it could not finish. */
+const MIN_FALLBACK_MS = 10_000
+
+/**
+ * The model's answer could not be used as an extraction: cut off at the
+ * token limit, not JSON, or not the expected shape. Worth one read on the
+ * other model; if that fails too the PDF is left for the next run.
+ */
+export class ExtractionOutputError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = "ExtractionOutputError"
+  }
+}
+
+function asString(v: unknown): string | null {
+  if (typeof v === "string") return v
+  if (typeof v === "number" && Number.isFinite(v)) return String(v)
+  return null
+}
+
+function asNumber(v: unknown): number | null {
+  if (typeof v === "number") return Number.isFinite(v) ? v : null
+  if (typeof v === "string" && v.trim() !== "") {
+    const n = Number(v.replace(/[$,\s]/g, ""))
+    return Number.isFinite(n) ? n : null
+  }
+  return null
+}
+
+/**
+ * Parse and check a model's answer before anything reads it. The structure
+ * must be right (an object with a `lineItems` array of objects) or it throws
+ * `ExtractionOutputError`; a field of the wrong type is coerced (a number
+ * printed as a string) or set to null, never invented. A null quantity or
+ * price then fails the line-math check downstream and holds the invoice for
+ * review instead of crashing the sync.
+ */
+export function parseExtraction(text: string, provider: string): InvoiceExtraction {
+  let raw: unknown
+  try {
+    raw = JSON.parse(text)
+  } catch {
+    throw new ExtractionOutputError(`${provider} returned invalid JSON for invoice extraction`)
+  }
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+    throw new ExtractionOutputError(`${provider} returned a non-object for invoice extraction`)
+  }
+  const o = raw as Record<string, unknown>
+  if (!Array.isArray(o.lineItems)) {
+    throw new ExtractionOutputError(`${provider} returned no lineItems array for invoice extraction`)
+  }
+  const lineItems = o.lineItems.map((item, i) => {
+    if (!item || typeof item !== "object" || Array.isArray(item)) {
+      throw new ExtractionOutputError(`${provider} returned line ${i + 1} as a non-object`)
+    }
+    const li = item as Record<string, unknown>
+    return {
+      lineNumber: asNumber(li.lineNumber) as number,
+      sku: asString(li.sku),
+      productName: asString(li.productName) ?? "",
+      description: asString(li.description),
+      category: asString(li.category),
+      quantity: asNumber(li.quantity) as number,
+      unit: asString(li.unit),
+      packSize: asNumber(li.packSize),
+      unitSize: asNumber(li.unitSize),
+      unitSizeUom: asString(li.unitSizeUom),
+      unitPrice: asNumber(li.unitPrice) as number,
+      extendedPrice: asNumber(li.extendedPrice) as number,
+    }
+  })
+  return {
+    vendorName: asString(o.vendorName) ?? "",
+    invoiceNumber: asString(o.invoiceNumber) as string,
+    invoiceDate: asString(o.invoiceDate),
+    dueDate: asString(o.dueDate),
+    deliveryAddress: asString(o.deliveryAddress),
+    lineItems,
+    subtotal: asNumber(o.subtotal),
+    taxAmount: asNumber(o.taxAmount),
+    totalAmount: asNumber(o.totalAmount) as number,
+    isReturn: o.isReturn === true,
+  }
+}
+
+/**
+ * An AbortSignal that fires after `ms`, or when `parent` does. `done()`
+ * clears the timer; call it in a finally.
+ */
+function deadlineSignal(ms: number, parent?: AbortSignal): { signal: AbortSignal; done: () => void } {
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(new Error(`invoice read timed out after ${ms}ms`)), ms)
+  const onParent = () => controller.abort(parent?.reason ?? new Error("invoice read aborted"))
+  if (parent) {
+    if (parent.aborted) onParent()
+    else parent.addEventListener("abort", onParent, { once: true })
+  }
+  return {
+    signal: controller.signal,
+    done: () => {
+      clearTimeout(timer)
+      parent?.removeEventListener("abort", onParent)
+    },
+  }
+}
+
+interface CallLimits {
+  timeoutMs: number
+  signal?: AbortSignal
+}
+
 async function extractViaOpenAI(
   pdfBase64: string,
   fileName: string,
+  limits: CallLimits,
   problems?: string[]
 ): Promise<InvoiceExtraction> {
   const apiKey = process.env.OPENAI_API_KEY
   if (!apiKey) throw new Error("OPENAI_API_KEY env var is required")
-  const openai = new OpenAI({ apiKey, timeout: 60_000 })
+  // No SDK retries: a retry is the fallback model's job, inside the budget.
+  const openai = new OpenAI({ apiKey, timeout: limits.timeoutMs, maxRetries: 0 })
 
+  const { signal, done } = deadlineSignal(limits.timeoutMs, limits.signal)
   const start = Date.now()
-  const response = await openai.chat.completions.create({
-    model: PRIMARY_MODEL,
-    messages: [
+  let response: OpenAI.Chat.Completions.ChatCompletion
+  try {
+    response = await openai.chat.completions.create(
       {
-        role: "user",
-        content: [
+        model: PRIMARY_MODEL,
+        messages: [
           {
-            type: "file",
-            file: {
-              filename: fileName,
-              file_data: `data:application/pdf;base64,${pdfBase64}`,
-            },
+            role: "user",
+            content: [
+              {
+                type: "file",
+                file: {
+                  filename: fileName,
+                  file_data: `data:application/pdf;base64,${pdfBase64}`,
+                },
+              },
+              { type: "text", text: buildExtractionPrompt(problems) },
+            ],
           },
-          { type: "text", text: buildExtractionPrompt(problems) },
         ],
+        response_format: { type: "json_object" },
+        max_tokens: 16000,
       },
-    ],
-    response_format: { type: "json_object" },
-    max_tokens: 16000,
-  })
+      { signal, timeout: limits.timeoutMs, maxRetries: 0 }
+    )
+  } finally {
+    done()
+  }
 
   // Additive monitoring — wrapper never throws.
   await recordAiUsage({
@@ -477,30 +622,46 @@ async function extractViaOpenAI(
     durationMs: Date.now() - start,
   })
 
-  const text = response.choices[0]?.message?.content
-  if (!text) throw new Error("OpenAI returned empty response for invoice extraction")
-  return JSON.parse(text) as InvoiceExtraction
+  const choice = response.choices[0]
+  // Cut off at max_tokens: the JSON may still parse if the cut fell between
+  // lines, and the invoice would be stored missing its last lines.
+  if (choice?.finish_reason === "length") {
+    throw new ExtractionOutputError("OpenAI extraction was cut off at the token limit")
+  }
+  const text = choice?.message?.content
+  if (!text) throw new ExtractionOutputError("OpenAI returned empty response for invoice extraction")
+  return parseExtraction(text, "OpenAI")
 }
 
-async function extractViaGemini(pdfBase64: string, problems?: string[]): Promise<InvoiceExtraction> {
+async function extractViaGemini(
+  pdfBase64: string,
+  limits: CallLimits,
+  problems?: string[]
+): Promise<InvoiceExtraction> {
   const apiKey = process.env.GEMINI_API_KEY
   if (!apiKey) throw new Error("GEMINI_API_KEY env var is required")
   const ai = new GoogleGenAI({ apiKey })
 
+  const { signal, done } = deadlineSignal(limits.timeoutMs, limits.signal)
   const start = Date.now()
-  const response = await ai.models.generateContent({
-    model: FALLBACK_MODEL,
-    contents: [
-      {
-        role: "user",
-        parts: [
-          { inlineData: { mimeType: "application/pdf", data: pdfBase64 } },
-          { text: buildExtractionPrompt(problems) },
-        ],
-      },
-    ],
-    config: { responseMimeType: "application/json" },
-  })
+  let response: Awaited<ReturnType<typeof ai.models.generateContent>>
+  try {
+    response = await ai.models.generateContent({
+      model: FALLBACK_MODEL,
+      contents: [
+        {
+          role: "user",
+          parts: [
+            { inlineData: { mimeType: "application/pdf", data: pdfBase64 } },
+            { text: buildExtractionPrompt(problems) },
+          ],
+        },
+      ],
+      config: { responseMimeType: "application/json", abortSignal: signal },
+    })
+  } finally {
+    done()
+  }
 
   // Additive monitoring — wrapper never throws. SDK shape varies; default to 0.
   const usage = (response as { usageMetadata?: { promptTokenCount?: number; candidatesTokenCount?: number; cachedContentTokenCount?: number } }).usageMetadata
@@ -514,20 +675,25 @@ async function extractViaGemini(pdfBase64: string, problems?: string[]): Promise
     durationMs: Date.now() - start,
   })
 
+  if (String(response.candidates?.[0]?.finishReason ?? "") === "MAX_TOKENS") {
+    throw new ExtractionOutputError("Gemini extraction was cut off at the token limit")
+  }
   const text = response.text
-  if (!text) throw new Error("Gemini returned empty response for invoice extraction")
-  return JSON.parse(text) as InvoiceExtraction
+  if (!text) throw new ExtractionOutputError("Gemini returned empty response for invoice extraction")
+  return parseExtraction(text, "Gemini")
 }
 
 /**
  * Returns true for errors that are worth retrying on the Gemini fallback:
  *   - 429 / rate limit / quota exceeded (primary provider throttled)
  *   - 5xx server errors
- *   - transient network failures
+ *   - transient network failures and timeouts
+ *   - an answer that was cut off or not the expected shape
  * Auth or validation errors (4xx other than 429) propagate up unchanged — those
  * indicate a config bug that the fallback won't fix.
  */
-function shouldFallBackToGemini(err: unknown): boolean {
+export function shouldFallBackToGemini(err: unknown): boolean {
+  if (err instanceof ExtractionOutputError) return true
   const msg = err instanceof Error ? err.message : String(err)
   const lower = msg.toLowerCase()
 
@@ -537,7 +703,13 @@ function shouldFallBackToGemini(err: unknown): boolean {
   if (lower.includes("500") || lower.includes("502") || lower.includes("503") || lower.includes("504")) {
     return true
   }
-  if (lower.includes("econnreset") || lower.includes("etimedout") || lower.includes("fetch failed") || lower.includes("timeout")) {
+  // The OpenAI SDK's timeout reads "Request timed out." — no "timeout" in it,
+  // so before 2026-11-20 a slow primary read never fell back.
+  if (
+    lower.includes("econnreset") || lower.includes("etimedout") || lower.includes("fetch failed") ||
+    lower.includes("timeout") || lower.includes("timed out") ||
+    (err instanceof Error && (err.name === "APIConnectionTimeoutError" || err.name === "APIUserAbortError" || err.name === "AbortError"))
+  ) {
     return true
   }
   return false
@@ -554,32 +726,45 @@ export async function extractInvoiceData(
      * falls back to the primary on any error (a missing key included).
      */
     rereadProblems?: string[]
+    /** The caller gave up: abort whichever read is in flight, fall back to nothing. */
+    signal?: AbortSignal
+    /** Both reads (first model + fallback) finish inside this. Default `DEFAULT_BUDGET_MS`. */
+    budgetMs?: number
   }
 ): Promise<InvoiceExtractionResult> {
   const problems = options?.rereadProblems
+  const signal = options?.signal
+  const deadline = Date.now() + (options?.budgetMs ?? DEFAULT_BUDGET_MS)
+  const left = () => deadline - Date.now()
+  const firstLimits = (cap: number): CallLimits => ({ timeoutMs: Math.max(1, Math.min(cap, left() - MIN_FALLBACK_MS)), signal })
+  const fallbackLimits = (cap: number): CallLimits => ({ timeoutMs: Math.min(cap, left()), signal })
+  /** Fall back only when the caller is still waiting and there is time to finish. */
+  const canFallBack = () => !signal?.aborted && left() >= MIN_FALLBACK_MS
+
   if (problems && problems.length > 0) {
     try {
-      const extraction = normalizeExtraction(await extractViaGemini(pdfBase64, problems))
+      const extraction = normalizeExtraction(await extractViaGemini(pdfBase64, firstLimits(FALLBACK_TIMEOUT_MS), problems))
       return { extraction, model: FALLBACK_MODEL }
     } catch (err) {
+      if (!canFallBack()) throw err
       console.warn(
         `Gemini re-read failed (${err instanceof Error ? err.message.slice(0, 120) : err}), ` +
         `re-reading with ${PRIMARY_MODEL}`
       )
-      const extraction = normalizeExtraction(await extractViaOpenAI(pdfBase64, fileName, problems))
+      const extraction = normalizeExtraction(await extractViaOpenAI(pdfBase64, fileName, fallbackLimits(PRIMARY_TIMEOUT_MS), problems))
       return { extraction, model: PRIMARY_MODEL }
     }
   }
   try {
-    const extraction = normalizeExtraction(await extractViaOpenAI(pdfBase64, fileName))
+    const extraction = normalizeExtraction(await extractViaOpenAI(pdfBase64, fileName, firstLimits(PRIMARY_TIMEOUT_MS)))
     return { extraction, model: PRIMARY_MODEL }
   } catch (err) {
-    if (!shouldFallBackToGemini(err)) throw err
+    if (!shouldFallBackToGemini(err) || !canFallBack()) throw err
     console.warn(
       `OpenAI extraction failed (${err instanceof Error ? err.message.slice(0, 120) : err}), ` +
       `falling back to Gemini ${FALLBACK_MODEL}`
     )
-    const extraction = normalizeExtraction(await extractViaGemini(pdfBase64))
+    const extraction = normalizeExtraction(await extractViaGemini(pdfBase64, fallbackLimits(FALLBACK_TIMEOUT_MS)))
     return { extraction, model: FALLBACK_MODEL }
   }
 }

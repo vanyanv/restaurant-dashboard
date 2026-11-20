@@ -371,7 +371,10 @@ export async function confirmSkuMatch(input: {
 
     await prisma.ingredientSkuMatch.upsert({
       where: {
-        ownerId_vendorKey_sku: { ownerId, vendorKey, sku: li.sku },
+        // The account key: another owner of this account may have taught
+        // this SKU, and the owner key would then miss their row and hit the
+        // (accountId, vendorKey, sku) unique on create.
+        accountId_vendorKey_sku: { accountId, vendorKey, sku: li.sku },
       },
       update: {
         canonicalIngredientId: targetCanonicalId,

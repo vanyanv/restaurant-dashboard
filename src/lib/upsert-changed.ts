@@ -228,3 +228,95 @@ export function dedupeByKey<T>(rows: readonly T[], key: (row: T) => string): T[]
   }
   return [...byKey.values()]
 }
+
+/** One column's values as a bound array parameter, cast to `type[]`. */
+function castArray(values: readonly unknown[], type: SqlColumnType): Prisma.Sql {
+  const cast = Prisma.raw(`${CAST[type]}[]`)
+  const out = values.map((v) => {
+    if (v === null || v === undefined) return null
+    // A @db.Date column compares on its calendar day; send "YYYY-MM-DD".
+    if (type === "date" && v instanceof Date) return v.toISOString().slice(0, 10)
+    if (v instanceof Date) return v.toISOString()
+    return v
+  })
+  return Prisma.sql`${out}::${cast}`
+}
+
+/**
+ * The reconcile half of a sync: DELETE the rows inside one fully fetched
+ * scope that the fresh fetch no longer returned. Run it in the same
+ * transaction as the upsert of `keep`, the way `hourly-sync.ts` reconciles
+ * `OtterHourlySummary`, so readers never see the window half-replaced.
+ *
+ * - `where`: equality filters every deleted row must match (the store, and
+ *   e.g. `isModifier`). Always include the tenant/store column.
+ * - `dates`: the dates whose fetch fully succeeded. A date whose fetch failed
+ *   or was truncated must be left out — its rows are kept.
+ * - `key`: the columns that, together with `where`, identify a row (the rest
+ *   of the unique constraint, including the date column). They must be
+ *   NOT NULL columns: the match is `=`.
+ * - `keep`: the rows just written; anything in scope not among them goes.
+ *
+ * Returns null when there is no date to reconcile. Three to six bound
+ * parameters whatever the row count (arrays through `unnest`), so a 30-day
+ * backfill chunk cannot run into the bind-parameter limit.
+ */
+export function buildDeleteMissingSql(opts: {
+  table: string
+  where: ReadonlyArray<{ column: ColumnSpec; value: unknown }>
+  dates: { column: string; values: readonly (Date | string)[] }
+  key: readonly ColumnSpec[]
+  keep: readonly UpsertRow[]
+}): Prisma.Sql | null {
+  const { table, where, dates, key, keep } = opts
+  if (dates.values.length === 0) return null
+  if (key.length === 0) throw new Error("upsert-changed: delete-missing needs a key")
+  const filters = [
+    ...where.map(({ column, value }) => Prisma.sql`t.${ident(column.name)} = ${castValue(value, column.type)}`),
+    Prisma.sql`t.${ident(dates.column)} = ANY(${castArray([...new Set(dates.values.map((d) => (d instanceof Date ? d.toISOString().slice(0, 10) : d)))], "date")})`,
+  ]
+  const aliases = key.map((_, i) => ident(`k${i}`))
+  const unnestArgs = Prisma.join(
+    key.map((c) => castArray(keep.map((r) => r[c.name]), c.type)),
+    ", ",
+  )
+  const match = Prisma.join(
+    key.map((c, i) => Prisma.sql`t.${ident(c.name)} = k.${aliases[i]}`),
+    " AND ",
+  )
+  return Prisma.sql`
+    DELETE FROM ${ident(table)} AS t
+    WHERE ${Prisma.join(filters, " AND ")}
+      AND NOT EXISTS (
+        SELECT 1 FROM unnest(${unnestArgs}) AS k(${Prisma.join(aliases, ", ")})
+        WHERE ${match}
+      )
+  `
+}
+
+/**
+ * Collapse rows that share a key by adding their numeric fields — for Otter
+ * responses that return one row per Otter UUID when a store has two (menu
+ * categories group by `store`). `dedupeByKey`'s last-wins would drop one
+ * UUID's sales. A field that is null on every duplicate stays null.
+ */
+export function sumByKey<T extends { data: Record<string, number | null> }>(
+  rows: readonly T[],
+  key: (row: T) => string,
+): T[] {
+  const byKey = new Map<string, T>()
+  for (const row of rows) {
+    const k = key(row)
+    const existing = byKey.get(k)
+    if (!existing) {
+      byKey.set(k, { ...row, data: { ...row.data } })
+      continue
+    }
+    for (const [field, v] of Object.entries(row.data)) {
+      if (v == null) continue
+      const cur = existing.data[field]
+      existing.data[field] = cur == null ? v : cur + v
+    }
+  }
+  return [...byKey.values()]
+}

@@ -94,27 +94,3 @@ export type RecipeInput = {
   foodCostOverride?: number | null
   ingredients: RecipeIngredientInput[]
 }
-
-export type RecipeSummary = {
-  id: string
-  itemName: string
-  category: string
-  isSellable: boolean
-  isConfirmed: boolean
-  ingredientCount: number
-  /** Cost of ONE of whatever the recipe yields — batch cost ÷ yield. */
-  computedCost: number | null
-  partialCost: boolean
-  updatedAt: Date
-}
-
-export type MenuItemForCatalog = {
-  otterItemName: string
-  category: string
-  totalQtySoldAllTime: number
-  firstSeen: Date
-  lastSeen: Date
-  mappedRecipeId: string | null
-  mappedRecipeName: string | null
-  storeIds: string[]
-}
