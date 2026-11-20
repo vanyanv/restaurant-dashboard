@@ -1,0 +1,96 @@
+name: Sync Ticker
+# GitHub's own `schedule:` trigger is not reliable on this repo. Over
+# 2026-11-07..16 the every-30-minute checks cron fired about 4 times a day,
+# the hourly Otter sync about 3-4 times, and the 4-hourly Otter sync about 3,
+# so the dashboard's "synced" chip regularly read 6-9 hours old.
+#
+# workflow_dispatch is not throttled. This workflow stays running (~5h40m,
+# well inside the 6h job limit), dispatches the sales syncs on their intended
+# cadence, then dispatches itself to carry on. The repo is public, so the
+# runner minutes are free. The old `schedule:` lines stay on every workflow as
+# a backup: a late extra run only re-reads the same rolling window.
+#
+# If the chain ever breaks (a cancelled run, a GitHub outage), the backup
+# schedule below starts it again. `concurrency` keeps one ticker running and
+# at most one waiting, so a scheduled start while a chain is alive just
+# becomes the next link instead of a second chain.
+on:
+  schedule:
+    - cron: '23 */3 * * *'
+  workflow_dispatch:
+    inputs:
+      last:
+        description: 'UTC hour (YYYYMMDDHH) already dispatched by the previous link'
+        default: ''
+      pending:
+        description: 'Workflows from that hour the previous link could not dispatch'
+        default: ''
+
+concurrency:
+  group: sync-ticker
+  cancel-in-progress: false
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  tick:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    steps:
+      - name: Dispatch syncs each hour, then hand off
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          LAST: ${{ github.event.inputs.last }}
+          PENDING: ${{ github.event.inputs.pending }}
+        run: |
+          set -u
+          end=$(( $(date +%s) + 340 * 60 ))
+          last="${LAST:-}"
+          pending="${PENDING:-}"   # targets for the current hour not yet accepted by GitHub
+          dispatch() {
+            if gh workflow run "$1" --ref main; then
+              echo "$(date -u +%FT%TZ) dispatched $1"
+            else
+              echo "::warning::$(date -u +%FT%TZ) could not dispatch $1, retrying next minute"
+              return 1
+            fi
+          }
+          while [ "$(date +%s)" -lt "$end" ]; do
+            key=$(date -u +%Y%m%d%H)
+            if [ "$key" != "$last" ]; then
+              last=$key
+              h=$((10#$(date -u +%H)))
+              pending=""
+              # Same hours as otter-hourly-sync.yml's cron (trading hours, LA).
+              if [ "$h" -ge 17 ] || [ "$h" -le 10 ]; then
+                pending="$pending otter-hourly-sync.yml"
+              fi
+              # Same cadence as otter-sync.yml and otter-orders-sync.yml.
+              if [ $((h % 4)) -eq 0 ]; then
+                pending="$pending otter-sync.yml otter-orders-sync.yml"
+              fi
+            fi
+            # A failed dispatch stays pending and is retried each minute for the
+            # rest of the hour; one that went through is never sent twice.
+            still=""
+            for wf in $pending; do
+              dispatch "$wf" || still="$still $wf"
+            done
+            pending=$still
+            sleep 60
+          done
+          # Hand off. Retried so one failed request doesn't end the chain and
+          # leave it to the unreliable backup schedule.
+          for attempt in 1 2 3 4 5; do
+            if gh workflow run sync-ticker.yml --ref main -f last="$last" -f pending="$(echo $pending)"; then
+              echo "handed off (last=$last)"
+              exit 0
+            fi
+            echo "::warning::hand-off attempt $attempt failed"
+            sleep $((attempt * 30))
+          done
+          echo "::error::could not hand off; the backup schedule will restart the chain"
+          exit 1
