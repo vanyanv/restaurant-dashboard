@@ -607,3 +607,61 @@ export async function reviewCheckPhoto(raw: z.input<typeof ReviewInput>): Promis
     return fail(err)
   }
 }
+
+const ReviewManyInput = z.object({
+  markIds: z.array(z.string().min(1).max(40)).min(1).max(200),
+  // Only "looks good" comes in bulk: a redo carries its own note and rewrites the record, one at a time.
+  verdict: z.literal("ok"),
+})
+
+/**
+ * "All the rest look good": the same checks as `reviewCheckPhoto`'s "ok" for
+ * every photo, then one write and one revalidation, so a clean night is one
+ * save and one render instead of one per photo. All or nothing: if any id is
+ * not a photo in the caller's account, or any photo was sent back or is no
+ * longer the tick that stands, nothing is written.
+ */
+export async function reviewCheckPhotos(raw: z.input<typeof ReviewManyInput>): Promise<ActionResult> {
+  try {
+    const input = ReviewManyInput.parse(raw)
+    const ids = [...new Set(input.markIds)]
+    const session = await getSession()
+    if (!session?.user) throw new Error("Unauthorized")
+    if (!hasOwnerAccess(session.user.role)) throw new Error("Forbidden")
+    const marks = await prisma.checkMark.findMany({
+      where: { id: { in: ids }, photoKey: { not: null }, store: { accountId: session.user.accountId } },
+      select: { id: true, storeId: true, kind: true, businessDate: true, itemId: true, done: true, review: true },
+    })
+    if (marks.length !== ids.length) return { ok: false, error: "A photo is no longer there. Refresh to see the latest." }
+    if (marks.some((m) => m.review === "redo")) return { ok: false, error: "A photo was already sent back. Refresh to see the latest." }
+    // The tick that stands on each task, in one read: newest first, so the first row per task wins.
+    const others = await prisma.checkMark.findMany({
+      where: {
+        storeId: { in: [...new Set(marks.map((m) => m.storeId))] },
+        kind: { in: [...new Set(marks.map((m) => m.kind))] },
+        businessDate: { in: [...new Map(marks.map((m) => [m.businessDate.getTime(), m.businessDate])).values()] },
+        itemId: { in: [...new Set(marks.map((m) => m.itemId))] },
+        store: { accountId: session.user.accountId },
+      },
+      orderBy: [{ at: "desc" }, { id: "desc" }],
+      select: { id: true, storeId: true, kind: true, businessDate: true, itemId: true },
+    })
+    const key = (m: { storeId: string; kind: string; businessDate: Date; itemId: string | null }) =>
+      `${m.storeId}|${m.kind}|${m.businessDate.getTime()}|${m.itemId}`
+    const latest = new Map<string, string>()
+    for (const o of others) if (!latest.has(key(o))) latest.set(key(o), o.id)
+    if (marks.some((m) => !m.done || latest.get(key(m)) !== m.id)) {
+      return { ok: false, error: "A task changed since its photo was taken. Refresh to see the latest." }
+    }
+    const who = session.user.name?.trim() || "Owner"
+    await prisma.checkMark.updateMany({
+      // Guarded like the single redo, so a photo sent back in the meantime keeps its redo.
+      where: { id: { in: ids }, OR: [{ review: null }, { review: { not: "redo" } }] },
+      data: { review: "ok", reviewNote: null, reviewedBy: who, reviewedAt: new Date() },
+    })
+    revalidateChecks()
+    return { ok: true, message: `${ids.length} marked as looking good.` }
+  } catch (err) {
+    return fail(err)
+  }
+}

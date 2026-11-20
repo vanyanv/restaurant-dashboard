@@ -242,7 +242,7 @@ function StoreFileForm({
         }
       }
       setSaid({ ok: true, text: "Saved." })
-      router.refresh()
+      // No router.refresh(): saveStoreFile revalidates the desk and phone store pages.
     })
   }
 
@@ -556,7 +556,6 @@ function ExpenseEditor({
   picked: string | null
   onPick: (id: string | null) => void
 }) {
-  const router = useRouter()
   const [saving, startSaving] = useTransition()
   const selected = picked
   const setSelected = onPick
@@ -629,9 +628,8 @@ function ExpenseEditor({
         return
       }
       clear()
-      // The table above, the monthly total, and every P&L that reads fixed
-      // cost all move together.
-      router.refresh()
+      // No router.refresh(): the action revalidates both store files and every
+      // P&L that reads fixed cost, so the table and the total move together.
     })
   }
 
@@ -645,7 +643,7 @@ function ExpenseEditor({
         return
       }
       clear()
-      router.refresh()
+      // No router.refresh(): removeFixedExpense revalidates the store pages.
     })
   }
 

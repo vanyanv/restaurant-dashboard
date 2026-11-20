@@ -26,8 +26,15 @@ loadEnvLocal()
 
 async function main() {
   const { runHourlySync } = await import("../src/lib/hourly-sync")
-  const result = await runHourlySync({ triggeredBy: "github-actions" })
-  console.log("Hourly sync complete:", result)
+  // The workflow passes --skip-if-recent: sync-ticker.yml dispatches this hour
+  // on time and the workflow's own backup `schedule:` can fire the same hour
+  // again later. A run that finds a SUCCESS in the last 20 minutes prints
+  // `{"skipped":"recent-success",...}` and writes nothing.
+  const result = await runHourlySync({
+    triggeredBy: "github-actions",
+    skipIfRecentSuccess: process.argv.includes("--skip-if-recent"),
+  })
+  console.log("Hourly sync complete:", JSON.stringify(result))
 }
 
 main()

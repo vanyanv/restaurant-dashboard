@@ -30,7 +30,9 @@ import {
  * cache keys. `bustTags(["pnl"])` reads the tag set, deletes every key it
  * contains, then deletes the tag set itself. Sets are sized by the number
  * of distinct keys that share the tag, which for our use case (per-owner
- * aggregations) stays small — under a few hundred entries.
+ * aggregations) stays small — under a few hundred entries. Each set expires
+ * no sooner than the longest TTL of any key added to it, so a tag nobody
+ * busts goes away with its keys instead of growing forever.
  *
  * Failure mode: if Redis is unreachable or env vars aren't set, both
  * `cached()` and `bustTags()` log and fall through to the loader / no-op.
@@ -242,7 +244,18 @@ async function cachedUncoalesced<T>(
     const pipe = redis.pipeline()
     pipe.set(key, value, { ex: ttlSeconds })
     for (const tag of tags) {
-      pipe.sadd(`${TAG_PREFIX}${tag}`, key)
+      const setKey = `${TAG_PREFIX}${tag}`
+      pipe.sadd(setKey, key)
+      // A tag set used to live forever: its members expire on their own, the
+      // set never did, so every tag kept the names of keys long gone and grew
+      // without bound until something busted it. Now the set lives exactly as
+      // long as its longest-lived member could: NX gives a set with no expiry
+      // (new, or from before this) this key's TTL, and GT extends one that
+      // has a shorter expiry than this key. Neither ever shortens it, so a
+      // live key is never orphaned from its tag and busting still reaches it.
+      // (GT alone would never apply: Redis treats "no expiry" as infinite.)
+      pipe.expire(setKey, ttlSeconds, "NX")
+      pipe.expire(setKey, ttlSeconds, "GT")
     }
     await pipe.exec()
     bumpWrite(prefix)

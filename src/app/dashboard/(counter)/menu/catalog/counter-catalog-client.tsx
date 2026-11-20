@@ -121,7 +121,6 @@ const PROPOSAL_COLUMNS: Column[] = [
  * the store's expense editor reached.
  */
 function Proposals({ data }: { data: CatalogProposals }) {
-  const router = useRouter()
   const [busy, startBusy] = useTransition()
   const [picked, setPicked] = useState<string | null>(null)
   const [said, setSaid] = useState<{ ok: boolean; text: string } | null>(null)
@@ -136,9 +135,8 @@ function Proposals({ data }: { data: CatalogProposals }) {
         return
       }
       setPicked(null)
-      // Accepting writes an OtterItemMapping, which the catalogue's mapped
-      // column and every margin on the page read.
-      router.refresh()
+      // No router.refresh(): decideProposal revalidates the catalogue (desk and
+      // phone), whose mapped column and margins read the mapping an accept writes.
     })
   }
 
@@ -157,7 +155,7 @@ function Proposals({ data }: { data: CatalogProposals }) {
             ? `Nothing new to propose${result.skipped > 0 ? ` — ${result.skipped} already pending or previously rejected` : ""}.`
             : `${result.created} proposed${result.skipped > 0 ? `, ${result.skipped} skipped as already seen` : ""}.`,
       })
-      router.refresh()
+      // No router.refresh(): proposeMatches revalidates the catalogue when it adds any.
     })
   }
 

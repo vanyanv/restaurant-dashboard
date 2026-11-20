@@ -84,8 +84,8 @@ export function ThreadActions({
       }
       setRenaming(false)
       setSaid(null)
-      // The rail row, and this header, both read the row that just changed.
-      router.refresh()
+      // No router.refresh(): renameAskThread revalidates /dashboard/ask and /m/ask,
+      // so the rail row and this header arrive with the action's response.
     })
   }
 
@@ -104,6 +104,8 @@ export function ThreadActions({
         return
       }
       onDeleted()
+      // Kept: deleteAskThread revalidates nothing (see renameAskThread), so the
+      // rail would keep the deleted row from the router cache without this.
       router.refresh()
     })
   }

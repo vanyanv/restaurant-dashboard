@@ -8,6 +8,10 @@ on:
     # Nothing is lost: the 2-day rolling window means a retroactive Otter edit
     # made at 06:00 is still picked up by the 10:00 run.
     - cron: '0 17-23,0-10 * * *'
+  # The sync ticker dispatches this hour on time; the schedule above is the
+  # backup and often fires the same hour again later. Every run passes
+  # --skip-if-recent, so one that finds a run succeeded in the last 20
+  # minutes exits without touching Otter or writing a JobRun row.
   workflow_dispatch:
 
 concurrency:
@@ -33,7 +37,7 @@ jobs:
         id: cron
         run: |
           bash .github/scripts/run-with-cron-logging.sh \
-            npx tsx scripts/sync-otter-hourly.ts
+            npx tsx scripts/sync-otter-hourly.ts --skip-if-recent
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           OTTER_JWT: ${{ secrets.OTTER_JWT }}

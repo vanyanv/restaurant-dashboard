@@ -79,7 +79,6 @@ const ASK_SUGGESTIONS = [
  * thing this codebase does not ship, and it is what the old primary was.
  */
 function Behind({ b }: { b: ItemBehind }) {
-  const router = useRouter()
   const [saving, startSaving] = useTransition()
   const [recipeId, setRecipeId] = useState("")
   const [said, setSaid] = useState<{ ok: boolean; text: string } | null>(null)
@@ -99,9 +98,8 @@ function Behind({ b }: { b: ItemBehind }) {
         setSaid({ ok: false, text: `Not mapped: ${result.error}.` })
         return
       }
-      // The plate cost, the margin and the channel table on this page all read
-      // the mapping that was just written, and so does the catalogue behind it.
-      router.refresh()
+      // No router.refresh(): mapItemToRecipe revalidates this page and the
+      // catalogue behind it, whose plate cost, margin and channels read the mapping.
     })
   }
 

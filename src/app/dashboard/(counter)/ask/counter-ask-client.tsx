@@ -473,15 +473,15 @@ export function CounterAskClient({
    * THE RAIL'S FOUR VERBS. Each reaches a server action and then tells the
    * router what changed; the rail itself only reports the press (see
    * `ConversationActions`). A deleted CURRENT thread closes the page's
-   * address the way the head's Delete does; any other deletion, and every
-   * rename, is a refresh so the rail re-reads.
+   * address the way the head's Delete does; any other deletion is a refresh
+   * so the rail re-reads. A rename needs neither: its action revalidates.
    */
   const railActions = useMemo<ConversationActions>(
     () => ({
       onRename: async (id, title) => {
         const r = await renameAskThread({ id, title })
         if (!r.ok) return r.error
-        router.refresh()
+        // No router.refresh(): renameAskThread revalidates the Ask page, desk and phone.
         return null
       },
       onDelete: async (id) => {

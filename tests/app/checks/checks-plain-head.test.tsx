@@ -6,7 +6,7 @@
 import { describe, it, expect, vi } from "vitest"
 import { render } from "@testing-library/react"
 
-vi.mock("@/lib/counter/actions/checks", () => ({ reviewCheckPhoto: vi.fn() }))
+vi.mock("@/lib/counter/actions/checks", () => ({ reviewCheckPhoto: vi.fn(), reviewCheckPhotos: vi.fn() }))
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn() }) }))
 
 import { PlainHead } from "@/app/dashboard/(counter)/checks/checks-plain-ui"

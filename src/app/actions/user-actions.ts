@@ -8,6 +8,12 @@ import bcrypt from "bcryptjs"
 import { revalidatePath } from "next/cache"
 import { prisma } from "@/lib/prisma"
 
+/** The two pages that read the signed-in user's own settings row. */
+function revalidateProfilePages() {
+  revalidatePath("/dashboard/settings")
+  revalidatePath("/m/more")
+}
+
 export type ActionResult =
   | { success: true; error?: never }
   | { success?: never; error: string }
@@ -50,10 +56,13 @@ export async function updateProfile(formData: FormData): Promise<ActionResult> {
       data,
     })
 
-    revalidatePath("/dashboard/settings")
-    revalidatePath("/dashboard/settings/account")
-    revalidatePath("/dashboard/settings/preferences")
-    revalidatePath("/dashboard")
+    // Only the pages that read the profile: Settings (desk) and More (phone)
+    // show the name and timezone, People lists the name. Nothing else reads
+    // this row per view (the shell's name comes from the session), so the
+    // dashboard root is not revalidated.
+    revalidateProfilePages()
+    revalidatePath("/dashboard/admin/people")
+    revalidatePath("/m/admin/people")
     return { success: true as const }
   } catch (error) {
     if (error instanceof z.ZodError) {
@@ -139,7 +148,9 @@ export async function updateNotificationPrefs(
       data,
     })
 
-    revalidatePath("/dashboard/settings/notifications")
+    // The toggles live on Settings (desk) and More (phone); there is no
+    // /dashboard/settings/notifications page any more.
+    revalidateProfilePages()
     return { success: true as const }
   } catch (error) {
     if (error instanceof z.ZodError) {

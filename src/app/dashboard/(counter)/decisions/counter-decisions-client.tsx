@@ -173,7 +173,6 @@ function ledgerRows(rows: LedgerRow[]): Row[] {
  * jargon-stripped one the reader sees above it. See `DecisionQueueItem.ref`.
  */
 function QueueDecision({ item }: { item: DecisionQueueItem }) {
-  const router = useRouter()
   const { act, stateOf, busy: saving } = useAct()
   const [failed, setFailed] = useState(false)
 
@@ -196,8 +195,8 @@ function QueueDecision({ item }: { item: DecisionQueueItem }) {
         ),
       {
         // The ledger, the accuracy panel and this queue all read `DecisionLog`.
-        // Refresh so the row the owner just wrote appears in all three.
-        onDone: () => router.refresh(),
+        // No router.refresh(): the action revalidates /dashboard/decisions, and
+        // its response carries the re-rendered page with the new row in all three.
         onFailed: () => setFailed(true),
       },
     )

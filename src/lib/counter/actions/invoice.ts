@@ -1,10 +1,22 @@
 "use server"
 
+import { revalidatePath } from "next/cache"
 import {
   setInvoiceIsReturn,
   setInvoiceReviewDecision,
   setInvoiceStore,
 } from "@/app/actions/invoice-actions"
+
+/**
+ * Invoices, the invoice pages and the review counts on them, desk and phone.
+ * The underlying actions bust only the Redis tags, which re-render nothing, so
+ * each write here revalidates the section itself and the clients need no
+ * router.refresh() on top.
+ */
+function revalidateInvoices() {
+  revalidatePath("/dashboard/invoices", "layout")
+  revalidatePath("/m/invoices", "layout")
+}
 
 /**
  * The Counter layer's write path for one invoice — same shape as
@@ -32,6 +44,7 @@ export async function resolveInvoiceReview(
 ): Promise<{ ok: true; status: string } | { ok: false; error: string }> {
   const result = await setInvoiceReviewDecision(invoiceId, decision)
   if (!result.ok) return { ok: false, error: result.reason }
+  revalidateInvoices()
   return { ok: true, status: result.status }
 }
 
@@ -41,6 +54,7 @@ export async function markInvoiceReturn(
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const result = await setInvoiceIsReturn(invoiceId, isReturn)
   if (!result.ok) return { ok: false, error: result.reason }
+  revalidateInvoices()
   return { ok: true }
 }
 
@@ -54,5 +68,6 @@ export async function confirmInvoiceStore(
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const result = await setInvoiceStore(invoiceId, storeId)
   if (!result.ok) return { ok: false, error: result.reason }
+  revalidateInvoices()
   return { ok: true }
 }

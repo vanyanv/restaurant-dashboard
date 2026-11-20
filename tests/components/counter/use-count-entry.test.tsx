@@ -53,7 +53,9 @@ describe("stock-count saves", () => {
     await act(async () => result.current.finish())
     expect(record).toHaveBeenLastCalledWith(expect.objectContaining({ qty: 9 }))
     expect(finish).toHaveBeenCalledTimes(1)
-    expect(refresh).toHaveBeenCalledTimes(1)
+    // finishStockCount revalidates the page itself; a refresh on top would render it twice.
+    expect(refresh).not.toHaveBeenCalled()
+    expect(result.current.finishError).toBeNull()
   })
 
   it("leaves untouched blanks alone but persists a typed zero", async () => {

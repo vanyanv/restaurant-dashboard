@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import { useSurfaceHref } from "@/components/counter";
 import { decideProposal } from "@/lib/counter/actions/proposal";
 import {
@@ -32,10 +31,9 @@ import type {
  *
  * "Yes, link" accepts the pending mapping proposal. It is not optimistic: a
  * link moves which recipe a sale is costed against, so the row waits for the
- * save, then slides away and the page refreshes.
+ * save, then slides away as the action's own re-render arrives.
  */
 export function CatalogPlainView({ p }: { p: CatalogPlain }) {
-  const router = useRouter();
   const href = useSurfaceHref();
   const leaving = useLeaving();
   const [notes, setNotes] = useState<
@@ -76,7 +74,7 @@ export function CatalogPlainView({ p }: { p: CatalogPlain }) {
                 onLinked={(text) => {
                   leaving.keep(l.key);
                   setNotes((n) => [...n, { tone: "good", text }]);
-                  router.refresh();
+                  // No router.refresh(): decideProposal revalidates /dashboard/menu/catalog and /m/menu/catalog.
                 }}
                 onFailed={(text) =>
                   setNotes((n) => [...n, { tone: "bad", text }])

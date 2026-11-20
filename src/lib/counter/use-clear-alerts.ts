@@ -1,7 +1,6 @@
 "use client"
 
 import { useEffect, useRef, useState, useTransition } from "react"
-import { useRouter } from "next/navigation"
 import { clearAlerts, undoClearAlerts } from "@/lib/counter/actions/alert"
 import type { ClearAlertsScope } from "@/app/actions/alerts/inbox-actions"
 
@@ -25,7 +24,6 @@ export type ClearAlertsState =
  * inbox's own open tally, not the six.
  */
 export function useClearAlerts(scope: ClearAlertsScope) {
-  const router = useRouter()
   const [state, setState] = useState<ClearAlertsState>({ step: "idle" })
   const [, startTransition] = useTransition()
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -60,8 +58,7 @@ export function useClearAlerts(scope: ClearAlertsScope) {
       } catch {
         setState({ step: "failed" })
       }
-      // The list, the strip and the rail's count all read the same column.
-      router.refresh()
+      // No router.refresh(): clearAlerts revalidates /dashboard/alerts and /m/alerts and busts the rail's count tag.
     })
   }
 
@@ -77,7 +74,7 @@ export function useClearAlerts(scope: ClearAlertsScope) {
       } catch {
         setState({ step: "failed" })
       }
-      router.refresh()
+      // No router.refresh(): undoClearAlerts revalidates both inbox pages and the rail's count, like the clear.
     })
   }
 

@@ -1,7 +1,6 @@
 "use client"
 
 import { useState } from "react"
-import { useRouter } from "next/navigation"
 import { Section, useCounterTransition, usePageChrome } from "@/components/counter"
 import {
   addCrewMember,
@@ -50,7 +49,6 @@ function shortDate(iso: string): string {
 }
 
 function useAction() {
-  const router = useRouter()
   const { act, stateOf, busy } = useAct()
   const [outcome, setOutcome] = useState<Outcome>(null)
   /** `key` names the button, so only the tapped one shows working, then a tick. */
@@ -58,10 +56,8 @@ function useAction() {
     act(key, async () => {
       const r = await fn()
       setOutcome(r.ok ? (r.message ? { ok: true, text: r.message } : null) : { ok: false, text: r.error })
-      if (r.ok) {
-        after?.()
-        router.refresh()
-      }
+      // No router.refresh(): every crew action revalidates the /dashboard/checks and /m/checks layouts.
+      if (r.ok) after?.()
       return r
     })
   const marks = (key = "run") => actMarks(stateOf(key))

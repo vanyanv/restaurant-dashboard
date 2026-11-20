@@ -2,7 +2,6 @@
 
 import { useEffect, useRef, useState, useTransition, type ReactNode } from "react"
 import Link from "next/link"
-import { useRouter } from "next/navigation"
 import { PageHead, SubNav, useSurfaceHref } from "@/components/counter"
 import { SHOP_TABS } from "@/lib/counter/nav"
 import {
@@ -66,17 +65,14 @@ export function ShopLegend() {
 }
 
 export function useShopAction() {
-  const router = useRouter()
   const [busy, start] = useTransition()
   const [outcome, setOutcome] = useState<Outcome>(null)
   const run = (fn: () => Promise<ActionResult>, after?: (r: ActionResult) => void) =>
     start(async () => {
       const r = await fn()
       setOutcome(r.ok ? (r.message ? { ok: true, text: r.message } : null) : { ok: false, text: r.error })
-      if (r.ok) {
-        after?.(r)
-        router.refresh()
-      }
+      // No router.refresh(): every shop action revalidates the /dashboard/shop and /m/shop layouts.
+      if (r.ok) after?.(r)
     })
   return { busy, outcome, run, setOutcome }
 }

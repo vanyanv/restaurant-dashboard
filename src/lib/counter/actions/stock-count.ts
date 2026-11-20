@@ -1,5 +1,6 @@
 "use server"
 
+import { revalidatePath } from "next/cache"
 import {
   getCountEntryData,
   startOrResumeStockCount,
@@ -131,5 +132,10 @@ export async function finishStockCount(
   const result = await completeStockCount({ stockCountId })
   if (result === null) return { ok: false, error: "not_signed_in" }
   if (!result.ok) return { ok: false, error: result.error }
+  // The count's own page (where Finish is pressed), the counts list and the
+  // inventory page all show its status, on the desk and the phone. Done here
+  // so the client needs no router.refresh() on top.
+  revalidatePath("/dashboard/operations/inventory", "layout")
+  revalidatePath("/m/operations/inventory", "layout")
   return { ok: true }
 }

@@ -17,7 +17,6 @@ import {
 import type { SectionSources } from "@/lib/counter/adapters/types"
 import type { InvoiceCheck, InvoiceLines, InvoiceSections } from "@/lib/counter/adapters/invoice"
 import { markInvoiceReturn, resolveInvoiceReview } from "@/lib/counter/actions/invoice"
-import { useRouter } from "next/navigation"
 import { PageTabs, Button, ButtonRow, Status, useAct, type StatusTone } from "@/components/counter/ui"
 import { InvoiceGlyph, Tiles, type InvoiceGlyphKind } from "../invoices-ui"
 
@@ -137,14 +136,14 @@ function ReviewDecision({
   isReturn: boolean
   reconciles: boolean
 }) {
-  const router = useRouter()
   const { act, stateOf, doneOf, busy: saving, error } = useAct()
 
   // The status is read by the section that just wrote it, and by the review
-  // counts on Invoices and Operations. Refresh rather than patch local state
-  // so none of them can disagree with the row just decided.
+  // counts on Invoices. No router.refresh(): both actions revalidate the
+  // invoices section (desk and phone), and the action's response carries the
+  // re-rendered page, so nothing patches local state and nothing disagrees.
   const run = (key: string, done: string, work: () => Promise<{ ok: true } | { ok: false; error: string }>) =>
-    act(key, work, { done, onDone: () => router.refresh() })
+    act(key, work, { done })
 
   const decide = (key: string, to: "APPROVED" | "REJECTED" | "REVIEW") =>
     run(key, DONE_WORDS[to], () => resolveInvoiceReview(invoiceId, to))

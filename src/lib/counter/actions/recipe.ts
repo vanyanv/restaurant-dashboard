@@ -76,6 +76,17 @@ export interface SaveResult {
 }
 
 /**
+ * One recipe save, on both surfaces: its own desk page (when there is one),
+ * the desk list, and every phone recipe page. The catalogue and ingredient
+ * pages are the underlying action's (`revalidateRecipePages`).
+ */
+function revalidateRecipe(recipeId?: string) {
+  if (recipeId) revalidatePath(`/dashboard/recipes/${recipeId}`)
+  revalidatePath("/dashboard/recipes")
+  revalidatePath("/m/recipes", "layout")
+}
+
+/**
  * Turn a write failure into a sentence an owner can act on.
  *
  * `Recipe` carries `@@unique([accountId, itemName, category])`, and both of
@@ -150,9 +161,7 @@ export async function saveRecipeLines(input: {
     return { ok: false, error: writeError(error) }
   }
 
-  revalidatePath(`/dashboard/recipes/${input.recipeId}`)
-  revalidatePath("/dashboard/recipes")
-  revalidatePath("/m/recipes", "layout")
+  revalidateRecipe(input.recipeId)
   return { ok: true, error: null }
 }
 
@@ -208,8 +217,7 @@ export async function removeRecipe(recipeId: string): Promise<SaveResult> {
   } catch (error) {
     return { ok: false, error: error instanceof Error ? error.message : String(error) }
   }
-  revalidatePath("/dashboard/recipes")
-  revalidatePath("/m/recipes", "layout")
+  revalidateRecipe()
   return { ok: true, error: null }
 }
 
@@ -220,9 +228,7 @@ export async function markRecipeConfirmed(recipeId: string): Promise<SaveResult>
   } catch (error) {
     return { ok: false, error: error instanceof Error ? error.message : String(error) }
   }
-  revalidatePath(`/dashboard/recipes/${recipeId}`)
-  revalidatePath("/dashboard/recipes")
-  revalidatePath("/m/recipes", "layout")
+  revalidateRecipe(recipeId)
   return { ok: true, error: null }
 }
 
@@ -262,8 +268,7 @@ export async function createRecipe(input: {
       foodCostOverride: null,
       ingredients: [],
     })
-    revalidatePath("/dashboard/recipes")
-    revalidatePath("/m/recipes", "layout")
+    revalidateRecipe()
     return { ok: true, recipeId: id, error: null }
   } catch (error) {
     return { ok: false, recipeId: null, error: writeError(error) }
