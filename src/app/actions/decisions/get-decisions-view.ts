@@ -10,9 +10,8 @@ import { batchedStoreRows, sumByDate } from "@/lib/counter/store-batch"
 import { Prisma } from "@/generated/prisma/client"
 import { weekdayTargets, type SplhInput } from "@/lib/splh"
 import { foldSplhHistory, type SplhHistoryRow } from "@/lib/decisions/splh-history"
-import { getAllStoresPnL } from "@/app/actions/store/pnl-actions"
-import { TOTAL_SALES_CODE } from "@/lib/pnl"
-import { rowValues } from "@/lib/counter/statement"
+import { loadHarriPositionRows, actualSecondsByStoreDay } from "@/lib/harri-position-rows"
+import { getNetSalesByPeriod } from "@/app/actions/store/pnl-actions"
 import { getCachedSession, resolveStoreContext } from "@/app/actions/forecasts/_shared"
 import { getRevenueForecast } from "@/app/actions/forecasts/revenue-forecast-actions"
 import { getOpenAnomalies } from "@/app/actions/forecasts/anomaly-actions"
@@ -807,17 +806,13 @@ async function loadSplhHistoryRows(
   to: Date,
 ): Promise<SplhHistoryRow[]> {
   const [hourRows, pnl] = await Promise.all([
-    prisma.harriPositionDaily.groupBy({
-      by: ["storeId", "date"],
-      where: { storeId: { in: storeIds }, store: { accountId }, date: { gte: from, lte: to } },
-      _sum: { actualSeconds: true },
-    }),
-    getAllStoresPnL({ startDate: from, endDate: to, granularity: "daily" }),
+    loadHarriPositionRows({ accountId, storeIds, startDate: from, endDate: to }).then(actualSecondsByStoreDay),
+    getNetSalesByPeriod({ startDate: from, endDate: to, granularity: "daily" }),
   ])
   const net = new Map<string, number>()
   if (!("error" in pnl)) {
     for (const st of pnl.perStore) {
-      const values = rowValues(st.rows, TOTAL_SALES_CODE) ?? []
+      const values = st.net
       pnl.periods.forEach((p, i) => {
         const v = values[i]
         if (typeof v === "number" && Number.isFinite(v) && v > 0) net.set(`${st.storeId}|${ymd(p.startDate)}`, v)

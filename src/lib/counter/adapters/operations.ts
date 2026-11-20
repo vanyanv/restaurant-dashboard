@@ -188,14 +188,18 @@ async function loadOperations(input: OperationsInput): Promise<OperationsData> {
     }),
     storeIds.length === 0
       ? Promise.resolve([])
-      : prisma.stockCount.findMany({
-          where: { storeId: { in: storeIds } },
-          select: { id: true, status: true, createdAt: true },
-          orderBy: { createdAt: "desc" },
+      : // Tallied in the database: this page needs how many counts are open,
+        // done and in all, and the newest one's date. It used to load every
+        // count the stores ever made to count them here.
+        prisma.stockCount.groupBy({
+          by: ["status"],
+          where: { storeId: { in: storeIds }, store: { accountId } },
+          _count: { _all: true },
+          _max: { createdAt: true },
         }),
     storeIds.length === 0
       ? Promise.resolve(0)
-      : prisma.stockCountLine.count({ where: { stockCount: { storeId: { in: storeIds } } } }),
+      : prisma.stockCountLine.count({ where: { stockCount: { storeId: { in: storeIds }, store: { accountId } } } }),
     // Packaging is NOT its own model — no table matches `%packag%`. It is the
     // Paper/Supplies and Cleaning categories of the ingredient catalogue, which
     // is the same definition `ingredient-reach.ts` treats as "not food".
@@ -218,8 +222,14 @@ async function loadOperations(input: OperationsInput): Promise<OperationsData> {
   // suppliers. An unfolded count would say ten and disagree with that page.
   const vendorCount = new Set(vendorNames.map((v) => normalizeVendorName(v.vendorName))).size
 
-  const countsOpen = counts.filter((c) => c.status === "IN_PROGRESS").length
-  const countsCompleted = counts.filter((c) => c.status === "COMPLETED").length
+  const countsOf = (status: string) => counts.find((c) => c.status === status)?._count._all ?? 0
+  const countsOpen = countsOf("IN_PROGRESS")
+  const countsCompleted = countsOf("COMPLETED")
+  const countsTotal = counts.reduce((n, c) => n + c._count._all, 0)
+  const newestCountAt = counts.reduce<Date | null>(
+    (max, c) => (c._max.createdAt && (max === null || c._max.createdAt > max) ? c._max.createdAt : max),
+    null,
+  )
 
   const areas: Area[] = [
     {
@@ -258,7 +268,7 @@ async function loadOperations(input: OperationsInput): Promise<OperationsData> {
       open: countsOpen,
       openUnit: "in progress",
       worth: null,
-      lastTouched: counts[0]?.createdAt ?? null,
+      lastTouched: newestCountAt,
     },
     {
       key: "inventory",
@@ -267,7 +277,7 @@ async function loadOperations(input: OperationsInput): Promise<OperationsData> {
       open: countLines,
       openUnit: "lines counted, ever",
       worth: null,
-      lastTouched: counts[0]?.createdAt ?? null,
+      lastTouched: newestCountAt,
     },
     {
       key: "vendors",
@@ -287,7 +297,7 @@ async function loadOperations(input: OperationsInput): Promise<OperationsData> {
 
   return {
     areas,
-    countsTotal: counts.length,
+    countsTotal,
     countsCompleted,
     countsOpen,
     countLines,

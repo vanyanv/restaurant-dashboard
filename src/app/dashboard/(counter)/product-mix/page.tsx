@@ -26,13 +26,17 @@ export default async function ProductMixPage({
 
   const today = counterToday()
   const counterParams = readCounterParams(params, today)
-  const stores = await getOverviewStores()
+  // Started now, awaited after the section promises have started: the store
+  // list does not feed them, so they do not wait behind it.
+  const storesP = getOverviewStores()
 
   const sections = getProductMixSectionPromises({
     range: counterParams.range,
     storeId: counterParams.storeId,
     accountId: session.user.accountId,
   })
+
+  const stores = await storesP
 
   return (
     <>

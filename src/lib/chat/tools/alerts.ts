@@ -166,7 +166,21 @@ export const getAlerts: ChatTool<typeof params, AlertsChatResult> = {
      * across every store pulled a year of every detector's output into memory
      * to return 25. `groupBy` does the counting in Postgres.
      */
-    const [tallies, rows] = await Promise.all([
+    /*
+     * Preferences are account-owned, not store-owned, so they are the one
+     * query here that filters on `accountId` directly rather than reaching it
+     * through `store`. A row with a null `storeId` is the account-wide
+     * default; a row with one overrides it for that store.
+     */
+    const prefsP = ctx.prisma.alertPreference.findMany({
+      where: {
+        accountId: ctx.accountId,
+        OR: [{ storeId: null }, { storeId: { in: storeIds } }],
+      },
+      select: { muted: true, minSeverity: true, storeId: true, target: true },
+    })
+    // Started with the other two: it needs only the store ids, not their answers.
+    const [tallies, rows, prefs] = await Promise.all([
       ctx.prisma.alert.groupBy({ by: ["severity"], where, _count: { _all: true } }),
       ctx.prisma.alert.findMany({
         where,
@@ -188,6 +202,7 @@ export const getAlerts: ChatTool<typeof params, AlertsChatResult> = {
         orderBy: [{ severity: "desc" }, { occurredOn: "desc" }, { detectedAt: "desc" }],
         take: Math.max(args.limit ?? 25, 1),
       }),
+      prefsP,
     ])
 
     const tally = (s: AlertSeverity) =>
@@ -199,19 +214,6 @@ export const getAlerts: ChatTool<typeof params, AlertsChatResult> = {
       total: tallies.reduce((n, t) => n + t._count._all, 0),
     }
 
-    /*
-     * Preferences are account-owned, not store-owned, so they are the one
-     * query here that filters on `accountId` directly rather than reaching it
-     * through `store`. A row with a null `storeId` is the account-wide
-     * default; a row with one overrides it for that store.
-     */
-    const prefs = await ctx.prisma.alertPreference.findMany({
-      where: {
-        accountId: ctx.accountId,
-        OR: [{ storeId: null }, { storeId: { in: storeIds } }],
-      },
-      select: { muted: true, minSeverity: true, storeId: true, target: true },
-    })
     /*
      * A preference row with a null `target` is the account-wide default and
      * applies to every subject; one with a target applies only to that

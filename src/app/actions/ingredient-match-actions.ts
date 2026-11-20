@@ -10,6 +10,7 @@ import { recomputeCanonicalCost, getLineItemBaseQty } from "@/lib/ingredient-cos
 import { syncCanonicalEmbedding } from "@/lib/ingredient-embedding-sync"
 import { buildGroupKey } from "@/lib/ingredient-auto-match-core"
 import { revalidatePath } from "next/cache"
+import { bustTags } from "@/lib/cache/cached"
 
 export type UnmatchedLineItemGroup = {
   /** Stable key combining vendor+sku (or vendor+productName when sku is null). */
@@ -423,6 +424,8 @@ export async function confirmSkuMatch(input: {
       console.warn("[confirmSkuMatch] recomputeCanonicalCost failed:", e)
     })
 
+    // Lines were rematched: the saved price moves read them.
+    await bustTags(["invoices", `account:${accountId}`])
     revalidatePath("/dashboard/ingredients")
     revalidatePath("/dashboard/menu/catalog")
     revalidatePath("/dashboard/recipes")
@@ -470,6 +473,7 @@ export async function confirmSkuMatch(input: {
   })
   await syncCanonicalEmbedding(targetCanonicalId)
 
+  await bustTags(["invoices", `account:${accountId}`])
   revalidatePath("/dashboard/ingredients")
   revalidatePath("/dashboard/menu/catalog")
   revalidatePath("/dashboard/recipes")

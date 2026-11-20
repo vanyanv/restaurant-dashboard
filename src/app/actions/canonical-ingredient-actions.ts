@@ -3,6 +3,7 @@
 // Browser saves go through `src/lib/counter/actions/`.
 import "server-only"
 import { revalidatePath } from "next/cache"
+import { bustTags } from "@/lib/cache/cached"
 import { getAuthScope, getSession } from "@/lib/auth-scope"
 import { prisma } from "@/lib/prisma"
 import {
@@ -29,7 +30,13 @@ import type {
  * ingredient list, every recipe that costs off it, and the catalogue's
  * margins (left out when nothing that costs a plate changed).
  */
-function revalidateIngredientPages({ catalog = true }: { catalog?: boolean } = {}) {
+async function revalidateIngredientPages(
+  accountId: string,
+  { catalog = true }: { catalog?: boolean } = {},
+) {
+  // The saved price moves (`loadPriceMoves`) read an ingredient's unit, its
+  // pack and which invoice lines it owns.
+  await bustTags(["invoices", `account:${accountId}`])
   revalidatePath("/dashboard/ingredients")
   revalidatePath("/dashboard/recipes")
   if (catalog) revalidatePath("/dashboard/menu/catalog")
@@ -145,6 +152,7 @@ export async function setCanonicalPackDefinition(input: {
     data: { caseUnit, recipeUnitsPerCase, innerPackUnit, innerPacksPerCase },
   })
 
+  await bustTags(["invoices", `account:${accountId}`])
   revalidatePath("/m/count", "layout")
   revalidatePath("/m/ingredients")
 }
@@ -351,7 +359,7 @@ export async function createCanonicalIngredient(input: {
   await syncCanonicalEmbedding(created.id)
 
   // A new ingredient has no cost yet, so no margin on the catalogue moves.
-  revalidateIngredientPages({ catalog: false })
+  await revalidateIngredientPages(scope.accountId, { catalog: false })
   return created
 }
 
@@ -406,7 +414,7 @@ export async function updateCanonicalCost(input: {
     data,
   })
 
-  revalidateIngredientPages()
+  await revalidateIngredientPages(accountId)
 }
 
 export async function runCanonicalIngredientSeed(): Promise<SeedResult> {
@@ -414,7 +422,7 @@ export async function runCanonicalIngredientSeed(): Promise<SeedResult> {
   if (!scope) throw new Error("Not authenticated")
   const result = await seedCanonicalIngredientsFromInvoices(scope.ownerId, scope.accountId)
   if (result.canonicalsCreated > 0 || result.aliasesCreated > 0) {
-    revalidateIngredientPages()
+    await revalidateIngredientPages(scope.accountId)
   }
   return result
 }
@@ -544,6 +552,6 @@ export async function mergeCanonicalIngredients(input: {
   // CanonicalIngredientEmbedding cascade.)
   await syncCanonicalEmbedding(input.targetId)
 
-  revalidateIngredientPages()
+  await revalidateIngredientPages(accountId)
   return result
 }

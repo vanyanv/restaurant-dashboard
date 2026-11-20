@@ -8,6 +8,7 @@ import {
   type DecisionsView,
 } from "@/app/actions/decisions/get-decisions-view"
 import { prisma } from "@/lib/prisma"
+import { batchedDayRows, dayStart, utcDay } from "@/lib/counter/day-batch"
 import { resolveStoreContext } from "@/app/actions/forecasts/_shared"
 import { newestGenerationPerDay } from "@/lib/counter/forecast-generation"
 import {
@@ -894,6 +895,51 @@ export async function loadSettledDays(
 }
 
 /**
+ * The whole-day forecast rows of these stores over `[start, end)`, read once
+ * per render for every caller that asks (`readClosedDays` for the closed half
+ * of the week, `loadWeekProvenance` for the whole week, the Week ahead plan for
+ * last week): one superset `select`, so a wider read is cut back to each
+ * caller's days (`batchedDayRows`) and each gets the rows its own read would
+ * have returned. `forecastDate` is a `@db.Date`, so `< end` is `<= end - 1 day`.
+ *
+ * Whole-day rows only: `hourBucket` 1-23 is reserved for an hourly forecast,
+ * and counting one alongside its own day would double the day.
+ */
+function readForecastDays(storeIds: string[], start: Date, end: Date, accountId: string) {
+  const last = new Date(end.getTime() - 24 * 60 * 60 * 1000)
+  return batchedDayRows({
+    group: `decisions-forecast-days|${accountId}|${[...storeIds].sort().join(",")}`,
+    range: { first: utcDay(start), last: utcDay(last) },
+    load: (r) =>
+      prisma.forecastDailyRevenue.findMany({
+        where: {
+          storeId: { in: storeIds },
+          store: { accountId },
+          hourBucket: 0,
+          forecastDate: { gte: dayStart(r.first), lte: dayStart(r.last) },
+        },
+        select: {
+          storeId: true,
+          forecastDate: true,
+          generatedAt: true,
+          predictedRevenue: true,
+          actualRevenue: true,
+          p10: true,
+          p90: true,
+          attribution: true,
+          reconciledRevenue: true,
+          reconciledP10: true,
+          reconciledP90: true,
+          reconciledAt: true,
+          modelVersion: true,
+          reconciliationMethod: true,
+        },
+      }),
+    dayOf: (row) => utcDay(row.forecastDate),
+  })
+}
+
+/**
  * Closed days per store, `[start, end)`: the one read behind both
  * `loadSettledDays` (this week's closed half, merged) and the Week ahead
  * plan (each store's sold days, and last week). Newest generation per
@@ -909,30 +955,7 @@ export async function readClosedDays(
 ): Promise<Map<string, SettledDay[]>> {
   const out = new Map<string, SettledDay[]>()
   if (storeIds.length === 0 || start.getTime() >= end.getTime()) return out
-  const rows = await prisma.forecastDailyRevenue.findMany({
-    where: {
-      storeId: { in: storeIds },
-      store: { accountId },
-      // Whole-day rows only. `hourBucket` 1-23 is reserved for an hourly
-      // forecast; counting one alongside its own day would double the day.
-      hourBucket: 0,
-      forecastDate: { gte: start, lt: end },
-    },
-    select: {
-      storeId: true,
-      forecastDate: true,
-      generatedAt: true,
-      predictedRevenue: true,
-      actualRevenue: true,
-      p10: true,
-      p90: true,
-      attribution: true,
-      reconciledRevenue: true,
-      reconciledP10: true,
-      reconciledP90: true,
-      reconciledAt: true,
-    },
-  })
+  const rows = await readForecastDays(storeIds, start, end, accountId)
 
   /*
    * The SAME reconciled-or-raw choice `getRevenueForecast` makes, and it has
@@ -1038,10 +1061,10 @@ export function mergeClosedDays(perStore: Iterable<SettledDay[]>): SettledDay[] 
  * forecast, and says "conformal" for the interval without claiming which
  * flavour — the column that would settle it does not exist.
  *
- * Its own small query rather than a widening of `loadSettledDays`: that
- * function's window is the settled half by design, this needs the whole week,
- * and its return shape is read by three call sites. Five columns over seven
- * days is not the cost that matters here.
+ * Its own FUNCTION rather than a widening of `loadSettledDays` (whose window
+ * is the settled half by design and whose return shape three call sites read),
+ * but not its own query any more: both read `readForecastDays`, so one read of
+ * the week serves them.
  */
 export interface DayProvenance {
   modelVersion: string | null
@@ -1065,21 +1088,9 @@ export async function loadWeekProvenance(
   const storeIds = resolved.ctx.storeIds
   if (storeIds.length === 0) return out
 
-  const rows = await prisma.forecastDailyRevenue.findMany({
-    where: {
-      storeId: { in: storeIds },
-      hourBucket: 0,
-      forecastDate: { gte: start, lt: end },
-    },
-    select: {
-      storeId: true,
-      forecastDate: true,
-      generatedAt: true,
-      modelVersion: true,
-      reconciliationMethod: true,
-      reconciledAt: true,
-    },
-  })
+  // The same read `readClosedDays` makes, over the whole week: one read of
+  // the widest span serves both. This one used to carry no account filter.
+  const rows = await readForecastDays(storeIds, start, end, accountId)
 
   for (const row of newestGenerationPerDay(rows)) {
     const key = row.forecastDate.toISOString().slice(0, 10)

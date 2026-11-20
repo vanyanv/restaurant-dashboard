@@ -1,3 +1,4 @@
+import { getAccountStores } from "@/lib/account-stores"
 import QRCode from "qrcode"
 import { prisma } from "@/lib/prisma"
 import { loadCheckGrid, shortName, type GridCell, type GridStore } from "@/lib/checks/data"
@@ -38,11 +39,10 @@ import type { SectionData } from "@/lib/counter/section-data"
 export type StoreOption = { id: string; name: string }
 
 async function accountStores(accountId: string): Promise<StoreOption[]> {
-  return prisma.store.findMany({
-    where: { accountId, isActive: true },
-    select: { id: true, name: true },
-    orderBy: { name: "asc" },
-  })
+  // The request's one store read (`@/lib/account-stores`): active, by name.
+  // Only id and name are used, so a store's check code written during this
+  // render (`ensureCheckSetup`) is not read from here.
+  return (await getAccountStores(accountId)).map(({ id, name }) => ({ id, name }))
 }
 
 function pickStore(stores: StoreOption[], requested: string | undefined): StoreOption | null {
@@ -869,6 +869,10 @@ export function getChecksPostersSectionPromises(opts: { accountId: string }): St
   return {
     posters: guardSection(
       classify(async () => {
+        // The account's report emails do not depend on the stores: read them
+        // beside the store reads instead of after them.
+        const accountP = prisma.account.findUnique({ where: { id: opts.accountId }, select: { checkReportEmails: true } })
+        accountP.catch(() => {})
         const stores = await accountStores(opts.accountId)
         await Promise.all(stores.map((s) => ensureCheckSetup(s.id)))
         const rows = await prisma.store.findMany({
@@ -879,7 +883,7 @@ export function getChecksPostersSectionPromises(opts: { accountId: string }): St
           },
           orderBy: { name: "asc" },
         })
-        const account = await prisma.account.findUnique({ where: { id: opts.accountId }, select: { checkReportEmails: true } })
+        const account = await accountP
         return {
           reportEmails: account?.checkReportEmails ?? [],
           emailReady: emailConfigured(),

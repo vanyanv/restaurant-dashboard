@@ -26,7 +26,9 @@ export default async function OperationsPage({
 
   const today = counterToday()
   const counterParams = readCounterParams(params, today)
-  const stores = await getOverviewStores()
+  // Started now, awaited after the section promises have started: the store
+  // list does not feed them, so they do not wait behind it.
+  const storesP = getOverviewStores()
 
   const sections = getOperationsSectionPromises({
     storeId: counterParams.storeId,
@@ -34,6 +36,8 @@ export default async function OperationsPage({
     range: counterParams.range,
     today,
   })
+
+  const stores = await storesP
 
   return (
     <>

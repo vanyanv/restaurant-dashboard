@@ -1,3 +1,4 @@
+import { getAccountStoreRows } from "@/lib/account-stores"
 import { prisma } from "@/lib/prisma"
 import { rowSales } from "@/lib/pnl"
 import { cached } from "@/lib/cache/cached"
@@ -93,10 +94,18 @@ const WEEKDAY_SHORT = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
  * figure the Overview and P&L print — not Otter's `fpNetSales + tpNetSales`,
  * so a signal here and the headline the owner then opens agree.
  */
-async function netSalesOn(storeIds: string[], day: Date): Promise<number | null> {
+export async function netSalesOn(
+  accountId: string,
+  storeIds: string[],
+  days: Date[],
+): Promise<Array<number | null>> {
+  // One read for both days (`date in`), split by day below: the two single-day
+  // reads it replaces each returned exactly their own day's rows.
+  const wanted = days.map(queryDate)
   const rows = await prisma.otterDailySummary.findMany({
-    where: { storeId: { in: storeIds }, date: queryDate(day) },
+    where: { storeId: { in: storeIds }, store: { accountId }, date: { in: wanted } },
     select: {
+      date: true,
       platform: true,
       fpGrossSales: true,
       tpGrossSales: true,
@@ -109,16 +118,15 @@ async function netSalesOn(storeIds: string[], day: Date): Promise<number | null>
       tpTaxCollected: true,
     },
   })
-  if (rows.length === 0) return null
-  return rows.reduce((t, r) => t + rowSales(r).net, 0)
+  return wanted.map((d) => {
+    const mine = rows.filter((r) => r.date.getTime() === d.getTime())
+    return mine.length === 0 ? null : mine.reduce((t, r) => t + rowSales(r).net, 0)
+  })
 }
 
-async function salesSignal(storeIds: string[], today: Date): Promise<AskSignal | null> {
+async function salesSignal(accountId: string, storeIds: string[], today: Date): Promise<AskSignal | null> {
   const yesterday = addDays(today, -1)
-  const [net, prior] = await Promise.all([
-    netSalesOn(storeIds, yesterday),
-    netSalesOn(storeIds, addDays(yesterday, -7)),
-  ])
+  const [net, prior] = await netSalesOn(accountId, storeIds, [yesterday, addDays(yesterday, -7)])
   if (net === null) return null
   const day = WEEKDAY[yesterday.getDay()]
   const short = WEEKDAY_SHORT[yesterday.getDay()]
@@ -198,13 +206,12 @@ export async function loadAskBrief(input: AskBriefInput): Promise<AskBrief> {
     TTL_SECONDS,
     ["invoices", "otter", `account:${accountId}`],
     async () => {
-      const stores = await prisma.store.findMany({
-        where: { accountId, ...(storeId ? { id: storeId } : {}) },
-        select: { id: true },
-      })
+      // The request's one store read (`@/lib/account-stores`), every store of
+      // the account (inactive too, as this always counted), narrowed to one.
+      const stores = (await getAccountStoreRows(accountId)).filter((s) => !storeId || s.id === storeId)
       const storeIds = stores.map((s) => s.id)
       const [sales, price, invoices, status] = await Promise.all([
-        storeIds.length > 0 ? salesSignal(storeIds, today) : null,
+        storeIds.length > 0 ? salesSignal(accountId, storeIds, today) : null,
         priceSignal(accountId),
         invoiceSignal(accountId, storeId),
         getShellStatus({ accountId, storeIds }),

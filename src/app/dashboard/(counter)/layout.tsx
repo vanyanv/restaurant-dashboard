@@ -59,14 +59,18 @@ export default async function CounterLayout({
   // The sync chip and the "Needs you" count: two facts every Counter page's
   // chrome carries, read once here (cached a minute) rather than by the rail
   // and the topbar themselves. See `shell-status.ts`.
-  const [session, stores] = await Promise.all([
-    getServerSession(authOptions),
+  // The status needs the account, which is on the session, and not the store
+  // list (it filters on the store relation), so it starts the moment the
+  // session resolves instead of after the stores have come back too.
+  const sessionP = getServerSession(authOptions)
+  const [session, stores, status] = await Promise.all([
+    sessionP,
     getOverviewStores(),
+    // Scoped to this account's trading stores, never the whole table.
+    sessionP.then((s) =>
+      s ? getShellStatus({ accountId: s.user.accountId }, now) : { sync: null, needsYou: 0 },
+    ),
   ])
-  // Scoped to this account's stores, never the whole table.
-  const status = session
-    ? await getShellStatus({ accountId: session.user.accountId, storeIds: stores.map((s) => s.id) }, now)
-    : { sync: null, needsYou: 0 }
 
   return (
     <AppShell

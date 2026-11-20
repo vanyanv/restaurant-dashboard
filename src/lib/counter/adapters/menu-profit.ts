@@ -5,11 +5,9 @@ import {
 } from "@/app/actions/forecasts/menu-engineering-actions"
 import { buildProfitPlain, type ProfitPlain } from "@/lib/counter/menu-profit-plain"
 import { count, money, pct } from "@/lib/counter/format"
-import { dayCount, type DateRange } from "@/lib/counter/date-range"
-import { loadStatement } from "@/lib/counter/statement"
+import { dayCount, toQueryBounds, type DateRange } from "@/lib/counter/date-range"
+import { getSalesAndCogsRow } from "@/app/actions/store/pnl-actions"
 import { getScopedStores } from "@/lib/account-stores"
-import { COGS_CODE } from "@/lib/pnl"
-import { rowValues } from "@/lib/counter/statement"
 import {
   awaitSections,
   classify,
@@ -548,13 +546,17 @@ export function getMenuProfitSectionPromises(
           lookbackDays: Math.max(0, days - 1),
           asOf: range.end,
         }),
-        loadStatement({ range, storeId, granularity: "daily" }),
+        // Net Sales and the COGS row only — all this page prints of the
+        // statement — so fees, fixed costs and labor are not built for it.
+        // Same rows and arithmetic as the statement's; see `getSalesAndCogsRow`.
+        getSalesAndCogsRow({ ...toQueryBounds(range), storeId: storeId ?? null }),
       ])
       if (!me || !me.ok) throw new Error("menu engineering unavailable")
-      const cogsRow = rowValues(statement.rows, COGS_CODE) ?? []
+      if ("error" in statement) throw new Error(statement.error)
+      const cogsRow = statement.cogsRow
       return {
         me: me.data,
-        totalSales: statement.grossSales,
+        totalSales: statement.totalSales,
         // Stored NEGATIVE by `computeStorePnL`; flipped once, here.
         foodCost: -cogsRow.reduce((t, v) => t + v, 0),
       }

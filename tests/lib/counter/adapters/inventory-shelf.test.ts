@@ -445,8 +445,8 @@ describe("the shelf loaders", () => {
     h.loadStoreDraft.mockReset()
     h.loadStoreDraft.mockResolvedValue(emptyDraft())
     h.answers.set("store.findMany", () => [
-      { id: "store_a", name: "Glendale" },
-      { id: "store_b", name: "Van Nuys" },
+      { id: "store_a", name: "Glendale", isActive: true },
+      { id: "store_b", name: "Van Nuys", isActive: true },
     ])
   })
 

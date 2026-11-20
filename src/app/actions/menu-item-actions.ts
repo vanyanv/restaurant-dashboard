@@ -414,10 +414,7 @@ export async function mapOtterSubItemToRecipe(input: {
   if (!scope) throw new Error("Not authenticated")
   const { ownerId, accountId } = scope
 
-  const stores = await prisma.store.findMany({
-    where: { accountId },
-    select: { id: true },
-  })
+  const stores = await getAccountStoreRows(accountId)
   const recipe = await prisma.recipe.findFirst({
     where: { id: input.recipeId, accountId },
     select: { id: true },
@@ -454,18 +451,12 @@ export async function unmapOtterSubItem(skuId: string): Promise<void> {
   if (!scope) throw new Error("Not authenticated")
   const { ownerId, accountId } = scope
 
-  const stores = await prisma.store.findMany({
-    where: { accountId },
-    select: { id: true },
-  })
+  // The account boundary goes in the delete itself (`store: { accountId }`),
+  // so the account's store ids are not read first just to be sent back.
   await prisma.otterSubItemMapping.deleteMany({
-    where: {
-      skuId,
-      storeId: { in: stores.map((s) => s.id) },
-    },
+    where: { skuId, store: { accountId } },
   })
 
-  void stores
   revalidateMappingPages()
 }
 
@@ -492,10 +483,7 @@ export async function getMenuItemSellPrices(
   if (!scope) return new Map()
   const { accountId } = scope
 
-  const stores = await prisma.store.findMany({
-    where: { accountId },
-    select: { id: true },
-  })
+  const stores = await getAccountStoreRows(accountId)
   const storeIds = stores.map((s) => s.id)
   if (storeIds.length === 0) return new Map()
 

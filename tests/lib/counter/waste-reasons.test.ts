@@ -143,7 +143,7 @@ const CUR = new Date("2026-10-27T15:00:00Z")
 
 beforeEach(() => {
   vi.clearAllMocks()
-  asMock(prisma.store.findMany).mockResolvedValue([{ id: "store_a", name: "Hollywood" }])
+  asMock(prisma.store.findMany).mockResolvedValue([{ id: "store_a", name: "Hollywood", isActive: true }])
   asMock(prisma.stockCount.findMany).mockResolvedValue([
     { id: "sc_cur", countedAt: CUR },
     { id: "sc_prev", countedAt: PREV },

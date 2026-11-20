@@ -1,3 +1,4 @@
+import { getAccountStores } from "@/lib/account-stores"
 import { cache } from "react"
 import { prisma } from "@/lib/prisma"
 import { anchorLineWhere } from "@/lib/inventory/anchor-line"
@@ -39,11 +40,8 @@ const DAY_MS = 86_400_000
 export type StoreOption = { id: string; name: string }
 
 export async function accountStores(accountId: string): Promise<StoreOption[]> {
-  return prisma.store.findMany({
-    where: { accountId, isActive: true },
-    select: { id: true, name: true },
-    orderBy: { name: "asc" },
-  })
+  // The request's one store read (`@/lib/account-stores`): active, by name.
+  return (await getAccountStores(accountId)).map(({ id, name }) => ({ id, name }))
 }
 
 function pickStore(stores: StoreOption[], requested: string | undefined): StoreOption | null {

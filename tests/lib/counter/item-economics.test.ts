@@ -54,6 +54,9 @@ vi.mock("@/lib/counter/statement", () => ({
   loadStatement: vi.fn(async () => ({ rows: [], grossSales: 0 })),
   rowValues: vi.fn(() => []),
 }))
+vi.mock("@/app/actions/store/pnl-actions", () => ({
+  getSalesAndCogsRow: vi.fn(async () => ({ totalSales: 0, cogsRow: [] })),
+}))
 vi.mock("@/lib/chat/owner-scope", () => ({ assertOwnerOwnsStores: vi.fn(async () => ["s1"]) }))
 
 import { prisma } from "@/lib/prisma"

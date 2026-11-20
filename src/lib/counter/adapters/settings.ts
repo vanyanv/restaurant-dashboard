@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma"
+import { getAccountStoreRows } from "@/lib/account-stores"
 import { count } from "@/lib/counter/format"
 import {
   awaitSections,
@@ -135,11 +136,9 @@ async function loadSettings(input: SettingsInput): Promise<SettingsData> {
 
   const [stores, alertPreferences, logins, signouts, invites, roles] =
     await Promise.all([
-      prisma.store.findMany({
-        where: { accountId: input.accountId },
-        orderBy: { name: "asc" },
-        select: { name: true, isActive: true },
-      }),
+      // The one store read a request makes (`@/lib/account-stores`): the same
+      // `accountId` filter and `name asc` order, every store.
+      getAccountStoreRows(input.accountId),
       prisma.alertPreference.count({ where: { accountId: input.accountId } }),
       prisma.loginEvent.findMany({
         where: { kind: "SIGN_IN", createdAt: { gt: since }, userId: { in: userIds } },

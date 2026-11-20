@@ -62,9 +62,113 @@ export interface RatingsSummary {
 const DEFAULT_WINDOW_DAYS = 30
 const RECENT_LIMIT = 6
 
-function mean(values: number[]): number | null {
-  if (values.length === 0) return null
-  return values.reduce((a, b) => a + b, 0) / values.length
+const RATING_ROW = {
+  id: true,
+  rating: true,
+  reviewText: true,
+  platform: true,
+  reviewedAt: true,
+  storeName: true,
+  orderItemNames: true,
+} as const
+
+type RatingRow = {
+  id: string
+  rating: number
+  reviewText: string | null
+  platform: string
+  reviewedAt: Date
+  storeName: string
+  orderItemNames: string | null
+}
+
+interface RatingGroup {
+  platform: string
+  rating: number
+  _count: { _all: number }
+  _max: { reviewedAt: Date | null }
+}
+
+interface RatingStats {
+  count: number
+  average: number | null
+  priorAverage: number | null
+  lowCount: number
+  distribution: number[]
+  latestReviewAt: Date | null
+  byPlatform: Array<{ platform: string; count: number; average: number }>
+}
+
+/** Rows as the (platform, rating) groups a `groupBy` would return for them. */
+function groupRows(rows: RatingRow[]): RatingGroup[] {
+  const by = new Map<string, RatingGroup>()
+  for (const r of rows) {
+    const key = `${r.platform}\u0000${r.rating}`
+    const g = by.get(key) ?? {
+      platform: r.platform,
+      rating: r.rating,
+      _count: { _all: 0 },
+      _max: { reviewedAt: null as Date | null },
+    }
+    g._count._all += 1
+    if (g._max.reviewedAt === null || r.reviewedAt > g._max.reviewedAt) g._max.reviewedAt = r.reviewedAt
+    by.set(key, g)
+  }
+  return [...by.values()]
+}
+
+/** Worst-first: a 5-star review needs no action, a 1-star one might. */
+function worstFirst(rows: RatingRow[]): RatingRow[] {
+  return [...rows].sort((a, b) =>
+    a.rating !== b.rating ? a.rating - b.rating : b.reviewedAt.getTime() - a.reviewedAt.getTime(),
+  )
+}
+
+/**
+ * The window's figures from its (platform, rating) counts: what the loop over
+ * every row computed, as integer sums over the same ratings. Null when the
+ * window holds no reviews.
+ */
+function statsOfGroups(
+  groups: RatingGroup[],
+  priorGroups: Array<{ rating: number; _count: { _all: number } }>,
+): RatingStats | null {
+  const count = groups.reduce((n, g) => n + g._count._all, 0)
+  if (count === 0) return null
+
+  const distribution = [0, 0, 0, 0, 0]
+  let sum = 0
+  let lowCount = 0
+  let latestReviewAt: Date | null = null
+  const platformTotals = new Map<string, { count: number; sum: number }>()
+  for (const g of groups) {
+    const n = g._count._all
+    distribution[Math.min(4, Math.max(0, g.rating - 1))] += n
+    sum += g.rating * n
+    if (g.rating <= 2) lowCount += n
+    const at = g._max.reviewedAt
+    if (at !== null && (latestReviewAt === null || at > latestReviewAt)) latestReviewAt = at
+    const key = g.platform || "unknown"
+    const acc = platformTotals.get(key) ?? { count: 0, sum: 0 }
+    acc.count += n
+    acc.sum += g.rating * n
+    platformTotals.set(key, acc)
+  }
+
+  const priorCount = priorGroups.reduce((n, g) => n + g._count._all, 0)
+  const priorSum = priorGroups.reduce((t, g) => t + g.rating * g._count._all, 0)
+
+  return {
+    count,
+    average: sum / count,
+    priorAverage: priorCount === 0 ? null : priorSum / priorCount,
+    lowCount,
+    distribution,
+    latestReviewAt,
+    byPlatform: Array.from(platformTotals.entries())
+      .map(([platform, acc]) => ({ platform, count: acc.count, average: acc.sum / acc.count }))
+      .sort((a, b) => b.count - a.count || a.platform.localeCompare(b.platform)),
+  }
 }
 
 /**
@@ -93,42 +197,49 @@ export async function getRatingsSummary(input?: {
       ...(input?.storeId ? { id: input.storeId } : {}),
     }
 
-    const rows = await prisma.otterRating.findMany({
-      where: {
-        store: storeWhere,
-        reviewedAt: { gte: priorStart, lte: now },
-      },
-      select: {
-        id: true,
-        rating: true,
-        reviewText: true,
-        platform: true,
-        reviewedAt: true,
-        storeName: true,
-        orderItemNames: true,
-      },
-      orderBy: { reviewedAt: "desc" },
-    })
+    /*
+     * Counts and means come from grouped reads, and only the rows a caller can
+     * render are loaded. This used to load EVERY review in both windows, with
+     * its text and item names, to count stars in JS (the Overview tile prints
+     * the mean, the count and the 1-2 star count; `recent` is capped at six).
+     *
+     * The mean is sum / count over the integer ratings, exactly as before: the
+     * groups give the counts per (platform, rating), and `rating * count`
+     * summed is the same integer the row loop summed.
+     */
+    const inWindow = { store: storeWhere, reviewedAt: { gte: start, lte: now } }
+    const [groups, priorGroups, worst] = await Promise.all([
+      prisma.otterRating.groupBy({
+        by: ["platform", "rating"],
+        where: inWindow,
+        _count: { _all: true },
+        _max: { reviewedAt: true },
+      }),
+      prisma.otterRating.groupBy({
+        by: ["rating"],
+        where: { store: storeWhere, reviewedAt: { gte: priorStart, lt: start } },
+        _count: { _all: true },
+      }),
+      // Worst-first, newest first within a rating: the six `recent` shows.
+      prisma.otterRating.findMany({
+        where: inWindow,
+        select: RATING_ROW,
+        orderBy: [{ rating: "asc" }, { reviewedAt: "desc" }, { id: "asc" }],
+        take: RECENT_LIMIT,
+      }),
+    ])
 
-    let current = rows.filter((r) => r.reviewedAt >= start)
-    let prior = rows.filter((r) => r.reviewedAt < start)
     let stale = false
+    let stats: RatingStats | null = statsOfGroups(groups, priorGroups)
+    let recentRows = worst
 
     // Nothing in the window: fall back to the newest reviews on record and say
     // so, rather than disappearing and leaving the operator to assume nobody
     // has reviewed them.
-    if (current.length === 0) {
+    if (stats === null) {
       const fallback = await prisma.otterRating.findMany({
         where: { store: storeWhere },
-        select: {
-          id: true,
-          rating: true,
-          reviewText: true,
-          platform: true,
-          reviewedAt: true,
-          storeName: true,
-          orderItemNames: true,
-        },
+        select: RATING_ROW,
         orderBy: { reviewedAt: "desc" },
         take: 60,
       })
@@ -162,66 +273,30 @@ export async function getRatingsSummary(input?: {
           recent: [],
         }
       }
-      current = fallback
-      prior = []
+      // The same fold, over the (at most 60) rows themselves; no prior window.
+      stats = statsOfGroups(groupRows(fallback), [])
+      recentRows = worstFirst(fallback).slice(0, RECENT_LIMIT)
       stale = true
     }
-
-    const latestReviewAt = current[0]?.reviewedAt ?? null
-
-    const distribution = [0, 0, 0, 0, 0]
-    for (const r of current) {
-      const idx = Math.min(4, Math.max(0, r.rating - 1))
-      distribution[idx] += 1
-    }
-
-    const average = mean(current.map((r) => r.rating))
-    const priorAverage = mean(prior.map((r) => r.rating))
-
-    // Computed from the rows already in hand — no second query.
-    const platformTotals = new Map<string, { count: number; sum: number }>()
-    for (const r of current) {
-      const key = r.platform || "unknown"
-      const acc = platformTotals.get(key) ?? { count: 0, sum: 0 }
-      acc.count += 1
-      acc.sum += r.rating
-      platformTotals.set(key, acc)
-    }
-    const byPlatform = Array.from(platformTotals.entries())
-      .map(([platform, acc]) => ({
-        platform,
-        count: acc.count,
-        average: acc.sum / acc.count,
-      }))
-      .sort((a, b) => b.count - a.count || a.platform.localeCompare(b.platform))
+    if (stats === null) throw new Error("unreachable: a non-empty fallback has stats")
 
     return {
       windowDays,
       stale,
-      latestReviewAt:
-        current.reduce<Date | null>(
-          (max, r) => (max == null || r.reviewedAt > max ? r.reviewedAt : max),
-          null,
-        ) ?? latestReviewAt,
-      count: current.length,
-      average,
-      lowCount: current.filter((r) => r.rating <= 2).length,
-      distribution,
-      byPlatform,
+      latestReviewAt: stats.latestReviewAt,
+      count: stats.count,
+      average: stats.average,
+      lowCount: stats.lowCount,
+      distribution: stats.distribution,
+      byPlatform: stats.byPlatform,
       deltaVsPrior:
-        average != null && priorAverage != null ? average - priorAverage : null,
-      // Worst-first: a 5-star review needs no action, a 1-star one might.
-      recent: [...current]
-        .sort((a, b) =>
-          a.rating !== b.rating
-            ? a.rating - b.rating
-            : b.reviewedAt.getTime() - a.reviewedAt.getTime(),
-        )
-        .slice(0, RECENT_LIMIT)
-        .map(({ orderItemNames, ...r }) => ({
-          ...r,
-          orderItems: parseOrderItems(orderItemNames),
-        })),
+        stats.average != null && stats.priorAverage != null
+          ? stats.average - stats.priorAverage
+          : null,
+      recent: recentRows.map(({ orderItemNames, ...r }) => ({
+        ...r,
+        orderItems: parseOrderItems(orderItemNames),
+      })),
     }
   } catch (error) {
     console.error("getRatingsSummary error:", error)

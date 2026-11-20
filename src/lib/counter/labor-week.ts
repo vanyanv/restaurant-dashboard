@@ -1,3 +1,4 @@
+import { loadHarriPositionRows } from "@/lib/harri-position-rows"
 import { addDays } from "date-fns"
 import { prisma } from "@/lib/prisma"
 import { getScopedStores } from "@/lib/account-stores"
@@ -708,19 +709,9 @@ async function foldLaborWeekRows(input: {
   const { accountId, storeIds, startDate, endDate } = input
 
   const [positionRows, shiftRows, laborCost] = await Promise.all([
-    prisma.harriPositionDaily.findMany({
-      where: { storeId: { in: storeIds }, date: { gte: startDate, lte: endDate } },
-      select: {
-        storeId: true,
-        date: true,
-        positionCode: true,
-        positionName: true,
-        payType: true,
-        totalLabor: true,
-        actualSeconds: true,
-        overtimeAmount: true,
-      },
-    }),
+    // The shared read (`@/lib/harri-position-rows`): this week and the trend's
+    // wider span below come from one read of the widest span.
+    loadHarriPositionRows({ accountId, storeIds, startDate, endDate }),
     // isVirtual: false — an unfilled slot on the grid is not a published
     // hour, same reading as `labor-productivity-actions.ts`.
     prisma.harriShift.findMany({
@@ -912,10 +903,7 @@ async function foldLaborTrendRows(input: {
   const { accountId, storeIds, startDate, endDate } = input
 
   const [positionRows, laborCost] = await Promise.all([
-    prisma.harriPositionDaily.findMany({
-      where: { storeId: { in: storeIds }, date: { gte: startDate, lte: endDate } },
-      select: { date: true, actualSeconds: true },
-    }),
+    loadHarriPositionRows({ accountId, storeIds, startDate, endDate }),
     loadLaborCost({ accountId, storeIds, startDate, endDate }),
   ])
 

@@ -1,5 +1,4 @@
-import { prisma } from "@/lib/prisma"
-import { getAccountStores } from "@/lib/account-stores"
+import { getAccountStoreRows } from "@/lib/account-stores"
 
 /**
  * Owner-scope helpers shared by every chat tool. The chat layer never trusts
@@ -64,6 +63,21 @@ const ownedStoreIdsCache = new Map<
   { ids: string[]; expiresAt: number }
 >()
 
+/**
+ * ONE store read fills both lists below. `assertOwnerOwnsStores` needs every
+ * owned id and, for the unscoped default, the active stores: those were two
+ * store queries one after the other, over the same rows.
+ */
+async function readStoreCaches(accountId: string) {
+  const rows = await getAccountStoreRows(accountId)
+  const expiresAt = Date.now() + STORE_CACHE_TTL_MS
+  const stores = rows.filter((s) => s.isActive)
+  const ids = rows.map((s) => s.id)
+  storeCache.set(accountId, { stores, expiresAt })
+  ownedStoreIdsCache.set(accountId, { ids, expiresAt })
+  return { stores, ids }
+}
+
 /** Returns every active store on `accountId`. Used to inject the store
  * list into the system prompt and to resolve "all my stores" tool calls. */
 export async function listOwnerStores(
@@ -71,13 +85,7 @@ export async function listOwnerStores(
 ): Promise<OwnerStoreRow[]> {
   const cached = storeCache.get(accountId)
   if (cached && cached.expiresAt > Date.now()) return cached.stores
-
-  const stores = await getAccountStores(accountId)
-  storeCache.set(accountId, {
-    stores,
-    expiresAt: Date.now() + STORE_CACHE_TTL_MS,
-  })
-  return stores
+  return (await readStoreCaches(accountId)).stores
 }
 
 /** Drop the cached store list for one account. Call after store create/edit/
@@ -158,16 +166,7 @@ async function listOwnedStoreIds(accountId: string): Promise<string[]> {
   const cached = ownedStoreIdsCache.get(accountId)
   if (cached && cached.expiresAt > Date.now()) return cached.ids
 
-  const owned = await prisma.store.findMany({
-    where: { accountId },
-    select: { id: true },
-  })
-  const ids = owned.map((s) => s.id)
-  ownedStoreIdsCache.set(accountId, {
-    ids,
-    expiresAt: Date.now() + STORE_CACHE_TTL_MS,
-  })
-  return ids
+  return (await readStoreCaches(accountId)).ids
 }
 
 /** Render the owner's store list into a compact block for the system

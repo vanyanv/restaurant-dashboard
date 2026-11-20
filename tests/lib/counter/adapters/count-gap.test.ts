@@ -50,7 +50,7 @@ beforeEach(() => {
     { canonicalIngredientId: "ci_buns", qtyInRecipeUnit: 40, nativeUnit: "each" },
   ]
   prices = { ci_beef: 5, ci_buns: 0.5 }
-  asMock(prisma.store.findMany).mockResolvedValue([{ id: "store_a", name: "Hollywood" }])
+  asMock(prisma.store.findMany).mockResolvedValue([{ id: "store_a", name: "Hollywood", isActive: true }])
   asMock(prisma.stockCount.findMany).mockResolvedValue([
     { id: "sc_cur", countedAt: CUR },
     { id: "sc_prev", countedAt: PREV },

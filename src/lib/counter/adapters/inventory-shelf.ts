@@ -1,3 +1,4 @@
+import { getAccountStores } from "@/lib/account-stores"
 import { cache } from "react"
 import { prisma } from "@/lib/prisma"
 import { UNCONVERTED_UNIT } from "@/lib/inventory/anchor-line"
@@ -432,12 +433,9 @@ export function buildShelfLines(input: {
 }
 
 /** The account's active stores, once per request. */
-export const loadStores = cache((accountId: string) =>
-  prisma.store.findMany({
-    where: { accountId, isActive: true },
-    select: { id: true, name: true },
-    orderBy: { name: "asc" },
-  }),
+export const loadStores = cache(async (accountId: string) =>
+  // The request's one store read (`@/lib/account-stores`), active ones, by name.
+  (await getAccountStores(accountId)).map(({ id, name }) => ({ id, name })),
 )
 
 const loadItems = cache((accountId: string) => countItems(accountId))

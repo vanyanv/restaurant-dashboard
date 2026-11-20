@@ -11,12 +11,6 @@ export {
 } from "./store/crud-actions"
 
 export {
-  getOtterAnalytics,
-  getRevenueTrendData,
-  getDashboardAnalytics,
-} from "./store/dashboard-analytics-actions"
-
-export {
   getMenuCategoryAnalytics,
   getProductMixData,
 } from "./store/menu-analytics-actions"
@@ -24,7 +18,6 @@ export {
 export { getOrderPatterns } from "./store/order-patterns-actions"
 
 export {
-  getStorePnL,
   getAllStoresPnL,
   recomputeCogsForStore,
 } from "./store/pnl-actions"

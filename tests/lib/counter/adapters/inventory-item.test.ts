@@ -84,9 +84,9 @@ beforeEach(() => {
   h.running.mockReset()
 
   h.answers.set("store.findMany", () => [
-    { id: "store_a", name: "Glendale" },
-    { id: "store_b", name: "Hollywood" },
-    { id: "store_c", name: "Van Nuys" },
+    { id: "store_a", name: "Glendale", isActive: true },
+    { id: "store_b", name: "Hollywood", isActive: true },
+    { id: "store_c", name: "Van Nuys", isActive: true },
   ])
   // Fries sits on two shelves; beef has a tray nobody has sized; syrup has no unit to be counted in.
   h.answers.set("countItem.findMany", () => [

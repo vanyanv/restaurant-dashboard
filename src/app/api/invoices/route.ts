@@ -24,7 +24,9 @@ export async function GET(request: NextRequest) {
   const startDate = url.searchParams.get("startDate")
   const endDate = url.searchParams.get("endDate")
   const page = parseInt(url.searchParams.get("page") ?? "1", 10)
-  const limit = parseInt(url.searchParams.get("limit") ?? "25", 10)
+  // Clamped: an uncapped `limit` let one request read the whole table.
+  const rawLimit = parseInt(url.searchParams.get("limit") ?? "25", 10)
+  const limit = Number.isFinite(rawLimit) ? Math.min(100, Math.max(1, rawLimit)) : 25
 
   const where: {
     accountId: string
