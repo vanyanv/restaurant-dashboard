@@ -51,6 +51,19 @@ describe("withJobRun — expectsRows truthfulness", () => {
     expect(lastUpdateStatus()).toBe(JobStatus.SUCCESS)
   })
 
+  it("marks PARTIAL, with the reason, when the job calls markPartial", async () => {
+    await withJobRun("test.job", { triggeredBy: "manual" }, async ({ addRows, markPartial }) => {
+      addRows(5)
+      markPartial("categories: fetch failed for 1/3 days")
+    })
+    expect(lastUpdateStatus()).toBe(JobStatus.PARTIAL)
+    const last = vi.mocked(prisma.jobRun.update).mock.calls.at(-1)?.[0] as {
+      data: { errorMessage?: string; rowsWritten?: number }
+    }
+    expect(last.data.errorMessage).toBe("categories: fetch failed for 1/3 days")
+    expect(last.data.rowsWritten).toBe(5)
+  })
+
   it("still reports SUCCESS on zero rows when expectsRows is not set (back-compat)", async () => {
     await withJobRun("test.job", { triggeredBy: "manual" }, async () => {
       // zero rows, but caller never claimed it expected any

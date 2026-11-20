@@ -11,7 +11,9 @@ import { Prisma } from "@/generated/prisma/client"
 import {
   buildChangedUpsertSql,
   castValue,
+  buildDeleteMissingSql,
   dedupeByKey,
+  sumByKey,
   planChangedUpserts,
   upsertChangedRows,
   type ChangedUpsertSpec,
@@ -113,5 +115,76 @@ describe("dedupeByKey", () => {
       { k: "b", v: 2 },
       { k: "a", v: 3 },
     ])
+  })
+})
+
+describe("sumByKey", () => {
+  it("adds numeric fields of rows that share a key; null only when every duplicate is null", () => {
+    const out = sumByKey(
+      [
+        { k: "a", data: { qty: 2, sales: null as number | null } },
+        { k: "b", data: { qty: 1, sales: 5 } },
+        { k: "a", data: { qty: 3, sales: null } },
+        { k: "b", data: { qty: 1, sales: 2 } },
+      ],
+      (r) => r.k,
+    )
+    expect(out).toEqual([
+      { k: "a", data: { qty: 5, sales: null } },
+      { k: "b", data: { qty: 2, sales: 7 } },
+    ])
+  })
+})
+
+describe("buildDeleteMissingSql", () => {
+  const key = [
+    { name: "date", type: "date" as const },
+    { name: "category", type: "text" as const },
+  ]
+  const DAY = new Date("2026-05-01T00:00:00.000Z")
+
+  it("deletes, within the store and the given dates, every row not among the kept keys", () => {
+    const sql = buildDeleteMissingSql({
+      table: "OtterMenuCategory",
+      where: [{ column: { name: "storeId", type: "text" }, value: "s1" }],
+      dates: { column: "date", values: ["2026-05-01", "2026-05-02", "2026-05-01"] },
+      key,
+      keep: [
+        { storeId: "s1", date: DAY, category: "Sliders" },
+        { storeId: "s1", date: DAY, category: "Drinks" },
+      ],
+    })!
+    expect(flat(sql)).toBe(
+      ` DELETE FROM "OtterMenuCategory" AS t WHERE t."storeId" = ?::text AND t."date" = ANY(?::date[]) ` +
+        `AND NOT EXISTS ( SELECT 1 FROM unnest(?::date[], ?::text[]) AS k("k0", "k1") ` +
+        `WHERE t."date" = k."k0" AND t."category" = k."k1" ) `,
+    )
+    // three or so parameters whatever the row count; dates de-duplicated
+    expect(sql.values).toEqual([
+      "s1",
+      ["2026-05-01", "2026-05-02"],
+      ["2026-05-01", "2026-05-01"],
+      ["Sliders", "Drinks"],
+    ])
+  })
+
+  it("clears the scope when the fetch came back empty, and does nothing without dates", () => {
+    const empty = buildDeleteMissingSql({
+      table: "OtterMenuCategory",
+      where: [{ column: { name: "storeId", type: "text" }, value: "s1" }],
+      dates: { column: "date", values: ["2026-05-01"] },
+      key,
+      keep: [],
+    })!
+    expect(empty.values).toEqual(["s1", ["2026-05-01"], [], []])
+    expect(
+      buildDeleteMissingSql({
+        table: "OtterMenuCategory",
+        where: [{ column: { name: "storeId", type: "text" }, value: "s1" }],
+        dates: { column: "date", values: [] },
+        key,
+        keep: [],
+      }),
+    ).toBeNull()
   })
 })

@@ -22,6 +22,11 @@ export type InvoicePdfFetch = {
 
 let client: S3Client | null = null
 
+/** TCP/TLS connect to R2. */
+export const R2_CONNECTION_TIMEOUT_MS = 5_000
+/** One R2 request (invoice PDFs are a few MB at most). */
+export const R2_REQUEST_TIMEOUT_MS = 30_000
+
 function getR2Client(): { client: S3Client; bucket: string; endpoint: string } {
   const bucket = process.env.R2_BUCKET_NAME
   if (!bucket) throw new Error("R2_BUCKET_NAME is not set")
@@ -43,6 +48,14 @@ function getR2Client(): { client: S3Client; bucket: string; endpoint: string } {
       region: process.env.R2_REGION ?? "auto",
       endpoint,
       credentials: { accessKeyId, secretAccessKey },
+      // The SDK's default is no timeout at all: a stalled R2 connection held
+      // the invoice sync (and an owner opening a PDF) until the function was
+      // killed. Fail the request instead; the SDK's own retries still apply.
+      requestHandler: {
+        connectionTimeout: R2_CONNECTION_TIMEOUT_MS,
+        requestTimeout: R2_REQUEST_TIMEOUT_MS,
+        throwOnRequestTimeout: true,
+      },
     })
   }
 

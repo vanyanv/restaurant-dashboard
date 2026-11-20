@@ -7,6 +7,7 @@ import type { SyncProgressEvent } from "@/types/sync"
 import { isCronRequest, rateLimit, RATE_LIMIT_TIERS } from "@/lib/rate-limit"
 import { bustTags } from "@/lib/cache/cached"
 import { logger } from "@/lib/logger"
+import { shouldSyncStore } from "@/lib/store-lifecycle"
 import {
   runMetricsSyncForStore,
   totalChangedRows,
@@ -31,8 +32,16 @@ interface SyncResult {
   cogsDaysProcessed: number
   cogsRowsWritten: number
   storesProcessed: number
-  /** Rows actually inserted or updated (unchanged rows are not rewritten). */
+  /** Rows actually inserted, updated or removed (unchanged rows are not rewritten). */
   rowsChanged: number
+  /**
+   * Otter requests that failed or came back truncated (a day of a menu
+   * phase, or a whole daily/ratings fetch). Those dates were not written or
+   * reconciled, and each affected store's JobRun is PARTIAL.
+   */
+  fetchFailures: number
+  /** Stores whose run was incomplete (PARTIAL) or failed outright. */
+  storesIncomplete: number
 }
 
 const EMPTY_COUNTS = {
@@ -44,12 +53,22 @@ const EMPTY_COUNTS = {
   cogs: 0,
 }
 
+/**
+ * `accountId` is the tenancy boundary: an owner's manual sync touches only
+ * their account's stores. The cron caller has no session and syncs every
+ * account (null). Either way the store set goes through `shouldSyncStore`,
+ * the predicate every other Otter job uses, so a pre-open store is skipped.
+ */
 async function runSyncAllStores(
   emit: ProgressEmitter,
   triggeredBy: "cron" | "manual",
+  accountId: string | null,
 ): Promise<SyncResult> {
   const otterStores = await prisma.otterStore.findMany({
-    include: { store: { select: { id: true, name: true, isActive: true } } },
+    ...(accountId ? { where: { store: { accountId } } } : {}),
+    include: {
+      store: { select: { id: true, name: true, isActive: true, lifecycleStage: true } },
+    },
   })
 
   if (otterStores.length === 0) {
@@ -76,10 +95,12 @@ async function runSyncAllStores(
       cogsRowsWritten: 0,
       storesProcessed: 0,
       rowsChanged: 0,
+      fetchFailures: 0,
+      storesIncomplete: 0,
     }
   }
 
-  const activeOtterStores = otterStores.filter((os) => os.store.isActive)
+  const activeOtterStores = otterStores.filter((os) => shouldSyncStore(os.store))
 
   // Group Otter UUIDs by internal storeId (multiple UUIDs may map to one store).
   const storeGroups = new Map<string, string[]>()
@@ -112,6 +133,8 @@ async function runSyncAllStores(
     ratingsSynced: 0,
     ratingsFailed: 0,
     rowsChanged: 0,
+    fetchFailures: 0,
+    storesIncomplete: 0,
   }
 
   for (let storeIdx = 0; storeIdx < storeIds.length; storeIdx++) {
@@ -155,6 +178,7 @@ async function runSyncAllStores(
       // Don't abort the loop on a single store's failure — continue with the
       // others so one bad store can't lock out the dashboard. Per-store
       // JobRun row already captured the FAILURE inside the runner.
+      totals.storesIncomplete++
       continue
     }
 
@@ -169,6 +193,13 @@ async function runSyncAllStores(
     totals.ratingsSynced += result.ratings.synced
     totals.ratingsFailed += result.ratings.failed
     totals.rowsChanged += totalChangedRows(result)
+    totals.fetchFailures +=
+      result.daily.fetchFailed +
+      result.categories.fetchFailed +
+      result.items.fetchFailed +
+      result.modifiers.fetchFailed +
+      result.ratings.fetchFailed
+    if (result.problems.length > 0) totals.storesIncomplete++
 
     aggregateCounts.daily += result.daily.synced
     aggregateCounts.categories += result.categories.synced
@@ -197,7 +228,10 @@ async function runSyncAllStores(
     revalidatePath("/dashboard/pnl", "layout")
   }
 
-  const message = `Otter sync completed: ${totals.synced} daily rows, ${totals.categorySynced} categories, ${totals.itemSynced} items, ${totals.modifierSynced} modifiers, ${totals.ratingsSynced} ratings, ${totals.rowsChanged} changed (${numStores} stores)`
+  const message = `Otter sync completed: ${totals.synced} daily rows, ${totals.categorySynced} categories, ${totals.itemSynced} items, ${totals.modifierSynced} modifiers, ${totals.ratingsSynced} ratings, ${totals.rowsChanged} changed (${numStores} stores)` +
+    (totals.storesIncomplete > 0
+      ? `; INCOMPLETE for ${totals.storesIncomplete} store(s), ${totals.fetchFailures} failed Otter fetches`
+      : "")
 
   emit({
     phase: "complete",
@@ -231,6 +265,8 @@ async function runSyncAllStores(
     cogsRowsWritten: 0,
     storesProcessed: numStores,
     rowsChanged: totals.rowsChanged,
+    fetchFailures: totals.fetchFailures,
+    storesIncomplete: totals.storesIncomplete,
   }
 }
 
@@ -240,6 +276,7 @@ export async function POST(request: NextRequest) {
 
   // Allow Vercel Cron or authenticated owner
   const fromCron = isCronRequest(request)
+  let accountId: string | null = null
   if (!fromCron) {
     const session = await getServerSession(authOptions)
     if (!session?.user) {
@@ -248,6 +285,7 @@ export async function POST(request: NextRequest) {
     if (!hasOwnerAccess(session.user.role)) {
       return NextResponse.json({ error: "Only owners can sync Otter data" }, { status: 403 })
     }
+    accountId = session.user.accountId
   }
 
   const wantsSSE = request.headers.get("accept")?.includes("text/event-stream")
@@ -265,7 +303,7 @@ export async function POST(request: NextRequest) {
           }
         }
         try {
-          await runSyncAllStores(emit, triggeredBy)
+          await runSyncAllStores(emit, triggeredBy, accountId)
         } catch (error) {
           logger.error("Otter sync error:", error)
           emit({
@@ -294,7 +332,7 @@ export async function POST(request: NextRequest) {
 
   // JSON path (cron or non-SSE clients)
   try {
-    const result = await runSyncAllStores(() => {}, triggeredBy)
+    const result = await runSyncAllStores(() => {}, triggeredBy, accountId)
     return NextResponse.json(result)
   } catch (error) {
     logger.error("Otter sync error:", error)

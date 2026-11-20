@@ -103,4 +103,13 @@ describe("GET /api/cron/otter/stores", () => {
     const body = await (await GET(req("?skipRecent=1"))).json()
     expect(body.stores.map((s: { storeId: string }) => s.storeId)).toEqual(["s-a", "s-b"])
   })
+
+  it("does not let a run with failed fetches stand in for the scheduled sync", async () => {
+    db.jobRun.findMany.mockResolvedValue([
+      run("s-a", { problems: ["categories: fetch failed for 1/4 days (2026-11-18)"] }),
+      run("s-b", { problems: [] }),
+    ])
+    const body = await (await GET(req("?skipRecent=1"))).json()
+    expect(body.stores.map((s: { storeId: string }) => s.storeId)).toEqual(["s-a"])
+  })
 })

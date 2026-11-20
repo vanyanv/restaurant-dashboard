@@ -23,6 +23,9 @@ export function coversScheduledWindow(startedAt: Date, metadata: unknown): boole
   if (!metadata || typeof metadata !== "object") return false
   const m = metadata as Record<string, unknown>
   if (m.dailyOnly !== false || m.includeRatings !== true) return false
+  // A run with failed or truncated fetches is recorded PARTIAL and so never
+  // read here; this is the same guard for any row that slipped through.
+  if (Array.isArray(m.problems) && m.problems.length > 0) return false
   const start = typeof m.windowStart === "string" ? Date.parse(m.windowStart) : NaN
   const end = typeof m.windowEnd === "string" ? Date.parse(m.windowEnd) : NaN
   if (!Number.isFinite(start) || !Number.isFinite(end)) return false

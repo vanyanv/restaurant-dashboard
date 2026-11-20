@@ -19,6 +19,14 @@ import { JobStatus, Prisma } from "@/generated/prisma/client"
 export type JobRunCtx = {
   jobRunId: string
   addRows: (n: number) => void
+  /**
+   * Record the run as PARTIAL instead of SUCCESS when it completes without
+   * throwing but could not do all of its work (an upstream fetch for some
+   * days failed, a response hit its row cap). The reason lands in
+   * `errorMessage`. A PARTIAL run never counts as a recent success, so the
+   * next scheduled run is not skipped on its account.
+   */
+  markPartial: (reason: string) => void
 }
 
 export type JobRunOpts = {
@@ -183,13 +191,17 @@ export async function withJobRun<T>(
 
   let rows = 0
   const addRows = (n: number) => { rows += n }
+  const partialReasons: string[] = []
+  const markPartial = (reason: string) => { partialReasons.push(reason) }
 
   const start = Date.now()
 
   try {
-    const result = await fn({ jobRunId: run.id, addRows })
+    const result = await fn({ jobRunId: run.id, addRows, markPartial })
     const status =
-      opts.expectsRows && rows === 0 ? JobStatus.PARTIAL : JobStatus.SUCCESS
+      partialReasons.length > 0 || (opts.expectsRows && rows === 0)
+        ? JobStatus.PARTIAL
+        : JobStatus.SUCCESS
     await prisma.jobRun.update({
       where: { id: run.id },
       data: {
@@ -197,6 +209,9 @@ export async function withJobRun<T>(
         completedAt: new Date(),
         durationMs: Date.now() - start,
         rowsWritten: rows,
+        ...(partialReasons.length > 0
+          ? { errorMessage: partialReasons.join("; ").slice(0, 4000) }
+          : {}),
       },
     })
     return result

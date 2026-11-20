@@ -37,6 +37,7 @@ vi.mock("@/lib/prisma", () => ({
       raw.push(sql)
       return affected(sql)
     }),
+    $transaction: vi.fn(async (ops: Promise<unknown>[]) => Promise.all(ops)),
   },
 }))
 
@@ -147,6 +148,34 @@ describe("runHarriLaborSync — change-only bulk writes", () => {
     const r = await runHarriLaborSync(opts)
     expect(r.rowsChanged).toBe(2)
     expect(r.daysWritten).toBe(3)
+  })
+
+  it("deletes the positions a returned week no longer carries, with the upsert, for that week's days only", async () => {
+    affected = (sql) => (sql.sql.includes(`DELETE FROM "HarriPositionDaily"`) ? 3 : 0)
+    const r = await runHarriLaborSync(opts)
+
+    const [del] = raw.filter((w) => w.sql.includes(`DELETE FROM "HarriPositionDaily"`))
+    expect(del.sql).toContain("NOT EXISTS")
+    expect(del.values).toContain(STORE)
+    // the dates Harri returned, and the key of the row it still carries
+    expect(del.values).toContainEqual(["2026-11-16"])
+    expect(del.values).toContainEqual(["cook"])
+    expect(del.values).toContainEqual(["HOURLY"])
+    expect(prisma.$transaction).toHaveBeenCalledTimes(1)
+    expect(r.rowsChanged).toBe(3)
+  })
+
+  it("keeps a failed week's positions: nothing to reconcile", async () => {
+    const base = vi.mocked(harriFetch).getMockImplementation()!
+    vi.mocked(harriFetch).mockImplementation(async (url: string) => {
+      if (url.includes("positions")) throw new Error("Harri API error 500 on /positions")
+      return base(url)
+    })
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {})
+    const r = await runHarriLaborSync(opts)
+    warn.mockRestore()
+    expect(raw.some((w) => w.sql.includes(`DELETE FROM "HarriPositionDaily"`))).toBe(false)
+    expect(r.positionsWritten).toBe(0)
   })
 })
 

@@ -42,8 +42,12 @@ async function main() {
   const { prisma } = await import("../src/lib/prisma")
   const { runHarriLaborSync } = await import("../src/lib/harri-labor-sync")
 
-  const endDate = new Date()
-  endDate.setUTCHours(0, 0, 0, 0)
+  const { businessQueryDate } = await import("../src/lib/counter/business-date")
+
+  // Today's LA business date, in the @db.Date encoding. UTC midnight was
+  // already tomorrow from 4-5pm Pacific, so every evening run wrote a labor
+  // row for a day that had not started.
+  const endDate = businessQueryDate(new Date())
   const startDate = new Date(endDate)
   startDate.setUTCDate(startDate.getUTCDate() - (days - 1))
 

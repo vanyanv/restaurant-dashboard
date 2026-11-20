@@ -25,9 +25,12 @@ import {
 } from "@/lib/otter"
 import type { SyncProgressEvent } from "@/types/sync"
 import { withJobRun } from "@/lib/monitoring/job-run"
+import { Prisma } from "@/generated/prisma/client"
 import {
+  buildDeleteMissingSql,
   dedupeByKey,
   planChangedUpserts,
+  sumByKey,
   type ChangedUpsertSpec,
   type ColumnSpec,
   type UpsertRow,
@@ -97,12 +100,21 @@ function mergeDailyRecords(records: DailyRecord[]): DailyRecord[] {
 /**
  * `synced` = rows sent to the database (new, changed or unchanged), as before.
  * `changed` = rows actually inserted or updated; an unchanged row is no longer
- * rewritten, so its `syncedAt` stays put. Callers gate cache busts on it.
+ * rewritten, so its `syncedAt` stays put. Callers gate cache busts on it
+ * (with `removed`, through `totalChangedRows`).
+ * `failed` = rows whose write failed.
+ * `removed` = rows deleted because Otter no longer returns them for a date
+ * whose fetch fully succeeded (a voided item, a payment method reclassified).
+ * `fetchFailed` = requests (a day, or the whole window for daily/ratings)
+ * that failed or came back truncated at their row cap. Their dates are
+ * neither reconciled nor counted as synced, and the run is recorded PARTIAL.
  */
 export type PhaseCounts = {
   synced: number
   failed: number
   changed: number
+  removed: number
+  fetchFailed: number
 }
 
 export interface MetricsSyncResult {
@@ -114,17 +126,18 @@ export interface MetricsSyncResult {
   ratings: PhaseCounts
   windowStart: Date
   windowEnd: Date
+  /**
+   * Why this run is incomplete (failed or truncated fetches, failed writes).
+   * Empty on a complete run. Non-empty marks the JobRun PARTIAL and leaves
+   * `OtterStore.lastSyncAt` where it was.
+   */
+  problems: string[]
 }
 
-/** Rows inserted or updated across every phase of one store's sync. */
+/** Rows inserted, updated or removed across every phase of one store's sync. */
 export function totalChangedRows(result: MetricsSyncResult): number {
-  return (
-    result.daily.changed +
-    result.categories.changed +
-    result.items.changed +
-    result.modifiers.changed +
-    result.ratings.changed
-  )
+  const phases = [result.daily, result.categories, result.items, result.modifiers, result.ratings]
+  return phases.reduce((sum, p) => sum + p.changed + p.removed, 0)
 }
 
 const float = (name: string): ColumnSpec => ({ name, type: "float" })
@@ -208,20 +221,53 @@ export const RATING_UPSERT: ChangedUpsertSpec = {
   touch: "syncedAt",
 }
 
+const emptyCounts = (): PhaseCounts => ({
+  synced: 0,
+  failed: 0,
+  changed: 0,
+  removed: 0,
+  fetchFailed: 0,
+})
+
 /**
- * Write one phase's rows, only touching new or changed ones. A failing
- * statement (one chunk of up to 1000 rows) is logged and counted as failed,
- * and the phase carries on — the same contract the 50-row transactions had.
+ * Write one phase's rows, only touching new or changed ones.
+ *
+ * Without `reconcile`, each statement (one chunk of up to 1000 rows) is its
+ * own write: a failing chunk is logged and counted as failed, and the phase
+ * carries on. With `reconcile` (the DELETE of rows Otter stopped returning
+ * for the dates that fetched cleanly), the upserts and that delete run in one
+ * transaction, like `hourly-sync.ts`: either the dates are fully replaced or
+ * nothing moves, and a failure counts every row as failed.
  */
 async function writeChangedPhase(
   label: string,
   spec: ChangedUpsertSpec,
   rows: UpsertRow[],
   onChunk: (processed: number, counts: PhaseCounts) => void,
+  reconcile: Prisma.Sql | null = null,
 ): Promise<PhaseCounts> {
-  const counts: PhaseCounts = { synced: 0, failed: 0, changed: 0 }
+  const counts = emptyCounts()
+  const plan = planChangedUpserts(spec, rows)
+
+  if (reconcile) {
+    try {
+      const results = await prisma.$transaction([
+        ...plan.map(({ sql }) => prisma.$executeRaw(sql)),
+        prisma.$executeRaw(reconcile),
+      ])
+      counts.removed = results[results.length - 1]
+      counts.changed = results.slice(0, -1).reduce((sum, n) => sum + n, 0)
+      counts.synced = rows.length
+    } catch (err) {
+      console.error(`[metrics-sync] Failed ${label} write of ${rows.length} rows:`, err)
+      counts.failed = rows.length
+    }
+    onChunk(rows.length, counts)
+    return counts
+  }
+
   let processed = 0
-  for (const { sql, rowCount } of planChangedUpserts(spec, rows)) {
+  for (const { sql, rowCount } of plan) {
     try {
       counts.changed += await prisma.$executeRaw(sql)
       counts.synced += rowCount
@@ -233,6 +279,69 @@ async function writeChangedPhase(
     onChunk(processed, counts)
   }
   return counts
+}
+
+/**
+ * True when a response holds as many rows as the request's `limit`.
+ * `queryOtterEndpoint` reads one response page, so `limit` is a hard cap:
+ * landing on it means Otter had more and the rest were dropped.
+ */
+function hitRowCap(rows: readonly unknown[], body: object): boolean {
+  const limit = (body as { limit?: unknown }).limit
+  return typeof limit === "number" && rows.length >= limit
+}
+
+const ymd = (d: Date) => d.toISOString().slice(0, 10)
+
+type DayFetch = { day: Date; rows: OtterRow[]; ok: boolean }
+
+/**
+ * One request per day, five at a time. A day whose request throws or comes
+ * back at its row cap is `ok: false`: its rows (if any) are not written and
+ * its date is not reconciled.
+ */
+async function fetchPerDay(
+  storeId: string,
+  label: string,
+  days: Date[],
+  buildBody: (day: Date) => object,
+  onProgress: (completed: number, total: number) => void,
+): Promise<DayFetch[]> {
+  const tasks = days.map((day) => async (): Promise<DayFetch> => {
+    const body = buildBody(day)
+    try {
+      const rows: OtterRow[] = await queryMetrics(body)
+      if (hitRowCap(rows, body)) {
+        console.error(
+          `[metrics-sync ${storeId}] ${label} for ${ymd(day)} returned ${rows.length} rows, ` +
+            `its row cap: truncated, not written`,
+        )
+        return { day, rows: [], ok: false }
+      }
+      return { day, rows, ok: true }
+    } catch (err) {
+      console.error(`[metrics-sync ${storeId}] ${label} sync error for ${ymd(day)}:`, err)
+      return { day, rows: [], ok: false }
+    }
+  })
+  return withConcurrency(tasks, 5, onProgress)
+}
+
+function failedDaysProblem(label: string, results: DayFetch[]): string | null {
+  const failed = results.filter((r) => !r.ok).map((r) => ymd(r.day))
+  if (failed.length === 0) return null
+  return `${label}: fetch failed for ${failed.length}/${results.length} days (${failed.slice(0, 10).join(", ")})`
+}
+
+function menuFields(row: OtterRow): Record<string, number> {
+  return {
+    fpQuantitySold: (row["fp_order_items_quantity_sold"] as number) ?? 0,
+    fpTotalInclModifiers: (row["fp_order_items_total_include_modifiers"] as number) ?? 0,
+    fpTotalSales: (row["fp_order_items_total_sales"] as number) ?? 0,
+    tpQuantitySold: (row["third_party_item_quantity_sold"] as number) ?? 0,
+    tpTotalInclModifiers: (row["third_party_item_total_include_modifiers"] as number) ?? 0,
+    tpTotalSales: (row["third_party_item_total_sales"] as number) ?? 0,
+  }
 }
 
 export interface MetricsSyncOpts {
@@ -250,6 +359,9 @@ export interface MetricsSyncOpts {
 /**
  * Sync metrics for ONE internal store across the given window.
  * Wraps the work in withJobRun so each call produces a per-store JobRun row.
+ * A run with failed or truncated fetches (or failed writes) completes but is
+ * recorded PARTIAL, with the reasons in `metadata.problems`, so it never
+ * stands in for the scheduled sync (`coversScheduledWindow`).
  */
 export async function runMetricsSyncForStore(
   storeId: string,
@@ -276,7 +388,7 @@ export async function runMetricsSyncForStore(
         ...(opts.metadata ?? {}),
       },
     },
-    async ({ jobRunId, addRows }) => {
+    async ({ jobRunId, addRows, markPartial }) => {
       const result = await runMetricsSyncInner(
         storeId,
         otterStoreIds,
@@ -291,6 +403,7 @@ export async function runMetricsSyncForStore(
         result.modifiers.synced +
         result.ratings.synced
       addRows(totalRows)
+      if (result.problems.length > 0) markPartial(result.problems.join("; "))
       // Enrich the JobRun with per-phase counts so the monitoring grid can
       // surface durations + rows alongside phase-level breakdowns.
       await prisma.jobRun.update({
@@ -308,6 +421,7 @@ export async function runMetricsSyncForStore(
             items: result.items,
             modifiers: result.modifiers,
             ratings: result.ratings,
+            problems: result.problems,
           },
         },
       })
@@ -329,6 +443,8 @@ async function runMetricsSyncInner(
   const counts = { daily: 0, categories: 0, items: 0, modifiers: 0, ratings: 0, cogs: 0 }
   const otterUuidSet = new Set(otterStoreIds)
   const days = getDateRange(windowStart, windowEnd)
+  const problems: string[] = []
+  const storeScope = [{ column: { name: "storeId", type: "text" as const }, value: storeId }]
 
   // ─── Phase 1: Daily summaries ───
   emit({
@@ -339,8 +455,15 @@ async function runMetricsSyncInner(
     counts,
   })
 
+  // One request for the whole window. A throw here fails the run (FAILURE),
+  // as before; a truncated response writes what came back but reconciles
+  // nothing and marks the run PARTIAL.
   const dailyBody = buildDailySyncBody(otterStoreIds, windowStart, windowEnd)
   const dailyRows = await queryMetrics(dailyBody)
+  const dailyTruncated = hitRowCap(dailyRows, dailyBody)
+  if (dailyTruncated) {
+    problems.push(`daily: response hit its row cap (${dailyRows.length} rows), not reconciled`)
+  }
 
   const rawDaily = dailyRows
     .filter((row: OtterRow) => {
@@ -388,6 +511,13 @@ async function runMetricsSyncInner(
   // — e.g. css-pos CASH has one "sales" row and one "till session" row sharing the
   // unique key. Sequential upserts lose data to last-write; merge first.
   const dailyRecords = mergeDailyRecords(rawDaily)
+  const dailyUpserts = dailyRecords.map(({ date, platform, paymentMethod, fields }) => ({
+    storeId,
+    date,
+    platform,
+    paymentMethod,
+    ...fields,
+  }))
 
   emit({
     phase: "daily",
@@ -400,13 +530,7 @@ async function runMetricsSyncInner(
   const daily = await writeChangedPhase(
     `${storeId} daily`,
     DAILY_SUMMARY_UPSERT,
-    dailyRecords.map(({ date, platform, paymentMethod, fields }) => ({
-      storeId,
-      date,
-      platform,
-      paymentMethod,
-      ...fields,
-    })),
+    dailyUpserts,
     (processed, phase) => {
       counts.daily = phase.synced
       emit({
@@ -417,7 +541,17 @@ async function runMetricsSyncInner(
         counts,
       })
     },
+    dailyTruncated
+      ? null
+      : buildDeleteMissingSql({
+          table: DAILY_SUMMARY_UPSERT.table,
+          where: storeScope,
+          dates: { column: "date", values: days.map(ymd) },
+          key: DAILY_SUMMARY_UPSERT.conflict.filter((c) => c.name !== "storeId"),
+          keep: dailyUpserts,
+        }),
   )
+  if (dailyTruncated) daily.fetchFailed = 1
 
   emit({
     phase: "daily",
@@ -427,10 +561,9 @@ async function runMetricsSyncInner(
     counts,
   })
 
-  const empty = (): PhaseCounts => ({ synced: 0, failed: 0, changed: 0 })
-  let categories = empty()
-  let items = empty()
-  let modifiers = empty()
+  let categories = emptyCounts()
+  let items = emptyCounts()
+  let modifiers = emptyCounts()
 
   if (!dailyOnly) {
     // ─── Phase 2: Menu categories ───
@@ -442,28 +575,22 @@ async function runMetricsSyncInner(
       counts,
     })
 
-    const categoryTasks = days.map((day) => () =>
-      queryMetrics(buildMenuCategoryBatchBody(otterStoreIds, day))
-        .then((rows: OtterRow[]) => ({ day, rows }))
-        .catch((err: unknown) => {
-          console.error(
-            `[metrics-sync ${storeId}] Category sync error for ${day.toISOString().slice(0, 10)}:`,
-            err,
-          )
-          return { day, rows: [] as OtterRow[] }
-        }),
+    const categoryResults = await fetchPerDay(
+      storeId,
+      "Category",
+      days,
+      (day) => buildMenuCategoryBatchBody(otterStoreIds, day),
+      (completed, total) => {
+        const fetchPct = (completed / total) * 40
+        emit({
+          phase: "categories",
+          status: "fetching",
+          totalProgress: computeTotalProgress(100, fetchPct, 0),
+          detail: `Store ${storeId}: categories (${completed}/${total} days)…`,
+          counts,
+        })
+      },
     )
-
-    const categoryResults = await withConcurrency(categoryTasks, 5, (completed, total) => {
-      const fetchPct = (completed / total) * 40
-      emit({
-        phase: "categories",
-        status: "fetching",
-        totalProgress: computeTotalProgress(100, fetchPct, 0),
-        detail: `Store ${storeId}: categories (${completed}/${total} days)…`,
-        counts,
-      })
-    })
 
     const categoryRecords = categoryResults.flatMap(({ day, rows }) => {
       const date = new Date(day)
@@ -476,26 +603,27 @@ async function runMetricsSyncInner(
         })
         .map((row: OtterRow) => {
           const category = (row["menu_parent_entity_name"] as string | null) ?? "Uncategorized"
-          const data = {
-            fpQuantitySold: (row["fp_order_items_quantity_sold"] as number) ?? 0,
-            fpTotalInclModifiers: (row["fp_order_items_total_include_modifiers"] as number) ?? 0,
-            fpTotalSales: (row["fp_order_items_total_sales"] as number) ?? 0,
-            tpQuantitySold: (row["third_party_item_quantity_sold"] as number) ?? 0,
-            tpTotalInclModifiers: (row["third_party_item_total_include_modifiers"] as number) ?? 0,
-            tpTotalSales: (row["third_party_item_total_sales"] as number) ?? 0,
-          }
-          return { date, category, data }
+          return { date, category, data: menuFields(row) }
         })
     })
 
-    const categoryRows = dedupeByKey(
+    // The category request groups by `store`, so a store with two Otter
+    // UUIDs gets one row per UUID for the same category. Add them: keeping
+    // the last one (as `dedupeByKey` did) dropped one UUID's sales.
+    const categoryRows = sumByKey(
       categoryRecords,
       (r) => `${r.date.toISOString()}|${r.category}`,
     )
+    const categoryUpserts = categoryRows.map(({ date, category, data }) => ({
+      storeId,
+      date,
+      category,
+      ...data,
+    }))
     categories = await writeChangedPhase(
       `${storeId} category`,
       MENU_CATEGORY_UPSERT,
-      categoryRows.map(({ date, category, data }) => ({ storeId, date, category, ...data })),
+      categoryUpserts,
       (processed, phase) => {
         counts.categories = phase.synced
         emit({
@@ -506,7 +634,17 @@ async function runMetricsSyncInner(
           counts,
         })
       },
+      buildDeleteMissingSql({
+        table: MENU_CATEGORY_UPSERT.table,
+        where: storeScope,
+        dates: { column: "date", values: categoryResults.filter((r) => r.ok).map((r) => ymd(r.day)) },
+        key: MENU_CATEGORY_UPSERT.conflict.filter((c) => c.name !== "storeId"),
+        keep: categoryUpserts,
+      }),
     )
+    categories.fetchFailed = categoryResults.filter((r) => !r.ok).length
+    const categoryProblem = failedDaysProblem("categories", categoryResults)
+    if (categoryProblem) problems.push(categoryProblem)
 
     emit({
       phase: "categories",
@@ -525,73 +663,35 @@ async function runMetricsSyncInner(
       counts,
     })
 
-    const itemTasks = days.map((day) => () =>
-      queryMetrics(buildMenuItemSyncBody(otterStoreIds, day))
-        .then((rows: OtterRow[]) => ({ day, rows }))
-        .catch((err: unknown) => {
-          console.error(
-            `[metrics-sync ${storeId}] Item sync error for ${day.toISOString().slice(0, 10)}:`,
-            err,
-          )
-          return { day, rows: [] as OtterRow[] }
-        }),
-    )
-
-    const itemResults = await withConcurrency(itemTasks, 5, (completed, total) => {
-      const fetchPct = (completed / total) * 40
-      emit({
-        phase: "items",
-        status: "fetching",
-        totalProgress: computeTotalProgress(100, 100, fetchPct),
-        detail: `Store ${storeId}: items (${completed}/${total} days)…`,
-        counts,
-      })
-    })
-
-    const itemRecords = itemResults.flatMap(({ day, rows }) => {
-      const date = new Date(day)
-      date.setUTCHours(0, 0, 0, 0)
-      return rows.map((row: OtterRow) => {
-        const category = (row["menu_parent_entity_name"] as string | null) ?? "Uncategorized"
-        const itemName = (row["item"] as string | null) ?? "Unknown"
-        const data = {
-          fpQuantitySold: (row["fp_order_items_quantity_sold"] as number) ?? 0,
-          fpTotalInclModifiers: (row["fp_order_items_total_include_modifiers"] as number) ?? 0,
-          fpTotalSales: (row["fp_order_items_total_sales"] as number) ?? 0,
-          tpQuantitySold: (row["third_party_item_quantity_sold"] as number) ?? 0,
-          tpTotalInclModifiers: (row["third_party_item_total_include_modifiers"] as number) ?? 0,
-          tpTotalSales: (row["third_party_item_total_sales"] as number) ?? 0,
-        }
-        return { date, category, itemName, data }
-      })
-    })
-
-    const itemRows = dedupeByKey(
-      itemRecords,
-      (r) => `${r.date.toISOString()}|${r.category}|${r.itemName}`,
-    )
-    items = await writeChangedPhase(
-      `${storeId} item`,
-      MENU_ITEM_UPSERT,
-      itemRows.map(({ date, category, itemName, data }) => ({
-        storeId,
-        date,
-        category,
-        itemName,
-        isModifier: false,
-        ...data,
-      })),
-      (processed, phase) => {
-        counts.items = phase.synced
+    const itemResults = await fetchPerDay(
+      storeId,
+      "Item",
+      days,
+      (day) => buildMenuItemSyncBody(otterStoreIds, day),
+      (completed, total) => {
+        const fetchPct = (completed / total) * 40
         emit({
           phase: "items",
-          status: "writing",
-          totalProgress: computeTotalProgress(100, 100, 40 + (processed / itemRows.length) * 60),
-          detail: `Store ${storeId}: writing items (${processed}/${itemRows.length})…`,
+          status: "fetching",
+          totalProgress: computeTotalProgress(100, 100, fetchPct),
+          detail: `Store ${storeId}: items (${completed}/${total} days)…`,
           counts,
         })
       },
     )
+
+    items = await writeMenuItemPhase(storeId, false, itemResults, (processed, total, phase) => {
+      counts.items = phase.synced
+      emit({
+        phase: "items",
+        status: "writing",
+        totalProgress: computeTotalProgress(100, 100, 40 + (processed / total) * 60),
+        detail: `Store ${storeId}: writing items (${processed}/${total})…`,
+        counts,
+      })
+    })
+    const itemProblem = failedDaysProblem("items", itemResults)
+    if (itemProblem) problems.push(itemProblem)
 
     // ─── Phase 4: Modifiers ───
     emit({
@@ -602,82 +702,39 @@ async function runMetricsSyncInner(
       counts,
     })
 
-    const modifierTasks = days.map((day) => () =>
-      queryMetrics(buildModifierSyncBody(otterStoreIds, day))
-        .then((rows: OtterRow[]) => ({ day, rows }))
-        .catch((err: unknown) => {
-          console.error(
-            `[metrics-sync ${storeId}] Modifier sync error for ${day.toISOString().slice(0, 10)}:`,
-            err,
-          )
-          return { day, rows: [] as OtterRow[] }
-        }),
-    )
-
-    const modifierResults = await withConcurrency(modifierTasks, 5, (completed, total) => {
-      const fetchPct = (completed / total) * 40
-      emit({
-        phase: "modifiers",
-        status: "fetching",
-        totalProgress: computeTotalProgress(100, 100, 100, fetchPct),
-        detail: `Store ${storeId}: modifiers (${completed}/${total} days)…`,
-        counts,
-      })
-    })
-
-    const modifierRecords = modifierResults.flatMap(({ day, rows }) => {
-      const date = new Date(day)
-      date.setUTCHours(0, 0, 0, 0)
-      return rows.map((row: OtterRow) => {
-        const category = (row["menu_parent_entity_name"] as string | null) ?? "Uncategorized"
-        const itemName = (row["item"] as string | null) ?? "Unknown"
-        const data = {
-          fpQuantitySold: (row["fp_order_items_quantity_sold"] as number) ?? 0,
-          fpTotalInclModifiers: (row["fp_order_items_total_include_modifiers"] as number) ?? 0,
-          fpTotalSales: (row["fp_order_items_total_sales"] as number) ?? 0,
-          tpQuantitySold: (row["third_party_item_quantity_sold"] as number) ?? 0,
-          tpTotalInclModifiers: (row["third_party_item_total_include_modifiers"] as number) ?? 0,
-          tpTotalSales: (row["third_party_item_total_sales"] as number) ?? 0,
-        }
-        return { date, category, itemName, data }
-      })
-    })
-
-    const modifierRows = dedupeByKey(
-      modifierRecords,
-      (r) => `${r.date.toISOString()}|${r.category}|${r.itemName}`,
-    )
-    modifiers = await writeChangedPhase(
-      `${storeId} modifier`,
-      MENU_ITEM_UPSERT,
-      modifierRows.map(({ date, category, itemName, data }) => ({
-        storeId,
-        date,
-        category,
-        itemName,
-        isModifier: true,
-        ...data,
-      })),
-      (processed, phase) => {
-        counts.modifiers = phase.synced
+    const modifierResults = await fetchPerDay(
+      storeId,
+      "Modifier",
+      days,
+      (day) => buildModifierSyncBody(otterStoreIds, day),
+      (completed, total) => {
+        const fetchPct = (completed / total) * 40
         emit({
           phase: "modifiers",
-          status: "writing",
-          totalProgress: computeTotalProgress(
-            100,
-            100,
-            100,
-            40 + (processed / modifierRows.length) * 60,
-          ),
-          detail: `Store ${storeId}: writing modifiers (${processed}/${modifierRows.length})…`,
+          status: "fetching",
+          totalProgress: computeTotalProgress(100, 100, 100, fetchPct),
+          detail: `Store ${storeId}: modifiers (${completed}/${total} days)…`,
           counts,
         })
       },
     )
+
+    modifiers = await writeMenuItemPhase(storeId, true, modifierResults, (processed, total, phase) => {
+      counts.modifiers = phase.synced
+      emit({
+        phase: "modifiers",
+        status: "writing",
+        totalProgress: computeTotalProgress(100, 100, 100, 40 + (processed / total) * 60),
+        detail: `Store ${storeId}: writing modifiers (${processed}/${total})…`,
+        counts,
+      })
+    })
+    const modifierProblem = failedDaysProblem("modifiers", modifierResults)
+    if (modifierProblem) problems.push(modifierProblem)
   }
 
   // ─── Phase 5: Ratings (21-day lookback, route opts in) ───
-  let ratings = empty()
+  let ratings = emptyCounts()
 
   if (includeRatings) {
     emit({
@@ -694,11 +751,24 @@ async function runMetricsSyncInner(
     ratingsStart.setUTCDate(ratingsStart.getUTCDate() - 21)
     ratingsStart.setUTCHours(0, 0, 0, 0)
 
+    // Ratings are individual reviews: nothing is reconciled, so a truncated
+    // response still writes what came back. A failed or truncated fetch
+    // marks the run PARTIAL.
     let ratingRows: OtterRow[] = []
+    let ratingsFetchFailed = false
+    const ratingsBody = buildRatingsBody(otterStoreIds, ratingsStart, ratingsEnd)
     try {
-      ratingRows = await queryRatings(buildRatingsBody(otterStoreIds, ratingsStart, ratingsEnd))
+      ratingRows = await queryRatings(ratingsBody)
+      if (hitRowCap(ratingRows, ratingsBody)) {
+        ratingsFetchFailed = true
+        problems.push(`ratings: response hit its row cap (${ratingRows.length} rows)`)
+      }
     } catch (err) {
       console.error(`[metrics-sync ${storeId}] Ratings sync error:`, err)
+      ratingsFetchFailed = true
+      problems.push(
+        `ratings: fetch failed (${err instanceof Error ? err.message.slice(0, 200) : String(err)})`,
+      )
     }
 
     const ratingRecords = ratingRows
@@ -758,6 +828,7 @@ async function runMetricsSyncInner(
         })
       },
     )
+    if (ratingsFetchFailed) ratings.fetchFailed = 1
 
     emit({
       phase: "ratings",
@@ -768,22 +839,80 @@ async function runMetricsSyncInner(
     })
   }
 
+  const phases = { daily, categories, items, modifiers, ratings }
+  for (const [name, phase] of Object.entries(phases)) {
+    if (phase.failed > 0) problems.push(`${name}: ${phase.failed} rows failed to write`)
+  }
+
   // Update lastSyncAt for THIS store's Otter UUIDs only — never touch other
   // stores. The previous global updateMany would lie about other stores'
-  // freshness when running per-store.
-  await prisma.otterStore.updateMany({
-    where: { storeId, otterStoreId: { in: otterStoreIds } },
-    data: { lastSyncAt: new Date() },
-  })
+  // freshness when running per-store. An incomplete run leaves it alone: a
+  // store whose menu fetch failed has not been freshly synced.
+  if (problems.length === 0) {
+    await prisma.otterStore.updateMany({
+      where: { storeId, otterStoreId: { in: otterStoreIds } },
+      data: { lastSyncAt: new Date() },
+    })
+  }
 
   return {
     storeId,
-    daily,
-    categories,
-    items,
-    modifiers,
-    ratings,
+    ...phases,
     windowStart,
     windowEnd,
+    problems,
   }
+}
+
+/**
+ * Items (isModifier=false) or modifiers (isModifier=true) for one store:
+ * rows from the days that fetched cleanly, summed on (date, category,
+ * itemName), written with the stale rows of those days removed in the same
+ * transaction. The item requests carry all of a store's Otter UUIDs and do
+ * not group by store, so Otter already adds the UUIDs together; the sum only
+ * matters when a null item or category name folds into "Unknown" /
+ * "Uncategorized" beside a real row of that name, which last-wins dropped.
+ */
+async function writeMenuItemPhase(
+  storeId: string,
+  isModifier: boolean,
+  results: DayFetch[],
+  onWrite: (processed: number, total: number, counts: PhaseCounts) => void,
+): Promise<PhaseCounts> {
+  const records = results.flatMap(({ day, rows }) => {
+    const date = new Date(day)
+    date.setUTCHours(0, 0, 0, 0)
+    return rows.map((row: OtterRow) => {
+      const category = (row["menu_parent_entity_name"] as string | null) ?? "Uncategorized"
+      const itemName = (row["item"] as string | null) ?? "Unknown"
+      return { date, category, itemName, data: menuFields(row) }
+    })
+  })
+  const merged = sumByKey(records, (r) => `${r.date.toISOString()}|${r.category}|${r.itemName}`)
+  const upserts = merged.map(({ date, category, itemName, data }) => ({
+    storeId,
+    date,
+    category,
+    itemName,
+    isModifier,
+    ...data,
+  }))
+  const counts = await writeChangedPhase(
+    `${storeId} ${isModifier ? "modifier" : "item"}`,
+    MENU_ITEM_UPSERT,
+    upserts,
+    (processed, phase) => onWrite(processed, merged.length, phase),
+    buildDeleteMissingSql({
+      table: MENU_ITEM_UPSERT.table,
+      where: [
+        { column: { name: "storeId", type: "text" }, value: storeId },
+        { column: { name: "isModifier", type: "boolean" }, value: isModifier },
+      ],
+      dates: { column: "date", values: results.filter((r) => r.ok).map((r) => ymd(r.day)) },
+      key: MENU_ITEM_UPSERT.conflict.filter((c) => c.name !== "storeId" && c.name !== "isModifier"),
+      keep: upserts,
+    }),
+  )
+  counts.fetchFailed = results.filter((r) => !r.ok).length
+  return counts
 }
