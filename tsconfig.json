@@ -39,6 +39,7 @@
     "node_modules",
     "scripts",
     "tmp",
-    "tests/styles/fixtures/counter-lint"
+    "tests/styles/fixtures/counter-lint",
+    "tests/styles/fixtures/page-layout"
   ]
 }

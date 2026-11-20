@@ -272,6 +272,17 @@ check, not an AST, and fails the build on:
    `scripts/counter-lint.ts`'s `AWAITED_SECTIONS_ALLOWED` for exactly which
    two of the six still write the awaited-bare shape.
 
+9. **`page-too-long`** and **`fold-holds-a-page`** — the page layout rules
+   below, as a build failure. A file under the two `(counter)` groups that
+   stacks more than five `<Section>`/`<Card>` blocks outside a fold with no
+   shared `<Tabs>`, or a `<Fold>` wrapping more than two, fails. The 40 files
+   that broke this on 2026-11-20 are listed in `KNOWN` in
+   `scripts/page-layout-lint.ts`; a listed file that gets fixed fails as
+   `page-layout-known-stale` until its line is deleted, so the list only
+   shrinks. Never add to it. Holes (regex, not AST) are in that module's
+   comment: blocks rendered from another file count there, a `.map()` of
+   sections counts once, and list caps are not checked.
+
 It checks `src/app/dashboard/**`, `src/app/(mobile)/m/**`,
 `src/components/counter/**`, and `src/lib/counter/**`. Legacy files under the
 first two roots are exempt *only* while their on-disk content is byte-
@@ -708,6 +719,72 @@ tracks when fed fewer cells than its layout expects) and the structural gap
 found alongside it — `/dashboard` rendering inside two navigation shells at
 once, with a ⌘K collision to match — which the `(editorial)` route group
 below fixed.
+
+## Page layout — read before building or rebuilding any page
+
+The colour and token rules above keep a page *looking* like Counter. These
+keep it *usable*. They exist because the same mistake shipped again and
+again: on 2026-11-20 the Labor rebuild came out as one long scroll on desk
+and phone, and an audit found ~40 more pages built the same way — a short
+plain top, then an "Every figure, as before" fold holding the whole old
+page (Overview 13 sections, Decisions 10, Labor 10), or 6–9 sections
+stacked with no tabs (P&L, Inventory, Ingredients, Store file). Owners read
+these pages on a phone between rushes; a page they have to scroll through
+is a page they stop opening. `npm run tokens` (rule 9 above) checks part
+of rules 2 and 3 only: a file with more than five open sections and no tabs,
+and a `Fold` wrapping more than two. The Made Plain head (rule 1), Needs
+you grouping, list caps and the rest need judgment and are the reviewer's
+job.
+
+**1. Made Plain on top.** Every owner page opens with the owner-approved
+"Made Plain" head, in this order: one plain sentence that answers the
+page's question (`Answer`); the one headline number with its change vs
+the last period (`BigNumber`); `Freshness` ("Updated 8:14 am · Refresh");
+status in words, never a bare colour or code. A missing input is labelled
+("Waiting on Harri"), never counted as $0 or shown as `0.0 h`.
+
+**2. More than four blocks under the answer means tabs.** A page shows the
+answer plus at most four blocks. Anything more is split into tabs with the
+shared `Tabs` block (`@/components/counter/ui`): at most five tabs, short
+one- or two-word labels, the first tab is the summary. Tabs are links
+(`href` with `?tab=`), so reload, back and a shared link land on the same
+tab. Each tab follows this rule again on its own.
+
+**3. A fold holds one thing.** `Fold` is for one secondary thing — "How
+this is worked out", the full statement, edit history — never "the rest of
+the page". At most two blocks inside. "Every figure, as before" is the
+pattern this rule retires: if the old figures still matter, they get a tab
+with a name that says what they are; if nobody would open that tab, delete
+them.
+
+**4. Needs you is folded and grouped.** Collapsed by default, at most three
+groups, one fix button per group (`NeedsYou`).
+
+**5. Lists stop.** A list shows its top 5–8 rows, then "Show all N" (or
+"Next 20"). No list renders every row the database returns, on desk or
+phone. Long reference lists (every invoice, every item) belong on their own
+tab or route with search/filters, not under a summary. (Not lint-checked —
+review it.)
+
+**6. Phone is the same page, stacked.** Same tabs, same order as desk. All
+tabs visible at 360 px without sideways scrolling (that's why the limit is
+five short labels). Rows are stacked cards, never a wide table. A phone tab
+should fit in about two screens (≈1,700 px at 390 px wide); if it doesn't,
+it needs a cap (rule 5) or another tab.
+
+**7. Plain words, no build notes.** No model or table names, no
+"designed, not yet built", no 11 px mono paragraphs. Explanations are one
+plain line plus a "How this is worked out" fold.
+
+**8. Shared blocks and motion.** Build from `@/components/counter/ui`
+(`Answer`, `BigNumber`, `Card`, `Tabs`, `Fold`, `NeedsYou`, `StoreCard`,
+`Tile`, `Rows`, `Status`, `WeekBars`, `Freshness`) rather than a page-local
+copy, and use `useAct`/`useLeaving` for presses (see Motion).
+
+**Before opening a PR for a page**, state in the PR body: the tabs and what
+each holds, the blocks on the first tab, and the phone height of the
+longest tab if it was measured (or that it was not). The repo skill
+`.claude/skills/counter-page/` is the checklist form of this section.
 
 ## The `(counter)` and `(editorial)` route groups — the `(editorial)` half is now history
 

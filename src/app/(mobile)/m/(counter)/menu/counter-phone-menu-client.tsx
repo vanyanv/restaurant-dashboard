@@ -7,7 +7,7 @@ import { readCounterParams } from "@/lib/counter/url-state"
 import { rangeLabel } from "@/lib/counter/date-range"
 import type { MenuHubSections } from "@/lib/counter/adapters/menu-hub"
 import type { SectionSources } from "@/lib/counter/adapters/types"
-import { Fold } from "@/components/counter/ui"
+import { PageTabs } from "@/components/counter/ui"
 import { MenuPlainView } from "@/app/dashboard/(counter)/menu/menu-plain-ui"
 
 /**
@@ -62,19 +62,37 @@ export function CounterPhoneMenuClient({
         <p className="msub">{windowLabel}</p>
       </div>
 
-      <Section bare title="The menu in a sentence" data={sections.plain} pending={pending}>
-        {(p) => <MenuPlainView p={p} />}
-      </Section>
+      <PageTabs
+        label="Menu views"
+        tabs={[
+          {
+            key: "summary",
+            label: "Summary",
+            content: (
+              <>
+                <Section bare title="The menu in a sentence" data={sections.plain} pending={pending}>
+                  {(p) => <MenuPlainView p={p} />}
+                </Section>
+              </>
+            ),
+          },
+          {
+            key: "work",
+            label: "Where to work",
+            content: (
+              <>
+                <Section bare title="The figures" data={sections.headline} pending={pending}>
+                  {(h) => <MStrip cells={h.phoneCells} />}
+                </Section>
 
-      <Fold summary="Every figure, as before">
-        <Section bare title="The figures" data={sections.headline} pending={pending}>
-          {(h) => <MStrip cells={h.phoneCells} />}
-        </Section>
-
-        <Section title="Where to work" data={sections.work} pending={pending}>
-          {(w) => <MList rows={w.phoneRows} />}
-        </Section>
-      </Fold>
+                <Section title="Where to work" data={sections.work} pending={pending}>
+                  {(w) => <MList rows={w.phoneRows} />}
+                </Section>
+              </>
+            ),
+          },
+        ]}
+      />
     </>
   )
 }

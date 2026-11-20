@@ -1,6 +1,6 @@
 "use client"
 
-import { Fold } from "@/components/counter/ui"
+import { PageTabs } from "@/components/counter/ui"
 import { OrdersPlainView } from "@/app/dashboard/(counter)/orders/orders-plain-ui"
 import { Suspense, use } from "react"
 import { MList, MStrip, Section, useCounterTransition, type MListRow } from "@/components/counter"
@@ -105,34 +105,52 @@ export function CounterPhoneOrdersClient({
       </div>
 
       {/* The page made plain, the same view the desk shows. */}
-      <Section bare title="Orders in a sentence" data={sections.plain} pending={pending}>
-        {(p) => <OrdersPlainView p={p} />}
-      </Section>
+      <PageTabs
+        label="Order views"
+        tabs={[
+          {
+            key: "summary",
+            label: "Summary",
+            content: (
+              <>
+                <Section bare title="Orders in a sentence" data={sections.plain} pending={pending}>
+                  {(p) => <OrdersPlainView p={p} />}
+                </Section>
+              </>
+            ),
+          },
+          {
+            key: "orders",
+            label: "Orders",
+            content: (
+              <>
+                {/* Two cells, chosen by NAME out of the adapter's five. Nothing here
+                    is judged — ruling O-R2 — so no cell carries a reference and the
+                    phone draws no bullet and no band. */}
+                <Section bare title="The figures" data={sections.strip} pending={pending}>
+                  {(cells) => <MStrip cells={phoneCells(cells)} />}
+                </Section>
 
-      <Fold summary="All orders and figures">
-      {/* Two cells, chosen by NAME out of the adapter's five. Nothing here
-          is judged — ruling O-R2 — so no cell carries a reference and the
-          phone draws no bullet and no band. */}
-      <Section bare title="The figures" data={sections.strip} pending={pending}>
-        {(cells) => <MStrip cells={phoneCells(cells)} />}
-      </Section>
+                {/* `sec('Latest', '8 shown', mlist(ORDERS.slice(0, 6), 'order'))`. No
+                    filter bar above it and no pager below it — see the file note.
 
-      {/* `sec('Latest', '8 shown', mlist(ORDERS.slice(0, 6), 'order'))`. No
-          filter bar above it and no pager below it — see the file note.
-
-          The meta is a FUNCTION of the list because it is a claim ABOUT the
-          list: the prototype's `'8 shown'` is a literal beside a six-row list,
-          and ours says what it actually showed. `Section` calls it once the
-          value is in hand, which is the only place that count exists. */}
-      <Section
-        title="Latest"
-        pending={pending}
-        meta={(l) => `${Math.min(l.rows.length, PHONE_ROWS)} shown`}
-        data={sections.list}
-      >
-        {(l) => <MList rows={l.rows.slice(0, PHONE_ROWS).map(toListRow)} />}
-      </Section>
-      </Fold>
+                    The meta is a FUNCTION of the list because it is a claim ABOUT the
+                    list: the prototype's `'8 shown'` is a literal beside a six-row list,
+                    and ours says what it actually showed. `Section` calls it once the
+                    value is in hand, which is the only place that count exists. */}
+                <Section
+                  title="Latest"
+                  pending={pending}
+                  meta={(l) => `${Math.min(l.rows.length, PHONE_ROWS)} shown`}
+                  data={sections.list}
+                >
+                  {(l) => <MList rows={l.rows.slice(0, PHONE_ROWS).map(toListRow)} />}
+                </Section>
+              </>
+            ),
+          },
+        ]}
+      />
     </>
   )
 }

@@ -1,7 +1,10 @@
 import type { ReactNode } from "react"
 
 /**
- * Everything that is not the answer, folded at the bottom of the page.
+ * ONE secondary thing, folded: "How this is worked out", the full statement,
+ * edit history. Not "the rest of the page" — more than two blocks inside a
+ * Fold fails `npm run tokens` (`fold-holds-a-page`); give them a `Tabs` tab
+ * instead. See DESIGN.md "Page layout".
  *
  * Shared block: replaces `.iv-fold`, `.rs-fold`, `.ck-logfold` and
  * `.ckp-more`. A native `<details>`, so it opens with the keyboard and

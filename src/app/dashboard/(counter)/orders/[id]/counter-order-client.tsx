@@ -1,6 +1,6 @@
 "use client"
 
-import { Fold } from "@/components/counter/ui"
+import { PageTabs } from "@/components/counter/ui"
 import { OrderPlainView } from "../orders-plain-ui"
 import { type ReactNode } from "react"
 import {
@@ -142,78 +142,103 @@ export function CounterOrderClient({
 
       {/* The order made plain (owner's go, 2026-11-18; mock
           https://claude.ai/artifact/Sr98ngzuijqUUhPbJNJAv4). The items, the
-          timeline and the platform detail are folded underneath. */}
-      <Section bare title="This order in a sentence" data={sections.plain}>
-        {(p) => <OrderPlainView p={p} />}
-      </Section>
+          timeline and the platform detail sit in named tabs beside it. */}
+      <PageTabs
+        label="Order views"
+        tabs={[
+          {
+            key: "summary",
+            label: "Summary",
+            content: (
+              <>
+                <Section bare title="This order in a sentence" data={sections.plain}>
+                  {(p) => <OrderPlainView p={p} />}
+                </Section>
+              </>
+            ),
+          },
+          {
+            key: "items",
+            label: "Items",
+            content: (
+              <>
+                {/* Page level, above the first `.sec`, exactly as `strip([...])` is
+                    written in `P.order.desk()`. Ruling O-R2: no cell here is judged
+                    against anything, because nothing in this schema publishes a
+                    per-order target, a fee ceiling or a ticket floor. */}
+                <Section bare title="The figures" data={sections.strip}>
+                  {(cells) => <Strip cells={cells} />}
+                </Section>
 
-      <Fold summary="Every line, the timeline and the platform detail">
-      {/* Page level, above the first `.sec`, exactly as `strip([...])` is
-          written in `P.order.desk()`. Ruling O-R2: no cell here is judged
-          against anything, because nothing in this schema publishes a
-          per-order target, a fee ceiling or a ticket floor. */}
-      <Section bare title="The figures" data={sections.strip}>
-        {(cells) => <Strip cells={cells} />}
-      </Section>
+                <div className="split">
+                  <Section
+                    title="Items"
+                    // The adapter's own sentence: "2 lines · 1 modifier", or the reason
+                    // there are none — "line detail not drained yet" is a different fact
+                    // from "no lines on this order" and only the loader knows which.
+                    meta={dataOf(sections.items)?.meta}
+                    // `tbl()` is `raw()` in the prototype: a Table fills the section edge
+                    // to edge and brings its own padding.
+                    pad={false}
+                    data={sections.items}
+                  >
+                    {(items) => <ItemsTable items={items} channel={channel} />}
+                  </Section>
 
-      <div className="split">
-        <Section
-          title="Items"
-          // The adapter's own sentence: "2 lines · 1 modifier", or the reason
-          // there are none — "line detail not drained yet" is a different fact
-          // from "no lines on this order" and only the loader knows which.
-          meta={dataOf(sections.items)?.meta}
-          // `tbl()` is `raw()` in the prototype: a Table fills the section edge
-          // to edge and brings its own padding.
-          pad={false}
-          data={sections.items}
-        >
-          {(items) => <ItemsTable items={items} channel={channel} />}
-        </Section>
+                  <Section title="What you keep" meta="the whole chain" data={sections.keep}>
+                    {(keep) => (
+                      <>
+                        {/* Every row IS summed into the figure below it. That is why the
+                            tax figure is in the paragraph and not in this list — see
+                            `MathLines`' own doc comment, and prototype line 6600. */}
+                        <MathLines rows={keep.rows} />
+                        {keep.note ? (
+                          // The prototype's own inline margin on this paragraph.
+                          <Note>
+                            {keep.note}
+                          </Note>
+                        ) : null}
+                      </>
+                    )}
+                  </Section>
+                </div>
+              </>
+            ),
+          },
+          {
+            key: "timeline",
+            label: "Timeline",
+            content: (
+              <>
+                <div className="tri">
+                  <Section title="Timeline" meta="from the POS" data={sections.timeline}>
+                    {(rows) => <Kv rows={rows} />}
+                  </Section>
 
-        <Section title="What you keep" meta="the whole chain" data={sections.keep}>
-          {(keep) => (
-            <>
-              {/* Every row IS summed into the figure below it. That is why the
-                  tax figure is in the paragraph and not in this list — see
-                  `MathLines`' own doc comment, and prototype line 6600. */}
-              <MathLines rows={keep.rows} />
-              {keep.note ? (
-                // The prototype's own inline margin on this paragraph.
-                <Note>
-                  {keep.note}
-                </Note>
-              ) : null}
-            </>
-          )}
-        </Section>
-      </div>
+                  {/* `sec('Platform', 'DoorDash', …)` — the meta is the channel, which is
+                      the section's own first row. Read by label so an inserted row
+                      cannot make it print a fulfilment mode instead. */}
+                  <Section title="Platform" meta={channel ?? undefined} data={sections.platform}>
+                    {(rows) => <Kv rows={rows} />}
+                  </Section>
 
-      <div className="tri">
-        <Section title="Timeline" meta="from the POS" data={sections.timeline}>
-          {(rows) => <Kv rows={rows} />}
-        </Section>
-
-        {/* `sec('Platform', 'DoorDash', …)` — the meta is the channel, which is
-            the section's own first row. Read by label so an inserted row
-            cannot make it print a fulfilment mode instead. */}
-        <Section title="Platform" meta={channel ?? undefined} data={sections.platform}>
-          {(rows) => <Kv rows={rows} />}
-        </Section>
-
-        {/* `sec('Needs you', '1', queue(…))` — the meta is how many. An order
-            with nothing to fix arrives here as an EMPTY section, which is what
-            the adapter means by it and what `Section` draws. */}
-        <Section
-          fold="closed"
-          title="Needs you"
-          meta={countMeta(dataOf(sections.needsYou)?.length)}
-          data={sections.needsYou}
-        >
-          {(items) => <Queue items={items} />}
-        </Section>
-      </div>
-      </Fold>
+                  {/* `sec('Needs you', '1', queue(…))` — the meta is how many. An order
+                      with nothing to fix arrives here as an EMPTY section, which is what
+                      the adapter means by it and what `Section` draws. */}
+                  <Section
+                    fold="closed"
+                    title="Needs you"
+                    meta={countMeta(dataOf(sections.needsYou)?.length)}
+                    data={sections.needsYou}
+                  >
+                    {(items) => <Queue items={items} />}
+                  </Section>
+                </div>
+              </>
+            ),
+          },
+        ]}
+      />
     </>
   )
 }

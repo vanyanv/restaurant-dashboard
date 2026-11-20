@@ -1,6 +1,6 @@
 "use client"
 
-import { Fold } from "@/components/counter/ui"
+import { PageTabs } from "@/components/counter/ui"
 import { AnalyticsPlainView } from "@/app/dashboard/(counter)/analytics/analytics-plain-ui"
 import { useMemo } from "react"
 import {
@@ -132,31 +132,57 @@ export function CounterPhoneStoreAnalyticsClient({
 
       {/* Analytics made plain (owner's go, 2026-11-18; mock
           https://claude.ai/artifact/Sr98ngzuijqUUhPbJNJAv4). Every figure
-          below is folded underneath, unchanged. */}
-      <Section bare title="Where sales came from" data={sections.plain} pending={pending}>
-        {(p) => <AnalyticsPlainView p={p} />}
-      </Section>
+          below sits in named tabs beside it (DESIGN.md "Page layout"). */}
+      <PageTabs
+        label="Analytics views"
+        tabs={[
+          {
+            key: "summary",
+            label: "Summary",
+            content: (
+              <>
+                <Section bare title="Where sales came from" data={sections.plain} pending={pending}>
+                  {(p) => <AnalyticsPlainView p={p} />}
+                </Section>
+              </>
+            ),
+          },
+          {
+            key: "sales",
+            label: "Sales",
+            content: (
+              <>
 
-      <Fold summary="Sales breakdown">
+                {/* Two cells: Net sales · Food cost — `h.phoneCells`, never a slice of
+                    `h.cells` (which carries four: Net sales, Orders, Avg ticket, Food
+                    cost, and only when an order count exists at all). */}
+                <Section bare title="The figures" data={sections.headline} pending={pending}>
+                  {(h) => <MStrip cells={h.phoneCells} />}
+                </Section>
 
-      {/* Two cells: Net sales · Food cost — `h.phoneCells`, never a slice of
-          `h.cells` (which carries four: Net sales, Orders, Avg ticket, Food
-          cost, and only when an order count exists at all). */}
-      <Section bare title="The figures" data={sections.headline} pending={pending}>
-        {(h) => <MStrip cells={h.phoneCells} />}
-      </Section>
+                {/* Shorter, no axis — `s.phoneChart`, the adapter's own. */}
+                <Section title="Net sales" data={sections.sales} pending={pending}>
+                  {(s) => <Chart {...s.phoneChart} />}
+                </Section>
 
-      {/* Shorter, no axis — `s.phoneChart`, the adapter's own. */}
-      <Section title="Net sales" data={sections.sales} pending={pending}>
-        {(s) => <Chart {...s.phoneChart} />}
-      </Section>
-
-      {/* Four days, newest first — `DayBook.phoneRows`, the adapter's own
-          slice. See the file note above on why this page does not slice it. */}
-      <Section title="The day book" meta="newest first" data={sections.dayBook} pending={pending}>
-        {(b) => <MList rows={b.phoneRows.map(toDayRow)} />}
-      </Section>
-      </Fold>
+                {/* Four days, newest first — `DayBook.phoneRows`, the adapter's own
+                    slice. See the file note above on why this page does not slice it. */}
+              </>
+            ),
+          },
+          {
+            key: "daybook",
+            label: "Day book",
+            content: (
+              <>
+                <Section title="The day book" meta="newest first" data={sections.dayBook} pending={pending}>
+                  {(b) => <MList rows={b.phoneRows.map(toDayRow)} />}
+                </Section>
+              </>
+            ),
+          },
+        ]}
+      />
     </>
   )
 }

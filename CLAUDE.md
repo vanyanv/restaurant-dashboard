@@ -50,6 +50,14 @@ overtook it. Generic Tailwind/shadcn
 output is wrong on a Counter page, and so is output copying the old serif
 system — neither is what a rebuilt page should look like.
 
+**Building or rebuilding a page? Use the `counter-page` skill
+(`.claude/skills/counter-page/`) and DESIGN.md "Page layout" first.** More
+than four blocks under the answer means tabs; a `Fold` holds one thing, never
+"the rest of the page"; lists stop at 5–8 rows with "Show all"; phone gets the
+same tabs. Pages kept being built as one long scroll until this was written
+down (40 files are on the `KNOWN` ratchet in `scripts/page-layout-lint.ts`;
+it only shrinks).
+
 **The rules are a build failure, not prose to remember. Run `npm run tokens`.**
 It enforces, on `src/app/dashboard/**`, `src/app/(mobile)/m/**`,
 `src/components/counter/**` and `src/lib/counter/**`: no colour literal

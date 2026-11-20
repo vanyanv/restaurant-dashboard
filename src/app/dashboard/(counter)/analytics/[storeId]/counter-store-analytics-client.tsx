@@ -1,6 +1,6 @@
 "use client"
 
-import { Fold } from "@/components/counter/ui"
+import { PageTabs } from "@/components/counter/ui"
 import { AnalyticsPlainView } from "@/app/dashboard/(counter)/analytics/analytics-plain-ui"
 import { useCallback, useMemo } from "react"
 import { usePathname, useRouter } from "next/navigation"
@@ -272,122 +272,162 @@ export function CounterStoreAnalyticsClient({
 
       {/* Analytics made plain (owner's go, 2026-11-18; mock
           https://claude.ai/artifact/Sr98ngzuijqUUhPbJNJAv4). Every figure
-          below is folded underneath, unchanged. */}
-      <Section bare title="Where sales came from" data={sections.plain} pending={pending}>
-        {(p) => <AnalyticsPlainView p={p} />}
-      </Section>
+          below sits in named tabs beside it (DESIGN.md "Page layout"). */}
+      <PageTabs
+        label="Analytics views"
+        tabs={[
+          {
+            key: "summary",
+            label: "Summary",
+            content: (
+              <>
+                <Section bare title="Where sales came from" data={sections.plain} pending={pending}>
+                  {(p) => <AnalyticsPlainView p={p} />}
+                </Section>
+              </>
+            ),
+          },
+          {
+            key: "sales",
+            label: "Sales",
+            content: (
+              <>
 
-      <Fold summary="Every figure, the day book, the statement and the menu">
+                {/* The prototype's `storeNote()` and its strip, in one block above the
+                    first `.sec`. The note is the adapter's — it states what this route
+                    adds to the group page, and it is one sentence rather than a second
+                    page-level heading. */}
+                <Section bare title="The figures" data={sections.headline} pending={pending}>
+                  {(h) => (
+                    <>
+                      <Note lede>
+                        {h.note}
+                      </Note>
+                      <Strip cells={h.cells} />
+                    </>
+                  )}
+                </Section>
 
-      {/* The prototype's `storeNote()` and its strip, in one block above the
-          first `.sec`. The note is the adapter's — it states what this route
-          adds to the group page, and it is one sentence rather than a second
-          page-level heading. */}
-      <Section bare title="The figures" data={sections.headline} pending={pending}>
-        {(h) => (
-          <>
-            <Note lede>
-              {h.note}
-            </Note>
-            <Strip cells={h.cells} />
-          </>
-        )}
-      </Section>
+                <div className="split">
+                  <Section
+                    title="Net sales"
+                    pending={pending}
+                    meta={windowLabel}
+                    data={sections.sales}
+                    askAbout="how this store's sales moved"
+                  >
+                    {(s) => <Chart {...s.chart} fmt={(v) => money(v)} />}
+                  </Section>
 
-      <div className="split">
-        <Section
-          title="Net sales"
-          pending={pending}
-          meta={windowLabel}
-          data={sections.sales}
-          askAbout="how this store's sales moved"
-        >
-          {(s) => <Chart {...s.chart} fmt={(v) => money(v)} />}
-        </Section>
+                  <Section
+                    title="When the orders come"
+                    pending={pending}
+                    // A-R5: the adapter's caption, because this counts orders from the
+                    // HOURLY table and the daily summaries answer 1.5% differently for
+                    // the same window. It is never read against a figure elsewhere on
+                    // this page.
+                    meta={(s) => s.meta}
+                    data={sections.service}
+                    askAbout="when the orders come in"
+                  >
+                    {(s) => (
+                      <>
+                        <Chart {...s.chart} fmt={orders} />
+                        <p className="mono">{s.sentence}</p>
+                      </>
+                    )}
+                  </Section>
+                </div>
+              </>
+            ),
+          },
+          {
+            key: "channels",
+            label: "Channels",
+            content: (
+              <>
+                <div className="split">
+                  <Section
+                    title="By channel"
+                    pending={pending}
+                    // The adapter's, not the page's: the bands are a share of the FOUR
+                    // channels (A-R2), and the group page prints the same line.
+                    meta={(m) => m.subtitle}
+                    data={sections.mix}
+                    askAbout="the channel mix at this store"
+                  >
+                    {(m) => <Chart {...m.chart} fmt={share} />}
+                  </Section>
 
-        <Section
-          title="When the orders come"
-          pending={pending}
-          // A-R5: the adapter's caption, because this counts orders from the
-          // HOURLY table and the daily summaries answer 1.5% differently for
-          // the same window. It is never read against a figure elsewhere on
-          // this page.
-          meta={(s) => s.meta}
-          data={sections.service}
-          askAbout="when the orders come in"
-        >
-          {(s) => (
-            <>
-              <Chart {...s.chart} fmt={orders} />
-              <p className="mono">{s.sentence}</p>
-            </>
-          )}
-        </Section>
-      </div>
+                  <Section
+                    title="Top items"
+                    pending={pending}
+                    // The coverage is part of the reading: the classifier only sees items
+                    // with a costed recipe, and a table that did not say so would present
+                    // a partial menu as the menu.
+                    meta={(i) => i.meta}
+                    data={sections.items}
+                    pad={false}
+                    askAbout="which items carry this store"
+                  >
+                    {(i) => <Table columns={ITEM_COLUMNS} rows={itemRows(i)} />}
+                  </Section>
+                </div>
 
-      <div className="split">
-        <Section
-          title="By channel"
-          pending={pending}
-          // The adapter's, not the page's: the bands are a share of the FOUR
-          // channels (A-R2), and the group page prints the same line.
-          meta={(m) => m.subtitle}
-          data={sections.mix}
-          askAbout="the channel mix at this store"
-        >
-          {(m) => <Chart {...m.chart} fmt={share} />}
-        </Section>
+                {/* The section the group page cannot draw three times over. */}
+              </>
+            ),
+          },
+          {
+            key: "daybook",
+            label: "Day book",
+            content: (
+              <>
+                <Section
+                  title="The day book"
+                  pending={pending}
+                  meta={(b) => b.meta}
+                  data={sections.dayBook}
+                  pad={false}
+                  askAbout="how the days in this range compare"
+                >
+                  {(b) => <Table columns={DAY_BOOK_COLUMNS} rows={dayBookRows(b)} />}
+                </Section>
+              </>
+            ),
+          },
+          {
+            key: "statement",
+            label: "Statement",
+            content: (
+              <>
+                <div className="split">
+                  <Section
+                    title="The statement"
+                    pending={pending}
+                    meta={(s) => s.meta}
+                    data={sections.statement}
+                    askAbout="what this store keeps"
+                  >
+                    {(s) => <MoneyLines rows={s.rows} />}
+                  </Section>
 
-        <Section
-          title="Top items"
-          pending={pending}
-          // The coverage is part of the reading: the classifier only sees items
-          // with a costed recipe, and a table that did not say so would present
-          // a partial menu as the menu.
-          meta={(i) => i.meta}
-          data={sections.items}
-          pad={false}
-          askAbout="which items carry this store"
-        >
-          {(i) => <Table columns={ITEM_COLUMNS} rows={itemRows(i)} />}
-        </Section>
-      </div>
-
-      {/* The section the group page cannot draw three times over. */}
-      <Section
-        title="The day book"
-        pending={pending}
-        meta={(b) => b.meta}
-        data={sections.dayBook}
-        pad={false}
-        askAbout="how the days in this range compare"
-      >
-        {(b) => <Table columns={DAY_BOOK_COLUMNS} rows={dayBookRows(b)} />}
-      </Section>
-
-      <div className="split">
-        <Section
-          title="The statement"
-          pending={pending}
-          meta={(s) => s.meta}
-          data={sections.statement}
-          askAbout="what this store keeps"
-        >
-          {(s) => <MoneyLines rows={s.rows} />}
-        </Section>
-
-        <Section
-          title="By category"
-          pending={pending}
-          meta={(c) => c.meta}
-          data={sections.categories}
-          pad={false}
-          askAbout="which categories carry this store"
-        >
-          {(c) => <Table columns={CATEGORY_COLUMNS} rows={categoryRows(c)} />}
-        </Section>
-      </div>
-      </Fold>
+                  <Section
+                    title="By category"
+                    pending={pending}
+                    meta={(c) => c.meta}
+                    data={sections.categories}
+                    pad={false}
+                    askAbout="which categories carry this store"
+                  >
+                    {(c) => <Table columns={CATEGORY_COLUMNS} rows={categoryRows(c)} />}
+                  </Section>
+                </div>
+              </>
+            ),
+          },
+        ]}
+      />
     </>
   )
 }

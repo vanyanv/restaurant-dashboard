@@ -1,6 +1,6 @@
 "use client"
 
-import { Fold } from "@/components/counter/ui"
+import { PageTabs } from "@/components/counter/ui"
 import { AnalyticsPlainView } from "@/app/dashboard/(counter)/analytics/analytics-plain-ui"
 import { useCallback, useMemo } from "react"
 import { usePathname, useRouter } from "next/navigation"
@@ -190,107 +190,132 @@ export function CounterAnalyticsClient({
 
       {/* Analytics made plain (owner's go, 2026-11-18; mock
           https://claude.ai/artifact/Sr98ngzuijqUUhPbJNJAv4). Every figure
-          below is folded underneath, unchanged. */}
-      <Section bare title="Where sales came from" data={sections.plain} pending={pending}>
-        {(p) => <AnalyticsPlainView p={p} />}
-      </Section>
+          below sits in named tabs beside it (DESIGN.md "Page layout"). */}
+      <PageTabs
+        label="Analytics views"
+        tabs={[
+          {
+            key: "summary",
+            label: "Summary",
+            content: (
+              <>
+                <Section bare title="Where sales came from" data={sections.plain} pending={pending}>
+                  {(p) => <AnalyticsPlainView p={p} />}
+                </Section>
+              </>
+            ),
+          },
+          {
+            key: "channels",
+            label: "Channels",
+            content: (
+              <>
 
-      <Fold summary="Every figure, the mix, the weekdays and the service hours">
+                {/* Page level, above the first `.sec`, as `P.analytics.desk()` writes it.
+                    Three cells (A-R3). The second carries a quiet `Bullet` — `Figure`
+                    draws it from the cell's own `reference`, so the page does not have
+                    to know which cell is judged against what. */}
+                <Section bare title="The figures" data={sections.headline} pending={pending}>
+                  {(h) => <Strip cells={h.cells} />}
+                </Section>
 
-      {/* Page level, above the first `.sec`, as `P.analytics.desk()` writes it.
-          Three cells (A-R3). The second carries a quiet `Bullet` — `Figure`
-          draws it from the cell's own `reference`, so the page does not have
-          to know which cell is judged against what. */}
-      <Section bare title="The figures" data={sections.headline} pending={pending}>
-        {(h) => <Strip cells={h.cells} />}
-      </Section>
+                {/* One chart, one relationship. Dollars per channel live on the Overview;
+                    what belongs here is whether the mix is MOVING — which is why the
+                    bands are drawn as share and the subtitle says so. */}
+                <Section
+                  title="Channel mix"
+                  pending={pending}
+                  // The adapter's, not the page's: the denominator is a fact about the
+                  // data (A-R2), and `/m/analytics` prints the same line.
+                  meta={(m) => m.subtitle}
+                  data={sections.mix}
+                  askAbout="the channel mix"
+                >
+                  {(m) => (
+                    <>
+                      <Chart {...m.chart} fmt={share} />
+                      <Drill label="How the mix moved, and what it cost">
+                        {m.drill.enough ? (
+                          <>
+                            <Table columns={MIX_COLUMNS} rows={mixRows(m.drill)} />
+                            <p className="shift">{m.drill.note}</p>
+                          </>
+                        ) : (
+                          /* A-R10: below three buckets there is no first third and no
+                             last third. The paragraph IS the body — a four-column table
+                             of zeroes would be a fabricated drift presented as a
+                             measurement. */
+                          <p className="shift">{m.drill.note}</p>
+                        )}
+                      </Drill>
+                    </>
+                  )}
+                </Section>
+              </>
+            ),
+          },
+          {
+            key: "days",
+            label: "Days & hours",
+            content: (
+              <>
+                <div className="split">
+                  <Section
+                    title="By day of week"
+                    pending={pending}
+                    /*
+                     * "AVERAGED BY WEEKDAY" IS A CLAIM, AND AT THIS PAGE'S TWO COMMONEST
+                     * RANGES IT WAS FALSE.
+                     *
+                     * A range of a week or less puts exactly one day in each weekday
+                     * bucket, so the bars are readings. The card already said so in its
+                     * own caveat — while this heading, three lines above it, said the
+                     * opposite. `WeekdaySection.averaged` is the one fact both now read.
+                     */
+                    meta={(w) =>
+                      `${windowLabel} · ${plural(days, "day")}, ${
+                        w.averaged ? "averaged by weekday" : "one reading per weekday"
+                      }`
+                    }
+                    data={sections.weekday}
+                    askAbout="which day of the week sells best"
+                  >
+                    {(w) => (
+                      <>
+                        <Chart {...w.chart} fmt={(v) => money(v)} />
+                        {/* The caveat rides in the same paragraph the prototype puts it
+                            in, and it is null on a range wide enough not to need it. */}
+                        <p className="mono">
+                          {w.sentence}
+                          {w.note ? ` ${w.note}` : null}
+                        </p>
+                      </>
+                    )}
+                  </Section>
 
-      {/* One chart, one relationship. Dollars per channel live on the Overview;
-          what belongs here is whether the mix is MOVING — which is why the
-          bands are drawn as share and the subtitle says so. */}
-      <Section
-        title="Channel mix"
-        pending={pending}
-        // The adapter's, not the page's: the denominator is a fact about the
-        // data (A-R2), and `/m/analytics` prints the same line.
-        meta={(m) => m.subtitle}
-        data={sections.mix}
-        askAbout="the channel mix"
-      >
-        {(m) => (
-          <>
-            <Chart {...m.chart} fmt={share} />
-            <Drill label="How the mix moved, and what it cost">
-              {m.drill.enough ? (
-                <>
-                  <Table columns={MIX_COLUMNS} rows={mixRows(m.drill)} />
-                  <p className="shift">{m.drill.note}</p>
-                </>
-              ) : (
-                /* A-R10: below three buckets there is no first third and no
-                   last third. The paragraph IS the body — a four-column table
-                   of zeroes would be a fabricated drift presented as a
-                   measurement. */
-                <p className="shift">{m.drill.note}</p>
-              )}
-            </Drill>
-          </>
-        )}
-      </Section>
-
-      <div className="split">
-        <Section
-          title="By day of week"
-          pending={pending}
-          /*
-           * "AVERAGED BY WEEKDAY" IS A CLAIM, AND AT THIS PAGE'S TWO COMMONEST
-           * RANGES IT WAS FALSE.
-           *
-           * A range of a week or less puts exactly one day in each weekday
-           * bucket, so the bars are readings. The card already said so in its
-           * own caveat — while this heading, three lines above it, said the
-           * opposite. `WeekdaySection.averaged` is the one fact both now read.
-           */
-          meta={(w) =>
-            `${windowLabel} · ${plural(days, "day")}, ${
-              w.averaged ? "averaged by weekday" : "one reading per weekday"
-            }`
-          }
-          data={sections.weekday}
-          askAbout="which day of the week sells best"
-        >
-          {(w) => (
-            <>
-              <Chart {...w.chart} fmt={(v) => money(v)} />
-              {/* The caveat rides in the same paragraph the prototype puts it
-                  in, and it is null on a range wide enough not to need it. */}
-              <p className="mono">
-                {w.sentence}
-                {w.note ? ` ${w.note}` : null}
-              </p>
-            </>
-          )}
-        </Section>
-
-        <Section
-          title="When the orders come"
-          pending={pending}
-          // A-R5: this counts orders from the HOURLY table and says so, because
-          // the hourly rollup and the daily summaries disagree by 1.5% for the
-          // same window. The adapter writes that caption for the same reason.
-          meta={(s) => s.meta}
-          data={sections.service}
-          askAbout="when the orders come in"
-        >
-          {(s) => (
-            <>
-              <Chart {...s.chart} fmt={orders} />
-              <p className="mono">{s.sentence}</p>
-            </>
-          )}
-        </Section>
-      </div>
-      </Fold>
+                  <Section
+                    title="When the orders come"
+                    pending={pending}
+                    // A-R5: this counts orders from the HOURLY table and says so, because
+                    // the hourly rollup and the daily summaries disagree by 1.5% for the
+                    // same window. The adapter writes that caption for the same reason.
+                    meta={(s) => s.meta}
+                    data={sections.service}
+                    askAbout="when the orders come in"
+                  >
+                    {(s) => (
+                      <>
+                        <Chart {...s.chart} fmt={orders} />
+                        <p className="mono">{s.sentence}</p>
+                      </>
+                    )}
+                  </Section>
+                </div>
+              </>
+            ),
+          },
+        ]}
+      />
     </>
   )
 }

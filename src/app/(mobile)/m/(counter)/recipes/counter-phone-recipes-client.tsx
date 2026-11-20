@@ -5,7 +5,7 @@ import { phoneHref } from "@/lib/phone-routes"
 import { MList, MStrip, Section, useCounterTransition } from "@/components/counter"
 import type { RecipesSections } from "@/lib/counter/adapters/recipes"
 import type { SectionSources } from "@/lib/counter/adapters/types"
-import { Fold } from "@/components/counter/ui"
+import { PageTabs } from "@/components/counter/ui"
 import { RecipesPlainView } from "@/app/dashboard/(counter)/recipes/recipes-plain-ui"
 
 /**
@@ -48,27 +48,52 @@ export function CounterPhoneRecipesClient({
         </Section>
       </div>
 
-      <Section bare title="Recipes in a sentence" data={sections.plain} pending={pending}>
-        {(p) => <RecipesPlainView p={p} />}
-      </Section>
+      <PageTabs
+        label="Recipe views"
+        tabs={[
+          {
+            key: "summary",
+            label: "Summary",
+            content: (
+              <>
+                <Section bare title="Recipes in a sentence" data={sections.plain} pending={pending}>
+                  {(p) => <RecipesPlainView p={p} />}
+                </Section>
+              </>
+            ),
+          },
+          {
+            key: "all",
+            label: "Worst first",
+            content: (
+              <>
+                <Section bare title="The figures" data={sections.headline} pending={pending}>
+                  {(h) => <MStrip cells={h.phoneCells} />}
+                </Section>
 
-      <Fold summary="Every recipe, as before">
-      <Section bare title="The figures" data={sections.headline} pending={pending}>
-        {(h) => <MStrip cells={h.phoneCells} />}
-      </Section>
-
-      <Section title="Worst first" meta={(r) => r.meta} data={sections.recent} pending={pending}>
-        {(r) => <MList rows={r.rows} />}
-      </Section>
-
-      <Section bare title="Needs confirming" data={sections.work} pending={pending}>
-        {(w) => (
-          <Link className="mbtn mbtn--primary" href={phoneHref(w.items[0]?.href ?? "/dashboard/recipes")}>
-            {w.items[0] ? w.items[0].title : "The catalogue"}
-          </Link>
-        )}
-      </Section>
-      </Fold>
+                <Section title="Worst first" meta={(r) => r.meta} data={sections.recent} pending={pending}>
+                  {(r) => <MList rows={r.rows} />}
+                </Section>
+              </>
+            ),
+          },
+          {
+            key: "confirm",
+            label: "To confirm",
+            content: (
+              <>
+                <Section bare title="Needs confirming" data={sections.work} pending={pending}>
+                  {(w) => (
+                    <Link className="mbtn mbtn--primary" href={phoneHref(w.items[0]?.href ?? "/dashboard/recipes")}>
+                      {w.items[0] ? w.items[0].title : "The catalogue"}
+                    </Link>
+                  )}
+                </Section>
+              </>
+            ),
+          },
+        ]}
+      />
     </>
   )
 }

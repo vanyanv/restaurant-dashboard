@@ -194,11 +194,14 @@ describe("Counter P&L", () => {
     ])
   })
 
-  it("folds Needs you and the full statement closed", () => {
+  it("folds Needs you closed and gives the full statement its own tab", () => {
     const { container } = render(<CounterPnlClient {...base} sections={sections} />)
     const folds = Array.from(main(container).querySelectorAll("details"))
-    expect(folds.length).toBeGreaterThanOrEqual(2)
+    expect(folds.length).toBeGreaterThanOrEqual(1)
     for (const d of folds) expect(d.open).toBe(false)
+    const panels = [...main(container).querySelectorAll<HTMLElement>(".cu-pagetabs__panel")]
+    expect(panels.map((p) => p.dataset.tab)).toEqual(["summary", "costs", "days", "stores", "statement"])
+    expect(panels[4].hidden).toBe(true)
     expect(screen.getByText("Labor is missing")).toBeTruthy()
     expect(screen.getByRole("link", { name: "Open store settings" }).getAttribute("href")).toBe(
       "/dashboard/stores/glendale",

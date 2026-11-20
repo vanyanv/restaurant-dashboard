@@ -1,6 +1,6 @@
 "use client"
 
-import { Fold, useAct } from "@/components/counter/ui"
+import { PageTabs, useAct } from "@/components/counter/ui"
 import { WeekPlanView } from "./week-plan-ui"
 import { weekParam } from "@/lib/counter/week-plan"
 
@@ -356,213 +356,245 @@ export function CounterDecisionsClient({
       {/* The week as a plan (owner's go, 2026-11-20; mock
           https://claude.ai/artifact/9X3YWGHNAKdimeJh6ToQNF): this week and
           next, each day, each store's hours, the to-dos. Desk and phone draw
-          the same block. Everything the page said before is folded below. */}
-      <Section bare title="The week ahead" data={sections.plan} pending={pending}>
-        {(p) => <WeekPlanView plan={p} initialWeek={weekParam(params)} initialDay={params.get("day")} />}
-      </Section>
+          the same block. Everything the page said before sits in named tabs
+          (DESIGN.md "Page layout"): Forecast, Stock, and the track record. */}
+      <PageTabs
+        label="Week ahead views"
+        tabs={[
+          {
+            key: "plan",
+            label: "Plan",
+            content: (
+              <>
+                <Section bare title="The week ahead" data={sections.plan} pending={pending}>
+                  {(p) => <WeekPlanView plan={p} initialWeek={weekParam(params)} initialDay={params.get("day")} />}
+                </Section>
+              </>
+            ),
+          },
+          {
+            key: "forecast",
+            label: "Forecast",
+            content: (
+              <>
+                {/* One figure and the verdict beside it — `.headline`, no `--duo`.
+                    Both halves read the same `head` section, so a week that failed to
+                    load says so once in each place rather than printing half a
+                    headline. */}
+                <HeadBlock
+                  figures={[
+                    <Section bare key="pot" title="The call this week" data={sections.head} pending={pending}>
+                      {(h) => (
+                        <LeadFigure
+                          label={h.figure.label}
+                          value={h.figure.value}
+                          detail={h.figure.detail}
+                          // The adapter's judgement, not the arrow in the string: a
+                          // fall left unclassed paints in the colour of a rise.
+                          detailTone={h.figure.detailTone}
+                        />
+                      )}
+                    </Section>,
+                  ]}
+                >
+                  <Section bare title="The verdict" data={sections.head} pending={pending}>
+                    {(h) => (
+                      <Say tone={h.verdict.tone} headline={h.verdict.headline} action={h.verdict.action ?? undefined}>
+                        <Verdict segments={h.verdict.body} />
+                      </Say>
+                    )}
+                  </Section>
+                </HeadBlock>
 
-      <Fold summary="Every figure, as before: the forecast, each day, accuracy, the shelf and the ledger">
-      {/* One figure and the verdict beside it — `.headline`, no `--duo`.
-          Both halves read the same `head` section, so a week that failed to
-          load says so once in each place rather than printing half a
-          headline. */}
-      <HeadBlock
-        figures={[
-          <Section bare key="pot" title="The call this week" data={sections.head} pending={pending}>
-            {(h) => (
-              <LeadFigure
-                label={h.figure.label}
-                value={h.figure.value}
-                detail={h.figure.detail}
-                // The adapter's judgement, not the arrow in the string: a
-                // fall left unclassed paints in the colour of a rise.
-                detailTone={h.figure.detailTone}
-              />
-            )}
-          </Section>,
+                {/* Page level, above the first `.sec`, exactly as `strip([...])` is
+                    written in `P.decisions.desk()`. */}
+                <Section bare title="The figures" data={sections.strip} pending={pending}>
+                  {(cells) => <Strip cells={cells} />}
+                </Section>
+
+                <Section
+                  title="The briefing"
+                  meta="what the week turns on"
+                  data={sections.briefing}
+                  pending={pending}
+                  askAbout="what the week turns on"
+                >
+                  {(lines) => <Briefing lines={lines} />}
+                </Section>
+
+                <Section
+                  title="The call this week"
+                  meta="forecast, P10–P90 · click a day"
+                  data={sections.week}
+                  pending={pending}
+                >
+                  {(days) => (
+                    <>
+                      <WeekPicker
+                        days={days}
+                        selected={selectedDay}
+                        // To the URL, never to state. See the file note.
+                        onSelect={(key) => push({ day: key })}
+                      />
+                      {/* The prototype's own closing line under the picker, extended to
+                          say what the bar is now that it is not a fill. A reader about to
+                          staff or order against the figure above it needs to know that a
+                          wide bar is the model hedging. */}
+                      <Note>
+                        A day is marked once it has closed and reconciled &mdash; inside 3% of the call is a
+                        hit. A day still ahead carries its forecast, and the bar under it is the 80%
+                        interval: a wide bar is the model saying it is guessing.
+                      </Note>
+                    </>
+                  )}
+                </Section>
+
+                {/* FULL WIDTH, and that is the whole reason this stopped being half of a
+                    `.split`. The waterfall is the evidence for the biggest figure on the
+                    page and it has a label gutter, a base axis, up to six signed steps
+                    and a forecast axis to fit; at 1.32fr it had about 180px of drawing
+                    area and the step labels were unreadable. The section that pairs with
+                    the scorecard below is the run-out one, which is four columns wide
+                    and wants the space far less. */}
+                <Section
+                  // The day's own name, from the URL rather than from the section's
+                  // data — the head is drawn in every state, including before that
+                  // data exists. `meta` is the data's, because what the day was called
+                  // at is a fact about the day the server resolved.
+                  title={`${weekDayLabel(selectedDay)} in detail`}
+                  meta={(d) => d.meta}
+                  data={sections.day}
+                  pending={pending}
+                >
+                  {(d) => (
+                    <>
+                      <div className="dayattr">
+                        <div>
+                          {/* The waterfall REPLACES the arithmetic rows when it exists,
+                              rather than sitting above them. Two of the six rows are the
+                              waterfall's own axes (Forecast) and its band (80% interval,
+                              now in the head and in `Sureness`), so keeping both printed
+                              the same two figures three times. With no attribution on
+                              file the rows are still the panel — which is exactly what
+                              this section has always been. */}
+                          {d.attribution ? (
+                            <Attribution
+                              base={d.attribution.base}
+                              groups={d.attribution.groups}
+                              total={d.forecast}
+                            />
+                          ) : (
+                            <MathLines rows={d.rows} />
+                          )}
+                          <p style={{ margin: "6px 0 0" }}>{d.moves}.</p>
+                        </div>
+                        <Sureness band={d.band}>{d.sureness}</Sureness>
+                      </div>
+                      <Provenance items={d.provenance} />
+                    </>
+                  )}
+                </Section>
+
+              </>
+            ),
+          },
+          {
+            key: "stock",
+            label: "Stock",
+            content: (
+              <>
+                {/* THE NEW SECTION. See `src/lib/counter/run-out.ts` — the shelf read
+                    against the week, at the week's own demand rather than at a flat
+                    fourteen-day mean. `metaHot` is tier 1's single loop, and it moved
+                    here from the queue because three recommendations that will still
+                    be there tomorrow are not the time-critical thing on this page;
+                    stock that goes before the next delivery is. */}
+                <Section
+                  title="What you will run out of"
+                  meta={(r) =>
+                    r.hot > 0
+                      ? `${r.hot} before delivery`
+                      : `${r.rows.length} watched · cover to ${r.scaleDays}d`
+                  }
+                  metaHot={(r) => r.hot > 0}
+                  data={sections.runOut}
+                  pending={pending}
+                  askAbout="what we will run out of this week"
+                >
+                  {(r) => (
+                    <>
+                      <RunOutKey />
+                      <RunOut rows={r.rows} scaleDays={r.scaleDays} />
+                      <Note>
+                        Cover is what is on the shelf divided by what gets through it. The grey bar
+                        divides by a flat fourteen-day average, which is what this product has always
+                        done; the coloured bar divides by the week&rsquo;s own forecast demand, exploded
+                        through the recipes. The marker is lead time plus safety &mdash; past it,
+                        ordering is already late.
+                        {r.partial ? " Some demand could not be exploded, so these are floors." : ""}
+                      </Note>
+                    </>
+                  )}
+                </Section>
+              </>
+            ),
+          },
+          {
+            key: "record",
+            label: "How we did",
+            content: (
+              <>
+                  <Section
+                    title="How well we have been calling it"
+                    meta="the last reconciled window"
+                    data={sections.accuracy}
+                    pending={pending}
+                    askAbout="how accurate the forecast has been"
+                  >
+                    {(a) => (
+                      <>
+                        <MathLines rows={a.rows} />
+                        <div style={{ marginTop: "10px" }}>
+                          <Record marks={a.record} />
+                        </div>
+                        <Note>
+                          {a.note}
+                        </Note>
+                      </>
+                    )}
+                  </Section>
+
+                <div className="split">
+                  {/* N-R5. Zero rows is the production state, and it renders as the
+                      table's own four headers over nothing — the exact DOM the
+                      prototype draws around its rows, and no `.empty` landmark. */}
+                  <Section
+                    title="What you decided"
+                    meta={(rows) => `${rows.length} on file`}
+                    data={sections.ledger}
+                    pending={pending}
+                    pad={false}
+                  >
+                    {(rows) => <Table columns={LEDGER_COLUMNS} rows={ledgerRows(rows)} />}
+                  </Section>
+
+                  {/* N-R6. THREE items against the loader's five, and the head says so
+                      — the cap is on the page rather than hidden in the adapter. */}
+                  <Section
+                    title="What to do this week"
+                    meta={(q) => q.meta}
+                    data={sections.queue}
+                    pending={pending}
+                    askAbout="what to do this week"
+                  >
+                    {(q) => <Queue items={queueItems(q.items)} />}
+                  </Section>
+                </div>
+              </>
+            ),
+          },
         ]}
-      >
-        <Section bare title="The verdict" data={sections.head} pending={pending}>
-          {(h) => (
-            <Say tone={h.verdict.tone} headline={h.verdict.headline} action={h.verdict.action ?? undefined}>
-              <Verdict segments={h.verdict.body} />
-            </Say>
-          )}
-        </Section>
-      </HeadBlock>
-
-      {/* Page level, above the first `.sec`, exactly as `strip([...])` is
-          written in `P.decisions.desk()`. */}
-      <Section bare title="The figures" data={sections.strip} pending={pending}>
-        {(cells) => <Strip cells={cells} />}
-      </Section>
-
-      <Section
-        title="The briefing"
-        meta="what the week turns on"
-        data={sections.briefing}
-        pending={pending}
-        askAbout="what the week turns on"
-      >
-        {(lines) => <Briefing lines={lines} />}
-      </Section>
-
-      <Section
-        title="The call this week"
-        meta="forecast, P10–P90 · click a day"
-        data={sections.week}
-        pending={pending}
-      >
-        {(days) => (
-          <>
-            <WeekPicker
-              days={days}
-              selected={selectedDay}
-              // To the URL, never to state. See the file note.
-              onSelect={(key) => push({ day: key })}
-            />
-            {/* The prototype's own closing line under the picker, extended to
-                say what the bar is now that it is not a fill. A reader about to
-                staff or order against the figure above it needs to know that a
-                wide bar is the model hedging. */}
-            <Note>
-              A day is marked once it has closed and reconciled &mdash; inside 3% of the call is a
-              hit. A day still ahead carries its forecast, and the bar under it is the 80%
-              interval: a wide bar is the model saying it is guessing.
-            </Note>
-          </>
-        )}
-      </Section>
-
-      {/* FULL WIDTH, and that is the whole reason this stopped being half of a
-          `.split`. The waterfall is the evidence for the biggest figure on the
-          page and it has a label gutter, a base axis, up to six signed steps
-          and a forecast axis to fit; at 1.32fr it had about 180px of drawing
-          area and the step labels were unreadable. The section that pairs with
-          the scorecard below is the run-out one, which is four columns wide
-          and wants the space far less. */}
-      <Section
-        // The day's own name, from the URL rather than from the section's
-        // data — the head is drawn in every state, including before that
-        // data exists. `meta` is the data's, because what the day was called
-        // at is a fact about the day the server resolved.
-        title={`${weekDayLabel(selectedDay)} in detail`}
-        meta={(d) => d.meta}
-        data={sections.day}
-        pending={pending}
-      >
-        {(d) => (
-          <>
-            <div className="dayattr">
-              <div>
-                {/* The waterfall REPLACES the arithmetic rows when it exists,
-                    rather than sitting above them. Two of the six rows are the
-                    waterfall's own axes (Forecast) and its band (80% interval,
-                    now in the head and in `Sureness`), so keeping both printed
-                    the same two figures three times. With no attribution on
-                    file the rows are still the panel — which is exactly what
-                    this section has always been. */}
-                {d.attribution ? (
-                  <Attribution
-                    base={d.attribution.base}
-                    groups={d.attribution.groups}
-                    total={d.forecast}
-                  />
-                ) : (
-                  <MathLines rows={d.rows} />
-                )}
-                <p style={{ margin: "6px 0 0" }}>{d.moves}.</p>
-              </div>
-              <Sureness band={d.band}>{d.sureness}</Sureness>
-            </div>
-            <Provenance items={d.provenance} />
-          </>
-        )}
-      </Section>
-
-      <div className="split split--ro">
-        {/* THE NEW SECTION. See `src/lib/counter/run-out.ts` — the shelf read
-            against the week, at the week's own demand rather than at a flat
-            fourteen-day mean. `metaHot` is tier 1's single loop, and it moved
-            here from the queue because three recommendations that will still
-            be there tomorrow are not the time-critical thing on this page;
-            stock that goes before the next delivery is. */}
-        <Section
-          title="What you will run out of"
-          meta={(r) =>
-            r.hot > 0
-              ? `${r.hot} before delivery`
-              : `${r.rows.length} watched · cover to ${r.scaleDays}d`
-          }
-          metaHot={(r) => r.hot > 0}
-          data={sections.runOut}
-          pending={pending}
-          askAbout="what we will run out of this week"
-        >
-          {(r) => (
-            <>
-              <RunOutKey />
-              <RunOut rows={r.rows} scaleDays={r.scaleDays} />
-              <Note>
-                Cover is what is on the shelf divided by what gets through it. The grey bar
-                divides by a flat fourteen-day average, which is what this product has always
-                done; the coloured bar divides by the week&rsquo;s own forecast demand, exploded
-                through the recipes. The marker is lead time plus safety &mdash; past it,
-                ordering is already late.
-                {r.partial ? " Some demand could not be exploded, so these are floors." : ""}
-              </Note>
-            </>
-          )}
-        </Section>
-
-        <Section
-          title="How well we have been calling it"
-          meta="the last reconciled window"
-          data={sections.accuracy}
-          pending={pending}
-          askAbout="how accurate the forecast has been"
-        >
-          {(a) => (
-            <>
-              <MathLines rows={a.rows} />
-              <div style={{ marginTop: "10px" }}>
-                <Record marks={a.record} />
-              </div>
-              <Note>
-                {a.note}
-              </Note>
-            </>
-          )}
-        </Section>
-      </div>
-
-      <div className="split">
-        {/* N-R5. Zero rows is the production state, and it renders as the
-            table's own four headers over nothing — the exact DOM the
-            prototype draws around its rows, and no `.empty` landmark. */}
-        <Section
-          title="What you decided"
-          meta={(rows) => `${rows.length} on file`}
-          data={sections.ledger}
-          pending={pending}
-          pad={false}
-        >
-          {(rows) => <Table columns={LEDGER_COLUMNS} rows={ledgerRows(rows)} />}
-        </Section>
-
-        {/* N-R6. THREE items against the loader's five, and the head says so
-            — the cap is on the page rather than hidden in the adapter. */}
-        <Section
-          title="What to do this week"
-          meta={(q) => q.meta}
-          data={sections.queue}
-          pending={pending}
-          askAbout="what to do this week"
-        >
-          {(q) => <Queue items={queueItems(q.items)} />}
-        </Section>
-      </div>
-      </Fold>
+      />
     </>
   )
 }

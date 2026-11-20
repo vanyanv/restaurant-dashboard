@@ -1,6 +1,6 @@
 "use client"
 
-import { Fold } from "@/components/counter/ui"
+import { PageTabs } from "@/components/counter/ui"
 import { CogsPlainView } from "@/app/dashboard/(counter)/cogs/cogs-plain-ui"
 import { useMemo } from "react"
 import {
@@ -95,30 +95,48 @@ export function CounterPhoneStoreCogsClient({
 
       {/* Food cost made plain (owner's go, 2026-11-18; mock
           https://claude.ai/artifact/Sr98ngzuijqUUhPbJNJAv4). Every figure
-          below is folded underneath, unchanged. */}
-      <Section bare title="Food cost in a sentence" data={sections.plain} pending={pending}>
-        {(p) => <CogsPlainView p={p} />}
-      </Section>
+          below sits in named tabs beside it (DESIGN.md "Page layout"). */}
+      <PageTabs
+        label="Food cost views"
+        tabs={[
+          {
+            key: "summary",
+            label: "Summary",
+            content: (
+              <>
+                <Section bare title="Food cost in a sentence" data={sections.plain} pending={pending}>
+                  {(p) => <CogsPlainView p={p} />}
+                </Section>
+              </>
+            ),
+          },
+          {
+            key: "plan",
+            label: "Plan",
+            content: (
+              <>
 
-      <Fold summary="COGS breakdown">
+                {/* `h.phoneCells` — two, and NOT a slice of the desk's four. */}
+                <Section bare title="The figures" data={sections.headline} pending={pending}>
+                  {(h) => <MStrip cells={h.phoneCells} />}
+                </Section>
 
-      {/* `h.phoneCells` — two, and NOT a slice of the desk's four. */}
-      <Section bare title="The figures" data={sections.headline} pending={pending}>
-        {(h) => <MStrip cells={h.phoneCells} />}
-      </Section>
-
-      {/* The adapter's own shorter, tickless chart. No sentence and no note:
-          at 340px there is no room for the desk's prose beside its own chart,
-          and the prototype's phone composition stops at the chart too. */}
-      <Section
-        title="Against this store's target"
-        meta={(p) => p.meta}
-        data={sections.plan}
-        pending={pending}
-      >
-        {(p) => <Chart {...p.phoneChart} fmt={PCT} />}
-      </Section>
-      </Fold>
+                {/* The adapter's own shorter, tickless chart. No sentence and no note:
+                    at 340px there is no room for the desk's prose beside its own chart,
+                    and the prototype's phone composition stops at the chart too. */}
+                <Section
+                  title="Against this store's target"
+                  meta={(p) => p.meta}
+                  data={sections.plan}
+                  pending={pending}
+                >
+                  {(p) => <Chart {...p.phoneChart} fmt={PCT} />}
+                </Section>
+              </>
+            ),
+          },
+        ]}
+      />
     </>
   )
 }

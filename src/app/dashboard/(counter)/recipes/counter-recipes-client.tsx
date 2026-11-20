@@ -19,7 +19,7 @@ import { readCounterParams, writeCounterParams } from "@/lib/counter/url-state"
 import { createRecipe } from "@/lib/counter/actions/recipe"
 import type { SectionSources } from "@/lib/counter/adapters/types"
 import type { RecipesSections } from "@/lib/counter/adapters/recipes"
-import { Fold } from "@/components/counter/ui"
+import { PageTabs } from "@/components/counter/ui"
 import { RecipesPlainView } from "./recipes-plain-ui"
 
 /**
@@ -106,64 +106,94 @@ export function CounterRecipesClient({
         />
       </PageHead>
 
-      <Section bare title="Recipes in a sentence" data={sections.plain} pending={pending}>
-        {(p) => <RecipesPlainView p={p} add={<NewRecipe categories={p.categories} />} />}
-      </Section>
+      <PageTabs
+        label="Recipe views"
+        tabs={[
+          {
+            key: "summary",
+            label: "Summary",
+            content: (
+              <>
+                <Section bare title="Recipes in a sentence" data={sections.plain} pending={pending}>
+                  {(p) => <RecipesPlainView p={p} add={<NewRecipe categories={p.categories} />} />}
+                </Section>
+              </>
+            ),
+          },
+          {
+            key: "all",
+            label: "All recipes",
+            content: (
+              <>
+                <Section bare title="The figures" data={sections.headline} pending={pending}>
+                  {(h) => <Strip cells={h.cells} />}
+                </Section>
 
-      <Fold summary="Every recipe as a table, as before">
-      <Section bare title="The figures" data={sections.headline} pending={pending}>
-        {(h) => <Strip cells={h.cells} />}
-      </Section>
-
-      <Section
-        title="All recipes"
-        meta={(c) => c.meta}
-        data={sections.catalogue}
-        pending={pending}
-        pad={false}
-        askAbout="which plates have no recipe lines at all"
-      >
-        {(c) => (
-          <>
-            <Table columns={CATALOGUE_COLUMNS} rows={c.rows} />
-            {/* No `.sec__body` — a table section emits the table alone, so the
-                note carries the body's own inset via `<Note flush>`. */}
-            <Note flush>
-              {c.note}
-            </Note>
-          </>
-        )}
-      </Section>
-
-      <div className="split">
-        <Section
-          title="Needs confirming"
-          meta={(w) => w.meta}
-          data={sections.work}
-          pending={pending}
-          askAbout="how much revenue sits on unconfirmed recipes"
-        >
-          {(w) => <Queue items={w.items} />}
-        </Section>
-
-        <Section
-          title="Component recipes"
-          meta={(c) => c.meta}
-          data={sections.components}
-          pending={pending}
-          pad={false}
-        >
-          {(c) => (
-            <>
-              <Table columns={COMPONENT_COLUMNS} rows={c.rows} />
-              <Note flush>
-                {c.note}
-              </Note>
-            </>
-          )}
-        </Section>
-      </div>
-      </Fold>
+                <Section
+                  title="All recipes"
+                  meta={(c) => c.meta}
+                  data={sections.catalogue}
+                  pending={pending}
+                  pad={false}
+                  askAbout="which plates have no recipe lines at all"
+                >
+                  {(c) => (
+                    <>
+                      <Table columns={CATALOGUE_COLUMNS} rows={c.rows} />
+                      {/* No `.sec__body` — a table section emits the table alone, so the
+                          note carries the body's own inset via `<Note flush>`. */}
+                      <Note flush>
+                        {c.note}
+                      </Note>
+                    </>
+                  )}
+                </Section>
+              </>
+            ),
+          },
+          {
+            key: "confirm",
+            label: "To confirm",
+            content: (
+              <>
+                <Section
+                  title="Needs confirming"
+                  meta={(w) => w.meta}
+                  data={sections.work}
+                  pending={pending}
+                  askAbout="how much revenue sits on unconfirmed recipes"
+                >
+                  {(w) => <Queue items={w.items} />}
+                </Section>
+              </>
+            ),
+          },
+          {
+            key: "components",
+            label: "Components",
+            content: (
+              <>
+                <Section
+                  title="Component recipes"
+                  meta={(c) => c.meta}
+                  data={sections.components}
+                  pending={pending}
+                  pad={false}
+                >
+                  {(c) => (
+                    <>
+                      <Table columns={COMPONENT_COLUMNS} rows={c.rows} />
+                      <Note flush>
+                        {c.note}
+                      </Note>
+                    </>
+                  )}
+                </Section>
+              </>
+            ),
+          },
+        ]}
+      />
     </>
   )
 }

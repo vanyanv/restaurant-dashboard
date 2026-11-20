@@ -1,6 +1,6 @@
 "use client"
 
-import { Fold } from "@/components/counter/ui"
+import { PageTabs } from "@/components/counter/ui"
 import { CogsPlainView } from "@/app/dashboard/(counter)/cogs/cogs-plain-ui"
 import { useCallback, useMemo } from "react"
 import { usePathname, useRouter } from "next/navigation"
@@ -188,91 +188,122 @@ export function CounterStoreCogsClient({
 
       {/* Food cost made plain (owner's go, 2026-11-18; mock
           https://claude.ai/artifact/Sr98ngzuijqUUhPbJNJAv4). Every figure
-          below is folded underneath, unchanged. */}
-      <Section bare title="Food cost in a sentence" data={sections.plain} pending={pending}>
-        {(p) => <CogsPlainView p={p} />}
-      </Section>
+          below sits in named tabs beside it (DESIGN.md "Page layout"). */}
+      <PageTabs
+        label="Food cost views"
+        tabs={[
+          {
+            key: "summary",
+            label: "Summary",
+            content: (
+              <>
+                <Section bare title="Food cost in a sentence" data={sections.plain} pending={pending}>
+                  {(p) => <CogsPlainView p={p} />}
+                </Section>
+              </>
+            ),
+          },
+          {
+            key: "plan",
+            label: "Plan",
+            content: (
+              <>
 
-      <Fold summary="Every figure, the plan, what moved and the worst margins">
+                {/* The store note and the strip are ONE section, because the note is a
+                    statement about the figures beside it — a page that could show one
+                    without the other would print a claim about numbers that failed to
+                    load. Same shape as the P&L's headline. */}
+                <Section bare title="The figures" data={sections.headline} pending={pending}>
+                  {(h) => (
+                    <>
+                      {h.note ? (
+                        <Note lede>
+                          {h.note}
+                        </Note>
+                      ) : null}
+                      <Strip cells={h.cells} />
+                    </>
+                  )}
+                </Section>
 
-      {/* The store note and the strip are ONE section, because the note is a
-          statement about the figures beside it — a page that could show one
-          without the other would print a claim about numbers that failed to
-          load. Same shape as the P&L's headline. */}
-      <Section bare title="The figures" data={sections.headline} pending={pending}>
-        {(h) => (
-          <>
-            {h.note ? (
-              <Note lede>
-                {h.note}
-              </Note>
-            ) : null}
-            <Strip cells={h.cells} />
-          </>
-        )}
-      </Section>
+                <Section
+                  title="Food cost against this store's target"
+                  pending={pending}
+                  meta={(p) => p.meta}
+                  data={sections.plan}
+                  askAbout="how this store ran against its own food-cost target"
+                >
+                  {(p) => (
+                    <>
+                      <Chart {...p.chart} fmt={PCT} />
+                      <Note>
+                        {p.sentence}
+                      </Note>
+                      <Note>
+                        {p.note}
+                      </Note>
+                    </>
+                  )}
+                </Section>
 
-      <Section
-        title="Food cost against this store's target"
-        pending={pending}
-        meta={(p) => p.meta}
-        data={sections.plan}
-        askAbout="how this store ran against its own food-cost target"
-      >
-        {(p) => (
-          <>
-            <Chart {...p.chart} fmt={PCT} />
-            <Note>
-              {p.sentence}
-            </Note>
-            <Note>
-              {p.note}
-            </Note>
-          </>
-        )}
-      </Section>
-
-      <div className="split">
-        <Section
-          title="What moved"
-          pending={pending}
-          meta={(m) => m.meta}
-          data={sections.moved}
-          pad={false}
-          askAbout="which ingredient prices moved"
-        >
-          {(m) => (
-            <>
-              <Table columns={MOVED_COLUMNS} rows={movedRows(m)} />
-              {/* No `.sec__body` wrapper: it is a landmark class and the
-                  prototype's `sec(..., tbl(...))` emits the table alone. The
-                  note carries the body's own inset via `<Note flush>` instead of opening a
-                  second landmark to get it. */}
-              <Note flush>{m.sentence}</Note>
-              <Note flush>{m.note}</Note>
-            </>
-          )}
-        </Section>
-
-        <Section
-          title="Worst margin items"
-          pending={pending}
-          meta={(w) => w.meta}
-          data={sections.worst}
-          pad={false}
-          askAbout="which items lose the most against plan at this store"
-        >
-          {(w) => (
-            <>
-              <Table columns={WORST_COLUMNS} rows={worstRows(w)} />
-              <Note flush>
-                {w.note}
-              </Note>
-            </>
-          )}
-        </Section>
-      </div>
-      </Fold>
+              </>
+            ),
+          },
+          {
+            key: "moved",
+            label: "What moved",
+            content: (
+              <>
+                <Section
+                  title="What moved"
+                  pending={pending}
+                  meta={(m) => m.meta}
+                  data={sections.moved}
+                  pad={false}
+                  askAbout="which ingredient prices moved"
+                >
+                  {(m) => (
+                    <>
+                      <Table columns={MOVED_COLUMNS} rows={movedRows(m)} />
+                      {/* No `.sec__body` wrapper: it is a landmark class and the
+                          prototype's `sec(..., tbl(...))` emits the table alone. The
+                          note carries the body's own inset via `<Note flush>` instead of opening a
+                          second landmark to get it. */}
+                      <Note flush>{m.sentence}</Note>
+                      <Note flush>{m.note}</Note>
+                    </>
+                  )}
+                </Section>
+              </>
+            ),
+          },
+          {
+            key: "items",
+            label: "Items",
+            content: (
+              <>
+                  <Section
+                    title="Worst margin items"
+                    pending={pending}
+                    meta={(w) => w.meta}
+                    data={sections.worst}
+                    pad={false}
+                    askAbout="which items lose the most against plan at this store"
+                  >
+                    {(w) => (
+                      <>
+                        <Table columns={WORST_COLUMNS} rows={worstRows(w)} />
+                        <Note flush>
+                          {w.note}
+                        </Note>
+                      </>
+                    )}
+                  </Section>
+              </>
+            ),
+          },
+        ]}
+      />
     </>
   )
 }

@@ -21,7 +21,7 @@ import {
 import { readCounterParams, writeCounterParams } from "@/lib/counter/url-state"
 import { dataOf } from "@/lib/counter/section-data"
 import type { SectionSources } from "@/lib/counter/adapters/types"
-import { Fold } from "@/components/counter/ui"
+import { PageTabs } from "@/components/counter/ui"
 import { ItemPlainView } from "./item-plain-ui"
 import { mapItemToRecipe } from "@/lib/counter/actions/menu-item"
 import type { ItemBehind, MenuItemSections } from "@/lib/counter/adapters/menu-item"
@@ -220,80 +220,110 @@ export function CounterMenuItemClient({
 
       {/* Made plain (owner's go, 2026-11-19; mock
           https://claude.ai/artifact/YNwJ7EneNdAaC7vDp4HhBe): what one plate
-          keeps, by channel. The page as it was is folded below, unchanged. */}
-      <Section bare title="This item in a sentence" data={sections.plain} pending={pending}>
-        {(p) => <ItemPlainView p={p} />}
-      </Section>
+          keeps, by channel. The page as it was sits in named tabs beside it (DESIGN.md "Page layout"). */}
+      <PageTabs
+        label="Item views"
+        tabs={[
+          {
+            key: "summary",
+            label: "Summary",
+            content: (
+              <>
+                <Section bare title="This item in a sentence" data={sections.plain} pending={pending}>
+                  {(p) => <ItemPlainView p={p} />}
+                </Section>
+              </>
+            ),
+          },
+          {
+            key: "sales",
+            label: "Sales",
+            content: (
+              <>
+                <Section bare title="The figures" data={sections.headline} pending={pending}>
+                  {(h) => <Strip cells={h.cells} />}
+                </Section>
 
-      <Fold summary="Every figure, units and channels, as before">
-      <Section bare title="The figures" data={sections.headline} pending={pending}>
-        {(h) => <Strip cells={h.cells} />}
-      </Section>
-
-      {/* `pad` default and `askAbout`: the prototype's fourth argument to
-          `sec()` is ASK, not padding — `sec('Units sold', …, chart({…}), true)`
-          asks about the section by its title, and a chart body is not `raw()`
-          so it keeps its `.sec__body`. */}
-      <Section
-        title="Units sold"
-        meta={(s) => s.meta}
-        data={sections.series}
-        pending={pending}
-        askAbout
-      >
-        {(s) => <Chart {...s.chart} />}
-      </Section>
-
-      <div className="split">
-        <Section
-          title="By channel"
-          meta={(c) => c.meta}
-          data={sections.channels}
-          pending={pending}
-          askAbout="which channel sells this item best"
-          /* `tbl()` returns `raw()` in the prototype, so a section whose body
-             is a table has no `.sec__body`. The note below carries the body's
-             own inset via `<Note flush>`, as the Menu profit ledger's does. */
-          pad={false}
-        >
-          {(c) => (
-            <>
-              <Table
-                columns={CHANNEL_COLUMNS}
-                rows={c.rows.map<Row>((r) => ({
-                  key: r.key,
-                  cells: {
-                    channel: (
-                      <span className="chip" style={{ "--pc": r.tint } as CSSProperties}>
-                        <i />
-                        {r.channel}
-                      </span>
-                    ),
-                    price: r.price,
-                    sold: r.sold,
-                    commission: r.commission,
-                    net: r.netEach,
-                    margin: r.margin,
-                  },
-                }))}
-              />
-              <Note flush>
-                {c.note}
-              </Note>
-            </>
-          )}
-        </Section>
-
-        <Section
-          title="Behind it"
-          meta={(b) => b.meta}
-          data={sections.behind}
-          pending={pending}
-        >
-          {(b) => <Behind b={b} />}
-        </Section>
-      </div>
-      </Fold>
+                {/* `pad` default and `askAbout`: the prototype's fourth argument to
+                    `sec()` is ASK, not padding — `sec('Units sold', …, chart({…}), true)`
+                    asks about the section by its title, and a chart body is not `raw()`
+                    so it keeps its `.sec__body`. */}
+                <Section
+                  title="Units sold"
+                  meta={(s) => s.meta}
+                  data={sections.series}
+                  pending={pending}
+                  askAbout
+                >
+                  {(s) => <Chart {...s.chart} />}
+                </Section>
+              </>
+            ),
+          },
+          {
+            key: "channels",
+            label: "Channels",
+            content: (
+              <>
+                <Section
+                  title="By channel"
+                  meta={(c) => c.meta}
+                  data={sections.channels}
+                  pending={pending}
+                  askAbout="which channel sells this item best"
+                  /* `tbl()` returns `raw()` in the prototype, so a section whose body
+                     is a table has no `.sec__body`. The note below carries the body's
+                     own inset via `<Note flush>`, as the Menu profit ledger's does. */
+                  pad={false}
+                >
+                  {(c) => (
+                    <>
+                      <Table
+                        columns={CHANNEL_COLUMNS}
+                        rows={c.rows.map<Row>((r) => ({
+                          key: r.key,
+                          cells: {
+                            channel: (
+                              <span className="chip" style={{ "--pc": r.tint } as CSSProperties}>
+                                <i />
+                                {r.channel}
+                              </span>
+                            ),
+                            price: r.price,
+                            sold: r.sold,
+                            commission: r.commission,
+                            net: r.netEach,
+                            margin: r.margin,
+                          },
+                        }))}
+                      />
+                      <Note flush>
+                        {c.note}
+                      </Note>
+                    </>
+                  )}
+                </Section>
+              </>
+            ),
+          },
+          {
+            key: "recipe",
+            label: "Recipe",
+            content: (
+              <>
+                <Section
+                  title="Behind it"
+                  meta={(b) => b.meta}
+                  data={sections.behind}
+                  pending={pending}
+                >
+                  {(b) => <Behind b={b} />}
+                </Section>
+              </>
+            ),
+          },
+        ]}
+      />
     </>
   )
 }

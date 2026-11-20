@@ -1,6 +1,6 @@
 "use client"
 
-import { Fold } from "@/components/counter/ui"
+import { PageTabs } from "@/components/counter/ui"
 import { AlertsPlainView } from "./alerts-plain-ui"
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition, useLayoutEffect } from "react"
 import { usePathname, useRouter } from "next/navigation"
@@ -527,91 +527,117 @@ export function CounterAlertsClient({
 
       {/* The page made plain (owner's go, 2026-11-18; mock
           https://claude.ai/artifact/Sr98ngzuijqUUhPbJNJAv4). The list it opens
-          is folded underneath and unfolds when an alert is picked. */}
-      <Section bare title="Alerts in a sentence" data={sections.plain} pending={pending}>
-        {(p) => (
-          <AlertsPlainView
-            p={p}
-            // A serious alert is open, so it shows in the Open list with no filter on.
-            onOpen={(id) => push({ alert: id, segment: "open" as AlertSegment, severities: [], sources: [], search: "" })}
-          />
-        )}
-      </Section>
+          sits in the Alerts and History tabs; picking an alert opens Alerts. */}
+      <PageTabs
+        label="Alert views"
+        initial={selectedAlert !== null ? "alerts" : undefined}
+        tabs={[
+          {
+            key: "summary",
+            label: "Summary",
+            content: (
+              <>
+                <Section bare title="Alerts in a sentence" data={sections.plain} pending={pending}>
+                  {(p) => (
+                    <AlertsPlainView
+                      p={p}
+                      // A serious alert is open, so it shows in the Open list with no filter on.
+                      onOpen={(id) => push({ alert: id, segment: "open" as AlertSegment, severities: [], sources: [], search: "" })}
+                    />
+                  )}
+                </Section>
 
-      {/* Keyed on the selection so each newly opened alert opens the fold again. */}
-      <Fold key={selectedAlert ?? "none"} summary="Every alert, one by one, with the figures and filters" defaultOpen={selectedAlert !== null}>
-      <Section bare title="The figures" data={sections.strip} pending={pending}>
-        {(cells) => <Strip cells={cells.map(figureOf)} />}
-      </Section>
+              </>
+            ),
+          },
+          {
+            key: "alerts",
+            label: "Alerts",
+            content: (
+              <>
+                <Section bare title="The figures" data={sections.strip} pending={pending}>
+                  {(cells) => <Strip cells={cells.map(figureOf)} />}
+                </Section>
 
-      {/* The prototype's own headless `.sec` — no `.sec__head`, because the
-          page title and the filter bar's count already say what a heading
-          would, and `.sec__head` is a landmark the fidelity gate counts. */}
-      <div className="sec">
-        <Section bare title="Filters" data={sections.filters} pending={pending}>
-          {(f) => (
-            <AlertFilterRows
-              filters={f}
-              draft={draft}
-              onSearch={setDraft}
-              onSeverity={onSeverity}
-              onSource={onSource}
-              onClear={f.filtering ? onClear : undefined}
-            />
-          )}
-        </Section>
-        <Section bare title="Alerts" data={sections.table} pending={pending}>
-          {(rows) => (
-            <>
-              {segment === "muted" ? null : (
-                <ClearAll rows={rows} />
-              )}
-              <Table
-                columns={COLUMNS}
-                rows={alertRows(rows, selectedAlert, selectAlert, leaving)}
-              />
-              {/* Nothing until a row is picked — the page's default
-                  composition is unchanged, which is both the honest reading of
-                  "this page shows the queue" and what keeps the fidelity gate
-                  able to hold it. See `AlertDecision`. */}
-              {(() => {
-                const picked = rows.find((r) => r.id === selectedAlert)
-                return picked ? (
-                  <AlertDecision
-                    alert={picked}
-                    onDone={() => selectAlert(null)}
-                    onLeaving={() => setLeaving(picked.id)}
-                  />
-                ) : null
-              })()}
-            </>
-          )}
-        </Section>
-      </div>
-
-      <Section
-        title="Alerts opened"
-        // The window the bars actually cover, named by the ADAPTER — a fact
-        // about the data, not a page decision.
-        meta={(c) => c.meta}
-        data={sections.chart}
-        pending={pending}
-      >
-        {(c) => (
-          <Chart
-            type="bars"
-            h={124}
-            zero
-            labels={c.labels}
-            series={c.series}
-            // `fmt` defaults to `money()`. Unpassed, a day that opened three
-            // alerts would read "$3".
-            fmt={openedCount}
-            alt={c.alt}
-          />
-        )}
-      </Section>
-      </Fold>
+                {/* The prototype's own headless `.sec` — no `.sec__head`, because the
+                    page title and the filter bar's count already say what a heading
+                    would, and `.sec__head` is a landmark the fidelity gate counts. */}
+                <div className="sec">
+                  <Section bare title="Filters" data={sections.filters} pending={pending}>
+                    {(f) => (
+                      <AlertFilterRows
+                        filters={f}
+                        draft={draft}
+                        onSearch={setDraft}
+                        onSeverity={onSeverity}
+                        onSource={onSource}
+                        onClear={f.filtering ? onClear : undefined}
+                      />
+                    )}
+                  </Section>
+                  <Section bare title="Alerts" data={sections.table} pending={pending}>
+                    {(rows) => (
+                      <>
+                        {segment === "muted" ? null : (
+                          <ClearAll rows={rows} />
+                        )}
+                        <Table
+                          columns={COLUMNS}
+                          rows={alertRows(rows, selectedAlert, selectAlert, leaving)}
+                        />
+                        {/* Nothing until a row is picked — the page's default
+                            composition is unchanged, which is both the honest reading of
+                            "this page shows the queue" and what keeps the fidelity gate
+                            able to hold it. See `AlertDecision`. */}
+                        {(() => {
+                          const picked = rows.find((r) => r.id === selectedAlert)
+                          return picked ? (
+                            <AlertDecision
+                              alert={picked}
+                              onDone={() => selectAlert(null)}
+                              onLeaving={() => setLeaving(picked.id)}
+                            />
+                          ) : null
+                        })()}
+                      </>
+                    )}
+                  </Section>
+                </div>
+              </>
+            ),
+          },
+          {
+            key: "history",
+            label: "History",
+            content: (
+              <>
+                <Section
+                  title="Alerts opened"
+                  // The window the bars actually cover, named by the ADAPTER — a fact
+                  // about the data, not a page decision.
+                  meta={(c) => c.meta}
+                  data={sections.chart}
+                  pending={pending}
+                >
+                  {(c) => (
+                    <Chart
+                      type="bars"
+                      h={124}
+                      zero
+                      labels={c.labels}
+                      series={c.series}
+                      // `fmt` defaults to `money()`. Unpassed, a day that opened three
+                      // alerts would read "$3".
+                      fmt={openedCount}
+                      alt={c.alt}
+                    />
+                  )}
+                </Section>
+              </>
+            ),
+          },
+        ]}
+      />
     </>
   )
 }

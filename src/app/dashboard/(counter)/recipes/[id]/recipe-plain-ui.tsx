@@ -8,7 +8,7 @@ import {
   ButtonLink,
   Card,
   Freshness,
-  openFold,
+  openTab,
   Rows,
   Status,
   Statuses,
@@ -20,8 +20,8 @@ import type { RecipePlain } from "@/lib/counter/adapters/recipe"
  * One recipe made plain, shared by the desk and the phone (mock
  * https://claude.ai/artifact/YNwJ7EneNdAaC7vDp4HhBe, screen 8). The cost and
  * its biggest line come first; editing is one button away. The phone edits on
- * its own page (`editHref`); the desk opens the editor folded below
- * (`editFold`).
+ * its own page (`editHref`); the desk opens its Recipe tab
+ * (`editTab`).
  */
 type Line = { key: string; label: string; value: string; missing?: boolean; total?: boolean }
 
@@ -40,11 +40,11 @@ const COLUMNS: RowsColumn<Line>[] = [
 export function RecipePlainView({
   p,
   editHref,
-  editFold,
+  editTab,
 }: {
   p: RecipePlain
   editHref?: string
-  editFold?: string
+  editTab?: string
 }) {
   const rows: Line[] = [
     ...p.lines,
@@ -77,8 +77,8 @@ export function RecipePlainView({
           <ButtonLink variant="primary" href={editHref}>
             Edit recipe
           </ButtonLink>
-        ) : editFold ? (
-          <Button variant="primary" onClick={() => openFold(editFold)}>
+        ) : editTab ? (
+          <Button variant="primary" onClick={() => openTab(editTab)}>
             Edit recipe
           </Button>
         ) : null}

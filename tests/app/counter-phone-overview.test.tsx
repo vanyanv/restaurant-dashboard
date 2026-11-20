@@ -189,22 +189,23 @@ describe("Counter Overview — the phone", () => {
     expect(found).toEqual([])
   })
 
-  it("leads with the Overview made plain, stacked, and folds the old phone page under it", () => {
+  it("leads with the Overview made plain, stacked, and puts the old phone page in tabs after it", () => {
     const { container } = renderPhone()
     const scroll = container.querySelector(".mscroll")!
-    const stack = scroll.querySelector(".cu-stack")!
-    const fold = scroll.querySelector(".cu-fold") as HTMLDetailsElement
-    // The answer comes before the fold, and the old head block is inside it.
-    expect(stack.compareDocumentPosition(fold) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
-    expect(fold.open).toBe(false)
-    expect(fold.querySelector(".mhead")).not.toBeNull()
+    const tabs = scroll.querySelector(".cu-pagetabs") as HTMLElement
+    const panels = [...tabs.querySelectorAll<HTMLElement>(":scope > .cu-pagetabs__panel")]
+    // The same tabs as the desk, in the same order (the last is "Alerts" on the phone).
+    expect(panels.map((p) => p.dataset.tab)).toEqual(["summary", "trends", "stores", "checks"])
+    expect(panels.map((p) => p.hidden)).toEqual([false, true, true, true])
+    const stack = panels[0].querySelector(".cu-stack")!
+    // The answer is on Summary, and the old head block is on Trends.
+    expect(panels[1].querySelector(".mhead")).not.toBeNull()
     expect(stack.querySelector(".cu-answer")!.textContent).toContain("Hollywood sold $7,468")
     // The P&L button stays on the phone.
     expect(stack.querySelector<HTMLAnchorElement>("a[href^='/m/pnl']")).not.toBeNull()
-    // Needs you, folded, ahead of the old page.
-    const needs = scroll.querySelector("details.cu-needs") as HTMLDetailsElement
+    // Needs you, folded, on Summary.
+    const needs = panels[0].querySelector("details.cu-needs") as HTMLDetailsElement
     expect(needs.open).toBe(false)
-    expect(needs.compareDocumentPosition(fold) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   })
 
   it("tapping a week bar writes the range the date sheet writes", () => {

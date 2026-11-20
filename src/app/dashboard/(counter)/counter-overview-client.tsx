@@ -33,7 +33,7 @@ import {
 import {
   AskBar,
 } from "@/components/counter/ask"
-import { Fold } from "@/components/counter/ui"
+import { PageTabs } from "@/components/counter/ui"
 import { OverviewHero, OverviewNeeds, OverviewStatuses, OverviewStores } from "./overview-plain-ui"
 import { readCounterParams, writeCounterParams } from "@/lib/counter/url-state"
 import {
@@ -401,32 +401,357 @@ export function CounterOverviewClient({
           https://claude.ai/artifact/8ZrnRsGAYWc2WV6tg6wb5D): the sentence, sales
           and kept with the eight weeks as the week picker, status in words, one
           card per store, where the sales came from, and Needs you in a few
-          groups. Every figure is the P&L's own. What the page said before is
-          folded underneath, unchanged. */}
-      <Section bare title="How the period went" data={sections.plain} pending={pending}>
-        {(o) => (
-          <div className="cu-stack">
-            <OverviewHero o={o} range={range} onWeek={(r) => push({ range: r })} />
-            <OverviewStatuses o={o} />
-            <OverviewStores o={o} onStore={(id) => push({ storeId: id })} />
-          </div>
-        )}
-      </Section>
+          groups. Every figure is the P&L's own. What the page said before
+          is split into named tabs (DESIGN.md "Page layout"), not one fold:
+          Trends, Stores, and Alerts & feeds. */}
+      <PageTabs
+        label="Overview views"
+        tabs={[
+          {
+            key: "summary",
+            label: "Summary",
+            content: (
+              <>
+              <Section bare title="How the period went" data={sections.plain} pending={pending}>
+                {(o) => (
+                  <div className="cu-stack">
+                    <OverviewHero o={o} range={range} onWeek={(r) => push({ range: r })} />
+                    <OverviewStatuses o={o} />
+                    <OverviewStores o={o} onStore={(id) => push({ storeId: id })} />
+                  </div>
+                )}
+              </Section>
 
-      <Section bare title="Where sales came from" data={sections.channels} pending={pending}>
-        {(mix) => (
-          <ChannelRows
-            caption={`Where ${storeName === "all stores" ? "the" : `${storeName}'s`} sales came from · ${windowLabel}`}
-            rows={mix.map((c) => ({ id: c.channel, net: c.net, orders: c.orders, commission: c.commission, ticket: c.ticket }))}
-            footer={mix.length === 0 ? "No channel readings for this range." : undefined}
-          />
-        )}
-      </Section>
+              <Section bare title="Where sales came from" data={sections.channels} pending={pending}>
+                {(mix) => (
+                  <ChannelRows
+                    caption={`Where ${storeName === "all stores" ? "the" : `${storeName}'s`} sales came from · ${windowLabel}`}
+                    rows={mix.map((c) => ({ id: c.channel, net: c.net, orders: c.orders, commission: c.commission, ticket: c.ticket }))}
+                    footer={mix.length === 0 ? "No channel readings for this range." : undefined}
+                  />
+                )}
+              </Section>
 
-      <Section bare title="Needs you" data={sections.plain} pending={pending}>
-        {(o) => <OverviewNeeds o={o} />}
-      </Section>
+              <Section bare title="Needs you" data={sections.plain} pending={pending}>
+                {(o) => <OverviewNeeds o={o} />}
+              </Section>
+              </>
+            ),
+          },
+          {
+            key: "trends",
+            label: "Trends",
+            content: (
+              <>
+              {/* Note 30, as two figures and a verdict: net sales says whether the day
+                  happened, sales per labor hour says whether it was worth having.
+                  Three sections, one block — they come from three rollups that fail
+                  independently, so each figure carries its own state and the block
+                  holds whichever of them arrived. */}
+              <HeadBlock
+                figures={[
+                  <Section bare key="net" title="Net sales" data={sections.sales} pending={pending}>
+                    {(d) => (
+                      <LeadFigure
+                        label={netSalesLabel(range)}
+                        // The figure arrives: it counts up to the rollup's number over
+                        // 480ms, worded by the same `money` it would be worded by at
+                        // rest. Data arriving is louder than a hover and quieter than
+                        // a figure that needs the reader — see the motion block in
+                        // `counter-components.css (repairs)` for the hierarchy.
+                        value={<CountUp value={d.grossSales} format={(v) => money(v)} />}
+                        // The shape behind the number, in the slot the prototype gives
+                        // a figure's sparkline. It is the same array the chart below
+                        // is drawn from, so a reader who sees a cliff here finds the
+                        // same cliff there.
+                        series={d.series}
+                        detail={d.comparison}
+                        // The adapter decides this, not the arrow in the string: net
+                        // sales is a figure whose direction and sentiment agree, and
+                        // until the sheet was corrected a 37.2% FALL printed here in
+                        // the colour of a rise.
+                        detailTone={d.comparisonTone}
+                        // "337 orders · $21.22 ticket" — the two numbers this one is
+                        // made of, written by the adapter off the rows they both come
+                        // from. Absent rather than half-written when the channel
+                        // rollup did not answer.
+                        caption={d.note ?? undefined}
+                      />
+                    )}
+                  </Section>,
+                  <Section bare key="splh" title="Sales per labor hour" data={sections.splh} pending={pending}>
+                    {(d) => (
+                      <LeadFigure
+                        label="Sales per labor hour"
+                        value={<CountUp value={d.value} format={(v) => money(v, { cents: true })} />}
+                        series={d.series}
+                        // "▼ $20.30 vs a usual $124.00" — how far this range sits from
+                        // what these same weekdays return, in the money the figure is
+                        // measured in rather than as a percentage of itself.
+                        detail={d.detail}
+                        detailTone={d.detailTone}
+                        /*
+                         * The USUAL, drawn as a band — not a floor.
+                         *
+                         * Nothing in this schema publishes an SPLH floor: the
+                         * prototype's `SPLH_FLOOR = 68.00` is its own number, and a
+                         * meter against a figure nobody set is worse than no meter.
+                         * What a band CAN honestly say is where this weekday normally
+                         * lands, which is history rather than intent — and the word
+                         * over it is always "usual". `src/lib/counter/splh-lead.ts`
+                         * carries the long form of the distinction; the verdict beside
+                         * this figure is what reads the published schedule.
+                         */
+                        reference={d.reference ?? undefined}
+                        // "74.0 h worked · 4.0 h over the 70.0 h published · $82 of
+                        // labor" — the Labor page's own verdict, distilled to one line
+                        // and built from the same `scheduleHeld` predicate, so the two
+                        // pages cannot call one week different things.
+                        caption={d.caption}
+                      />
+                    )}
+                  </Section>,
+                ]}
+              >
+                <Section bare title="The verdict" data={sections.verdict} pending={pending}>
+                  {(v) => (
+                    <Say tone={v.tone} headline={v.headline} action={v.action}>
+                      {v.body}
+                    </Say>
+                  )}
+                </Section>
+              </HeadBlock>
 
+              {/* The ruled strip. `Strip` sizes itself from `cells.length`, so a strip
+                  missing a figure the database cannot produce is a shorter strip
+                  rather than a bordered box reading "—". */}
+              <Section bare title="The figures" data={sections.strip} pending={pending}>
+                {(cells) => <Strip cells={cells} />}
+              </Section>
+
+              {/* Every cell names something the figures above it do NOT include. */}
+              <Section bare title="Still moving" data={sections.moving} pending={pending}>
+                {(cells) => <Moving cells={cells} />}
+              </Section>
+
+              {/* The two lead figures, as trends. Both are sections, so both carry all
+                  six states rather than only the one somebody remembered. */}
+              <div className="split">
+                <Section
+                  title={`Net sales · ${windowLabel}`}
+                  pending={pending}
+                  /*
+                   * WHAT IS ACTUALLY DRAWN, which at a one-bucket range is not a line.
+                   *
+                   * `Chart` has a documented single-reading branch: below two labels
+                   * it draws the reading and its comparison as two cells rather than
+                   * a bar and a dashed prior, because one bar is not a shape. This
+                   * caption did not know that, so the page's DEFAULT range — one day —
+                   * captioned two read-out boxes "dashed line: the prior period ·
+                   * 1 daily buckets", promising a line that was never coming and
+                   * getting the plural wrong on the way.
+                   *
+                   * A function of the data rather than of `range`, so the caption is
+                   * derived from the same array the chart is drawn from and the two
+                   * cannot disagree about how many buckets there turned out to be.
+                   */
+                  meta={(spec) =>
+                    spec.labels.length < 2
+                      ? comparing
+                        ? `one reading · ${cmpName} beside it`
+                        : "one reading · no line to draw"
+                      : comparing
+                        ? `dashed line: ${cmpName} · ${plural(spec.labels.length, `${buckets} bucket`)}`
+                        : `hover for the reading · ${plural(spec.labels.length, `${buckets} bucket`)}`
+                  }
+                  data={sections.salesChart}
+                  askAbout="net sales over this range"
+                >
+                  {(spec) => (
+                    <>
+                      <Chart {...spec} fmt={(v) => money(v)} />
+                      <div className="btnrow">
+                        <Link className="btn btn--quiet" href="/dashboard/analytics">
+                          Where it came from
+                        </Link>
+                      </div>
+                    </>
+                  )}
+                </Section>
+
+                <Section
+                  title="Sales per labor hour"
+                  // Same as the panel beside it: at one bucket `Chart` draws a reading,
+                  // not a series, and this said "daily readings" over it.
+                  meta={(spec) => plural(spec.labels.length, `${buckets} reading`)}
+                  data={sections.splhChart}
+                  pending={pending}
+                  askAbout="sales per labor hour"
+                >
+                  {(spec) => (
+                    <>
+                      <Chart {...spec} fmt={(v) => money(v, { cents: true })} />
+                      {/* The prototype draws a FLOOR rule here and writes a sentence
+                          about it. No store file publishes a floor, so there is no
+                          rule. The dashed line is a different claim and the sentence
+                          says which: the median of this store's own history for each
+                          weekday, which describes the past rather than setting a
+                          target for the future. Absent from the chart, and from this
+                          sentence, when too few days in the range have history behind
+                          them to draw one honestly. */}
+                      <p className="mono">
+                        Every hour of labor posted in this range returned this much in sales.{" "}
+                        {spec.legend
+                          ? "The dashed line is what these same weekdays usually return — the store's own history, not a target."
+                          : `No floor is published for ${storeName}, and there is not enough weekday history yet to draw a usual.`}
+                      </p>
+                    </>
+                  )}
+                </Section>
+              </div>
+
+              {/* The comparison, all of it, one click under the chart that draws it,
+                  at the width of the page — a four-column table in a 340px column
+                  wraps every row it has. Mounted only when a comparison is on, which
+                  is `P.overview.desk()`'s own `cmpOn &&` (line 4340) and is page
+                  state, not a section's status. */}
+              {comparing ? (
+                <Section bare title="Every figure against the comparison" data={sections.comparison} pending={pending}>
+                  {(rows) => (
+                    <Drill wide label={`Every figure against ${cmpName}`}>
+                      <Table
+                        columns={[
+                          { key: "figure", label: "Figure" },
+                          { key: "now", label: "This range", numeric: true },
+                          { key: "then", label: "Comparison", numeric: true },
+                          { key: "change", label: "Change", numeric: true },
+                        ]}
+                        rows={rows.map((r) => ({
+                          key: r.key,
+                          cells: {
+                            figure: r.figure,
+                            now: r.now,
+                            then: r.then,
+                            // `hot` is the prototype's own class for a cell that moved
+                            // the wrong way; the ported sheet paints it.
+                            change: { v: r.change, cls: r.bad ? "hot" : undefined },
+                          },
+                        }))}
+                      />
+                    </Drill>
+                  )}
+                </Section>
+              ) : null}
+              </>
+            ),
+          },
+          {
+            key: "stores",
+            label: "Stores",
+            content: (
+              <>
+              {/* Where the money came from belongs to the store that made it. And a
+                  store that has not opened belongs in something other than a row —
+                  note 33, the element this whole effort was diagnosed on. */}
+              <Section
+                title="Per-store ledger"
+                pending={pending}
+                meta={`${windowLabel} · open a store for where its money came from`}
+                data={sections.stores}
+                askAbout="the per-store ledger"
+              >
+                {(cards) => (
+                  <StoreCards
+                    stores={cards.map(toCard)}
+                    /* The prototype opens the SELECTED store's card (`here === id`,
+                       line 3907). With no store selected it opens the first trading
+                       one, because "open a store for where its money came from" is
+                       what this section is for and a page of shut drawers answers
+                       nothing. */
+                    defaultOpenId={
+                      counterParams.storeId ?? cards.find((c) => c.kind === "trading")?.id
+                    }
+                    notes={[
+                      `Every figure is ${windowLabel}.`,
+                      "Net sales across the store cards add up to the total at the top.",
+                    ]}
+                  />
+                )}
+              </Section>
+              </>
+            ),
+          },
+          {
+            key: "checks",
+            label: "Alerts & feeds",
+            content: (
+              <>
+              <Section
+                title="What needs you"
+                meta={(items) => String(items.length)}
+                data={sections.needsYou}
+                pending={pending}
+              >
+                {(items) => <Queue items={items.map(toQueueItem)} scope={scope} />}
+              </Section>
+              {/* THREE tiles, not two: `.tri` is a three-track grid and `tri--2`
+                  narrows it. What was missing was the block that says whether any of
+                  the figures above can be trusted, which on a page whose every number
+                  is a quotient of two syncs on different schedules is not a footnote.
+                  See `adapters/feed-health.ts`. */}
+              <div className="tri">
+                {/* Four figures became money lines: what arrived, what is held up, and
+                    what actually reached COGS. `MoneyLines` is the prototype's own
+                    element for a short reconciliation, and the adapter writes the
+                    lines because a page never formats a number a second way. */}
+                <Section title="Invoices" data={sections.invoices} pending={pending} askAbout>
+                  {(rows) => <MoneyLines rows={rows} />}
+                </Section>
+
+                {/* Deliberately NOT range-scoped, and it says so in its own meta: a
+                    sync that ran an hour ago is a fact about the pipeline, not about
+                    the window the reader is looking at. */}
+                <Section
+                  title="What feeds these figures"
+                  meta="and how fresh each one is"
+                  data={sections.feeds}
+                  pending={pending}
+                >
+                  {(rows) => (
+                    <>
+                      <MoneyLines rows={rows} />
+                      <p className="mono">
+                        Every figure above is a quotient of two of these. When one stops, the page goes
+                        quietly short of an answer rather than blank.
+                      </p>
+                    </>
+                  )}
+                </Section>
+
+                <Section title="Guest ratings" data={sections.ratings} pending={pending} askAbout>
+                  {(r) => (
+                    <>
+                      <div className="stars">
+                        <span className="n tabular-nums lining-nums">{r.average}</span>
+                        {/* The scale a sighted reader reads off five glyphs, in the
+                            one form a screen reader gets it: the glyphs themselves are
+                            `aria-hidden` inside `Stars`. */}
+                        <span className="sr-only">out of 5</span>
+                        <Stars value={r.averageValue} />
+                      </div>
+                      <p className="mono">
+                        {count(r.count)} reviews in {count(r.windowDays)} days
+                        {r.lowCount > 0 ? ` · ${count(r.lowCount)} at one or two stars` : ""}
+                      </p>
+                    </>
+                  )}
+                </Section>
+              </div>
+              </>
+            ),
+          },
+        ]}
+      />
       {/* Not a section in the prototype either, and it carries no state: a
           store that is not trading is still a store you can ask about. */}
       <AskBar
@@ -437,301 +762,6 @@ export function CounterOverviewClient({
           "Which channel is costing the most to sell through?",
         ]}
       />
-
-      <Fold summary="Detailed figures: sales, charts, alerts, each store and data feeds">
-      {/* Note 30, as two figures and a verdict: net sales says whether the day
-          happened, sales per labor hour says whether it was worth having.
-          Three sections, one block — they come from three rollups that fail
-          independently, so each figure carries its own state and the block
-          holds whichever of them arrived. */}
-      <HeadBlock
-        figures={[
-          <Section bare key="net" title="Net sales" data={sections.sales} pending={pending}>
-            {(d) => (
-              <LeadFigure
-                label={netSalesLabel(range)}
-                // The figure arrives: it counts up to the rollup's number over
-                // 480ms, worded by the same `money` it would be worded by at
-                // rest. Data arriving is louder than a hover and quieter than
-                // a figure that needs the reader — see the motion block in
-                // `counter-components.css (repairs)` for the hierarchy.
-                value={<CountUp value={d.grossSales} format={(v) => money(v)} />}
-                // The shape behind the number, in the slot the prototype gives
-                // a figure's sparkline. It is the same array the chart below
-                // is drawn from, so a reader who sees a cliff here finds the
-                // same cliff there.
-                series={d.series}
-                detail={d.comparison}
-                // The adapter decides this, not the arrow in the string: net
-                // sales is a figure whose direction and sentiment agree, and
-                // until the sheet was corrected a 37.2% FALL printed here in
-                // the colour of a rise.
-                detailTone={d.comparisonTone}
-                // "337 orders · $21.22 ticket" — the two numbers this one is
-                // made of, written by the adapter off the rows they both come
-                // from. Absent rather than half-written when the channel
-                // rollup did not answer.
-                caption={d.note ?? undefined}
-              />
-            )}
-          </Section>,
-          <Section bare key="splh" title="Sales per labor hour" data={sections.splh} pending={pending}>
-            {(d) => (
-              <LeadFigure
-                label="Sales per labor hour"
-                value={<CountUp value={d.value} format={(v) => money(v, { cents: true })} />}
-                series={d.series}
-                // "▼ $20.30 vs a usual $124.00" — how far this range sits from
-                // what these same weekdays return, in the money the figure is
-                // measured in rather than as a percentage of itself.
-                detail={d.detail}
-                detailTone={d.detailTone}
-                /*
-                 * The USUAL, drawn as a band — not a floor.
-                 *
-                 * Nothing in this schema publishes an SPLH floor: the
-                 * prototype's `SPLH_FLOOR = 68.00` is its own number, and a
-                 * meter against a figure nobody set is worse than no meter.
-                 * What a band CAN honestly say is where this weekday normally
-                 * lands, which is history rather than intent — and the word
-                 * over it is always "usual". `src/lib/counter/splh-lead.ts`
-                 * carries the long form of the distinction; the verdict beside
-                 * this figure is what reads the published schedule.
-                 */
-                reference={d.reference ?? undefined}
-                // "74.0 h worked · 4.0 h over the 70.0 h published · $82 of
-                // labor" — the Labor page's own verdict, distilled to one line
-                // and built from the same `scheduleHeld` predicate, so the two
-                // pages cannot call one week different things.
-                caption={d.caption}
-              />
-            )}
-          </Section>,
-        ]}
-      >
-        <Section bare title="The verdict" data={sections.verdict} pending={pending}>
-          {(v) => (
-            <Say tone={v.tone} headline={v.headline} action={v.action}>
-              {v.body}
-            </Say>
-          )}
-        </Section>
-      </HeadBlock>
-
-      {/* The ruled strip. `Strip` sizes itself from `cells.length`, so a strip
-          missing a figure the database cannot produce is a shorter strip
-          rather than a bordered box reading "—". */}
-      <Section bare title="The figures" data={sections.strip} pending={pending}>
-        {(cells) => <Strip cells={cells} />}
-      </Section>
-
-      {/* Every cell names something the figures above it do NOT include. */}
-      <Section bare title="Still moving" data={sections.moving} pending={pending}>
-        {(cells) => <Moving cells={cells} />}
-      </Section>
-
-      {/* The two lead figures, as trends. Both are sections, so both carry all
-          six states rather than only the one somebody remembered. */}
-      <div className="split">
-        <Section
-          title={`Net sales · ${windowLabel}`}
-          pending={pending}
-          /*
-           * WHAT IS ACTUALLY DRAWN, which at a one-bucket range is not a line.
-           *
-           * `Chart` has a documented single-reading branch: below two labels
-           * it draws the reading and its comparison as two cells rather than
-           * a bar and a dashed prior, because one bar is not a shape. This
-           * caption did not know that, so the page's DEFAULT range — one day —
-           * captioned two read-out boxes "dashed line: the prior period ·
-           * 1 daily buckets", promising a line that was never coming and
-           * getting the plural wrong on the way.
-           *
-           * A function of the data rather than of `range`, so the caption is
-           * derived from the same array the chart is drawn from and the two
-           * cannot disagree about how many buckets there turned out to be.
-           */
-          meta={(spec) =>
-            spec.labels.length < 2
-              ? comparing
-                ? `one reading · ${cmpName} beside it`
-                : "one reading · no line to draw"
-              : comparing
-                ? `dashed line: ${cmpName} · ${plural(spec.labels.length, `${buckets} bucket`)}`
-                : `hover for the reading · ${plural(spec.labels.length, `${buckets} bucket`)}`
-          }
-          data={sections.salesChart}
-          askAbout="net sales over this range"
-        >
-          {(spec) => (
-            <>
-              <Chart {...spec} fmt={(v) => money(v)} />
-              <div className="btnrow">
-                <Link className="btn btn--quiet" href="/dashboard/analytics">
-                  Where it came from
-                </Link>
-              </div>
-            </>
-          )}
-        </Section>
-
-        <Section
-          title="Sales per labor hour"
-          // Same as the panel beside it: at one bucket `Chart` draws a reading,
-          // not a series, and this said "daily readings" over it.
-          meta={(spec) => plural(spec.labels.length, `${buckets} reading`)}
-          data={sections.splhChart}
-          pending={pending}
-          askAbout="sales per labor hour"
-        >
-          {(spec) => (
-            <>
-              <Chart {...spec} fmt={(v) => money(v, { cents: true })} />
-              {/* The prototype draws a FLOOR rule here and writes a sentence
-                  about it. No store file publishes a floor, so there is no
-                  rule. The dashed line is a different claim and the sentence
-                  says which: the median of this store's own history for each
-                  weekday, which describes the past rather than setting a
-                  target for the future. Absent from the chart, and from this
-                  sentence, when too few days in the range have history behind
-                  them to draw one honestly. */}
-              <p className="mono">
-                Every hour of labor posted in this range returned this much in sales.{" "}
-                {spec.legend
-                  ? "The dashed line is what these same weekdays usually return — the store's own history, not a target."
-                  : `No floor is published for ${storeName}, and there is not enough weekday history yet to draw a usual.`}
-              </p>
-            </>
-          )}
-        </Section>
-      </div>
-
-      {/* The comparison, all of it, one click under the chart that draws it,
-          at the width of the page — a four-column table in a 340px column
-          wraps every row it has. Mounted only when a comparison is on, which
-          is `P.overview.desk()`'s own `cmpOn &&` (line 4340) and is page
-          state, not a section's status. */}
-      {comparing ? (
-        <Section bare title="Every figure against the comparison" data={sections.comparison} pending={pending}>
-          {(rows) => (
-            <Drill wide label={`Every figure against ${cmpName}`}>
-              <Table
-                columns={[
-                  { key: "figure", label: "Figure" },
-                  { key: "now", label: "This range", numeric: true },
-                  { key: "then", label: "Comparison", numeric: true },
-                  { key: "change", label: "Change", numeric: true },
-                ]}
-                rows={rows.map((r) => ({
-                  key: r.key,
-                  cells: {
-                    figure: r.figure,
-                    now: r.now,
-                    then: r.then,
-                    // `hot` is the prototype's own class for a cell that moved
-                    // the wrong way; the ported sheet paints it.
-                    change: { v: r.change, cls: r.bad ? "hot" : undefined },
-                  },
-                }))}
-              />
-            </Drill>
-          )}
-        </Section>
-      ) : null}
-
-      <Section
-        fold="closed"
-        title="What needs you"
-        meta={(items) => String(items.length)}
-        data={sections.needsYou}
-        pending={pending}
-      >
-        {(items) => <Queue items={items.map(toQueueItem)} scope={scope} />}
-      </Section>
-
-      {/* Where the money came from belongs to the store that made it. And a
-          store that has not opened belongs in something other than a row —
-          note 33, the element this whole effort was diagnosed on. */}
-      <Section
-        title="Per-store ledger"
-        pending={pending}
-        meta={`${windowLabel} · open a store for where its money came from`}
-        data={sections.stores}
-        askAbout="the per-store ledger"
-      >
-        {(cards) => (
-          <StoreCards
-            stores={cards.map(toCard)}
-            /* The prototype opens the SELECTED store's card (`here === id`,
-               line 3907). With no store selected it opens the first trading
-               one, because "open a store for where its money came from" is
-               what this section is for and a page of shut drawers answers
-               nothing. */
-            defaultOpenId={
-              counterParams.storeId ?? cards.find((c) => c.kind === "trading")?.id
-            }
-            notes={[
-              `Every figure is ${windowLabel}.`,
-              "Net sales across the store cards add up to the total at the top.",
-            ]}
-          />
-        )}
-      </Section>
-
-      {/* THREE tiles, not two: `.tri` is a three-track grid and `tri--2`
-          narrows it. What was missing was the block that says whether any of
-          the figures above can be trusted, which on a page whose every number
-          is a quotient of two syncs on different schedules is not a footnote.
-          See `adapters/feed-health.ts`. */}
-      <div className="tri">
-        {/* Four figures became money lines: what arrived, what is held up, and
-            what actually reached COGS. `MoneyLines` is the prototype's own
-            element for a short reconciliation, and the adapter writes the
-            lines because a page never formats a number a second way. */}
-        <Section title="Invoices" data={sections.invoices} pending={pending} askAbout>
-          {(rows) => <MoneyLines rows={rows} />}
-        </Section>
-
-        {/* Deliberately NOT range-scoped, and it says so in its own meta: a
-            sync that ran an hour ago is a fact about the pipeline, not about
-            the window the reader is looking at. */}
-        <Section
-          title="What feeds these figures"
-          meta="and how fresh each one is"
-          data={sections.feeds}
-          pending={pending}
-        >
-          {(rows) => (
-            <>
-              <MoneyLines rows={rows} />
-              <p className="mono">
-                Every figure above is a quotient of two of these. When one stops, the page goes
-                quietly short of an answer rather than blank.
-              </p>
-            </>
-          )}
-        </Section>
-
-        <Section title="Guest ratings" data={sections.ratings} pending={pending} askAbout>
-          {(r) => (
-            <>
-              <div className="stars">
-                <span className="n tabular-nums lining-nums">{r.average}</span>
-                {/* The scale a sighted reader reads off five glyphs, in the
-                    one form a screen reader gets it: the glyphs themselves are
-                    `aria-hidden` inside `Stars`. */}
-                <span className="sr-only">out of 5</span>
-                <Stars value={r.averageValue} />
-              </div>
-              <p className="mono">
-                {count(r.count)} reviews in {count(r.windowDays)} days
-                {r.lowCount > 0 ? ` · ${count(r.lowCount)} at one or two stars` : ""}
-              </p>
-            </>
-          )}
-        </Section>
-      </div>
-      </Fold>
     </>
   )
 }

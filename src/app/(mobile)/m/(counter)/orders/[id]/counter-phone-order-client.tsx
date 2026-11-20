@@ -1,6 +1,6 @@
 "use client"
 
-import { Fold } from "@/components/counter/ui"
+import { PageTabs } from "@/components/counter/ui"
 import { OrderPlainView } from "@/app/dashboard/(counter)/orders/orders-plain-ui"
 import {
   MList,
@@ -129,36 +129,54 @@ export function CounterPhoneOrderClient({
       </div>
 
       {/* The order made plain, the same view the desk shows. */}
-      <Section bare title="This order in a sentence" data={sections.plain}>
-        {(p) => <OrderPlainView p={p} />}
-      </Section>
+      <PageTabs
+        label="Order views"
+        tabs={[
+          {
+            key: "summary",
+            label: "Summary",
+            content: (
+              <>
+                <Section bare title="This order in a sentence" data={sections.plain}>
+                  {(p) => <OrderPlainView p={p} />}
+                </Section>
+              </>
+            ),
+          },
+          {
+            key: "items",
+            label: "Items",
+            content: (
+              <>
+                {/* Two cells, chosen by NAME out of the adapter's five. Nothing here is
+                    judged — ruling O-R2 — so no cell carries a reference and the phone
+                    draws no bullet and no band. */}
+                <Section bare title="The figures" data={sections.strip}>
+                  {(cells) => <MStrip cells={phoneCells(cells)} />}
+                </Section>
 
-      <Fold summary="Order details">
-      {/* Two cells, chosen by NAME out of the adapter's five. Nothing here is
-          judged — ruling O-R2 — so no cell carries a reference and the phone
-          draws no bullet and no band. */}
-      <Section bare title="The figures" data={sections.strip}>
-        {(cells) => <MStrip cells={phoneCells(cells)} />}
-      </Section>
+                <Section title="Items" meta={dataOf(sections.items)?.meta} data={sections.items}>
+                  {(items) => <MList rows={items.rows.map(toListRow)} />}
+                </Section>
 
-      <Section title="Items" meta={dataOf(sections.items)?.meta} data={sections.items}>
-        {(items) => <MList rows={items.rows.map(toListRow)} />}
-      </Section>
+                {/* `sec('What you keep', '', money(…))` — no meta in the prototype, and
+                    none here. */}
+                <Section title="What you keep" data={sections.keep}>
+                  {(keep) => <MoneyLines rows={moneyRows(keep)} />}
+                </Section>
 
-      {/* `sec('What you keep', '', money(…))` — no meta in the prototype, and
-          none here. */}
-      <Section title="What you keep" data={sections.keep}>
-        {(keep) => <MoneyLines rows={moneyRows(keep)} />}
-      </Section>
-
-      {/* OUTSIDE the section, exactly as the prototype writes it, and with
-          its own inline type scale. The tax figure lives here and nowhere
-          else on the page: it was never the restaurant's money, so stating it
-          inside the statement would invite subtracting it twice. */}
-      {note ? (
-        <Note>{note}</Note>
-      ) : null}
-      </Fold>
+                {/* OUTSIDE the section, exactly as the prototype writes it, and with
+                    its own inline type scale. The tax figure lives here and nowhere
+                    else on the page: it was never the restaurant's money, so stating it
+                    inside the statement would invite subtracting it twice. */}
+                {note ? (
+                  <Note>{note}</Note>
+                ) : null}
+              </>
+            ),
+          },
+        ]}
+      />
     </>
   )
 }

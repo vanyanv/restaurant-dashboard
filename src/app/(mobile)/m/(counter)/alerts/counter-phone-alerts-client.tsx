@@ -1,7 +1,7 @@
 "use client"
 
 import { useMemo, useState, useTransition } from "react"
-import { Fold } from "@/components/counter/ui"
+import { PageTabs } from "@/components/counter/ui"
 import { AlertsPlainView } from "@/app/dashboard/(counter)/alerts/alerts-plain-ui"
 import { writeCounterParams } from "@/lib/counter/url-state"
 import {
@@ -284,55 +284,81 @@ export function CounterPhoneAlertsClient({
 
       {/* The page made plain, the same block the desk renders (mock
           https://claude.ai/artifact/Sr98ngzuijqUUhPbJNJAv4). The lists are
-          folded underneath and unfold when an alert is picked. */}
-      <Section bare title="Alerts in a sentence" data={sections.plain} pending={pending}>
-        {(p) => (
-          <AlertsPlainView
-            p={p}
-            onOpen={(id) => {
-              const qs = writeCounterParams(params, { alert: id }).toString()
-              router.push(qs ? `/m/alerts?${qs}` : "/m/alerts", { scroll: false })
-            }}
-          />
-        )}
-      </Section>
+          in their own tabs; picking an alert opens the Alerts tab. */}
+      <PageTabs
+        label="Alert views"
+        initial={selectedAlert !== null ? "alerts" : undefined}
+        tabs={[
+          {
+            key: "summary",
+            label: "Summary",
+            content: (
+              <>
+                <Section bare title="Alerts in a sentence" data={sections.plain} pending={pending}>
+                  {(p) => (
+                    <AlertsPlainView
+                      p={p}
+                      onOpen={(id) => {
+                        const qs = writeCounterParams(params, { alert: id }).toString()
+                        router.push(qs ? `/m/alerts?${qs}` : "/m/alerts", { scroll: false })
+                      }}
+                    />
+                  )}
+                </Section>
+              </>
+            ),
+          },
+          {
+            key: "alerts",
+            label: "Alerts",
+            content: (
+              <>
+                <Section title="Open" meta={(l) => l.meta} data={sections.phoneOpen} pending={pending}>
+                  {(l) => (
+                    <>
+                      <MList rows={l.rows.map(listRow)} />
+                      {(() => {
+                        const picked = l.rows.find((r) => r.closable && r.id === selectedAlert)
+                        return picked ? (
+                          <PhoneAlertDecision
+                            alert={picked}
+                            onDone={() => router.push("/m/alerts", { scroll: false })}
+                          />
+                        ) : null
+                      })()}
+                      {l.clearable ? (
+                        <PhoneClearAll
+                          total={l.clearable.total}
+                          critical={l.clearable.critical}
+                          storeId={counterParams.storeId}
+                        />
+                      ) : null}
+                    </>
+                  )}
+                </Section>
 
-      {/* Keyed on the selection so each newly opened alert opens the fold again. */}
-      <Fold key={selectedAlert ?? "none"} summary="Every alert, one by one" defaultOpen={selectedAlert !== null}>
-      <Section title="Open" meta={(l) => l.meta} data={sections.phoneOpen} pending={pending}>
-        {(l) => (
-          <>
-            <MList rows={l.rows.map(listRow)} />
-            {(() => {
-              const picked = l.rows.find((r) => r.closable && r.id === selectedAlert)
-              return picked ? (
-                <PhoneAlertDecision
-                  alert={picked}
-                  onDone={() => router.push("/m/alerts", { scroll: false })}
-                />
-              ) : null
-            })()}
-            {l.clearable ? (
-              <PhoneClearAll
-                total={l.clearable.total}
-                critical={l.clearable.critical}
-                storeId={counterParams.storeId}
-              />
-            ) : null}
-          </>
-        )}
-      </Section>
-
-      {/* What is no longer open, never a blank panel. See the file note. */}
-      <Section
-        title="Closed"
-        meta={(l) => l.meta}
-        data={sections.phoneClosed}
-        pending={pending}
-      >
-        {(l) => <MList rows={l.rows.map(listRow)} />}
-      </Section>
-      </Fold>
+                {/* What is no longer open, never a blank panel. See the file note. */}
+              </>
+            ),
+          },
+          {
+            key: "history",
+            label: "History",
+            content: (
+              <>
+                <Section
+                  title="Closed"
+                  meta={(l) => l.meta}
+                  data={sections.phoneClosed}
+                  pending={pending}
+                >
+                  {(l) => <MList rows={l.rows.map(listRow)} />}
+                </Section>
+              </>
+            ),
+          },
+        ]}
+      />
     </>
   )
 }
