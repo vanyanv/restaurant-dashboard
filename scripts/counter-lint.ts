@@ -300,6 +300,7 @@
  */
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs"
 import { dirname, join, relative, sep } from "node:path"
+import { findPageLayoutViolations } from "./page-layout-lint"
 import { execFileSync } from "node:child_process"
 
 export interface Violation {
@@ -1184,6 +1185,10 @@ export function lintCounter(
   // `ask-rail-token-matches-prototype` — NOT scoped to Counter roots either,
   // and not a walk at all: it compares two fixed files. See the function.
   violations.push(...findAskRailDriftViolations())
+  // `page-too-long` / `fold-holds-a-page` — DESIGN.md "Page layout". Same
+  // directory scoping as the loading rule; the rules and their ratchet list
+  // live in `page-layout-lint.ts`.
+  violations.push(...findPageLayoutViolations(routeGroupsInScope))
   return violations
 }
 
