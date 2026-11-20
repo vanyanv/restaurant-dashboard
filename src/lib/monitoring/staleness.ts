@@ -50,32 +50,39 @@ export type JobDataOwnership =
 
 export const JOB_DATA_OWNERSHIP: Record<string, JobDataOwnership> = {
   // The daily report's revenue numbers. This is the one that went stale.
+  // 16h, not 8h: since 2026-11-20 the sync rewrites only rows that are new or
+  // changed, so `syncedAt` sits still overnight from the last order of the day
+  // until the first sync after opening — the same allowance as OtterOrder.
+  // The cadence check still catches a job that stopped running.
   "otter.metrics.sync": {
     kind: "timestamp",
     table: "OtterDailySummary",
     column: "syncedAt",
-    maxAgeMinutes: 60 * 8,
+    maxAgeMinutes: 60 * 16,
   },
-  // 10h, not 8h: the hourly sync only runs while Hollywood is trading, so
-  // updatedAt legitimately sits still for the 7h the restaurant is closed.
+  // 16h: the hourly sync only runs while Hollywood is trading, and since
+  // 2026-11-20 it writes only buckets that changed, so updatedAt sits still
+  // from the night's last order until the first order after opening.
   "otter.hourly.sync": {
     kind: "timestamp",
     table: "OtterHourlySummary",
     column: "updatedAt",
-    maxAgeMinutes: 60 * 10,
+    maxAgeMinutes: 60 * 16,
   },
   // 16h, not 8h: since 2026-11-17 the sync rewrites only orders that are new
   // or changed, so `syncedAt` sits still from the last late-night order until
   // the first sync after opening (stores close 1-3am; the 4-hourly cron can
-  // fire hours late). OtterDailySummary's 8h check still catches a dead feed.
+  // fire hours late). A day every store is closed (Thanksgiving) will read
+  // stale here and on the two summaries above: one known false alert a year,
+  // kept rather than waiting 40h to notice a feed that died on a trading day.
   "otter.orders.sync": {
     kind: "timestamp",
     table: "OtterOrder",
     column: "syncedAt",
     maxAgeMinutes: 60 * 16,
   },
-  // Date-partitioned: syncedAt/computedAt are @default(now()) without
-  // @updatedAt, so they don't move on re-sync. Coverage is the honest check.
+  // Date-partitioned: syncedAt/computedAt move only when a row changes, not
+  // on every re-sync. Coverage is the honest check.
   "harri-labor-sync": {
     kind: "dateCoverage",
     table: "HarriDailyLabor",

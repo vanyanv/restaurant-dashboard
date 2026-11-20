@@ -39,6 +39,6 @@ export default async function Page({ params }: { params: Promise<{ code: string 
       </main>
     )
   }
-  const view = await loadCrewView(store, new Date())
+  const view = await loadCrewView(store, new Date(), { autoClose: true })
   return <CrewCheckClient code={code} initial={view} />
 }

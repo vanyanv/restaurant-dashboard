@@ -25,6 +25,13 @@ import {
 } from "@/lib/otter"
 import type { SyncProgressEvent } from "@/types/sync"
 import { withJobRun } from "@/lib/monitoring/job-run"
+import {
+  dedupeByKey,
+  planChangedUpserts,
+  type ChangedUpsertSpec,
+  type ColumnSpec,
+  type UpsertRow,
+} from "@/lib/upsert-changed"
 
 type OtterRow = Record<string, any>
 
@@ -87,15 +94,145 @@ function mergeDailyRecords(records: DailyRecord[]): DailyRecord[] {
   return [...byKey.values()]
 }
 
+/**
+ * `synced` = rows sent to the database (new, changed or unchanged), as before.
+ * `changed` = rows actually inserted or updated; an unchanged row is no longer
+ * rewritten, so its `syncedAt` stays put. Callers gate cache busts on it.
+ */
+export type PhaseCounts = {
+  synced: number
+  failed: number
+  changed: number
+}
+
 export interface MetricsSyncResult {
   storeId: string
-  daily: { synced: number; failed: number }
-  categories: { synced: number; failed: number }
-  items: { synced: number; failed: number }
-  modifiers: { synced: number; failed: number }
-  ratings: { synced: number; failed: number }
+  daily: PhaseCounts
+  categories: PhaseCounts
+  items: PhaseCounts
+  modifiers: PhaseCounts
+  ratings: PhaseCounts
   windowStart: Date
   windowEnd: Date
+}
+
+/** Rows inserted or updated across every phase of one store's sync. */
+export function totalChangedRows(result: MetricsSyncResult): number {
+  return (
+    result.daily.changed +
+    result.categories.changed +
+    result.items.changed +
+    result.modifiers.changed +
+    result.ratings.changed
+  )
+}
+
+const float = (name: string): ColumnSpec => ({ name, type: "float" })
+
+const MENU_VALUE_COLUMNS: ColumnSpec[] = [
+  float("fpQuantitySold"),
+  float("fpTotalInclModifiers"),
+  float("fpTotalSales"),
+  float("tpQuantitySold"),
+  float("tpTotalInclModifiers"),
+  float("tpTotalSales"),
+]
+
+/** @@unique([storeId, date, platform, paymentMethod]) */
+export const DAILY_SUMMARY_UPSERT: ChangedUpsertSpec = {
+  table: "OtterDailySummary",
+  conflict: [
+    { name: "storeId", type: "text" },
+    { name: "date", type: "date" },
+    { name: "platform", type: "text" },
+    { name: "paymentMethod", type: "text" },
+  ],
+  values: [
+    ...[
+      "fpGrossSales", "fpNetSales", "fpDiscounts", "fpFees", "fpLostRevenue",
+      "fpTaxCollected", "fpTaxRemitted", "fpTips", "fpServiceCharges", "fpLoyalty",
+      "tpGrossSales", "tpNetSales", "tpFees", "tpTaxCollected", "tpTaxRemitted",
+      "tpDiscounts", "tpRefundsAdjustments", "tpServiceCharges", "tpTipForRestaurant",
+      "tpLoyaltyDiscount", "tillPaidIn", "tillPaidOut",
+    ].map(float),
+    { name: "fpOrderCount", type: "int" },
+    { name: "tpOrderCount", type: "int" },
+  ],
+  touch: "syncedAt",
+}
+
+/** @@unique([storeId, date, category]) */
+export const MENU_CATEGORY_UPSERT: ChangedUpsertSpec = {
+  table: "OtterMenuCategory",
+  conflict: [
+    { name: "storeId", type: "text" },
+    { name: "date", type: "date" },
+    { name: "category", type: "text" },
+  ],
+  values: MENU_VALUE_COLUMNS,
+  touch: "syncedAt",
+}
+
+/** @@unique([storeId, date, category, itemName, isModifier]) */
+export const MENU_ITEM_UPSERT: ChangedUpsertSpec = {
+  table: "OtterMenuItem",
+  conflict: [
+    { name: "storeId", type: "text" },
+    { name: "date", type: "date" },
+    { name: "category", type: "text" },
+    { name: "itemName", type: "text" },
+    { name: "isModifier", type: "boolean" },
+  ],
+  values: MENU_VALUE_COLUMNS,
+  touch: "syncedAt",
+}
+
+/** @@unique([storeId, externalReviewId]) */
+export const RATING_UPSERT: ChangedUpsertSpec = {
+  table: "OtterRating",
+  conflict: [
+    { name: "storeId", type: "text" },
+    { name: "externalReviewId", type: "text" },
+  ],
+  values: [
+    { name: "brandName", type: "text" },
+    { name: "facilityName", type: "text" },
+    { name: "storeName", type: "text" },
+    { name: "reviewedAt", type: "timestamp" },
+    { name: "platform", type: "text" },
+    { name: "reviewText", type: "text" },
+    { name: "rating", type: "int" },
+    { name: "externalOrderId", type: "text" },
+    { name: "orderItemNames", type: "text" },
+  ],
+  touch: "syncedAt",
+}
+
+/**
+ * Write one phase's rows, only touching new or changed ones. A failing
+ * statement (one chunk of up to 1000 rows) is logged and counted as failed,
+ * and the phase carries on — the same contract the 50-row transactions had.
+ */
+async function writeChangedPhase(
+  label: string,
+  spec: ChangedUpsertSpec,
+  rows: UpsertRow[],
+  onChunk: (processed: number, counts: PhaseCounts) => void,
+): Promise<PhaseCounts> {
+  const counts: PhaseCounts = { synced: 0, failed: 0, changed: 0 }
+  let processed = 0
+  for (const { sql, rowCount } of planChangedUpserts(spec, rows)) {
+    try {
+      counts.changed += await prisma.$executeRaw(sql)
+      counts.synced += rowCount
+    } catch (err) {
+      console.error(`[metrics-sync] Failed ${label} upsert of ${rowCount} rows:`, err)
+      counts.failed += rowCount
+    }
+    processed += rowCount
+    onChunk(processed, counts)
+  }
+  return counts
 }
 
 export interface MetricsSyncOpts {
@@ -205,9 +342,6 @@ async function runMetricsSyncInner(
   const dailyBody = buildDailySyncBody(otterStoreIds, windowStart, windowEnd)
   const dailyRows = await queryMetrics(dailyBody)
 
-  let dailySynced = 0
-  let dailyFailed = 0
-
   const rawDaily = dailyRows
     .filter((row: OtterRow) => {
       const otterStoreId = row["store"] as string | null
@@ -263,61 +397,40 @@ async function runMetricsSyncInner(
     counts,
   })
 
-  for (let i = 0; i < dailyRecords.length; i += 50) {
-    const batch = dailyRecords.slice(i, i + 50)
-    try {
-      await prisma.$transaction(
-        batch.map(({ date, platform, paymentMethod, fields }) =>
-          prisma.otterDailySummary.upsert({
-            where: {
-              storeId_date_platform_paymentMethod: {
-                storeId,
-                date,
-                platform,
-                paymentMethod,
-              },
-            },
-            create: { storeId, date, platform, paymentMethod, ...fields },
-            update: fields,
-          }),
-        ),
-      )
-      dailySynced += batch.length
-      counts.daily = dailySynced
-    } catch (err) {
-      console.error(
-        `[metrics-sync ${storeId}] Failed batch of ${batch.length} daily upserts at offset ${i}:`,
-        err,
-      )
-      dailyFailed += batch.length
-    }
-    const phasePct =
-      dailyRecords.length > 0
-        ? 10 + ((i + batch.length) / dailyRecords.length) * 90
-        : 100
-    emit({
-      phase: "daily",
-      status: "writing",
-      totalProgress: computeTotalProgress(phasePct, 0, 0),
-      detail: `Store ${storeId}: writing daily (${Math.min(i + 50, dailyRecords.length)}/${dailyRecords.length})…`,
-      counts,
-    })
-  }
+  const daily = await writeChangedPhase(
+    `${storeId} daily`,
+    DAILY_SUMMARY_UPSERT,
+    dailyRecords.map(({ date, platform, paymentMethod, fields }) => ({
+      storeId,
+      date,
+      platform,
+      paymentMethod,
+      ...fields,
+    })),
+    (processed, phase) => {
+      counts.daily = phase.synced
+      emit({
+        phase: "daily",
+        status: "writing",
+        totalProgress: computeTotalProgress(10 + (processed / dailyRecords.length) * 90, 0, 0),
+        detail: `Store ${storeId}: writing daily (${processed}/${dailyRecords.length})…`,
+        counts,
+      })
+    },
+  )
 
   emit({
     phase: "daily",
     status: "done",
     totalProgress: computeTotalProgress(100, 0, 0),
-    detail: `Store ${storeId}: ${dailySynced} daily records synced`,
+    detail: `Store ${storeId}: ${daily.synced} daily records synced (${daily.changed} changed)`,
     counts,
   })
 
-  let categorySynced = 0
-  let categoryFailed = 0
-  let itemSynced = 0
-  let itemFailed = 0
-  let modifierSynced = 0
-  let modifierFailed = 0
+  const empty = (): PhaseCounts => ({ synced: 0, failed: 0, changed: 0 })
+  let categories = empty()
+  let items = empty()
+  let modifiers = empty()
 
   if (!dailyOnly) {
     // ─── Phase 2: Menu categories ───
@@ -375,45 +488,31 @@ async function runMetricsSyncInner(
         })
     })
 
-    for (let i = 0; i < categoryRecords.length; i += 50) {
-      const batch = categoryRecords.slice(i, i + 50)
-      try {
-        await prisma.$transaction(
-          batch.map(({ date, category, data }) =>
-            prisma.otterMenuCategory.upsert({
-              where: { storeId_date_category: { storeId, date, category } },
-              create: { storeId, date, category, ...data },
-              update: data,
-            }),
-          ),
-        )
-        categorySynced += batch.length
-        counts.categories = categorySynced
-      } catch (err) {
-        console.error(
-          `[metrics-sync ${storeId}] Failed batch of ${batch.length} category upserts:`,
-          err,
-        )
-        categoryFailed += batch.length
-      }
-      const phasePct =
-        categoryRecords.length > 0
-          ? 40 + ((i + batch.length) / categoryRecords.length) * 60
-          : 100
-      emit({
-        phase: "categories",
-        status: "writing",
-        totalProgress: computeTotalProgress(100, phasePct, 0),
-        detail: `Store ${storeId}: writing categories (${Math.min(i + 50, categoryRecords.length)}/${categoryRecords.length})…`,
-        counts,
-      })
-    }
+    const categoryRows = dedupeByKey(
+      categoryRecords,
+      (r) => `${r.date.toISOString()}|${r.category}`,
+    )
+    categories = await writeChangedPhase(
+      `${storeId} category`,
+      MENU_CATEGORY_UPSERT,
+      categoryRows.map(({ date, category, data }) => ({ storeId, date, category, ...data })),
+      (processed, phase) => {
+        counts.categories = phase.synced
+        emit({
+          phase: "categories",
+          status: "writing",
+          totalProgress: computeTotalProgress(100, 40 + (processed / categoryRows.length) * 60, 0),
+          detail: `Store ${storeId}: writing categories (${processed}/${categoryRows.length})…`,
+          counts,
+        })
+      },
+    )
 
     emit({
       phase: "categories",
       status: "done",
       totalProgress: computeTotalProgress(100, 100, 0),
-      detail: `Store ${storeId}: ${categorySynced} categories synced`,
+      detail: `Store ${storeId}: ${categories.synced} categories synced (${categories.changed} changed)`,
       counts,
     })
 
@@ -467,47 +566,32 @@ async function runMetricsSyncInner(
       })
     })
 
-    for (let i = 0; i < itemRecords.length; i += 50) {
-      const batch = itemRecords.slice(i, i + 50)
-      try {
-        await prisma.$transaction(
-          batch.map(({ date, category, itemName, data }) =>
-            prisma.otterMenuItem.upsert({
-              where: {
-                storeId_date_category_itemName_isModifier: {
-                  storeId,
-                  date,
-                  category,
-                  itemName,
-                  isModifier: false,
-                },
-              },
-              create: { storeId, date, category, itemName, isModifier: false, ...data },
-              update: data,
-            }),
-          ),
-        )
-        itemSynced += batch.length
-        counts.items = itemSynced
-      } catch (err) {
-        console.error(
-          `[metrics-sync ${storeId}] Failed batch of ${batch.length} item upserts:`,
-          err,
-        )
-        itemFailed += batch.length
-      }
-      const phasePct =
-        itemRecords.length > 0
-          ? 40 + ((i + batch.length) / itemRecords.length) * 60
-          : 100
-      emit({
-        phase: "items",
-        status: "writing",
-        totalProgress: computeTotalProgress(100, 100, phasePct),
-        detail: `Store ${storeId}: writing items (${Math.min(i + 50, itemRecords.length)}/${itemRecords.length})…`,
-        counts,
-      })
-    }
+    const itemRows = dedupeByKey(
+      itemRecords,
+      (r) => `${r.date.toISOString()}|${r.category}|${r.itemName}`,
+    )
+    items = await writeChangedPhase(
+      `${storeId} item`,
+      MENU_ITEM_UPSERT,
+      itemRows.map(({ date, category, itemName, data }) => ({
+        storeId,
+        date,
+        category,
+        itemName,
+        isModifier: false,
+        ...data,
+      })),
+      (processed, phase) => {
+        counts.items = phase.synced
+        emit({
+          phase: "items",
+          status: "writing",
+          totalProgress: computeTotalProgress(100, 100, 40 + (processed / itemRows.length) * 60),
+          detail: `Store ${storeId}: writing items (${processed}/${itemRows.length})…`,
+          counts,
+        })
+      },
+    )
 
     // ─── Phase 4: Modifiers ───
     emit({
@@ -559,52 +643,41 @@ async function runMetricsSyncInner(
       })
     })
 
-    for (let i = 0; i < modifierRecords.length; i += 50) {
-      const batch = modifierRecords.slice(i, i + 50)
-      try {
-        await prisma.$transaction(
-          batch.map(({ date, category, itemName, data }) =>
-            prisma.otterMenuItem.upsert({
-              where: {
-                storeId_date_category_itemName_isModifier: {
-                  storeId,
-                  date,
-                  category,
-                  itemName,
-                  isModifier: true,
-                },
-              },
-              create: { storeId, date, category, itemName, isModifier: true, ...data },
-              update: data,
-            }),
+    const modifierRows = dedupeByKey(
+      modifierRecords,
+      (r) => `${r.date.toISOString()}|${r.category}|${r.itemName}`,
+    )
+    modifiers = await writeChangedPhase(
+      `${storeId} modifier`,
+      MENU_ITEM_UPSERT,
+      modifierRows.map(({ date, category, itemName, data }) => ({
+        storeId,
+        date,
+        category,
+        itemName,
+        isModifier: true,
+        ...data,
+      })),
+      (processed, phase) => {
+        counts.modifiers = phase.synced
+        emit({
+          phase: "modifiers",
+          status: "writing",
+          totalProgress: computeTotalProgress(
+            100,
+            100,
+            100,
+            40 + (processed / modifierRows.length) * 60,
           ),
-        )
-        modifierSynced += batch.length
-        counts.modifiers = modifierSynced
-      } catch (err) {
-        console.error(
-          `[metrics-sync ${storeId}] Failed batch of ${batch.length} modifier upserts:`,
-          err,
-        )
-        modifierFailed += batch.length
-      }
-      const phasePct =
-        modifierRecords.length > 0
-          ? 40 + ((i + batch.length) / modifierRecords.length) * 60
-          : 100
-      emit({
-        phase: "modifiers",
-        status: "writing",
-        totalProgress: computeTotalProgress(100, 100, 100, phasePct),
-        detail: `Store ${storeId}: writing modifiers (${Math.min(i + 50, modifierRecords.length)}/${modifierRecords.length})…`,
-        counts,
-      })
-    }
+          detail: `Store ${storeId}: writing modifiers (${processed}/${modifierRows.length})…`,
+          counts,
+        })
+      },
+    )
   }
 
   // ─── Phase 5: Ratings (21-day lookback, route opts in) ───
-  let ratingsSynced = 0
-  let ratingsFailed = 0
+  let ratings = empty()
 
   if (includeRatings) {
     emit({
@@ -663,47 +736,34 @@ async function runMetricsSyncInner(
       counts,
     })
 
-    for (let i = 0; i < ratingRecords.length; i += 50) {
-      const batch = ratingRecords.slice(i, i + 50)
-      try {
-        await prisma.$transaction(
-          batch.map(({ externalReviewId, data }) =>
-            prisma.otterRating.upsert({
-              where: {
-                storeId_externalReviewId: { storeId, externalReviewId },
-              },
-              create: { storeId, externalReviewId, ...data },
-              update: data,
-            }),
+    const ratingUpserts = dedupeByKey(ratingRecords, (r) => r.externalReviewId)
+    ratings = await writeChangedPhase(
+      `${storeId} rating`,
+      RATING_UPSERT,
+      ratingUpserts.map(({ externalReviewId, data }) => ({ storeId, externalReviewId, ...data })),
+      (processed, phase) => {
+        counts.ratings = phase.synced
+        emit({
+          phase: "ratings",
+          status: "writing",
+          totalProgress: computeTotalProgress(
+            100,
+            100,
+            100,
+            100,
+            40 + (processed / ratingUpserts.length) * 60,
           ),
-        )
-        ratingsSynced += batch.length
-        counts.ratings = ratingsSynced
-      } catch (err) {
-        console.error(
-          `[metrics-sync ${storeId}] Failed batch of ${batch.length} rating upserts:`,
-          err,
-        )
-        ratingsFailed += batch.length
-      }
-      const phasePct =
-        ratingRecords.length > 0
-          ? 40 + ((i + batch.length) / ratingRecords.length) * 60
-          : 100
-      emit({
-        phase: "ratings",
-        status: "writing",
-        totalProgress: computeTotalProgress(100, 100, 100, 100, phasePct),
-        detail: `Store ${storeId}: writing ratings (${Math.min(i + 50, ratingRecords.length)}/${ratingRecords.length})…`,
-        counts,
-      })
-    }
+          detail: `Store ${storeId}: writing ratings (${processed}/${ratingUpserts.length})…`,
+          counts,
+        })
+      },
+    )
 
     emit({
       phase: "ratings",
       status: "done",
       totalProgress: computeTotalProgress(100, 100, 100, 100, 100),
-      detail: `Store ${storeId}: ${ratingsSynced} ratings synced`,
+      detail: `Store ${storeId}: ${ratings.synced} ratings synced (${ratings.changed} changed)`,
       counts,
     })
   }
@@ -718,11 +778,11 @@ async function runMetricsSyncInner(
 
   return {
     storeId,
-    daily: { synced: dailySynced, failed: dailyFailed },
-    categories: { synced: categorySynced, failed: categoryFailed },
-    items: { synced: itemSynced, failed: itemFailed },
-    modifiers: { synced: modifierSynced, failed: modifierFailed },
-    ratings: { synced: ratingsSynced, failed: ratingsFailed },
+    daily,
+    categories,
+    items,
+    modifiers,
+    ratings,
     windowStart,
     windowEnd,
   }

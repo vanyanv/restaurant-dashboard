@@ -154,6 +154,11 @@ export async function loadCheckGrid(opts: {
    * `close.ts`), then read again. On by default; the second read turns it off.
    */
   autoClose?: boolean
+  /**
+   * Run `ensureCheckSetup` for each store first. On by default; off when the
+   * caller already did (the crew view), so a request runs it once.
+   */
+  setup?: boolean
 }): Promise<GridStore[]> {
   const stores = await prisma.store.findMany({
     where: {
@@ -165,7 +170,7 @@ export async function loadCheckGrid(opts: {
     orderBy: { name: "asc" },
   })
   if (stores.length === 0) return []
-  await Promise.all(stores.map((s) => ensureCheckSetup(s.id)))
+  if (opts.setup !== false) await Promise.all(stores.map((s) => ensureCheckSetup(s.id)))
 
   const storeIds = stores.map((s) => s.id)
   const range = { gte: dayToDb(opts.fromDay), lte: dayToDb(opts.toDay) }
@@ -332,7 +337,7 @@ export async function loadCheckGrid(opts: {
     if (candidates.length === 0) continue
     wrote += await autoCloseChecks({ store: { id: store.id, accountId: opts.accountId }, candidates, now: opts.now })
   }
-  return wrote > 0 ? loadCheckGrid({ ...opts, autoClose: false }) : out
+  return wrote > 0 ? loadCheckGrid({ ...opts, autoClose: false, setup: false }) : out
 }
 
 /** "Maria G." */

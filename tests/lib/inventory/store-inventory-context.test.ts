@@ -251,3 +251,46 @@ describe("usage-math helpers", () => {
     expect(partial).toBe(true)
   })
 })
+
+describe("sales split at the cutoff", () => {
+  // loadStoreInventoryContext reads sales day by day only after the oldest
+  // last count (or the lookback), and sums everything older per item. Every
+  // figure must equal the one a context holding every sale gives.
+  const day = (d: string, fp: number, tp: number | null = null) => ({
+    date: new Date(`${d}T00:00:00.000Z`),
+    itemName: "Burger",
+    fpQuantitySold: fp,
+    tpQuantitySold: tp,
+  })
+  const all = [day("2026-06-01", 4, 1), day("2026-07-20", 2), day("2026-08-01", 3, 2), day("2026-08-12", 5), day("2026-08-15", 1, 1)]
+  const cutoff = new Date("2026-08-01T12:00:00.000Z")
+  const split = {
+    sales: all.filter((s) => s.date > cutoff),
+    salesCutoff: cutoff,
+    salesBefore: [{ itemName: "Burger", fpQuantitySold: 4 + 2 + 3, tpQuantitySold: 1 + 2 }],
+  }
+  const counted = new Map([["beef", { qtyInRecipeUnit: 100, countedAt: cutoff }]])
+
+  it("gives an ingredient that was never counted every sale ever", () => {
+    const full = runningOnHandFromContext(ctx({ sales: all }), INGREDIENT)
+    const cut = runningOnHandFromContext(ctx(split), INGREDIENT)
+    expect(cut.depletionQty).toBe(full.depletionQty)
+    expect(cut.onHand).toBe(full.onHand)
+    expect(full.depletionQty).toBe((4 + 1 + 2 + 3 + 2 + 5 + 1 + 1) * 2)
+  })
+
+  it("gives a counted ingredient only the sales after its count", () => {
+    const full = runningOnHandFromContext(ctx({ sales: all, lastCountByIngredient: counted }), INGREDIENT)
+    const cut = runningOnHandFromContext(ctx({ ...split, lastCountByIngredient: counted }), INGREDIENT)
+    expect(cut.onHand).toBe(full.onHand)
+    expect(cut.depletionQty).toBe((5 + 1 + 1) * 2)
+  })
+
+  it("leaves the depletion rate unchanged", () => {
+    for (const lastCount of [new Map(), counted]) {
+      const full = dailyDepletionRateFromContext(ctx({ sales: all, lastCountByIngredient: lastCount }), INGREDIENT)
+      const cut = dailyDepletionRateFromContext(ctx({ ...split, lastCountByIngredient: lastCount }), INGREDIENT)
+      expect(cut).toEqual(full)
+    }
+  })
+})

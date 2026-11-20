@@ -15,6 +15,12 @@ import { withJobRun } from "@/lib/monitoring/job-run"
 import { buildTeamUsersUrl, harriFetch, type HarriUser } from "@/lib/harri"
 import { syncCrewFromHarri } from "@/lib/checks/setup"
 import { normalizeUsPhone } from "@/lib/checks/text"
+import {
+  dedupeByKey,
+  upsertChangedRows,
+  type ChangedUpsertSpec,
+  type UpsertRow,
+} from "@/lib/upsert-changed"
 
 const CHUNK_SIZE = 10
 
@@ -34,7 +40,29 @@ export type RefreshHarriEmployeesOpts = {
 export type RefreshHarriEmployeesResult = {
   requested: number
   fetched: number
+  /** Rows sent to the database (new, changed or unchanged). */
   upserted: number
+  /** Rows actually inserted or updated; `syncedAt` moves only on these. */
+  changed: number
+}
+
+/** @@unique([storeId, userId]) */
+export const HARRI_EMPLOYEE_UPSERT: ChangedUpsertSpec = {
+  table: "HarriEmployee",
+  conflict: [
+    { name: "storeId", type: "text" },
+    { name: "userId", type: "int" },
+  ],
+  values: [
+    { name: "brandId", type: "int" },
+    { name: "employeeId", type: "int" },
+    { name: "firstName", type: "text" },
+    { name: "lastName", type: "text" },
+    { name: "email", type: "text" },
+    { name: "phone", type: "text" },
+    { name: "status", type: "text" },
+  ],
+  touch: "syncedAt",
 }
 
 export async function refreshHarriEmployees(
@@ -72,11 +100,11 @@ export async function refreshHarriEmployees(
       ].filter((n) => Number.isFinite(n) && n > 0)
 
       if (userIds.length === 0) {
-        return { requested: 0, fetched: 0, upserted: 0 }
+        return { requested: 0, fetched: 0, upserted: 0, changed: 0 }
       }
 
       let fetched = 0
-      let upserted = 0
+      const employees: UpsertRow[] = []
       for (let i = 0; i < userIds.length; i += CHUNK_SIZE) {
         const chunk = userIds.slice(i, i + CHUNK_SIZE)
         let payload: { data?: HarriUser[] }
@@ -94,33 +122,25 @@ export async function refreshHarriEmployees(
           if (!u.id || !Number.isFinite(u.id)) continue
           const phone =
             typeof u.phone === "string" || typeof u.phone === "number" ? normalizeUsPhone(String(u.phone)) : null
-          await prisma.harriEmployee.upsert({
-            where: { storeId_userId: { storeId, userId: u.id } },
-            create: {
-              storeId,
-              brandId,
-              userId: u.id,
-              employeeId: u.employee_id ?? null,
-              firstName: u.first_name ?? null,
-              lastName: u.last_name ?? null,
-              email: u.email ?? null,
-              phone,
-              status: u.status ?? null,
-            },
-            update: {
-              brandId,
-              employeeId: u.employee_id ?? null,
-              firstName: u.first_name ?? null,
-              lastName: u.last_name ?? null,
-              email: u.email ?? null,
-              phone,
-              status: u.status ?? null,
-              syncedAt: new Date(),
-            },
+          employees.push({
+            storeId,
+            userId: u.id,
+            brandId,
+            employeeId: u.employee_id ?? null,
+            firstName: u.first_name ?? null,
+            lastName: u.last_name ?? null,
+            email: u.email ?? null,
+            phone,
+            status: u.status ?? null,
           })
-          upserted += 1
         }
       }
+
+      // One bulk write that only touches new or changed people (last
+      // sighting of a user wins, as the per-row upserts did).
+      const rows = dedupeByKey(employees, (r) => String(r.userId))
+      const upserted = rows.length
+      const changed = await upsertChangedRows(prisma, HARRI_EMPLOYEE_UPSERT, rows)
 
       addRows(upserted)
       // Store checks: new people get a PIN, people who left lose theirs. The
@@ -129,7 +149,7 @@ export async function refreshHarriEmployees(
       await syncCrewFromHarri(storeId).catch((err) => {
         console.error("[harri-employee-sync] crew sync failed", storeId, err)
       })
-      return { requested: userIds.length, fetched, upserted }
+      return { requested: userIds.length, fetched, upserted, changed }
     }
   )
 }

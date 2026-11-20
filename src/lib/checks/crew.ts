@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma"
 import { currentMarks, loadCheckGrid, type GridCell, type GridMark } from "./data"
 import { ensureCheckSetup } from "./setup"
 import { loadSections } from "./sections"
+import { checkStateVersion } from "./version"
 import {
   addDays,
   CHECK_KINDS,
@@ -108,10 +109,42 @@ export type CrewView = {
   /** Epoch ms the open pause began; practice clean-up touches only rows after it. */
   practiceSince: number | null
   serverNow: number
+  /**
+   * The store's check-state fingerprint when this view was read (see
+   * `version.ts`). The page's refresh sends it back, and gets the whole view
+   * again only when it has changed.
+   */
+  version: string
 }
 
-export async function loadCrewView(store: CrewStore, now: Date): Promise<CrewView> {
-  await ensureCheckSetup(store.id)
+export type CrewViewOptions = {
+  /**
+   * Run `ensureCheckSetup` first. On by default; off for a second load in
+   * the same request, where the first already did it.
+   */
+  setup?: boolean
+  /** The version, when the caller already computed it (the refresh does, to compare). */
+  version?: string
+  /**
+   * Close a finished check before reading, as the owners' screens do. Only
+   * the page render and a refresh whose version changed pass it: a window
+   * ending changes the version (its phase is in it), so the first refresh
+   * after a window ends closes it within seconds, as before, while the
+   * unchanged refreshes in between write nothing.
+   */
+  autoClose?: boolean
+}
+
+/**
+ * Read-only unless `autoClose` is passed. The phones refresh every few
+ * seconds; an unchanged refresh never gets here (`version.ts` answers it),
+ * and the taps (mark, submit, pin) never close anything.
+ */
+export async function loadCrewView(store: CrewStore, now: Date, opts: CrewViewOptions = {}): Promise<CrewView> {
+  if (opts.setup !== false) await ensureCheckSetup(store.id)
+  // Before the view's own reads, so a change made while they run is never
+  // hidden behind this version: at worst the next refresh loads once more.
+  const version = opts.version ?? (await checkStateVersion(store, now))
   const today = todayLA(now)
   const [grid] = await loadCheckGrid({
     accountId: store.accountId,
@@ -119,6 +152,8 @@ export async function loadCrewView(store: CrewStore, now: Date): Promise<CrewVie
     fromDay: addDays(today, -1),
     toDay: today,
     now,
+    setup: false,
+    autoClose: opts.autoClose === true,
   })
   const templates = grid?.templates ?? []
   const cellFor = (kind: CheckKindName, day: string): GridCell | undefined =>
@@ -211,6 +246,7 @@ export async function loadCrewView(store: CrewStore, now: Date): Promise<CrewVie
     practice,
     practiceSince: grid?.pausedSince ? grid.pausedSince.getTime() : null,
     serverNow: now.getTime(),
+    version,
   }
 }
 

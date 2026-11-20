@@ -16,6 +16,12 @@ import { Prisma } from "@/generated/prisma/client"
 import { withJobRun } from "@/lib/monitoring/job-run"
 import { isoWeekStartsCovering } from "@/lib/labor-week"
 import {
+  dedupeByKey,
+  upsertChangedRows,
+  type ChangedUpsertSpec,
+  type UpsertRow,
+} from "@/lib/upsert-changed"
+import {
   buildLaborActualUrl,
   buildLaborCategoriesUrl,
   buildLaborForecastUrl,
@@ -46,6 +52,80 @@ export type HarriSyncResult = {
   daysWritten: number
   positionsWritten: number
   alertsWritten: number
+  /**
+   * Rows actually inserted or updated across the three tables. The counts
+   * above are rows sent; an unchanged row is no longer rewritten, and its
+   * `syncedAt` only moves when the row changes.
+   */
+  rowsChanged: number
+}
+
+/** @@unique([storeId, date]) */
+export const HARRI_DAILY_LABOR_UPSERT: ChangedUpsertSpec = {
+  table: "HarriDailyLabor",
+  conflict: [
+    { name: "storeId", type: "text" },
+    { name: "date", type: "date" },
+  ],
+  values: [
+    { name: "actualCost", type: "float" },
+    { name: "forecastCost", type: "float" },
+    { name: "categories", type: "jsonb" },
+  ],
+  touch: "syncedAt",
+}
+
+/** @@unique([storeId, date, categoryCode, positionCode, payType]) */
+export const HARRI_POSITION_DAILY_UPSERT: ChangedUpsertSpec = {
+  table: "HarriPositionDaily",
+  conflict: [
+    { name: "storeId", type: "text" },
+    { name: "date", type: "date" },
+    { name: "categoryCode", type: "text" },
+    { name: "positionCode", type: "text" },
+    { name: "payType", type: "text" },
+  ],
+  values: [
+    { name: "categoryName", type: "text" },
+    { name: "positionName", type: "text" },
+    { name: "totalLabor", type: "float" },
+    { name: "netAmount", type: "float" },
+    { name: "overtimeAmount", type: "float" },
+    { name: "bonusAmount", type: "float" },
+    { name: "totalShiftCount", type: "int" },
+    { name: "actualSeconds", type: "int" },
+    { name: "userIds", type: "int[]" },
+    { name: "rawCost", type: "jsonb" },
+  ],
+  touch: "syncedAt",
+}
+
+/**
+ * harriAlertId @unique. The update only ever refreshed the alert's timing
+ * fields; who/where (store, date, employee, position) are set on insert only,
+ * exactly as the per-row upsert did.
+ */
+export const HARRI_ALERT_UPSERT: ChangedUpsertSpec = {
+  table: "HarriTimekeepingAlert",
+  conflict: [{ name: "harriAlertId", type: "bigint" }],
+  insertOnly: [
+    { name: "storeId", type: "text" },
+    { name: "date", type: "date" },
+    { name: "employeeId", type: "int" },
+    { name: "userId", type: "int" },
+    { name: "positionId", type: "int" },
+    { name: "positionCode", type: "text" },
+    { name: "positionName", type: "text" },
+    { name: "categoryCode", type: "text" },
+  ],
+  values: [
+    { name: "alertTime", type: "timestamp" },
+    { name: "alertCode", type: "text" },
+    { name: "alertTypeId", type: "int" },
+    { name: "timeDiffSec", type: "int" },
+    { name: "missedClockAt", type: "timestamp" },
+  ],
+  touch: "syncedAt",
 }
 
 /** "Harri API error 500 on /path" — the message without the response body. */
@@ -199,104 +279,89 @@ export async function runHarriLaborSync(opts: RunHarriLaborSyncOpts): Promise<Ha
       }
 
       // ---------------------------------------------------------------
-      // Persist daily summaries
+      // Persist daily summaries, positions and alerts: one bulk
+      // INSERT ... ON CONFLICT per table (1000-row chunks) that writes only
+      // new or changed rows. These were sequential per-row upserts that set
+      // syncedAt on every row every run.
       // ---------------------------------------------------------------
-      let daysWritten = 0
-      for (const p of perDay) {
-        const dateOnly = startOfUTCDay(p.date)
-        const categoriesJson = p.categories.categories.map((c) => ({
-          id: c.id,
-          code: c.code,
-          name: c.name,
-          total_labor_cost: harriCentsToUSD(c.total_labor_cost),
-        }))
-        await prisma.harriDailyLabor.upsert({
-          where: { storeId_date: { storeId, date: dateOnly } },
-          create: {
-            storeId,
-            date: dateOnly,
-            actualCost: harriCentsToUSD(p.actual.total_labor_cost),
-            forecastCost: harriCentsToUSD(p.forecast.total_labor_cost),
-            categories: categoriesJson,
-          },
-          update: {
-            actualCost: harriCentsToUSD(p.actual.total_labor_cost),
-            forecastCost: harriCentsToUSD(p.forecast.total_labor_cost),
-            categories: categoriesJson,
-            syncedAt: new Date(),
-          },
-        })
-        daysWritten += 1
-      }
+      const now = new Date()
+      const dailyRows: UpsertRow[] = dedupeByKey(
+        perDay.map((p) => ({
+          storeId,
+          date: startOfUTCDay(p.date),
+          actualCost: harriCentsToUSD(p.actual.total_labor_cost),
+          forecastCost: harriCentsToUSD(p.forecast.total_labor_cost),
+          categories: p.categories.categories.map((c) => ({
+            id: c.id,
+            code: c.code,
+            name: c.name,
+            total_labor_cost: harriCentsToUSD(c.total_labor_cost),
+          })),
+        })),
+        (r) => r.date.toISOString(),
+      )
+      const daysWritten = dailyRows.length
+      let rowsChanged = await upsertChangedRows(prisma, HARRI_DAILY_LABOR_UPSERT, dailyRows, {
+        now,
+      })
 
-      // ---------------------------------------------------------------
-      // Persist per-position rows from whichever days Harri returned.
-      // ---------------------------------------------------------------
-      let positionsWritten = 0
-      for (const result of positionsByDay) {
-        if (!result.ok) continue
-        for (const day of result.data.days) {
-          const dateOnly = parseHarriDateOnly(day.date)
-          for (const row of expandPositionsForDay(day)) {
-            await prisma.harriPositionDaily.upsert({
-              where: {
-                storeId_date_categoryCode_positionCode_payType: {
-                  storeId,
-                  date: dateOnly,
-                  categoryCode: row.categoryCode,
-                  positionCode: row.positionCode,
-                  payType: row.payType,
-                },
-              },
-              create: { storeId, date: dateOnly, ...row },
-              update: { ...row, syncedAt: new Date() },
-            })
-            positionsWritten += 1
-          }
-        }
-      }
+      // Per-position rows from whichever weeks Harri returned.
+      const positionRows: UpsertRow[] = dedupeByKey(
+        positionsByDay.flatMap((result) =>
+          result.ok
+            ? result.data.days.flatMap((day) => {
+                const date = parseHarriDateOnly(day.date)
+                return expandPositionsForDay(day).map((row) => ({ storeId, date, ...row }))
+              })
+            : [],
+        ),
+        (r) =>
+          `${r.date.toISOString()}|${r.categoryCode}|${r.positionCode}|${r.payType}`,
+      )
+      const positionsWritten = positionRows.length
+      rowsChanged += await upsertChangedRows(prisma, HARRI_POSITION_DAILY_UPSERT, positionRows, {
+        now,
+      })
 
-      // ---------------------------------------------------------------
-      // Persist alerts
-      // ---------------------------------------------------------------
-      let alertsWritten = 0
+      // Alerts. A repeated alert id keeps its first sighting's insert-only
+      // fields and its last sighting's timing fields — what the sequential
+      // create-then-update did.
+      const alertsById = new Map<string, UpsertRow>()
       for (const p of perDay) {
         for (const a of p.alerts) {
-          const dateOnly = startOfUTCDay(p.date)
-          await prisma.harriTimekeepingAlert.upsert({
-            where: { harriAlertId: BigInt(a.id) },
-            create: {
-              harriAlertId: BigInt(a.id),
-              storeId,
-              date: dateOnly,
-              employeeId: a.employee_id,
-              userId: a.user_id,
-              positionId: a.position?.id ?? null,
-              positionCode: a.position?.code ?? null,
-              positionName: a.position?.name ?? null,
-              categoryCode: a.position?.category?.code ?? null,
-              alertTime: new Date(a.alert_time),
-              alertCode: a.alert_type.code,
-              alertTypeId: a.alert_type.id,
-              timeDiffSec: a.extra_info?.time_diff ?? null,
-              missedClockAt: a.extra_info?.missed_clock_at
-                ? new Date(a.extra_info.missed_clock_at)
-                : null,
-            },
-            update: {
-              alertTime: new Date(a.alert_time),
-              alertCode: a.alert_type.code,
-              alertTypeId: a.alert_type.id,
-              timeDiffSec: a.extra_info?.time_diff ?? null,
-              missedClockAt: a.extra_info?.missed_clock_at
-                ? new Date(a.extra_info.missed_clock_at)
-                : null,
-              syncedAt: new Date(),
-            },
-          })
-          alertsWritten += 1
+          const id = String(a.id)
+          const timing = {
+            alertTime: new Date(a.alert_time),
+            alertCode: a.alert_type.code,
+            alertTypeId: a.alert_type.id,
+            timeDiffSec: a.extra_info?.time_diff ?? null,
+            missedClockAt: a.extra_info?.missed_clock_at
+              ? new Date(a.extra_info.missed_clock_at)
+              : null,
+          }
+          const first = alertsById.get(id)
+          alertsById.set(
+            id,
+            first
+              ? { ...first, ...timing }
+              : {
+                  harriAlertId: id,
+                  storeId,
+                  date: startOfUTCDay(p.date),
+                  employeeId: a.employee_id,
+                  userId: a.user_id,
+                  positionId: a.position?.id ?? null,
+                  positionCode: a.position?.code ?? null,
+                  positionName: a.position?.name ?? null,
+                  categoryCode: a.position?.category?.code ?? null,
+                  ...timing,
+                },
+          )
         }
       }
+      const alertRows = [...alertsById.values()]
+      const alertsWritten = alertRows.length
+      rowsChanged += await upsertChangedRows(prisma, HARRI_ALERT_UPSERT, alertRows, { now })
 
       await prisma.harriBrand.update({
         where: { id: brand.id },
@@ -327,7 +392,7 @@ export async function runHarriLaborSync(opts: RunHarriLaborSyncOpts): Promise<Ha
       }
 
       addRows(daysWritten + positionsWritten + alertsWritten)
-      return { daysWritten, positionsWritten, alertsWritten }
+      return { daysWritten, positionsWritten, alertsWritten, rowsChanged }
     }
   )
 }

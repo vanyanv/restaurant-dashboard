@@ -9,6 +9,7 @@ import { bustTags } from "@/lib/cache/cached"
 import { logger } from "@/lib/logger"
 import {
   runMetricsSyncForStore,
+  totalChangedRows,
   type MetricsSyncResult,
   type ProgressEmitter,
 } from "@/lib/otter-metrics-sync"
@@ -30,6 +31,8 @@ interface SyncResult {
   cogsDaysProcessed: number
   cogsRowsWritten: number
   storesProcessed: number
+  /** Rows actually inserted or updated (unchanged rows are not rewritten). */
+  rowsChanged: number
 }
 
 const EMPTY_COUNTS = {
@@ -72,6 +75,7 @@ async function runSyncAllStores(
       cogsDaysProcessed: 0,
       cogsRowsWritten: 0,
       storesProcessed: 0,
+      rowsChanged: 0,
     }
   }
 
@@ -107,6 +111,7 @@ async function runSyncAllStores(
     modifierFailed: 0,
     ratingsSynced: 0,
     ratingsFailed: 0,
+    rowsChanged: 0,
   }
 
   for (let storeIdx = 0; storeIdx < storeIds.length; storeIdx++) {
@@ -163,6 +168,7 @@ async function runSyncAllStores(
     totals.modifierFailed += result.modifiers.failed
     totals.ratingsSynced += result.ratings.synced
     totals.ratingsFailed += result.ratings.failed
+    totals.rowsChanged += totalChangedRows(result)
 
     aggregateCounts.daily += result.daily.synced
     aggregateCounts.categories += result.categories.synced
@@ -182,12 +188,16 @@ async function runSyncAllStores(
   })
 
   // Fresh Otter data means stale dashboard reads — revalidate the pages
-  // that read from DailyCogsItem / OtterDailySummary.
-  revalidatePath("/dashboard/menu/catalog")
-  revalidatePath("/dashboard/cogs", "layout")
-  revalidatePath("/dashboard/pnl", "layout")
+  // that read from DailyCogsItem / OtterDailySummary. Only when a row actually
+  // changed: the sync re-reads a 3-day window every run, and most runs now
+  // write nothing, so revalidating unconditionally threw away good pages.
+  if (totals.rowsChanged > 0) {
+    revalidatePath("/dashboard/menu/catalog")
+    revalidatePath("/dashboard/cogs", "layout")
+    revalidatePath("/dashboard/pnl", "layout")
+  }
 
-  const message = `Otter sync completed: ${totals.synced} daily rows, ${totals.categorySynced} categories, ${totals.itemSynced} items, ${totals.modifierSynced} modifiers, ${totals.ratingsSynced} ratings (${numStores} stores)`
+  const message = `Otter sync completed: ${totals.synced} daily rows, ${totals.categorySynced} categories, ${totals.itemSynced} items, ${totals.modifierSynced} modifiers, ${totals.ratingsSynced} ratings, ${totals.rowsChanged} changed (${numStores} stores)`
 
   emit({
     phase: "complete",
@@ -197,10 +207,11 @@ async function runSyncAllStores(
     counts: { ...aggregateCounts },
   })
 
-  // Otter sync runs globally for all owners' active stores. If anything
-  // wrote, bust the otter/dash/pnl tags so dashboards reflect the new
-  // data on the next page load. Skips when nothing changed.
-  if (totals.synced > 0 || totals.itemSynced > 0) {
+  // Otter sync runs globally for all owners' active stores. If any row
+  // actually changed (in any phase), bust the otter/dash/pnl tags so
+  // dashboards reflect the new data on the next page load. Rows that were
+  // re-read but unchanged are not rewritten and do not count.
+  if (totals.rowsChanged > 0) {
     await bustTags(["otter", "dash", "pnl"])
   }
 
@@ -219,6 +230,7 @@ async function runSyncAllStores(
     cogsDaysProcessed: 0,
     cogsRowsWritten: 0,
     storesProcessed: numStores,
+    rowsChanged: totals.rowsChanged,
   }
 }
 

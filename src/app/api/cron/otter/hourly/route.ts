@@ -12,6 +12,7 @@ export const POST = withCronAuth(
     try {
       // Scoped: the sync rewrites today and yesterday only, so afterwards it
       // retires the saved figures of exactly those days, and last week's stay.
+      // A run that changed no bucket wrote nothing, and retires nothing.
       let written: string[] | null = null
       const result = await withScopedWrites(
         () => {
@@ -24,11 +25,13 @@ export const POST = withCronAuth(
           const r = await runHourlySync({
             triggeredBy: fromCron ? "cron" : "manual",
           })
-          written = r.datesCovered
+          written = r.bucketsChanged > 0 ? r.datesCovered : []
           return r
         },
       )
-      if (result.bucketsWritten > 0) {
+      // Only when a bucket actually changed: most hourly runs re-read a window
+      // that has not moved, and busting on "rows exist" evicted every hour.
+      if (result.bucketsChanged > 0) {
         /*
          * NOT `"pnl"`. This route runs every hour and writes a two-day window
          * (today + yesterday); busting the broad tag threw away every cached

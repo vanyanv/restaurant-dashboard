@@ -134,5 +134,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     },
   })
 
-  return NextResponse.json({ ok: true, view: await loadCrewView(store, new Date()) })
+  // The form after this tick, with its version, so this phone's next refresh
+  // finds nothing new. Setup already ran in the load above.
+  return NextResponse.json({ ok: true, view: await loadCrewView(store, new Date(), { setup: false }) })
 }

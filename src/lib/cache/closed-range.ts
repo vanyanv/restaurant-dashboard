@@ -268,6 +268,22 @@ export function isFigureWrite(model: string | undefined, operation: string): boo
   return FIGURE_MODELS.has(model)
 }
 
+/**
+ * Whether a write's result says it touched no row: `$executeRaw` returns the
+ * affected-row count, `createMany`/`updateMany`/`deleteMany` return
+ * `{ count }`. The change-only sync upserts (`@/lib/upsert-changed`) usually
+ * affect nothing, and a write that changed no row cannot have moved a saved
+ * figure, so it must not clear the cache.
+ */
+export function wroteNoRows(result: unknown): boolean {
+  if (result === 0) return true
+  if (result !== null && typeof result === "object" && !Array.isArray(result)) {
+    const keys = Object.keys(result)
+    return keys.length === 1 && keys[0] === "count" && (result as { count: unknown }).count === 0
+  }
+  return false
+}
+
 const scoped = new AsyncLocalStorage<true>()
 
 export function inScopedWrites(): boolean {

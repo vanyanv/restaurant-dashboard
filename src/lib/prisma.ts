@@ -7,6 +7,7 @@ import {
   bumpClosedGeneration,
   inScopedWrites,
   isFigureWrite,
+  wroteNoRows,
 } from '@/lib/cache/closed-range'
 
 const globalForPrisma = globalThis as unknown as {
@@ -155,14 +156,16 @@ const withTrace = (client: PrismaClient): PrismaClient => {
  * (a script) `after` throws and only the first bump happens.
  *
  * Writers inside `withScopedWrites` skip this; they bump once at the end if
- * they touched a closed day.
+ * they touched a closed day. A write whose result says it affected no row
+ * (`$executeRaw` → 0, `*Many` → `{ count: 0 }`) skips it too: the change-only
+ * sync upserts are mostly that, and nothing they did can stale a figure.
  */
 const withClosedRangeBust = (client: PrismaClient): PrismaClient =>
   client.$extends({
     query: {
       async $allOperations({ model, operation, args, query }) {
         const result = await query(args)
-        if (isFigureWrite(model, operation) && !inScopedWrites()) {
+        if (isFigureWrite(model, operation) && !inScopedWrites() && !wroteNoRows(result)) {
           await bumpClosedGeneration()
           try {
             after(bumpClosedGeneration)

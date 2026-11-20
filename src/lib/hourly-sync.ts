@@ -1,12 +1,16 @@
 // Pulls a 2-day rolling window of customer_orders from Otter, buckets to
-// (storeId, date, hour), and writes OtterHourlySummary via transactional
-// delete+insert per (storeId, date) — idempotent + self-healing for late
-// arrivals, refunds, and Otter retroactive edits.
+// (storeId, date, hour), and reconciles OtterHourlySummary for every
+// (storeId, date) in the window in one transaction: new or changed buckets are
+// upserted, buckets that disappeared are deleted, unchanged buckets are not
+// written at all — idempotent + self-healing for late arrivals, refunds, and
+// Otter retroactive edits, without rewriting the whole window every hour.
 //
 // Called from both the API route (manual / Vercel cron) and the GH Actions
 // script. Keep all sync logic here; route + script are thin wrappers.
 
 import { prisma } from "@/lib/prisma"
+import { Prisma } from "@/generated/prisma/client"
+import { planChangedUpserts, type ChangedUpsertSpec } from "@/lib/upsert-changed"
 import { queryMetrics, buildCustomerOrdersBody } from "@/lib/otter"
 import { todayInLA, startOfDayLA, endOfDayLA } from "@/lib/dashboard-utils"
 import { laDateMinusDays } from "@/lib/hourly-orders"
@@ -17,9 +21,27 @@ import { shouldSyncStore } from "@/lib/store-lifecycle"
 export interface HourlySyncResult {
   storesProcessed: number
   rowsFetched: number
+  /** Buckets in the window after the sync (new, changed or unchanged). */
   bucketsWritten: number
+  /** Buckets actually inserted, updated or deleted. 0 = the window was already current. */
+  bucketsChanged: number
   datesCovered: string[]
   error?: string
+}
+
+/** @@unique([storeId, date, hour]) */
+export const HOURLY_SUMMARY_UPSERT: ChangedUpsertSpec = {
+  table: "OtterHourlySummary",
+  conflict: [
+    { name: "storeId", type: "text" },
+    { name: "date", type: "date" },
+    { name: "hour", type: "int" },
+  ],
+  values: [
+    { name: "orderCount", type: "int" },
+    { name: "netSales", type: "float" },
+  ],
+  touch: "updatedAt",
 }
 
 interface BucketKey {
@@ -84,7 +106,13 @@ async function runHourlySyncInner(opts?: {
   })
   const active = otterStores.filter((os) => shouldSyncStore(os.store))
   if (active.length === 0) {
-    return { storesProcessed: 0, rowsFetched: 0, bucketsWritten: 0, datesCovered: [] }
+    return {
+      storesProcessed: 0,
+      rowsFetched: 0,
+      bucketsWritten: 0,
+      bucketsChanged: 0,
+      datesCovered: [],
+    }
   }
 
   // Map otterStoreId → internal storeId, for row bucketing.
@@ -193,12 +221,12 @@ async function runHourlySyncInner(opts?: {
     byPair.set(pairKey, arr)
   }
 
-  // Clear stale data for every (storeId, date) in the window — even pairs with
-  // no rows — then insert all buckets, in a single transaction. Previously this
-  // ran one delete+insert transaction per (storeId, date) pair sequentially;
-  // collapsing it removes N round-trips that scale with stores × days.
+  // Reconcile every (storeId, date) in the window — even pairs with no rows —
+  // in a single transaction: upsert the new buckets (only new or changed ones
+  // are written), then delete the window's buckets that no longer exist.
+  // This replaced a delete-everything + createMany that rewrote the whole
+  // window every hour even when nothing had moved.
   const storeIds = [...new Set(active.map((s) => s.storeId))]
-  const dateObjs = datesCovered.map((date) => new Date(date + "T00:00:00.000Z"))
 
   let bucketsWritten = 0
   const allInserts: Array<{
@@ -225,19 +253,29 @@ async function runHourlySyncInner(opts?: {
     }
   }
 
-  await prisma.$transaction([
-    prisma.otterHourlySummary.deleteMany({
-      where: { storeId: { in: storeIds }, date: { in: dateObjs } },
-    }),
-    ...(allInserts.length > 0
-      ? [
-          prisma.otterHourlySummary.createMany({
-            data: allInserts,
-            skipDuplicates: true,
-          }),
-        ]
-      : []),
-  ])
+  const keepClause =
+    allInserts.length === 0
+      ? Prisma.empty
+      : Prisma.sql`
+          AND (h."storeId", h."date", h."hour") NOT IN (
+            VALUES ${Prisma.join(
+              allInserts.map(
+                (b) => Prisma.sql`(${b.storeId}::text, ${b.date}::date, ${b.hour}::integer)`,
+              ),
+            )}
+          )
+        `
+  const deleteStale = prisma.$executeRaw(Prisma.sql`
+    DELETE FROM "OtterHourlySummary" h
+    WHERE h."storeId" IN (${Prisma.join(storeIds.map((id) => Prisma.sql`${id}::text`))})
+      AND h."date" IN (${Prisma.join(datesCovered.map((d) => Prisma.sql`${d}::date`))})
+      ${keepClause}
+  `)
+  const upserts = planChangedUpserts(HOURLY_SUMMARY_UPSERT, allInserts).map(({ sql }) =>
+    prisma.$executeRaw(sql),
+  )
+  const counts = await prisma.$transaction([...upserts, deleteStale])
+  const bucketsChanged = counts.reduce((sum, n) => sum + n, 0)
 
   if (droppedNoStore > 0) {
     console.warn(
@@ -249,6 +287,7 @@ async function runHourlySyncInner(opts?: {
     storesProcessed: active.length,
     rowsFetched: rows.length,
     bucketsWritten,
+    bucketsChanged,
     datesCovered,
   }
 }

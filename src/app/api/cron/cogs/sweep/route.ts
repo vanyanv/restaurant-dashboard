@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { withCronAuth } from "@/lib/cron-auth"
 import { recomputeDailyCogsForRange } from "@/lib/cogs-materializer"
+import { shouldSkipCogsSweep } from "@/lib/cogs-sweep-gate"
 import { withJobRun } from "@/lib/monitoring/job-run"
 import { Prisma } from "@/generated/prisma/client"
 import { logger } from "@/lib/logger"
@@ -16,6 +17,8 @@ type CogsSweepOutcome = {
   daysProcessed: number
   rowsUpserted: number
   rowsDeleted: number
+  /** DailyCogsItem rows actually inserted, updated or deleted. */
+  rowsChanged: number
 }
 
 /**
@@ -67,7 +70,8 @@ export const POST = withCronAuth(async (request) => {
 
   try {
     // Scoped: afterwards it retires the saved figures of exactly the days in
-    // its window. A skipped sweep wrote nothing and retires none.
+    // its window. A skipped sweep, or one whose recompute changed no row,
+    // wrote nothing and retires none.
     let wrote = true
     const result: CogsSweepOutcome = await withScopedWrites(
       () =>
@@ -117,6 +121,7 @@ export const POST = withCronAuth(async (request) => {
               daysProcessed: 0,
               rowsUpserted: 0,
               rowsDeleted: 0,
+              rowsChanged: 0,
             }
           }
         }
@@ -137,7 +142,7 @@ export const POST = withCronAuth(async (request) => {
         }
       }
     )
-        wrote = !r.skipped
+        wrote = !r.skipped && r.rowsChanged > 0
         return r
       },
     )
@@ -155,6 +160,7 @@ export const POST = withCronAuth(async (request) => {
       daysProcessed: result.daysProcessed,
       rowsUpserted: result.rowsUpserted,
       rowsDeleted: result.rowsDeleted,
+      rowsChanged: result.rowsChanged,
       durationMs: Date.now() - startedAt,
     })
   } catch (err) {
@@ -170,141 +176,3 @@ export const POST = withCronAuth(async (request) => {
     )
   }
 })
-
-async function shouldSkipCogsSweep(input: {
-  storeId: string
-  accountId: string
-  startDate: Date
-  endDate: Date
-  lookbackDays: number
-}): Promise<{
-  shouldSkip: boolean
-  reason: string | null
-  sourceChangedAt: Date | null
-  lastSuccessfulSweepAt: Date | null
-}> {
-  const [sourceChangedAt, lastSuccessfulSweepAt] = await Promise.all([
-    getLatestCogsSourceChangeAt(input),
-    getLastSuccessfulCogsSweepAt(input.storeId, input.lookbackDays),
-  ])
-
-  if (!lastSuccessfulSweepAt) {
-    return {
-      shouldSkip: false,
-      reason: null,
-      sourceChangedAt,
-      lastSuccessfulSweepAt,
-    }
-  }
-
-  if (!sourceChangedAt || sourceChangedAt <= lastSuccessfulSweepAt) {
-    return {
-      shouldSkip: true,
-      reason: "no source changes since last successful sweep",
-      sourceChangedAt,
-      lastSuccessfulSweepAt,
-    }
-  }
-
-  return {
-    shouldSkip: false,
-    reason: null,
-    sourceChangedAt,
-    lastSuccessfulSweepAt,
-  }
-}
-
-async function getLastSuccessfulCogsSweepAt(
-  storeId: string,
-  lookbackDays: number,
-): Promise<Date | null> {
-  const rows = await prisma.$queryRaw<Array<{ completedAt: Date | null }>>`
-    SELECT "completedAt"
-    FROM "JobRun"
-    WHERE "jobName" = 'cogs.sweep'
-      AND "storeId" = ${storeId}
-      AND "status" = 'SUCCESS'::"JobStatus"
-      AND "completedAt" IS NOT NULL
-      AND ("metadata"->>'lookbackDays')::int = ${lookbackDays}
-    ORDER BY "completedAt" DESC
-    LIMIT 1
-  `
-  return rows[0]?.completedAt ?? null
-}
-
-async function getLatestCogsSourceChangeAt(input: {
-  storeId: string
-  accountId: string
-  startDate: Date
-  endDate: Date
-}): Promise<Date | null> {
-  const endExclusive = new Date(input.endDate)
-  endExclusive.setUTCDate(endExclusive.getUTCDate() + 1)
-
-  const rows = await prisma.$queryRaw<Array<{ changedAt: Date | null }>>`
-    SELECT NULLIF(GREATEST(
-      COALESCE((
-        SELECT MAX("syncedAt")
-        FROM "OtterMenuItem"
-        WHERE "storeId" = ${input.storeId}
-          AND "date" >= ${input.startDate}::date
-          AND "date" <= ${input.endDate}::date
-      ), 'epoch'::timestamp),
-      COALESCE((
-        SELECT MAX("syncedAt")
-        FROM "OtterOrder"
-        WHERE "storeId" = ${input.storeId}
-          AND "referenceTimeLocal" >= ${input.startDate}
-          AND "referenceTimeLocal" < ${endExclusive}
-      ), 'epoch'::timestamp),
-      COALESCE((
-        SELECT MAX("detailsFetchedAt")
-        FROM "OtterOrder"
-        WHERE "storeId" = ${input.storeId}
-          AND "referenceTimeLocal" >= ${input.startDate}
-          AND "referenceTimeLocal" < ${endExclusive}
-      ), 'epoch'::timestamp),
-      COALESCE((
-        SELECT MAX("updatedAt")
-        FROM "Recipe"
-        WHERE "accountId" = ${input.accountId}
-      ), 'epoch'::timestamp),
-      COALESCE((
-        SELECT MAX(ri."updatedAt")
-        FROM "RecipeIngredient" ri
-        JOIN "Recipe" r ON r.id = ri."recipeId"
-        WHERE r."accountId" = ${input.accountId}
-      ), 'epoch'::timestamp),
-      COALESCE((
-        SELECT MAX(GREATEST("updatedAt", COALESCE("costUpdatedAt", 'epoch'::timestamp)))
-        FROM "CanonicalIngredient"
-        WHERE "accountId" = ${input.accountId}
-      ), 'epoch'::timestamp),
-      COALESCE((
-        SELECT MAX(GREATEST("createdAt", "confirmedAt"))
-        FROM "OtterItemMapping"
-        WHERE "storeId" = ${input.storeId}
-      ), 'epoch'::timestamp),
-      COALESCE((
-        SELECT MAX(GREATEST("createdAt", "confirmedAt"))
-        FROM "OtterSubItemMapping"
-        WHERE "storeId" = ${input.storeId}
-      ), 'epoch'::timestamp),
-      COALESCE((
-        SELECT MAX("updatedAt")
-        FROM "Invoice"
-        WHERE "accountId" = ${input.accountId}
-          AND ("storeId" = ${input.storeId} OR "storeId" IS NULL)
-      ), 'epoch'::timestamp),
-      COALESCE((
-        SELECT MAX(li."matchedAt")
-        FROM "InvoiceLineItem" li
-        JOIN "Invoice" i ON i.id = li."invoiceId"
-        WHERE i."accountId" = ${input.accountId}
-          AND (i."storeId" = ${input.storeId} OR i."storeId" IS NULL)
-      ), 'epoch'::timestamp)
-    ), 'epoch'::timestamp) AS "changedAt"
-  `
-
-  return rows[0]?.changedAt ?? null
-}

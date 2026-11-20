@@ -72,6 +72,10 @@ jobs:
               if [ $((h % 4)) -eq 0 ]; then
                 pending="$pending otter-sync.yml otter-orders-sync.yml"
               fi
+              # Same hours as invoices-sync.yml's cron: 6 AM, noon, 6 PM (PST).
+              if [ "$h" -eq 14 ] || [ "$h" -eq 20 ] || [ "$h" -eq 2 ]; then
+                pending="$pending invoices-sync.yml"
+              fi
             fi
             # A failed dispatch stays pending and is retried each minute for the
             # rest of the hour; one that went through is never sent twice.

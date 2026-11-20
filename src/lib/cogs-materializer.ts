@@ -174,6 +174,7 @@ type ContainerGroupCost = {
 }
 
 const DAILY_COGS_TRANSACTION_TIMEOUT_MS = 20_000
+const DEFAULT_DAY_CONCURRENCY = 3
 
 function containerUnitCostMap(
   costs: Record<ContainerGroup, ContainerGroupCost>
@@ -207,7 +208,7 @@ async function recomputeDailyCogsForDay(input: {
   storeId: string
   date: Date
   accountId: string
-}): Promise<{ rowsUpserted: number; rowsDeleted: number }> {
+}): Promise<{ rowsUpserted: number; rowsDeleted: number; rowsChanged: number }> {
   const { storeId, accountId } = input
   const date = startOfDayUTC(input.date)
 
@@ -353,7 +354,7 @@ async function recomputeDailyCogsForDay(input: {
   // new set — bounded to one day, so historical data cannot evaporate.
   // Run as a single transaction so a partial failure can't leave the day in a
   // mixed state (some new rows present, stale rows still around).
-  const deleteResult = await replaceDailyCogsRowsForDay({
+  const write = await replaceDailyCogsRowsForDay({
     storeId,
     date,
     rows,
@@ -361,7 +362,8 @@ async function recomputeDailyCogsForDay(input: {
 
   return {
     rowsUpserted: rows.length,
-    rowsDeleted: deleteResult,
+    rowsDeleted: write.deleted,
+    rowsChanged: write.upserted + write.deleted,
   }
 }
 
@@ -662,7 +664,7 @@ async function recomputeDailyPackagingCogsForDay(input: {
   storeId: string
   date: Date
   accountId: string
-}): Promise<{ rowsUpserted: number; rowsDeleted: number; lineCost: number }> {
+}): Promise<{ rowsUpserted: number; rowsDeleted: number; rowsChanged: number; lineCost: number }> {
   const { storeId, accountId } = input
   const date = startOfDayUTC(input.date)
   const dayEnd = new Date(date)
@@ -675,7 +677,7 @@ async function recomputeDailyPackagingCogsForDay(input: {
     dayEnd,
   })
 
-  const deleteResult = await replaceDailyCogsRowsForDay({
+  const write = await replaceDailyCogsRowsForDay({
     storeId,
     date,
     rows,
@@ -684,7 +686,8 @@ async function recomputeDailyPackagingCogsForDay(input: {
 
   return {
     rowsUpserted: rows.length,
-    rowsDeleted: deleteResult,
+    rowsDeleted: write.deleted,
+    rowsChanged: write.upserted + write.deleted,
     lineCost: rows.reduce((sum, row) => sum + row.lineCost, 0),
   }
 }
@@ -694,13 +697,20 @@ export async function recomputePackagingCogsForRange(input: {
   startDate: Date
   endDate: Date
   accountId: string
-}): Promise<{ daysProcessed: number; rowsUpserted: number; rowsDeleted: number; lineCost: number }> {
+}): Promise<{
+  daysProcessed: number
+  rowsUpserted: number
+  rowsDeleted: number
+  rowsChanged: number
+  lineCost: number
+}> {
   const start = startOfDayUTC(input.startDate)
   const end = startOfDayUTC(input.endDate)
 
   let daysProcessed = 0
   let rowsUpserted = 0
   let rowsDeleted = 0
+  let rowsChanged = 0
   let lineCost = 0
 
   for (
@@ -716,14 +726,17 @@ export async function recomputePackagingCogsForRange(input: {
     daysProcessed++
     rowsUpserted += result.rowsUpserted
     rowsDeleted += result.rowsDeleted
+    rowsChanged += result.rowsChanged
     lineCost += result.lineCost
   }
 
-  // Once per run, not per day — see the same call in
-  // `recomputeDailyCogsForRange` for why the tags are what they are.
-  await bustTags(["cogs", ...monthTagsForRange(start, end)])
+  // Once per run, not per day, and only when a row changed — see the same
+  // call in `recomputeDailyCogsForRange` for why the tags are what they are.
+  if (rowsChanged > 0) {
+    await bustTags(["cogs", ...monthTagsForRange(start, end)])
+  }
 
-  return { daysProcessed, rowsUpserted, rowsDeleted, lineCost }
+  return { daysProcessed, rowsUpserted, rowsDeleted, rowsChanged, lineCost }
 }
 
 /**
@@ -737,10 +750,12 @@ export async function recomputeDailyCogsForRange(input: {
   endDate: Date
   accountId: string
   dayConcurrency?: number
-}): Promise<{ daysProcessed: number; rowsUpserted: number; rowsDeleted: number }> {
+}): Promise<{ daysProcessed: number; rowsUpserted: number; rowsDeleted: number; rowsChanged: number }> {
   const start = startOfDayUTC(input.startDate)
   const end = startOfDayUTC(input.endDate)
-  const dayConcurrency = normalizeConcurrency(input.dayConcurrency, 1)
+  // Three days at a time: each day is its own bounded transaction over a
+  // distinct (storeId, date), so days cannot contend for rows.
+  const dayConcurrency = normalizeConcurrency(input.dayConcurrency, DEFAULT_DAY_CONCURRENCY)
 
   const dates: Date[] = []
   for (
@@ -765,12 +780,20 @@ export async function recomputeDailyCogsForRange(input: {
   // range this run did not touch survives it. `cogs` is the broad tag for a
   // writer that cannot name its dates; a range recompute always can, but the
   // reader joins both so it stays reachable either way.
-  await bustTags(["cogs", ...monthTagsForRange(start, end)])
+  //
+  // Only when a row actually changed: the sweep recomputes a whole window
+  // every few hours and, now that unchanged rows are not rewritten, most runs
+  // change nothing — busting anyway evicted good cached COGS each time.
+  const rowsChanged = results.reduce((sum, result) => sum + result.rowsChanged, 0)
+  if (rowsChanged > 0) {
+    await bustTags(["cogs", ...monthTagsForRange(start, end)])
+  }
 
   return {
     daysProcessed: dates.length,
     rowsUpserted: results.reduce((sum, result) => sum + result.rowsUpserted, 0),
     rowsDeleted: results.reduce((sum, result) => sum + result.rowsDeleted, 0),
+    rowsChanged,
   }
 }
 
@@ -821,7 +844,7 @@ async function replaceDailyCogsRowsForDay(input: {
   date: Date
   rows: ComputedRow[]
   category?: string
-}): Promise<number> {
+}): Promise<{ upserted: number; deleted: number }> {
   const { storeId, date, rows, category } = input
   const computedAt = new Date()
   const categoryClause =
@@ -844,8 +867,9 @@ async function replaceDailyCogsRowsForDay(input: {
 
   return prisma.$transaction(
     async (tx) => {
+      let upserted = 0
       if (rows.length > 0) {
-        await tx.$executeRaw(Prisma.sql`
+        upserted = await tx.$executeRaw(Prisma.sql`
           INSERT INTO "DailyCogsItem" (
             "id",
             "storeId",
@@ -874,16 +898,32 @@ async function replaceDailyCogsRowsForDay(input: {
             "partialCost" = EXCLUDED."partialCost",
             "costSource" = EXCLUDED."costSource",
             "computedAt" = EXCLUDED."computedAt"
+          -- Only rewrite a row whose figures moved. Every sweep recomputes the
+          -- whole window, and rewriting unchanged rows cost 476k row versions
+          -- for 21k rows in prod (2026-11-20). computedAt therefore stays at
+          -- the last time the row's figures actually changed.
+          WHERE (
+            "DailyCogsItem"."recipeId", "DailyCogsItem"."qtySold",
+            "DailyCogsItem"."salesRevenue", "DailyCogsItem"."unitCost",
+            "DailyCogsItem"."lineCost", "DailyCogsItem"."status",
+            "DailyCogsItem"."partialCost", "DailyCogsItem"."costSource"
+          ) IS DISTINCT FROM (
+            EXCLUDED."recipeId", EXCLUDED."qtySold",
+            EXCLUDED."salesRevenue", EXCLUDED."unitCost",
+            EXCLUDED."lineCost", EXCLUDED."status",
+            EXCLUDED."partialCost", EXCLUDED."costSource"
+          )
         `)
       }
 
-      return tx.$executeRaw(Prisma.sql`
+      const deleted = await tx.$executeRaw(Prisma.sql`
         DELETE FROM "DailyCogsItem" d
         WHERE d."storeId" = ${storeId}
           AND d."date" = ${date}
           ${categoryClause}
           ${staleRowsClause}
       `)
+      return { upserted, deleted }
     },
     { timeout: DAILY_COGS_TRANSACTION_TIMEOUT_MS, maxWait: 10_000 }
   )
