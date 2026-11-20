@@ -57,6 +57,8 @@ export interface PlanStoreInput {
   days: PlanStoreDayInput[]
   /** Sold Monday to Sunday last week, or null when any day is not reconciled. */
   lastWeek: number | null
+  /** Its days could not be read. Never treated as "no forecast". */
+  failed?: boolean
 }
 
 export interface PlanRunOutInput {
@@ -465,7 +467,10 @@ export function buildWeekPlan(input: WeekPlanInput): WeekPlan {
           // The reasons cover only part of the number: in an all-stores view
           // one store wrote its reasons and another did not. A big "other"
           // row would be a reason nobody gave, so show none.
-          whyNote = "The forecast wrote its reasons for only part of this day. Pick one store to see them."
+          whyNote =
+            input.storeId === null
+              ? "The forecast wrote its reasons for only part of this day. Pick one store to see them."
+              : "The forecast was adjusted after the model wrote its reasons, so they no longer add up to it and are not shown."
         } else {
           if (Math.abs(rest) >= 1) {
             rows.push({ label: "Other adjustments", value: `${rest >= 0 ? "+" : "−"}${money(Math.abs(rest))}` })
@@ -562,11 +567,15 @@ export function buildWeekPlan(input: WeekPlanInput): WeekPlan {
     const soldDays = days.filter((d) => d.kind === "sold").length
     const fcPart = (total ?? 0) - soldPart
     const pendingSold = keys.filter((k) => k < input.asOf && salesByDay.get(k)?.actual == null).length
-    const change = total !== null && input.lastWeek !== null && input.lastWeek > 0 ? (total - input.lastWeek) / input.lastWeek : null
-
     const noForecast = scoped.filter(
-      (s) => aheadKeys.length > 0 && aheadKeys.every((k) => (storeDay(s, k)?.forecast ?? null) === null),
+      (s) => !s.failed && aheadKeys.length > 0 && aheadKeys.every((k) => (storeDay(s, k)?.forecast ?? null) === null),
     )
+    // Like for like or not at all: a closed day not counted yet, or a store
+    // left out of the total, would make the change compare different weeks.
+    const change =
+      total !== null && input.lastWeek !== null && input.lastWeek > 0 && pendingSold === 0 && noForecast.length === 0
+        ? (total - input.lastWeek) / input.lastWeek
+        : null
 
     const sales: PlanFigure = {
       value: total === null ? null : money(total),
@@ -728,13 +737,16 @@ export function buildWeekPlan(input: WeekPlanInput): WeekPlan {
       const posted = ahead.filter((d) => d!.status !== "unscheduled" && d!.status !== "unknown" && d!.needed !== null)
       const sh = ahead.reduce((a, d) => a + shortOf(d), 0)
       const unposted = ahead.some((d) => d!.status === "unscheduled")
-      const c = tot !== null && s.lastWeek !== null && s.lastWeek > 0 ? (tot - s.lastWeek) / s.lastWeek : null
+      const pending = keys.some((k) => k < input.asOf && (storeDay(s, k)?.actual ?? null) === null && storeDay(s, k) !== undefined)
+      const c =
+        tot !== null && s.lastWeek !== null && s.lastWeek > 0 && !pending ? (tot - s.lastWeek) / s.lastWeek : null
       const orders = orderTodos.filter((t) => {
         const row = shelfRows.find((r) => `order-${r.key}` === t.key)
         return row ? storeOfRow(row) === s.name : false
       }).length
-      const status: PlanStoreCard["status"] =
-        ahead.length === 0 && aheadKeys.length > 0
+      const status: PlanStoreCard["status"] = s.failed
+        ? { tone: "wait", label: "Didn't load" }
+        : ahead.length === 0 && aheadKeys.length > 0
           ? { tone: "wait", label: "No forecast yet" }
           : sh > 0
             ? { tone: "bad", label: `Short ${hrs(sh)} h` }

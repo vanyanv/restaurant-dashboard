@@ -203,6 +203,28 @@ describe("week plan", () => {
     expect(w.stores.find((s) => s.id === "vn")!.status.label).toBe("No forecast yet")
   })
 
+  it("drops the change on last week when a closed day is not counted yet", () => {
+    const input = base()
+    input.sales[0].actual = null
+    const w = buildWeekPlan(input).weeks.this
+    expect(w.sales.vs).toBeNull()
+    expect(w.sales.missing).toContain("1 closed day not counted yet")
+  })
+
+  it("drops the change on last week when a store is left out of the total", () => {
+    const input = base()
+    input.stores.push(store("vn", "Van Nuys", []))
+    expect(buildWeekPlan(input).weeks.next.sales.vs).toBeNull()
+  })
+
+  it("says a store that did not load did not load, never that it has no forecast", () => {
+    const input = base()
+    input.stores.push({ ...store("vn", "Van Nuys", []), failed: true })
+    const w = buildWeekPlan(input).weeks.next
+    expect(w.sentence.map((s) => s.text).join("")).not.toContain("Van Nuys")
+    expect(w.stores.find((s) => s.id === "vn")!.status).toEqual({ tone: "wait", label: "Didn't load" })
+  })
+
   it("shows no total, not $0, when nothing was forecast", () => {
     const w = buildWeekPlan(base({ sales: [] })).weeks.next
     expect(w.sales.value).toBeNull()

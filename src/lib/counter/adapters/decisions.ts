@@ -856,7 +856,7 @@ export async function loadSettledDays(
   const storeIds = resolved.ctx.storeIds
   if (storeIds.length === 0) return []
 
-  return mergeClosedDays((await readClosedDays(storeIds, start, asOf)).values())
+  return mergeClosedDays((await readClosedDays(storeIds, start, asOf, accountId)).values())
 }
 
 /**
@@ -870,12 +870,15 @@ export async function readClosedDays(
   storeIds: string[],
   start: Date,
   end: Date,
+  /** The tenancy boundary, filtered on here as well as by whoever resolved `storeIds`. */
+  accountId: string,
 ): Promise<Map<string, SettledDay[]>> {
   const out = new Map<string, SettledDay[]>()
   if (storeIds.length === 0 || start.getTime() >= end.getTime()) return out
   const rows = await prisma.forecastDailyRevenue.findMany({
     where: {
       storeId: { in: storeIds },
+      store: { accountId },
       // Whole-day rows only. `hourBucket` 1-23 is reserved for an hourly
       // forecast; counting one alongside its own day would double the day.
       hourBucket: 0,
@@ -1675,7 +1678,7 @@ export type PhoneDecisionsSections = Pick<DecisionsSections, (typeof PHONE_DECIS
 
 interface PlanStores {
   asOf: string
-  stores: Array<{ id: string; name: string; days: DecisionDay[] }>
+  stores: Array<{ id: string; name: string; days: DecisionDay[]; failed: boolean }>
   /** Closed days per store, last Monday up to today. */
   closed: Map<string, SettledDay[]>
 }
@@ -1692,16 +1695,17 @@ async function loadPlanStores(asOfKey: string, accountId: string): Promise<PlanS
     Promise.all(
       storeIds.map((id) =>
         getDecisionsView({ storeId: id, lite: true })
-          .then((r) => (r.ok ? r.data.ahead : []))
-          // One store's read failing costs that store its days, not the page.
-          .catch(() => [] as DecisionDay[]),
+          .then((r) => (r.ok ? { days: r.data.ahead, failed: false } : { days: [] as DecisionDay[], failed: true }))
+          // One store's read failing costs that store its card, not the page,
+          // and is said as "didn't load", never as "no forecast".
+          .catch(() => ({ days: [] as DecisionDay[], failed: true })),
       ),
     ),
-    readClosedDays(storeIds, lastMonday, asOf).catch(() => new Map<string, SettledDay[]>()),
+    readClosedDays(storeIds, lastMonday, asOf, accountId).catch(() => new Map<string, SettledDay[]>()),
   ])
   return {
     asOf: asOfKey,
-    stores: storeIds.map((id, i) => ({ id, name: storeNameById.get(id) ?? "Store", days: views[i] })),
+    stores: storeIds.map((id, i) => ({ id, name: storeNameById.get(id) ?? "Store", ...views[i] })),
     closed,
   }
 }
@@ -1715,7 +1719,11 @@ function forwardStoreDay(d: DecisionDay): PlanStoreDayInput {
     needed: d.labor.neededHours,
     gap: d.labor.gapHours,
     status: d.labor.status,
-    hourly: d.hourly.hours.map((h) => ({ hour: h.hour, needed: h.neededHours, staffed: h.staffedHours })),
+    // A day with no hourly forecast rows reads every hour as 0 orders, so 0
+    // needed: that is "not forecast by the hour", not "nothing needed".
+    hourly: d.hourly.hours.some((h) => h.predictedOrders > 0)
+      ? d.hourly.hours.map((h) => ({ hour: h.hour, needed: h.neededHours, staffed: h.staffedHours }))
+      : d.hourly.hours.map((h) => ({ hour: h.hour, needed: null, staffed: h.staffedHours })),
     worst: d.hourly.worstStretch
       ? { startHour: d.hourly.worstStretch.startHour, endHour: d.hourly.worstStretch.endHour }
       : null,
@@ -1773,6 +1781,7 @@ export function buildPlanFrom(
       name: s.name,
       days: [...closedThisWeek.map(closedStoreDay), ...s.days.map(forwardStoreDay)],
       lastWeek: soldWeek(closed, lastMonday),
+      failed: s.failed,
     }
   })
 
