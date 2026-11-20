@@ -339,8 +339,12 @@ describe("runMetricsSyncForStore — reconciles what Otter stopped returning", (
       expect(del, table).toBeDefined()
       expect(del.sql).toContain("NOT EXISTS")
       expect(del.values).toContain(STORE_A)
-      expect(del.values).toContainEqual(["2026-05-01", "2026-05-02"])
     }
+    // The daily request covers the window and only 05-01 came back with rows,
+    // so only 05-01 is reconciled; a day with no rows is never wiped.
+    expect(deletesFrom("OtterDailySummary")[0].values).toContainEqual(["2026-05-01"])
+    // Categories are fetched per day and both days answered with a row.
+    expect(deletesFrom("OtterMenuCategory")[0].values).toContainEqual(["2026-05-01", "2026-05-02"])
     // items and modifiers each reconcile only their own half of the table
     const menuDeletes = deletesFrom("OtterMenuItem")
     expect(menuDeletes).toHaveLength(2)
@@ -358,7 +362,9 @@ describe("runMetricsSyncForStore — reconciles what Otter stopped returning", (
   })
 
   it("counts removed rows as changes", async () => {
-    vi.mocked(otter.queryMetrics).mockResolvedValue([])
+    vi.mocked(otter.queryMetrics).mockResolvedValue([
+      { store: UUID_A, menu_parent_entity_name: "Sliders", item: "Classic", fp_order_items_quantity_sold: 1 },
+    ])
     executeRawImpl = async (sql) => (sql.sql.includes(`DELETE FROM "OtterMenuCategory"`) ? 4 : 0)
     const result = await runMetricsSyncForStore(STORE_A, [UUID_A], windowStart, windowEnd, {
       triggeredBy: "manual",
@@ -375,6 +381,7 @@ describe("runMetricsSyncForStore — reconciles what Otter stopped returning", (
     vi.mocked(otter.queryMetrics).mockImplementation(async (body: object) => {
       const b = body as { phase?: string; day?: number }
       if (b.phase === "cat" && b.day === 1) throw new Error("Otter API error 503")
+      if (b.phase === "cat") return [{ store: UUID_A, menu_parent_entity_name: "Sliders" }]
       return []
     })
     const spy = vi.spyOn(console, "error").mockImplementation(() => {})
@@ -400,6 +407,16 @@ describe("runMetricsSyncForStore — reconciles what Otter stopped returning", (
     ).toHaveLength(1)
     // lastSyncAt does not move for an incomplete run
     expect(prismaCalls.filter((c) => c.method === "otterStore.updateMany")).toHaveLength(0)
+  })
+
+  it("does not wipe a day that a clean fetch answered with no rows", async () => {
+    vi.mocked(otter.queryMetrics).mockResolvedValue([])
+    await runMetricsSyncForStore(STORE_A, [UUID_A], windowStart, windowEnd, { triggeredBy: "cron" })
+    for (const table of ["OtterDailySummary", "OtterMenuCategory", "OtterMenuItem"]) {
+      for (const del of deletesFrom(table)) {
+        expect(JSON.stringify(del.values), table).not.toContain("2026-05-0")
+      }
+    }
   })
 
   it("treats a failed ratings fetch as a failure", async () => {

@@ -314,11 +314,23 @@ export function everyToolStamped(toolNames: readonly string[]): boolean {
 const READS_NO_FIGURES: ReadonlySet<ChatToolName> = new Set<ChatToolName>(["fileReturn"])
 
 /**
- * The freshness stamp for one tool, or null when it reports none. A tool
- * with several sources reports the newest — the same reading
- * `maxAsOfForTools` keys the cache on.
+ * The freshness stamp for one tool, shown to the owner beside its figures, or
+ * null when it reports none.
+ *
+ * Unlike the cache key, this is the OLDEST of the tool's synced sources: a P&L
+ * built from Otter (today) and labor (two days old) is only as fresh as its
+ * labor. `storeSettings` is left out of the reading when the tool has a synced
+ * source too, because a rent edit is not when the figures were last synced; a
+ * tool that reads settings alone reports the settings stamp.
  */
 export async function asOfForTool(toolName: string): Promise<string | null> {
-  if (sourcesOf(toolName).length === 0) return null
-  return maxAsOfForTools([toolName])
+  const all = sourcesOf(toolName)
+  if (all.length === 0) return null
+  const synced = all.filter((s) => s !== "storeSettings")
+  const sources = synced.length > 0 ? synced : all
+  const reads = await Promise.all(sources.map(readSource))
+  const known = reads.filter((d): d is Date => d != null)
+  if (known.length === 0) return null
+  const oldest = known.reduce((acc, d) => (d < acc ? d : acc))
+  return oldest.toISOString()
 }

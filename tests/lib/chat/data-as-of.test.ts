@@ -86,7 +86,8 @@ describe("asOfForTool from JobRun", () => {
     const { maxAsOfForTools, asOfForTool } = await load()
     // A rent edit at 07:30 is newer than every sync, so it is the key.
     expect(await maxAsOfForTools(["getPnlSummary"])).toBe("2026-11-20T07:30:00.000Z")
-    expect(await asOfForTool("getPnlSummary")).toBe("2026-11-20T07:30:00.000Z")
+    // Shown to the owner: the oldest SYNCED source (Otter 04:00), not the rent edit.
+    expect(await asOfForTool("getPnlSummary")).toBe("2026-11-20T04:00:00.000Z")
     const jobs = findFirst.mock.calls.map((c) => c[0].where.jobName).sort()
     expect(jobs).toEqual(["harri-labor-sync", "otter.metrics.sync"])
     const texts = queryRaw.mock.calls.map((c) => JSON.stringify(c[0]))

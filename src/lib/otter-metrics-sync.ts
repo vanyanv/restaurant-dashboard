@@ -293,6 +293,19 @@ function hitRowCap(rows: readonly unknown[], body: object): boolean {
 
 const ymd = (d: Date) => d.toISOString().slice(0, 10)
 
+/**
+ * The dates a phase may reconcile: fetched cleanly AND came back with at least
+ * one row for this store. A clean fetch that returns nothing for a day is not
+ * trusted to mean "that day had no sales": one empty answer from Otter would
+ * otherwise wipe the day off the P&L until the next run. The cost is that a
+ * day whose every row was voided keeps its old rows; that is rare, and the
+ * next non-empty answer for the day reconciles it.
+ */
+function datesWithRows(candidates: readonly string[], keep: readonly { date: Date }[]): string[] {
+  const seen = new Set(keep.map((r) => ymd(r.date)))
+  return candidates.filter((d) => seen.has(d))
+}
+
 type DayFetch = { day: Date; rows: OtterRow[]; ok: boolean }
 
 /**
@@ -546,7 +559,7 @@ async function runMetricsSyncInner(
       : buildDeleteMissingSql({
           table: DAILY_SUMMARY_UPSERT.table,
           where: storeScope,
-          dates: { column: "date", values: days.map(ymd) },
+          dates: { column: "date", values: datesWithRows(days.map(ymd), dailyUpserts) },
           key: DAILY_SUMMARY_UPSERT.conflict.filter((c) => c.name !== "storeId"),
           keep: dailyUpserts,
         }),
@@ -637,7 +650,10 @@ async function runMetricsSyncInner(
       buildDeleteMissingSql({
         table: MENU_CATEGORY_UPSERT.table,
         where: storeScope,
-        dates: { column: "date", values: categoryResults.filter((r) => r.ok).map((r) => ymd(r.day)) },
+        dates: {
+          column: "date",
+          values: datesWithRows(categoryResults.filter((r) => r.ok).map((r) => ymd(r.day)), categoryUpserts),
+        },
         key: MENU_CATEGORY_UPSERT.conflict.filter((c) => c.name !== "storeId"),
         keep: categoryUpserts,
       }),
@@ -908,7 +924,7 @@ async function writeMenuItemPhase(
         { column: { name: "storeId", type: "text" }, value: storeId },
         { column: { name: "isModifier", type: "boolean" }, value: isModifier },
       ],
-      dates: { column: "date", values: results.filter((r) => r.ok).map((r) => ymd(r.day)) },
+      dates: { column: "date", values: datesWithRows(results.filter((r) => r.ok).map((r) => ymd(r.day)), upserts) },
       key: MENU_ITEM_UPSERT.conflict.filter((c) => c.name !== "storeId" && c.name !== "isModifier"),
       keep: upserts,
     }),
