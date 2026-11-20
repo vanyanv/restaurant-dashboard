@@ -25,7 +25,7 @@ import { phoneTargets } from "../fidelity/routes"
  * tree a reader walks.
  */
 
-test("no unnamed controls, unlabelled inputs, alt-less images or duplicate ids (phone)", async ({
+test("no unnamed controls, unlabelled inputs, alt-less images or duplicate ids (phone)", { tag: "@real-data" }, async ({
   page,
 }) => {
   test.setTimeout(900_000)

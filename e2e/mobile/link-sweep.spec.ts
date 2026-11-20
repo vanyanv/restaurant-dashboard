@@ -24,7 +24,7 @@ import { phoneRoutes } from "../fidelity/routes"
  */
 const ROUTES = phoneRoutes()
 
-test("every internal link resolves (phone)", async ({ page }) => {
+test("every internal link resolves (phone)", { tag: "@real-data" }, async ({ page }) => {
   test.setTimeout(900_000)
 
   const hrefs = new Map<string, string>()

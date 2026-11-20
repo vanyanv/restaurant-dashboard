@@ -21,7 +21,7 @@ import { phoneRoutes } from "../fidelity/routes"
  * manifest entry. That is a product state, not a failure.
  */
 
-test("no route renders a failed or unresolved section (phone)", async ({ page }) => {
+test("no route renders a failed or unresolved section (phone)", { tag: "@real-data" }, async ({ page }) => {
   test.setTimeout(900_000)
   const findings: string[] = []
 

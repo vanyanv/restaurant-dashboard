@@ -24,7 +24,7 @@ import { deskRoutes } from "../fidelity/routes"
  */
 const ROUTES = deskRoutes()
 
-test("every internal link resolves", async ({ page }) => {
+test("every internal link resolves", { tag: "@real-data" }, async ({ page }) => {
   test.setTimeout(900_000)
 
   const hrefs = new Map<string, string>()

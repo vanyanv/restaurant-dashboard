@@ -25,7 +25,7 @@ import { deskRoutes } from "../fidelity/routes"
  * viewport is a rounding artefact, not a defect.
  */
 
-test("no route overflows sideways", async ({ page }) => {
+test("no route overflows sideways", { tag: "@real-data" }, async ({ page }) => {
   test.setTimeout(900_000)
   const findings: string[] = []
 

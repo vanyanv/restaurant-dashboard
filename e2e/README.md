@@ -35,6 +35,7 @@ npm run e2e:report   # open the last HTML report
 
 ## Conventions
 
+- Tag a test `{ tag: "@real-data" }` when it needs the dev/production data rather than the demo seed (the route sweeps walk the fidelity manifest's real record ids). CI runs against the demo seed with `--grep-invert @real-data`; run them yourself against a database that has the data with `npx playwright test --grep @real-data`.
 - Tag P0 flows with `@smoke` in the `describe` or `test` name. Pre-push runs `--grep @smoke`.
 - Prefer role-based locators (`getByRole`, `getByLabel`) over class/CSS.
 - Assert on data presence (KPI is rendered, formatted with tabular-nums), not exact values.

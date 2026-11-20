@@ -22,7 +22,7 @@ import { phoneRoutes } from "../fidelity/routes"
  * viewport is a rounding artefact, not a defect.
  */
 
-test("no route overflows sideways (phone)", async ({ page }) => {
+test("no route overflows sideways (phone)", { tag: "@real-data" }, async ({ page }) => {
   test.setTimeout(900_000)
   const findings: string[] = []
 

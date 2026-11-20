@@ -25,7 +25,7 @@ import { deskTargets } from "../fidelity/routes"
  * tree a reader walks.
  */
 
-test("no unnamed controls, unlabelled inputs, alt-less images or duplicate ids", async ({
+test("no unnamed controls, unlabelled inputs, alt-less images or duplicate ids", { tag: "@real-data" }, async ({
   page,
 }) => {
   test.setTimeout(900_000)
