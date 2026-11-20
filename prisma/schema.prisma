@@ -105,6 +105,11 @@ model User {
   /// The row stays so the invoices, recipes and counts they entered keep a name.
   removedAt DateTime?
 
+  /// When the password last changed (settings change, re-invite). Every
+  /// session issued before it is ended by the jwt callback in src/lib/auth.ts.
+  /// Null: never changed since this column was added; no session is ended.
+  passwordChangedAt DateTime?
+
   // Profile
   phone     String?
   avatarUrl String?

@@ -1,6 +1,6 @@
 import "server-only"
 import { cookies } from "next/headers"
-import { getToken, type JWT } from "next-auth/jwt"
+import { encode, getToken, type JWT } from "next-auth/jwt"
 
 /**
  * Who is signed in, read from the session cookie alone. No database.
@@ -28,4 +28,40 @@ export async function readSessionToken(): Promise<JWT | null> {
   } catch {
     return null
   }
+}
+
+const SESSION_COOKIES = ["__Secure-next-auth.session-token", "next-auth.session-token"] as const
+/** Matches `session.maxAge` in `src/lib/auth.ts`. */
+const SESSION_MAX_AGE_S = 30 * 24 * 60 * 60
+
+/**
+ * Re-issue the signed-in person's session cookie with a fresh `iat`.
+ *
+ * A password change ends every session issued before it (the jwt callback
+ * compares `iat` with `User.passwordChangedAt`). The person who made the
+ * change should not be one of them, so the action that saves the new
+ * password calls this straight after: same claims, new issue time, same
+ * cookie name and attributes next-auth itself uses. Server actions and route
+ * handlers only (cookies cannot be set from a page render).
+ *
+ * Returns false when there is no readable session cookie; the caller's
+ * session then ends on its next page load, as everyone else's does.
+ */
+export async function reissueSessionCookie(): Promise<boolean> {
+  const secret = process.env.NEXTAUTH_SECRET
+  if (!secret) return false
+  const jar = await cookies()
+  const name = SESSION_COOKIES.find((n) => jar.get(n))
+  if (!name) return false
+  const token = await readSessionToken()
+  if (!token) return false
+  const value = await encode({ token, secret, maxAge: SESSION_MAX_AGE_S })
+  jar.set(name, value, {
+    httpOnly: true,
+    sameSite: "lax",
+    path: "/",
+    secure: name.startsWith("__Secure-"),
+    maxAge: SESSION_MAX_AGE_S,
+  })
+  return true
 }

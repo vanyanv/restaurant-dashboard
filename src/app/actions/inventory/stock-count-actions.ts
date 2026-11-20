@@ -210,15 +210,23 @@ export async function completeStockCount(input: {
   if (count.store.accountId !== user.accountId) return { ok: false, error: "count_not_in_account" }
   if (count.status !== "IN_PROGRESS") return { ok: false, error: "count_not_in_progress" }
 
-  // Run calibration update BEFORE marking complete, so the running-on-hand
-  // anchor query (which filters status=COMPLETED) still picks the previous
-  // count rather than this one.
-  await applyCalibrationUpdatesForCount(input.stockCountId, user.accountId)
-
-  await prisma.stockCount.update({
-    where: { id: input.stockCountId },
-    data: { status: "COMPLETED", completedAt: new Date() },
-  })
+  // Calibration READS run before the count is marked complete, so the
+  // running-on-hand anchor query (which filters status=COMPLETED) still picks
+  // the previous count rather than this one. Its WRITES commit in one
+  // transaction with the status flip, flip first and guarded on IN_PROGRESS:
+  // a concurrent or retried call flips nothing and calibrates nothing twice.
+  const finished = await applyCalibrationUpdatesForCount(
+    input.stockCountId,
+    user.accountId,
+    async (tx) => {
+      const done = await tx.stockCount.updateMany({
+        where: { id: input.stockCountId, status: "IN_PROGRESS" },
+        data: { status: "COMPLETED", completedAt: new Date() },
+      })
+      return done.count > 0
+    },
+  )
+  if (!finished) return { ok: false, error: "count_not_in_progress" }
   return { ok: true }
 }
 

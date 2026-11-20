@@ -16,6 +16,14 @@ export async function GET(req: NextRequest) {
   const url = new URL(req.url)
   const storeParam = url.searchParams.get("store")
   const storeId = storeParam && storeParam !== "all" ? storeParam : null
+  const accountId = session.user.accountId
+
+  // A named store must be one of the caller's: a store id from another
+  // account reads as not found, the same answer as a store that never existed.
+  if (storeId) {
+    const own = await prisma.store.findFirst({ where: { id: storeId, accountId }, select: { id: true } })
+    if (!own) return NextResponse.json({ error: "store not found" }, { status: 404 })
+  }
 
   const [db, redis, conn, syncs, errorsCount, todayCost] = await Promise.all([
     getDbSize(),
@@ -23,7 +31,7 @@ export async function GET(req: NextRequest) {
     getConnections(),
     getSyncs(storeId),
     getErrorCount24h(),
-    aiCostToday(),
+    aiCostToday(accountId),
   ])
 
   return NextResponse.json({
@@ -37,12 +45,23 @@ export async function GET(req: NextRequest) {
   })
 }
 
-async function aiCostToday(): Promise<number> {
+/**
+ * Today's AI spend for the caller's account. `AiUsageEvent` has no account
+ * column, so an event belongs to the account of its user or its store, the
+ * same rule the chat spend cap uses (`src/lib/chat/spend-cap.ts`). It used to
+ * sum every account's events.
+ */
+async function aiCostToday(accountId: string): Promise<number> {
   const since = new Date()
   since.setHours(0, 0, 0, 0)
   const rows = await prisma.$queryRaw<{ s: number }[]>`
-    SELECT COALESCE(SUM("estimatedCostUsd"), 0)::float AS s
-    FROM "AiUsageEvent" WHERE "occurredAt" >= ${since}
+    SELECT COALESCE(SUM(e."estimatedCostUsd"), 0)::float AS s
+    FROM "AiUsageEvent" e
+    WHERE e."occurredAt" >= ${since}
+      AND (
+        e."userId" IN (SELECT id FROM "User" WHERE "accountId" = ${accountId})
+        OR e."storeId" IN (SELECT id FROM "Store" WHERE "accountId" = ${accountId})
+      )
   `
   return Number(rows[0]?.s ?? 0)
 }

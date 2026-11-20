@@ -28,8 +28,15 @@ vi.mock("@/lib/prisma", () => ({
     ingredientSkuMatch: { findMany: vi.fn() },
   },
 }))
+// The transaction client `applyCalibrationUpdatesForCount` hands to the
+// action's `finish` callback. The real one opens an interactive transaction
+// and writes calibration only when `finish` flipped the row.
+const tx = { stockCount: { updateMany: vi.fn() } }
 vi.mock("@/lib/inventory/calibration-update", () => ({
-  applyCalibrationUpdatesForCount: vi.fn().mockResolvedValue(undefined),
+  applyCalibrationUpdatesForCount: vi.fn(
+    async (_id: string, _acct: string, finish?: (t: unknown) => Promise<boolean>) =>
+      finish ? finish(tx) : true,
+  ),
 }))
 
 import { getServerSession } from "next-auth"
@@ -307,33 +314,32 @@ describe("completeStockCount", () => {
     } as never)
     const result = await completeStockCount({ stockCountId: "c1" })
     expect(result).toEqual({ ok: false, error: "count_not_in_progress" })
-    expect(prisma.stockCount.update).not.toHaveBeenCalled()
+    expect(tx.stockCount.updateMany).not.toHaveBeenCalled()
   })
 
-  it("transitions IN_PROGRESS → COMPLETED and stamps completedAt", async () => {
+  it("transitions IN_PROGRESS → COMPLETED, guarded on status, inside the calibration transaction", async () => {
+    tx.stockCount.updateMany.mockResolvedValue({ count: 1 })
     const result = await completeStockCount({ stockCountId: "c1" })
     expect(result).toEqual({ ok: true })
-    expect(prisma.stockCount.update).toHaveBeenCalledWith({
-      where: { id: "c1" },
+    expect(tx.stockCount.updateMany).toHaveBeenCalledWith({
+      where: { id: "c1", status: "IN_PROGRESS" },
       data: { status: "COMPLETED", completedAt: expect.any(Date) },
     })
+    // Never a separate, unguarded write outside the transaction.
+    expect(prisma.stockCount.update).not.toHaveBeenCalled()
+    const calibrationModule = await import("@/lib/inventory/calibration-update")
+    expect(calibrationModule.applyCalibrationUpdatesForCount).toHaveBeenCalledWith(
+      "c1",
+      "acct-A",
+      expect.any(Function),
+    )
   })
 
-  it("runs calibration update before marking the count complete", async () => {
-    const calibrationModule = await import("@/lib/inventory/calibration-update")
-    const calls: string[] = []
-    vi.mocked(calibrationModule.applyCalibrationUpdatesForCount).mockImplementation(
-      (async () => {
-        calls.push("calibration")
-      }) as never,
-    )
-    vi.mocked(prisma.stockCount.update).mockImplementation((async () => {
-      calls.push("update")
-      return { id: "c1", status: "COMPLETED" }
-    }) as never)
-    await completeStockCount({ stockCountId: "c1" })
-    expect(calls).toEqual(["calibration", "update"])
-    expect(calibrationModule.applyCalibrationUpdatesForCount).toHaveBeenCalledWith("c1", "acct-A")
+  it("a second call that loses the race finishes nothing", async () => {
+    // The pre-check saw IN_PROGRESS, but another call committed first.
+    tx.stockCount.updateMany.mockResolvedValue({ count: 0 })
+    const result = await completeStockCount({ stockCountId: "c1" })
+    expect(result).toEqual({ ok: false, error: "count_not_in_progress" })
   })
 })
 

@@ -45,6 +45,17 @@ describe("POST /api/auth/signup-with-invite", () => {
     expect(asMock(prisma.invite.update).mock.calls[0][0].data).toEqual({ usedByUserId: "u_ana" })
   })
 
+  it("a removed person invited back gets their row, with old sessions ended", async () => {
+    asMock(prisma.user.findFirst).mockResolvedValue({ id: "u_ana", accountId: "acc_1", removedAt: new Date() })
+    asMock(prisma.user.update).mockResolvedValue({ id: "u_ana", email: "ana@example.com" })
+    const res = await post(BODY)
+    expect(res.status).toBe(201)
+    const data = asMock(prisma.user.update).mock.calls[0][0].data
+    expect(data).toMatchObject({ password: "hashed", removedAt: null })
+    // Clearing removedAt alone would bring a pre-removal 30-day cookie back.
+    expect(data.passwordChangedAt).toBeInstanceOf(Date)
+  })
+
   it("makes no account when the link was used or switched off mid-request", async () => {
     asMock(prisma.invite.updateMany).mockResolvedValue({ count: 0 })
     const res = await post(BODY)

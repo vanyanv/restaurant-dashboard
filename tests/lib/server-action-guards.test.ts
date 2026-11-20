@@ -128,6 +128,30 @@ function reachesGuard(file: string, name: string, seen = new Set<string>()): boo
   return ok
 }
 
+/**
+ * Does this action's own body touch Prisma before its first sign-in check?
+ * A call to a function that reaches the check counts as the check, at the
+ * position of that call.
+ */
+function queriesBeforeGuard(file: string, fn: Fn): boolean {
+  const body = code(fn.body)
+  const query = body.search(/\bprisma\.(?:\w+\.\w+|\$\w+)\(/)
+  if (query < 0) return false
+  let guard = body.search(GUARD)
+  const fns = functionsOf(file)
+  const imports = importsOf(file)
+  for (const m of body.matchAll(/\b(\w+)\(/g)) {
+    if (guard >= 0 && m.index! >= guard) break
+    const c = m[1]
+    if (c === fn.name) continue
+    const reaches =
+      (fns.some((f) => f.name === c) && reachesGuard(file, c)) ||
+      (imports.has(c) && reachesGuard(...imports.get(c)!))
+    if (reaches) guard = m.index!
+  }
+  return guard < 0 || guard > query
+}
+
 describe("server actions", () => {
   it("finds the server action files", () => {
     expect(actionFiles.length).toBeGreaterThan(5)
@@ -157,6 +181,40 @@ describe("server actions", () => {
       }
     }
     expect(missing, "These server actions never check who is signed in").toEqual([])
+  })
+
+  it("no exported server action queries the database before it checks who is signed in", () => {
+    // Reaching the check is not enough if a read runs first: `saveRecipeLines`
+    // read any account's recipe by id before its write path checked the
+    // session (fixed 2026-11-20). Text order is the proxy: the first sign-in
+    // check (or call to a function that reaches one) must come before the
+    // first `prisma.` call in the action's own body.
+    const early: string[] = []
+    for (const file of actionFiles) {
+      for (const fn of functionsOf(file)) {
+        if (!fn.exported) continue
+        const id = `${file}#${fn.name}`
+        if (PUBLIC_ON_PURPOSE[id]) continue
+        if (queriesBeforeGuard(file, fn)) early.push(id)
+      }
+    }
+    expect(early, "These server actions query before checking the session").toEqual([])
+  })
+
+  it("flags a read ahead of the session check, and passes one after it", () => {
+    VIRTUAL.set(
+      "fixture/order.ts",
+      `"use server"\n` +
+        `export async function early(id) { const r = await prisma.recipe.findUnique({ where: { id } }); await getSession(); return r }\n` +
+        `export async function late(id) { const s = await getSession(); return prisma.recipe.findFirst({ where: { id } }) }\n`,
+    )
+    try {
+      const [early, late] = functionsOf("fixture/order.ts")
+      expect(queriesBeforeGuard("fixture/order.ts", early)).toBe(true)
+      expect(queriesBeforeGuard("fixture/order.ts", late)).toBe(false)
+    } finally {
+      VIRTUAL.clear()
+    }
   })
 
   it("checks single-quoted directives and does not count a string as a guard call", () => {

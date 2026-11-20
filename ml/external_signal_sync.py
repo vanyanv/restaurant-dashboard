@@ -45,6 +45,13 @@ def main() -> int:
         print({"store_id": store["id"], "provider": args.provider, "skipped": "missing_coordinates"})
     stores = [s for s in stores if s["latitude"] is not None and s["longitude"] is not None]
 
+    events_on = predicthq_enabled()
+    if args.provider in ("predicthq", "events", "all") and not events_on:
+        # PredictHQ is a paid feed the owner has switched off (2026-11-20).
+        # Skipping it is not a failure: weather still syncs, and the models
+        # drop event columns whose coverage never landed.
+        print({"provider": "predicthq", "skipped": "not_connected"})
+
     failures = 0
     for store in stores:
         start_date = args.start_date or earliest_otter_history_date(store["id"])
@@ -57,9 +64,22 @@ def main() -> int:
             end = end_date
         if args.provider in ("weather", "all"):
             failures += 0 if sync_weather(store, start_date, end, args.triggered_by) else 1
-        if args.provider in ("predicthq", "events", "all"):
+        if events_on and args.provider in ("predicthq", "events", "all"):
             failures += 0 if sync_predicthq(store, start_date, end, args.triggered_by) else 1
     return 0 if failures == 0 else 1
+
+
+def predicthq_token() -> str | None:
+    return os.environ.get("PREDICTHQ_API_TOKEN") or os.environ.get("PREDICTHQ_TOKEN") or None
+
+
+def predicthq_enabled() -> bool:
+    """PredictHQ runs only with a token AND an explicit opt-in.
+
+    It costs money, so a token left in the environment is not enough on its
+    own: EVENTS_PROVIDER_ENABLED=1 must be set too.
+    """
+    return bool(predicthq_token()) and os.environ.get("EVENTS_PROVIDER_ENABLED") == "1"
 
 
 def parse_args() -> argparse.Namespace:
@@ -130,7 +150,7 @@ def sync_weather(store: dict[str, Any], start_date: dt.date, end_date: dt.date, 
 
 
 def sync_predicthq(store: dict[str, Any], start_date: dt.date, end_date: dt.date, triggered_by: str) -> bool:
-    token = os.environ.get("PREDICTHQ_API_TOKEN") or os.environ.get("PREDICTHQ_TOKEN")
+    token = predicthq_token()
     if not token:
         print({"provider": "predicthq", "store_id": store["id"], "skipped": "missing_token"})
         return True

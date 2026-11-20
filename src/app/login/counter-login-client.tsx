@@ -85,6 +85,10 @@ const WHY_REFUSED =
  * and saying so is the whole point — mid-outage the alternative is an owner
  * hunting a password fault that does not exist.
  */
+const WHY_THROTTLED =
+  "Sign-in for this email is paused for up to 15 minutes after ten wrong passwords. " +
+  "Wait, then try again."
+
 const WHY_OURS =
   "Nothing is wrong with your password — we could not reach the records to check it. " +
   "Try again in a few minutes."
@@ -153,6 +157,9 @@ export function CounterLoginClient() {
             "Email or password is wrong",
             WHY_REFUSED,
           )
+        } else if (result.error === "auth_throttled") {
+          // `src/lib/auth.ts`: ten wrong passwords for this email in 15 minutes.
+          fail("Too many tries for this email", WHY_THROTTLED)
         } else {
           fail(
             "Something went wrong on our end",

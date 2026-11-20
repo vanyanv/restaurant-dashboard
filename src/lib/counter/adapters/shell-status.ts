@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma"
 import { cached } from "@/lib/cache/cached"
+import { isStalledRunning } from "@/lib/monitoring/job-schedules"
 import { anomalyHorizon } from "@/lib/anomaly-window"
 import { alertsCacheTag } from "@/lib/alerts/cache-tag"
 import type { SyncState } from "@/components/counter/shell/sync-chip"
@@ -18,7 +19,8 @@ import type { SyncState } from "@/components/counter/shell/sync-chip"
  * and change) is `stale`, which the chip paints in the signal colour and
  * says in words. Nothing here polls: the chip changes when the page
  * next renders, and "syncing" is only ever true for the minutes a run is
- * actually open.
+ * actually open — a RUNNING row older than `isStalledRunning`'s bound is a
+ * run that died, and reads `failed`.
  *
  * Needs you. The count of `Alert` rows still `OPEN` across the ACCOUNT's
  * stores (every store, because the rail is not scoped to one; only the
@@ -101,9 +103,14 @@ export async function getShellStatus(
   if (raw.status && raw.startedAt) {
     const at = new Date(raw.completedAt ?? raw.startedAt)
     const ageHours = (now.getTime() - at.getTime()) / 3_600_000
+    // A RUNNING row past the job's bound is a run that died without writing
+    // its end (killed function, cancelled job): it reads as failed, not as
+    // "syncing" forever.
     const state: SyncState =
       raw.status === "RUNNING"
-        ? "syncing"
+        ? isStalledRunning(SYNC_JOB, new Date(raw.startedAt), now)
+          ? "failed"
+          : "syncing"
         : raw.status === "FAILURE"
           ? "failed"
           : ageHours > STALE_AFTER_HOURS

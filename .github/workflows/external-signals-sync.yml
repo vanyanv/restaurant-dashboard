@@ -45,6 +45,11 @@ jobs:
     env:
       DATABASE_URL: ${{ secrets.DATABASE_URL }}
       PREDICTHQ_API_TOKEN: ${{ secrets.PREDICTHQ_API_TOKEN }}
+      # PredictHQ is paid and switched off (owner, 2026-11-20). The sync calls
+      # it only with a token AND this repository variable set to "1"; unset,
+      # events are skipped as "not connected" and weather still syncs. Set the
+      # same variable on Vercel so the app stops saying "not connected".
+      EVENTS_PROVIDER_ENABLED: ${{ vars.EVENTS_PROVIDER_ENABLED }}
     steps:
       - uses: actions/checkout@v6
 
@@ -74,14 +79,19 @@ jobs:
 
       - name: Sync external signals
         id: sync
+        # Through run-with-cron-logging.sh (pipefail, writes `status`), not a
+        # bare `| tee`: under Actions' default `bash -e` a pipe's status is
+        # tee's, so PredictHQ's 401 on every run since 2026-11-01 read green
+        # and the incident step below never fired.
+        env:
+          LOG_FILE: logs/external-signals-sync.log
         run: |
-          mkdir -p logs
-          python -m ml.external_signal_sync \
-            --provider "${{ steps.window.outputs.provider }}" \
-            --start-date "${{ steps.window.outputs.start_date }}" \
-            --future-days "${{ steps.window.outputs.future_days }}" \
-            --triggered-by "${{ github.event_name }}" \
-            2>&1 | tee logs/external-signals-sync.log
+          bash .github/scripts/run-with-cron-logging.sh \
+            python -m ml.external_signal_sync \
+              --provider "${{ steps.window.outputs.provider }}" \
+              --start-date "${{ steps.window.outputs.start_date }}" \
+              --future-days "${{ steps.window.outputs.future_days }}" \
+              --triggered-by "${{ github.event_name }}"
 
       - name: Upload sync log
         if: always()

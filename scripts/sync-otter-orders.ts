@@ -42,6 +42,8 @@ async function main() {
 
   const { runOrdersSync } = await import("../src/lib/otter-orders-sync")
   const { prisma } = await import("../src/lib/prisma")
+  const { warnIfNoRedis } = await import("../src/lib/cache/redis")
+  warnIfNoRedis("sync-otter-orders")
 
   try {
     const started = Date.now()

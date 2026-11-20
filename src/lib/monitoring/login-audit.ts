@@ -44,6 +44,8 @@ type LoginEventInput = {
   userAgent?: string | null
 }
 
+const MAX_EMAIL_TRIED = 254
+
 /** Write one login event. Never throws — auth path must not fail on audit. */
 export async function recordLoginEvent(input: LoginEventInput): Promise<void> {
   try {
@@ -52,7 +54,9 @@ export async function recordLoginEvent(input: LoginEventInput): Promise<void> {
     await prisma.loginEvent.create({
       data: {
         userId: input.userId ?? null,
-        emailTried: input.emailTried,
+        // Whatever was typed, capped at the longest real email (254): the
+        // sign-in form is public and this column is not a free text store.
+        emailTried: input.emailTried.slice(0, MAX_EMAIL_TRIED),
         kind: input.kind,
         ipAddress: ip,
         userAgent: ua,

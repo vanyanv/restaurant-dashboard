@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma"
+import { EVENTS_NOT_CONNECTED, EVENTS_PROVIDER, eventsFeedConnected } from "@/lib/monitoring/events-feed"
 import type { MonitoringInput } from "@/lib/counter/adapters/monitoring"
 import { count, money, pct } from "@/lib/counter/format"
 import type { ChartSpec } from "@/lib/counter/chart-geometry"
@@ -533,8 +534,25 @@ export interface MlGaps {
 function gapsOf(d: MlData): MlGaps {
   const items: QueueItem[] = []
 
+  // The events feed switched off on purpose is "not connected", not dark:
+  // nothing calls it, so "every run since has failed" would be untrue.
+  const eventsOff = !eventsFeedConnected()
+  if (eventsOff && d.signals.some((x) => x.provider === EVENTS_PROVIDER)) {
+    items.push({
+      key: `signal-${EVENTS_PROVIDER}`,
+      tone: "warn",
+      lead: "off",
+      title: `${PROVIDER_LABEL[EVENTS_PROVIDER]} ${EVENTS_NOT_CONNECTED}`,
+      body:
+        `The paid events feed is switched off and no longer called. Forecasts train ` +
+        `without event features — they are absent, not read as zero events.`,
+    })
+  }
   const dead = d.signals.filter(
-    (x) => x.lastOkAt !== null && Date.now() - x.lastOkAt.getTime() > SIGNAL_DEAD_MS,
+    (x) =>
+      !(eventsOff && x.provider === EVENTS_PROVIDER) &&
+      x.lastOkAt !== null &&
+      Date.now() - x.lastOkAt.getTime() > SIGNAL_DEAD_MS,
   )
   for (const x of dead) {
     const days = Math.round((Date.now() - (x.lastOkAt?.getTime() ?? 0)) / 86_400_000)

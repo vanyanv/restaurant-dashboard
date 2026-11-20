@@ -1,0 +1,79 @@
+name: DB Backup (nightly pg_dump to R2)
+# The "snapshot" jobs (db-snapshot.yml, r2-snapshot.yml) only record SIZES.
+# This is the actual backup: a custom-format pg_dump of production, made with
+# the server's own major version of pg_dump, uploaded to the private R2 bucket
+# as backups/db/YYYY-MM-DD.dump, newest 30 kept. Restore steps, and how often
+# to test one: docs/backup-and-restore.md.
+#
+# THE REPOSITORY IS PUBLIC. Nothing here may print DATABASE_URL or an R2
+# credential, and nothing is uploaded as a GitHub artifact — not the dump,
+# not the log (the failure step's incident issue quotes the log, which
+# db-backup.sh scrubs). Do not add an upload-artifact step to this workflow.
+#
+# Records a `db.backup` JobRun (scripts/run-as-job.ts) so the monitoring page
+# and the staleness check notice when it stops.
+on:
+  schedule:
+    # 09:10 UTC = 01:10/02:10 LA, after the last service and before the 09:15
+    # Monday drain; nothing heavy writes at this hour.
+    - cron: '10 9 * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: db-backup
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npx prisma generate
+      - name: Dump, upload, prune
+        id: cron
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          # Same names src/lib/blob.ts reads on Vercel. They must exist as
+          # GitHub repository secrets too.
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_BUCKET_NAME: ${{ secrets.R2_BUCKET_NAME }}
+          BACKUP_KEEP: "30"
+          LOG_FILE: logs/db-backup.log
+          # No retries: a half-finished dump is thrown away and tomorrow's run
+          # is the retry; a second dump of production inside an hour helps
+          # nobody.
+          CRON_RETRIES: "0"
+        run: |
+          bash .github/scripts/run-with-cron-logging.sh \
+            npx tsx scripts/run-as-job.ts db.backup -- bash .github/scripts/db-backup.sh
+      - name: Open or update incident issue
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          WORKFLOW_NAME: DB Backup
+          ISSUE_TITLE: "[Auto] DB Backup failing"
+          ISSUE_LABEL: cron-failure
+          LOG_FILE: logs/db-backup.log
+          FAILED_EXIT_CODE: ${{ steps.cron.outputs.status }}
+        run: bash .github/scripts/report-workflow-failure.sh
+      - name: Close incident issue on recovery
+        if: success()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          WORKFLOW_NAME: DB Backup
+          ISSUE_TITLE: "[Auto] DB Backup failing"
+          ISSUE_LABEL: cron-failure
+        run: bash .github/scripts/report-workflow-recovery.sh

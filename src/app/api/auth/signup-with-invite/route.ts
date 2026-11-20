@@ -3,6 +3,7 @@ import { z } from "zod"
 import bcrypt from "bcryptjs"
 import { prisma } from "@/lib/prisma"
 import { rateLimit, RATE_LIMIT_TIERS } from "@/lib/rate-limit"
+import { passwordChangeStamp } from "@/lib/password-change"
 
 const bodySchema = z.object({
   token: z.string().min(8).max(128),
@@ -73,7 +74,9 @@ export async function POST(req: Request) {
         const createdUser = revived
           ? await tx.user.update({
               where: { id: existing.id },
-              data: { password: hashedPassword, name, role: invite.role, removedAt: null },
+              // The stamp keeps a session from before the removal ended:
+              // clearing removedAt alone would bring an old 30-day cookie back.
+              data: { password: hashedPassword, name, role: invite.role, removedAt: null, passwordChangedAt: passwordChangeStamp() },
               select: { id: true, email: true },
             })
           : await tx.user.create({

@@ -24,12 +24,23 @@ export const JOB_SCHEDULES: Record<string, JobSchedule> = {
   // Same shape: driven by cogs-sweep (every 4h) and cogs-refresh (daily).
   "cogs.stores":            { cadenceMinutes: 60 * 4,  description: "every 4h" },
   "monitoring.db-snapshot": { cadenceMinutes: 60 * 24, description: "daily" },
+  "monitoring.r2-snapshot": { cadenceMinutes: 60 * 24, description: "daily" },
+  // The real backup (db-backup.yml: pg_dump to R2), not a size reading.
+  "db.backup":              { cadenceMinutes: 60 * 24, description: "nightly" },
+  // checks-cron.yml runs every 30 min, but a half-hour in which no check
+  // window moved is skipped without a JobRun row (`checkAlertAccountsDue`),
+  // and the gate forces a real run once the last SUCCESS is 2h old
+  // (GATE_MAX_SKIP_MS). So the longest healthy gap between rows is 2h30m.
+  "checks.alerts":          { cadenceMinutes: 150, description: "every 30 min (recorded at least every 2.5h)" },
   "ml.operator-gate-check": { cadenceMinutes: 60 * 24, description: "daily" },
   // These five record JobRun rows but had no schedule, so isOverdue() was
   // permanently false for them — harri-labor-sync could have gone silent
   // forever with no signal at all. Cadences read off the workflow crons.
   "harri-labor-sync":       { cadenceMinutes: 60 * 4,  description: "every 4h" },
-  "harri-employee-sync":    { cadenceMinutes: 60 * 24 * 31, description: "monthly" },
+  // Weekly since harri-employees-cron.yml moved to Mondays 07:00 UTC (store
+  // checks hand out PINs from this roster). Declared monthly, a stopped
+  // roster refresh went unnoticed for four and a half weeks.
+  "harri-employee-sync":    { cadenceMinutes: 60 * 24 * 7, description: "weekly" },
   "proposals.generate":     { cadenceMinutes: 60 * 4,  description: "every 4h" },
   "maintenance.retention":  { cadenceMinutes: 60 * 24, description: "daily" },
   "alerts.ingest":          { cadenceMinutes: 60 * 24, description: "daily" },
@@ -83,4 +94,44 @@ export function isFarOverdue(
   now: Date = new Date(),
 ): boolean {
   return pastCadence(jobName, lastRunAt, OVERDUE_CEILING_MULTIPLIER, now)
+}
+
+/**
+ * How long a run may sit in RUNNING before a view stops calling it "syncing
+ * now". A run killed mid-flight (a Vercel function past `maxDuration`, a
+ * cancelled Actions job, a crashed process) never reaches its `update`, so
+ * without a bound its RUNNING row reads "syncing" forever.
+ *
+ * Twice the job's own limit, never under 15 minutes. Jobs absent here run
+ * from GitHub Actions scripts with no tight limit; an hour is several times
+ * the longest healthy run any of them records.
+ */
+export const RUNNING_STALL_FLOOR_MINUTES = 15
+export const RUNNING_STALL_DEFAULT_MINUTES = 60
+const RUNNING_STALL_MINUTES: Record<string, number> = {
+  // Vercel routes: 2x maxDuration, floored at 15 min.
+  "alerts.ingest": 15, // maxDuration 120s
+  "proposals.generate": 15, // maxDuration 120s
+  "monitoring.db-snapshot": 15, // maxDuration 30s
+  "monitoring.r2-snapshot": 15, // maxDuration 60s
+  "maintenance.retention": 15, // maxDuration 60s
+  "checks.alerts": 15,
+  "cogs.sweep": 15, // maxDuration 300s -> 10 min, floored
+  "db.backup": 120, // db-backup.yml timeout-minutes 60
+}
+
+export function runningStallMinutes(jobName: string): number {
+  return Math.max(
+    RUNNING_STALL_FLOOR_MINUTES,
+    RUNNING_STALL_MINUTES[jobName] ?? RUNNING_STALL_DEFAULT_MINUTES,
+  )
+}
+
+/** A RUNNING row older than its bound: the run died without recording how. */
+export function isStalledRunning(
+  jobName: string,
+  startedAt: Date,
+  now: Date = new Date(),
+): boolean {
+  return now.getTime() - startedAt.getTime() > runningStallMinutes(jobName) * 60_000
 }

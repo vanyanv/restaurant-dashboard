@@ -128,10 +128,50 @@ export function computeModelStateWrites(input: {
  * `accountId` is the tenancy boundary: the count is read through its store,
  * and the ingredients and the store inventory context are the account's.
  */
+/**
+ * Applies the count's calibration. With `finish`, the status flip and the
+ * calibration writes commit in ONE interactive transaction, flip first:
+ * `finish` runs the guarded `IN_PROGRESS -> COMPLETED` update on the
+ * transaction client and returns whether it changed the row. When it did
+ * not (a second tap, a retry after a crash that already committed), nothing
+ * is written. Before this the calibration committed on its own and the flip
+ * followed separately, so a crash between the two, then a retry, applied the
+ * same recount twice to every model state.
+ *
+ * Every READ still happens before the transaction opens, while the count is
+ * IN_PROGRESS, so the anchor is the previous COMPLETED count exactly as
+ * before: figures identical.
+ *
+ * Returns false only when `finish` reported the count already finished.
+ */
 export async function applyCalibrationUpdatesForCount(
   stockCountId: string,
   accountId: string,
-): Promise<void> {
+  finish?: (tx: Prisma.TransactionClient) => Promise<boolean>,
+): Promise<boolean> {
+  const plan = await planCalibrationUpdates(stockCountId, accountId)
+  if (!finish) {
+    if (plan) await writePlanOutsideTransaction(plan)
+    return true
+  }
+  return prisma.$transaction(async (tx) => {
+    if (!(await finish(tx))) return false
+    if (plan) await writePlan(tx, plan)
+    return true
+  })
+}
+
+type CalibrationPlan = {
+  stockCountId: string
+  storeId: string
+  toUpdate: ModelStateWrite[]
+  toCreate: ModelStateWrite[]
+}
+
+async function planCalibrationUpdates(
+  stockCountId: string,
+  accountId: string,
+): Promise<CalibrationPlan | null> {
   const count = await prisma.stockCount.findFirst({
     where: { id: stockCountId, store: { accountId } },
     select: {
@@ -147,13 +187,13 @@ export async function applyCalibrationUpdatesForCount(
       },
     },
   })
-  if (!count) return
+  if (!count) return null
 
   const linesWithEstimate = count.lines.filter(
     (l): l is typeof l & { estimatedQtyAtCount: number } =>
       l.estimatedQtyAtCount !== null && Number.isFinite(l.estimatedQtyAtCount),
   )
-  if (linesWithEstimate.length === 0) return
+  if (linesWithEstimate.length === 0) return null
 
   const ids = linesWithEstimate.map((l) => l.canonicalIngredientId)
   const [ctx, ingredientRows, priorRows] = await Promise.all([
@@ -210,37 +250,60 @@ export async function applyCalibrationUpdatesForCount(
       ]),
     ),
   })
-  if (writes.length === 0) return
+  if (writes.length === 0) return null
 
   const existing = new Set(priorRows.map((r) => r.canonicalIngredientId))
   const toCreate = writes.filter((w) => !existing.has(w.canonicalIngredientId))
   const toUpdate = writes.filter((w) => existing.has(w.canonicalIngredientId))
 
-  // One transaction, two statements at most, whatever the line count.
+  return { stockCountId, storeId: count.storeId, toUpdate, toCreate }
+}
+
+/** One transaction, two statements at most, whatever the line count. */
+async function writePlanOutsideTransaction(plan: CalibrationPlan): Promise<void> {
+  const { storeId, toUpdate, toCreate } = plan
   const results = await prisma.$transaction([
-    ...(toUpdate.length > 0 ? [updateModelStates(count.storeId, toUpdate)] : []),
+    ...(toUpdate.length > 0 ? [updateModelStates(prisma, storeId, toUpdate)] : []),
     ...(toCreate.length > 0
       ? [prisma.ingredientModelState.createMany({ data: toCreate, skipDuplicates: true })]
       : []),
   ])
-  // A row deleted between the read and this write is skipped, not re-made;
-  // the next finished count creates it again. Say so rather than stay quiet.
-  if (toUpdate.length > 0 && results[0] !== toUpdate.length) {
+  warnShortUpdate(plan, toUpdate.length > 0 ? results[0] : undefined)
+}
+
+/** The same two statements, on a caller's transaction. */
+async function writePlan(tx: Prisma.TransactionClient, plan: CalibrationPlan): Promise<void> {
+  const { storeId, toUpdate, toCreate } = plan
+  const updated = toUpdate.length > 0 ? await updateModelStates(tx, storeId, toUpdate) : undefined
+  if (toCreate.length > 0) {
+    await tx.ingredientModelState.createMany({ data: toCreate, skipDuplicates: true })
+  }
+  warnShortUpdate(plan, updated)
+}
+
+// A row deleted between the read and this write is skipped, not re-made;
+// the next finished count creates it again. Say so rather than stay quiet.
+function warnShortUpdate(plan: CalibrationPlan, updated: unknown): void {
+  if (plan.toUpdate.length > 0 && updated !== plan.toUpdate.length) {
     console.warn(
-      `[calibration] updated ${String(results[0])} of ${toUpdate.length} model states for count ${stockCountId}`,
+      `[calibration] updated ${String(updated)} of ${plan.toUpdate.length} model states for count ${plan.stockCountId}`,
     )
   }
 }
 
 /** `UPDATE ... FROM (VALUES ...)`: every existing row in one statement. */
-function updateModelStates(storeId: string, rows: ModelStateWrite[]) {
+function updateModelStates(
+  db: Pick<Prisma.TransactionClient, "$executeRaw">,
+  storeId: string,
+  rows: ModelStateWrite[],
+) {
   const values = Prisma.join(
     rows.map(
       (r) =>
         Prisma.sql`(${r.canonicalIngredientId}::text, ${r.calibrationFactor}::float8, ${r.recountDeltaMean}::float8, ${r.recountDeltaM2}::float8, ${r.sampleSize}::int, ${r.consecutiveTightWeeks}::int, ${r.isGraduated}::boolean, ${r.graduatedAt}::timestamp, ${r.confidenceLevel}::text, ${r.typicalWeeklyThroughput}::float8, ${r.lastUpdatedAt}::timestamp)`,
     ),
   )
-  return prisma.$executeRaw`
+  return db.$executeRaw`
     UPDATE "IngredientModelState" AS m SET
       "calibrationFactor" = v.cf,
       "recountDeltaMean" = v.rdm,

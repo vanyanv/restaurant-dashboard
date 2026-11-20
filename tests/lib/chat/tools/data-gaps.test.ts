@@ -133,6 +133,16 @@ describe("getWeatherAndEvents", () => {
     expect(sun.weather).toBeNull()
   })
 
+  it("says the events feed is not connected while it is switched off", async () => {
+    vi.stubEnv("EVENTS_PROVIDER_ENABLED", "")
+    const off = await getWeatherAndEvents.execute({ dateRange: { from: "2026-11-07", to: "2026-11-07" } }, ctx)
+    expect(off.eventsFeed).toBe("not connected")
+    vi.stubEnv("EVENTS_PROVIDER_ENABLED", "1")
+    const on = await getWeatherAndEvents.execute({ dateRange: { from: "2026-11-07", to: "2026-11-07" } }, ctx)
+    expect(on.eventsFeed).toBe("connected")
+    vi.unstubAllEnvs()
+  })
+
   it("names WMO codes", () => {
     expect([weatherLabel(0), weatherLabel(3), weatherLabel(95), weatherLabel(null)]).toEqual(["Clear", "Overcast", "Thunderstorm", null])
   })

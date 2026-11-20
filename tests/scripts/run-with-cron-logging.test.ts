@@ -15,7 +15,7 @@ afterEach(() => {
  * Run the wrapper around a command that fails its first `failures` attempts.
  * Returns the exit code plus how many attempts actually happened.
  */
-function run(failures: number, env: Record<string, string> = {}) {
+function run(failures: number, env: Record<string, string> = {}, failCode = 7) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "cron-retry-"))
   tmpDirs.push(dir)
   const counter = path.join(dir, "attempts")
@@ -29,7 +29,7 @@ function run(failures: number, env: Record<string, string> = {}) {
       // macOS run logged "attempt        1 failing" and only the log
       // assertion failed. Strip it here rather than loosen the assertion.
       `n=$(wc -l < "${counter}" | tr -d "[:space:]")\n` +
-      `if [ "$n" -le ${failures} ]; then echo "attempt $n failing" >&2; exit 7; fi\n` +
+      `if [ "$n" -le ${failures} ]; then echo "attempt $n failing" >&2; exit ${failCode}; fi\n` +
       `echo "attempt $n ok"\n`,
     { mode: 0o755 },
   )
@@ -95,5 +95,46 @@ describe("run-with-cron-logging retry", () => {
     const r = run(1, { CRON_RETRIES: "2" })
     expect(r.log).toContain("attempt 1 failing")
     expect(r.log).toContain("attempt 2 ok")
+  })
+
+  /**
+   * 124 is curl-cron-json.sh's "our --max-time ran out": the server may still
+   * be running the request (the COGS sweep's 295s against a 300s
+   * maxDuration), so a retry would start a second run beside it.
+   */
+  it("never retries a client-side timeout (exit 124)", () => {
+    const r = run(99, { CRON_RETRIES: "2" }, 124)
+    expect(r.code).toBe(124)
+    expect(r.attempts).toBe(1)
+    expect(r.log).toContain("not retried")
+  })
+})
+
+describe("curl-cron-json.sh", () => {
+  const CURL_SCRIPT = path.resolve(__dirname, "../../.github/scripts/curl-cron-json.sh")
+  function curlExit(fakeCurlCode: number): { code: number; stderr: string } {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "fake-curl-"))
+    tmpDirs.push(dir)
+    fs.writeFileSync(path.join(dir, "curl"), `#!/usr/bin/env bash\nexit ${fakeCurlCode}\n`, { mode: 0o755 })
+    try {
+      execFileSync("bash", [CURL_SCRIPT, "POST", "https://example.invalid/api/cron/x"], {
+        env: { ...process.env, PATH: `${dir}:${process.env.PATH}`, CRON_SECRET: "s", CRON_MAX_TIME: "5" },
+        stdio: "pipe",
+      })
+      return { code: 0, stderr: "" }
+    } catch (err) {
+      const e = err as { status: number; stderr: Buffer }
+      return { code: e.status, stderr: e.stderr.toString() }
+    }
+  }
+
+  it("turns curl's own timeout (28) into the never-retried 124", () => {
+    const r = curlExit(28)
+    expect(r.code).toBe(124)
+    expect(r.stderr).toContain("not retried")
+  })
+
+  it("keeps a connection error's own code, which stays retryable", () => {
+    expect(curlExit(7).code).toBe(7)
   })
 })

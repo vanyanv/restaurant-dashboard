@@ -105,7 +105,13 @@ export function CounterPhoneLoginClient() {
     try {
       const result = await signIn("credentials", { email, password, redirect: false })
       if (result?.error) {
-        fail("Email or password is wrong")
+        // `auth_throttled` (src/lib/auth.ts): ten wrong passwords for this
+        // email in 15 minutes; `CredentialsSignin` is a refused password.
+        fail(
+          result.error === "auth_throttled"
+            ? "Too many tries for this email. Wait 15 minutes."
+            : "Email or password is wrong",
+        )
         return
       }
       const session = await getSession()

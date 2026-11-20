@@ -1,6 +1,7 @@
 import { z } from "zod"
 import { dateRangeSchema, parseDateRange, resolveStoreIds, ymd } from "./_shared"
 import type { ChatTool } from "./types"
+import { EVENTS_NOT_CONNECTED, eventsFeedConnected } from "@/lib/monitoring/events-feed"
 
 /**
  * Weather and nearby events per store and day — the same rows the forecasts
@@ -60,6 +61,12 @@ function severity(code: number | null): number {
 export type WeatherEventsResult = {
   from: string
   to: string
+  /**
+   * "not connected" while the paid events feed is switched off
+   * (`events-feed.ts`): event days read null because nothing is fetched, not
+   * because there were no events or the feed is stale.
+   */
+  eventsFeed: "connected" | typeof EVENTS_NOT_CONNECTED
   stores: Array<{
     storeId: string
     storeName: string
@@ -146,6 +153,7 @@ export const getWeatherAndEvents: ChatTool<typeof params, WeatherEventsResult> =
     return {
       from: ymd(from),
       to: ymd(to),
+      eventsFeed: eventsFeedConnected() ? "connected" : EVENTS_NOT_CONNECTED,
       stores: stores.map((s) => ({
         storeId: s.id,
         storeName: s.name,

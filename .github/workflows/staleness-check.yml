@@ -6,6 +6,8 @@ on:
     # inside that window. Hourly would triple the Actions spend to shave
     # minutes off a 6h detection floor.
     - cron: '40 */2 * * *'
+  # sync-ticker.yml dispatches this every 2h on time (GitHub's own schedule
+  # here fired about 4 times a day); the schedule above is the backup.
   workflow_dispatch:
 
 concurrency:

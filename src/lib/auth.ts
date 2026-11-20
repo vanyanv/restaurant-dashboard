@@ -3,10 +3,13 @@ import CredentialsProvider from "next-auth/providers/credentials"
 import { prisma } from "@/lib/prisma"
 import bcrypt from "bcryptjs"
 import { Role } from "@/generated/prisma/client"
-import { recordLoginEvent } from "@/lib/monitoring/login-audit"
+import { extractIp, recordLoginEvent } from "@/lib/monitoring/login-audit"
 import { extractFirstName, markSignIn, markSignOut } from "@/lib/welcome"
 import { logger } from "@/lib/logger"
 import { cache } from "react"
+import { createHash } from "node:crypto"
+import { issuedBeforePasswordChange } from "@/lib/password-change"
+import { isOverLimitKey, rateLimitKey, RATE_LIMIT_TIERS } from "@/lib/rate-limit"
 
 /**
  * The jwt callback's "who is this still" read, once per request.
@@ -21,9 +24,34 @@ import { cache } from "react"
 const readSessionUser = cache((id: string) =>
   prisma.user.findUnique({
     where: { id },
-    select: { role: true, accountId: true, removedAt: true },
+    select: { role: true, accountId: true, removedAt: true, passwordChangedAt: true },
   }),
 )
+
+/**
+ * The thrown message `authorize` uses when one email has had too many wrong
+ * passwords. A protocol token the login pages read, like `auth_unavailable`.
+ */
+export const AUTH_THROTTLED = "auth_throttled"
+
+/** Longest email worth keying or storing (RFC 5321's 254-character path limit). */
+const MAX_EMAIL = 254
+
+/**
+ * The failure counter's key: one email from one address. Hashed so keys stay
+ * short whatever is typed.
+ *
+ * Per (email, address), not per email alone: a per-email budget lets anyone
+ * who knows the owner's email keep the owner locked out by sending wrong
+ * passwords from rotating addresses. Keyed with the address, a stranger only
+ * ever spends their own budget; the owner signing in from the store or home
+ * is untouched. The route's per-IP tier still caps each address overall.
+ */
+export function signInEmailKey(email: string, ip: string | null = null): string {
+  const normalized = email.trim().toLowerCase().slice(0, MAX_EMAIL)
+  return `auth-email:${createHash("sha256").update(`${normalized}|${ip ?? "unknown"}`).digest("hex")}`
+}
+
 
 declare module "next-auth" {
   interface Session {
@@ -75,6 +103,17 @@ export const authOptions: NextAuthOptions = {
             return null
           }
 
+          // Per-(email, address) failure budget, on top of the route's per-IP
+          // one. Checked before the user lookup and charged for unknown emails
+          // too, so the refusal never tells a stranger whether an address has
+          // an account. Past the budget even the right password waits from
+          // that address: otherwise guessing would simply continue until it hit.
+          const emailKey = signInEmailKey(credentials.email, headers ? extractIp(headers) : null)
+          if (await isOverLimitKey(emailKey, RATE_LIMIT_TIERS.authEmail)) {
+            await recordLoginEvent({ emailTried: email, kind: "SIGN_IN_FAILED", headers })
+            throw new Error(AUTH_THROTTLED)
+          }
+
           // Emails are stored lowercased; people type them however they like.
           const user = await prisma.user.findFirst({
             where: { email: { equals: credentials.email.trim(), mode: "insensitive" } },
@@ -83,6 +122,7 @@ export const authOptions: NextAuthOptions = {
           // A removed person (Admin > People) fails exactly like a wrong
           // password: the form does not say which half was wrong.
           if (!user || user.removedAt) {
+            await rateLimitKey(emailKey, RATE_LIMIT_TIERS.authEmail)
             await recordLoginEvent({ userId: user?.id, emailTried: email, kind: "SIGN_IN_FAILED", headers })
             return null
           }
@@ -93,6 +133,7 @@ export const authOptions: NextAuthOptions = {
           )
 
           if (!isPasswordValid) {
+            await rateLimitKey(emailKey, RATE_LIMIT_TIERS.authEmail)
             await recordLoginEvent({
               userId: user.id,
               emailTried: email,
@@ -117,6 +158,7 @@ export const authOptions: NextAuthOptions = {
             accountId: user.accountId
           }
         } catch (error) {
+          if (error instanceof Error && error.message === AUTH_THROTTLED) throw error
           /*
            * A thrown error here is NOT a wrong password — `authorize` already
            * returned null for that above. This is the database being
@@ -208,7 +250,10 @@ export const authOptions: NextAuthOptions = {
         // A database that does not answer keeps the session as it was: a
         // blip must not sign everyone out. Only a definite "removed" or "gone"
         // ends it.
-        let dbUser: { role: Role; accountId: string; removedAt: Date | null } | null | undefined
+        let dbUser:
+          | { role: Role; accountId: string; removedAt: Date | null; passwordChangedAt: Date | null }
+          | null
+          | undefined
         try {
           dbUser = await readSessionUser(token.id as string)
         } catch (error) {
@@ -218,6 +263,12 @@ export const authOptions: NextAuthOptions = {
           dbUser = undefined
         }
         if (dbUser === null || dbUser?.removedAt) throw new Error("access_removed")
+        // A password change ends every session signed in before it. The
+        // person who changed it got a fresh cookie at that moment
+        // (`reissueSessionCookie`), so only the others end here.
+        if (dbUser && issuedBeforePasswordChange(token.iat, dbUser.passwordChangedAt)) {
+          throw new Error("access_removed")
+        }
         if (dbUser) {
           token.role = dbUser.role
           token.accountId = dbUser.accountId
