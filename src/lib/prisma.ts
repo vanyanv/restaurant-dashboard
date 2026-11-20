@@ -11,6 +11,7 @@ import {
 
 const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined
+  pgPool: Pool | undefined
 }
 
 // Strip sslmode from the connection string. SSL is configured explicitly via
@@ -70,7 +71,13 @@ const poolMax = (): number => {
   return Number.isInteger(n) && n > 0 ? n : DEFAULT_POOL_MAX
 }
 
-const createPrismaClient = () => {
+/**
+ * The one `pg` pool per server instance. `src/lib/chat/prisma-chat.ts` builds
+ * its client on this same pool, so `DATABASE_POOL_MAX` is the whole instance's
+ * connection budget and `attachDatabasePool` covers every connection.
+ */
+export const getPgPool = (): Pool => {
+  if (globalForPrisma.pgPool) return globalForPrisma.pgPool
   const databaseUrl = process.env.DATABASE_URL
   if (!databaseUrl) throw new Error('DATABASE_URL is required')
   const pool = new Pool({
@@ -81,7 +88,14 @@ const createPrismaClient = () => {
   // Closes idle clients before a Vercel function suspends, so a frozen
   // instance does not hold Neon pooler connections. Does nothing off Vercel.
   attachDatabasePool(pool)
-  const adapter = new PrismaPg(pool)
+  globalForPrisma.pgPool = pool
+  return pool
+}
+
+const createPrismaClient = () => {
+  // This client owns the pool: `$disconnect()` (scripts) ends it, so the
+  // process exits without waiting out idle clients.
+  const adapter = new PrismaPg(getPgPool(), { disposeExternalPool: true })
 
   return new PrismaClient({
     adapter,

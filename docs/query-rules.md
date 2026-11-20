@@ -39,8 +39,10 @@ A PR that breaks a rule on purpose says which one and why in its body.
 
 ## Writes
 
-8. **Bulk, not row by row.** `createMany`, `updateMany`, one `$transaction`,
-   or one raw `UPDATE ... FROM (VALUES ...)`. A user action that saves N rows
+8. **Bulk, not row by row.** `createMany`, `updateMany`, or one raw
+   `UPDATE ... FROM (VALUES ...)`. A `$transaction` makes writes atomic but
+   still runs one statement per row; when the writes must be atomic, put the
+   bulk operation inside it. A user action that saves N rows
    is one server action call with one `revalidatePath`, and no extra
    `router.refresh()` after it.
 9. **Sync jobs skip unchanged rows.** Rewriting every row each run bloats the
@@ -67,7 +69,8 @@ A PR that breaks a rule on purpose says which one and why in its body.
 12. **One pool per instance.** The app connects through Neon's pooled
     (`-pooler`) host with one `pg` pool in `src/lib/prisma.ts`, handed to
     Vercel's `attachDatabasePool` so idle clients close before the function
-    suspends. Don't create another `PrismaClient` or `pg.Pool`. The pool
+    suspends. A second client (the chat layer's) is built on the same pool
+    via `getPgPool()`. Don't create another `pg.Pool`. The pool
     stays at 10: on 2026-11-20 a pool of 5 made Decisions 13% slower, since
     pages run 20-47 queries at once. Lower it only after re-measuring.
 
