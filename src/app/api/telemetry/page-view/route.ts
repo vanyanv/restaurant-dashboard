@@ -1,8 +1,7 @@
 import { NextResponse } from "next/server"
-import { getServerSession } from "next-auth"
+import { readSessionToken } from "@/lib/session-token"
 import { rateLimit, RATE_LIMIT_TIERS } from "@/lib/rate-limit"
 import { z } from "zod"
-import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import {
   clampDwell,
@@ -55,8 +54,13 @@ export async function POST(req: Request): Promise<NextResponse> {
     const limited = await rateLimit(req, RATE_LIMIT_TIERS.beacon)
     if (limited) return limited
 
-    const session = await getServerSession(authOptions)
-    const userId = session?.user?.id
+    // From the signed session cookie, no database read: `src/proxy.ts`
+    // already verified it, and a beacon only needs who sent it. A removed
+    // user cannot open a page to send one (the page's own check turns them
+    // away), so the database's "still here?" check bought nothing here and
+    // cost a user read on every page view.
+    const token = await readSessionToken()
+    const userId = typeof token?.id === "string" ? token.id : null
     if (!userId) return NO_CONTENT()
 
     // Developer browsing is excluded by decision. The escape hatch exists
@@ -64,7 +68,7 @@ export async function POST(req: Request): Promise<NextResponse> {
     // pinned to non-production so one stray Vercel env var cannot quietly
     // start polluting the owner's engagement data forever.
     if (
-      session.user.role === "DEVELOPER" &&
+      token?.role === "DEVELOPER" &&
       !(
         process.env.TRACK_DEVELOPER_PAGE_VIEWS === "1" &&
         process.env.NODE_ENV !== "production"

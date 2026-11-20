@@ -26,6 +26,18 @@ vi.mock("@/lib/cache/redis", () => ({
   getRedis: () => null,
 }))
 
+// The rate limiter keys a signed-in caller by the session cookie's user id
+// (no database read). Here that cookie says whatever the mocked session says.
+vi.mock("@/lib/session-token", async () => {
+  const { getServerSession } = await import("next-auth")
+  return {
+    readSessionToken: async () => {
+      const s = (await (getServerSession as unknown as () => Promise<{ user?: { id?: string } } | null>)()) ?? null
+      return s?.user?.id ? { id: s.user.id } : null
+    },
+  }
+})
+
 import { getServerSession } from "next-auth"
 import { withCronAuth, parseJsonBody } from "@/lib/cron-auth"
 

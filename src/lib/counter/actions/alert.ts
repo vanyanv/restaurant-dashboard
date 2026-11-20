@@ -3,6 +3,7 @@
 import {
   acknowledgeAlert,
   clearOpenAlerts,
+  closeAlerts as closeAlertsInInbox,
   dismissAlert,
   reopenAlerts,
   type ClearAlertsScope,
@@ -40,6 +41,17 @@ export async function closeAlert(
     how === "dismiss"
       ? await dismissAlert({ alertId })
       : await acknowledgeAlert({ alertId, explanation })
+  if (!result.ok) return { ok: false, error: result.error }
+  return { ok: true }
+}
+
+/** Every alert behind one inbox row, in one save. See `closeAlerts` in the inbox actions. */
+export async function closeAlertRow(
+  alertIds: string[],
+  how: "acknowledge" | "dismiss",
+  explanation?: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const result = await closeAlertsInInbox({ ids: alertIds, how, explanation })
   if (!result.ok) return { ok: false, error: result.error }
   return { ok: true }
 }

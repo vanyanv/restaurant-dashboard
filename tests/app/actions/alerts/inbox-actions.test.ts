@@ -25,6 +25,7 @@ vi.mock("@/lib/prisma", () => ({
       updateManyAndReturn: vi.fn(),
       count: vi.fn(),
     },
+    $transaction: vi.fn(),
     // The account's hard mutes. Zero rows on the live database; the inbox asks
     // for the RULES rather than a count so the "Muted" segment can report a
     // measurement instead of a hard-coded empty list.
@@ -40,6 +41,7 @@ import {
   dismissAlert,
   clearOpenAlerts,
   reopenAlerts,
+  closeAlerts,
 } from "@/app/actions/alerts/inbox-actions"
 import { ANOMALY_RELEVANCE_DAYS } from "@/lib/anomaly-window"
 
@@ -334,6 +336,55 @@ describe("clearOpenAlerts / reopenAlerts", () => {
   it("refuses an undo without a valid stamp", async () => {
     vi.mocked(getServerSession).mockResolvedValue(owner as never)
     expect(await reopenAlerts({ ids: ["a1"], at: "nope" })).toEqual({ ok: false, error: "invalid" })
+    expect(prisma.alert.updateMany).not.toHaveBeenCalled()
+  })
+})
+
+describe("closeAlerts (one save for a whole inbox row)", () => {
+  beforeEach(() => {
+    vi.mocked(prisma.$transaction).mockImplementation((async (fn: (tx: typeof prisma) => unknown) =>
+      fn(prisma)) as never)
+  })
+
+  it("refuses a non-owner and writes nothing", async () => {
+    vi.mocked(getServerSession).mockResolvedValue({
+      user: { id: "u2", accountId: "acct-A", role: "VIEWER" },
+    } as never)
+    expect(await closeAlerts({ ids: ["a1"], how: "dismiss" })).toEqual({ ok: false, error: "unauthorized" })
+    expect(prisma.alert.updateMany).not.toHaveBeenCalled()
+  })
+
+  it("closes every alert in one write, inside the account", async () => {
+    vi.mocked(getServerSession).mockResolvedValue(owner as never)
+    vi.mocked(prisma.alert.count).mockResolvedValue(3 as never)
+    const res = await closeAlerts({ ids: ["a1", "a2", "a3"], how: "acknowledge", explanation: " supplier late " })
+    expect(res).toEqual({ ok: true })
+    expect(prisma.alert.updateMany).toHaveBeenCalledTimes(1)
+    const arg = vi.mocked(prisma.alert.updateMany).mock.calls[0][0] as {
+      where: unknown
+      data: { status: string; explanation: string | null }
+    }
+    expect(arg.where).toEqual({ id: { in: ["a1", "a2", "a3"] }, store: { accountId: "acct-A" } })
+    expect(arg.data.status).toBe("EXPLAINED")
+    expect(arg.data.explanation).toBe("supplier late")
+  })
+
+  it("dismisses without an explanation", async () => {
+    vi.mocked(getServerSession).mockResolvedValue(owner as never)
+    vi.mocked(prisma.alert.count).mockResolvedValue(1 as never)
+    await closeAlerts({ ids: ["a1"], how: "dismiss", explanation: "ignored" })
+    const arg = vi.mocked(prisma.alert.updateMany).mock.calls[0][0] as { data: Record<string, unknown> }
+    expect(arg.data.status).toBe("DISMISSED")
+    expect(arg.data).not.toHaveProperty("explanation")
+  })
+
+  it("changes nothing when any id is missing or in another account", async () => {
+    vi.mocked(getServerSession).mockResolvedValue(owner as never)
+    vi.mocked(prisma.alert.count).mockResolvedValue(1 as never)
+    expect(await closeAlerts({ ids: ["a1", "other-account"], how: "dismiss" })).toEqual({
+      ok: false,
+      error: "not_found",
+    })
     expect(prisma.alert.updateMany).not.toHaveBeenCalled()
   })
 })

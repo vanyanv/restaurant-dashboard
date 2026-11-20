@@ -17,7 +17,7 @@ import { readCounterParams } from "@/lib/counter/url-state"
 import type { AlertsSections, PhoneAlertRow } from "@/lib/counter/adapters/alerts"
 import type { SectionSources } from "@/lib/counter/adapters/types"
 import { useRouter } from "next/navigation"
-import { closeAlert } from "@/lib/counter/actions/alert"
+import { closeAlertRow } from "@/lib/counter/actions/alert"
 import { clearQuestion, useClearAlerts } from "@/lib/counter/use-clear-alerts"
 
 /**
@@ -110,7 +110,6 @@ function PhoneAlertDecision({
   alert: PhoneAlertRow
   onDone: () => void
 }) {
-  const router = useRouter()
   const [saving, startSaving] = useTransition()
   const [failed, setFailed] = useState(false)
 
@@ -121,23 +120,16 @@ function PhoneAlertDecision({
        * Every alert this row stands for, not just its newest — the row is one
        * CONDITION now (see `buildRows`), and closing one of fourteen behind a
        * folded row would let the queue refill under a reader who thinks they
-       * cleared it. Serial, so a failure stops with the rest untouched.
+       * cleared it. One save for all of them, all or nothing.
        */
-      let ok = true
-      for (const id of alert.ids) {
-        const r = await closeAlert(id, how)
-        if (!r.ok) {
-          ok = false
-          break
-        }
-      }
-      const result = { ok }
+      const result = await closeAlertRow(alert.ids, how)
       if (!result.ok) {
         setFailed(true)
         return
       }
       onDone()
-      router.refresh()
+      // No router.refresh(): the save revalidates /m/alerts and Next sends
+      // the fresh page back with it.
     })
   }
 

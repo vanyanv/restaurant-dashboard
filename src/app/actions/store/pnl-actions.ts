@@ -27,6 +27,7 @@ import type { UnmappedMenuItem } from "@/types/cogs"
 import { recomputeDailyCogsForRange } from "@/lib/cogs-materializer"
 import { CogsStatus } from "@/generated/prisma/client"
 import { cached, monthTags, stableKey } from "@/lib/cache/cached"
+import { batchedDayRows, dayStart, utcDay } from "@/lib/counter/day-batch"
 import { rangeScopedTags } from "@/lib/cache/closed-range"
 import {
   loadLaborCost,
@@ -724,12 +725,19 @@ export async function getAllStoresPnL(input: {
     // store list and the overall bounds. They were awaited one after another,
     // which put five database round trips in a row on every rollup miss; this
     // rollup is the base of Overview, P&L, Analytics, Labor, COGS and Decisions.
-    const [allSummaries, allFeeGroups, allCogsRows, allFixedExpenses, laborCost] = await Promise.all([
+    // The rows below are read through `batchedDayRows`: when one render asks
+    // this rollup for several ranges (Overview asks for four), overlapping
+    // ranges share one read cut back to each range's days, which is the same
+    // rows each range's own read returns. A range that does not start at UTC
+    // midnight reads on its own, as before, because only whole days can be
+    // cut from a shared read. See @/lib/counter/day-batch.
+    const wholeDays = overallStart.getTime() === dayStart(utcDay(overallStart)).getTime()
+    const days = { first: utcDay(overallStart), last: utcDay(overallEnd) }
+    const storeKey = [...storeIds].sort().join(",")
+
+    const readSummaries = (r: { gte: Date; lte: Date }) =>
       prisma.otterDailySummary.findMany({
-      where: {
-        storeId: { in: storeIds },
-        date: { gte: overallStart, lte: overallEnd },
-      },
+        where: { storeId: { in: storeIds }, date: r },
       select: {
         storeId: true,
         date: true,
@@ -746,22 +754,10 @@ export async function getAllStoresPnL(input: {
         tpRefundsAdjustments: true,
         tpOrderCount: true,
       },
-    }),
-      // ONE grouped OtterOrder read for every store's commission — see
-      // `@/lib/counter/commission`. Cached on its own key, and inside this
-      // rollup's cache too.
-      loadOrderFeeGroups({
-        accountId,
-        storeIds,
-        startDate: overallStart,
-        endDate: overallEnd,
-      }),
+      })
+    const readCogs = (r: { gte: Date; lte: Date }) =>
       prisma.dailyCogsItem.findMany({
-        where: {
-          storeId: { in: storeIds },
-          date: { gte: overallStart, lte: overallEnd },
-          ...FOOD_COST_ROWS,
-        },
+        where: { storeId: { in: storeIds }, date: r, ...FOOD_COST_ROWS },
         select: {
           storeId: true,
           date: true,
@@ -774,11 +770,43 @@ export async function getAllStoresPnL(input: {
           recipeId: true,
           partialCost: true,
         },
-      }),
+      })
+    // ONE grouped OtterOrder read for every store's commission — see
+    // `@/lib/counter/commission`. Cached on its own key, and inside this
+    // rollup's cache too.
+    const readFees = (startDate: Date, endDate: Date) =>
+      loadOrderFeeGroups({ accountId, storeIds, startDate, endDate })
+
+    const [allSummaries, allFeeGroups, allCogsRows, allFixedExpenses, laborCost] = await Promise.all([
+      wholeDays
+        ? batchedDayRows({
+            group: `pnl-summaries|${storeKey}`,
+            range: days,
+            load: (r) => readSummaries({ gte: dayStart(r.first), lte: dayStart(r.last) }),
+            dayOf: (row) => utcDay(row.date),
+          })
+        : readSummaries({ gte: overallStart, lte: overallEnd }),
+      wholeDays
+        ? batchedDayRows({
+            group: `pnl-fees|${accountId}|${storeKey}`,
+            range: days,
+            load: (r) => readFees(dayStart(r.first), dayStart(r.last)),
+            dayOf: (g) => g.day,
+          })
+        : readFees(overallStart, overallEnd),
+      wholeDays
+        ? batchedDayRows({
+            group: `pnl-cogs|${storeKey}`,
+            range: days,
+            load: (r) => readCogs({ gte: dayStart(r.first), lte: dayStart(r.last) }),
+            dayOf: (row) => utcDay(row.date),
+          })
+        : readCogs({ gte: overallStart, lte: overallEnd }),
       pnlFixedExpensesCached(storeIds.join(",")),
       // Labor dollars, batched across stores through the same `loadLaborCost`
       // rule `getStorePnL` uses, so the all-stores roll-up and a store's own P&L
-      // cannot price a week differently.
+      // cannot price a week differently. Its reads are shared the same way
+      // inside `loadLaborCost`.
       loadLaborCost({
         accountId: session.user.accountId,
         storeIds,
