@@ -10,8 +10,59 @@ export function getChatOpenAIClient(): OpenAI {
   return cachedClient
 }
 
+/**
+ * The CAREFUL model: a reasoning model, used when the owner picks "Careful"
+ * in the dock. See `chatModelFor` for which turn gets which model.
+ */
 export const CHAT_ROUTING_MODEL =
   process.env.CHAT_ROUTING_MODEL ?? "gpt-5-mini"
+
+/**
+ * The QUICK model, which answers every turn that did not ask for Careful.
+ *
+ * gpt-4.1 since 2026-11-04 (owner's pick). Measured on the live database that
+ * day, a Quick answer on gpt-5-mini took 11-14 s, of which the data tools were
+ * under one second: the rest was two model calls, each preceded by hidden
+ * reasoning the owner watched a spinner for. gpt-4.1 does not reason before it
+ * acts, so each call starts writing almost at once. It was chosen over
+ * gpt-4.1-mini for tool-choice accuracy (these answers carry money figures)
+ * and over `minimal` effort on gpt-5-mini, which the note at the route's
+ * `streamText` call records picking duplicate tools.
+ *
+ * Overridable without a code change: set `CHAT_QUICK_MODEL`.
+ */
+export const CHAT_QUICK_MODEL =
+  process.env.CHAT_QUICK_MODEL ?? "gpt-4.1"
+
+/** OpenAI's reasoning families: gpt-5*, and o1/o3/o4. */
+export function isReasoningModel(model: string): boolean {
+  return /^(gpt-5|o\d)/.test(model)
+}
+
+/**
+ * Which model answers a turn, and with what reasoning effort.
+ *
+ * One function so the route, the eval and the timing script cannot disagree
+ * about what ships. `reasoningEffort` is null for a non-reasoning model: the
+ * provider would only drop it with a warning.
+ */
+export function chatModelFor(effort: "quick" | "careful" | null | undefined): {
+  model: string
+  reasoningEffort: string | null
+} {
+  if (effort === "careful") {
+    // One notch above Quick's old setting, never more: "high" on gpt-5-mini
+    // was measured at over a minute on a four-tool question.
+    return {
+      model: CHAT_ROUTING_MODEL,
+      reasoningEffort: isReasoningModel(CHAT_ROUTING_MODEL) ? "medium" : null,
+    }
+  }
+  return {
+    model: CHAT_QUICK_MODEL,
+    reasoningEffort: isReasoningModel(CHAT_QUICK_MODEL) ? CHAT_REASONING_EFFORT : null,
+  }
+}
 
 /**
  * How hard the routing model thinks before it acts. See the long note at the
@@ -20,9 +71,8 @@ export const CHAT_ROUTING_MODEL =
  * owner roughly fifteen seconds a question for tool choices `low` made
  * identically.
  *
- * Only meaningful for a reasoning model. If `CHAT_ROUTING_MODEL` is ever
- * pointed back at a non-reasoning model (gpt-4.1-mini is in this account's
- * history), the provider ignores it.
+ * Only applied when `CHAT_QUICK_MODEL` is a reasoning model (it is not by
+ * default since 2026-11-04); `chatModelFor` leaves it off otherwise.
  */
 export const CHAT_REASONING_EFFORT =
   process.env.CHAT_REASONING_EFFORT ?? "low"

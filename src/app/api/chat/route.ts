@@ -40,7 +40,7 @@ import {
   setConversationTitle,
 } from "@/lib/chat/conversation"
 import { buildSystemPrompt } from "@/lib/chat/system-prompt"
-import { CHAT_REASONING_EFFORT, CHAT_ROUTING_MODEL } from "@/lib/chat/openai-client"
+import { chatModelFor } from "@/lib/chat/openai-client"
 import { logger } from "@/lib/logger"
 import { generateConversationTitle } from "@/lib/chat/auto-title"
 import { checkDailyBudget } from "@/lib/chat/spend-cap"
@@ -75,17 +75,6 @@ interface ChatRequestBody {
    * either way and every tool owner-scopes inside its own `execute`.
    */
   askScope?: AskRequestScope | null
-}
-
-/**
- * The dock's Quick / Careful choice, as OpenAI's reasoning effort. Quick is
- * the route's default (`CHAT_REASONING_EFFORT`, "low" unless the env says
- * otherwise); Careful is one notch up, never more — "high" on gpt-5-mini was
- * measured at over a minute on a four-tool question, which is not an answer
- * an owner waits for.
- */
-function reasoningEffortFor(effort: AskRequestScope["effort"]): string {
-  return effort === "careful" ? "medium" : CHAT_REASONING_EFFORT
 }
 
 /**
@@ -593,6 +582,12 @@ export async function POST(req: Request) {
 
   // Captured per-step so we can persist tool-call provenance alongside
   // the assistant's final text.
+  /*
+   * Quick answers on gpt-4.1 (no hidden reasoning), Careful on gpt-5-mini at
+   * medium effort. See `chatModelFor`.
+   */
+  const { model: turnModel, reasoningEffort } = chatModelFor(body.askScope?.effort)
+
   const capturedToolCalls: Array<{
     toolName: string
     args: unknown
@@ -621,7 +616,7 @@ export async function POST(req: Request) {
   let result: ReturnType<typeof streamText>
   try {
     result = streamText({
-    model: openai(CHAT_ROUTING_MODEL),
+    model: openai(turnModel),
     system,
     messages: modelMessages,
     tools: toolSet,
@@ -630,6 +625,10 @@ export async function POST(req: Request) {
     /*
      * REASONING EFFORT IS THE LARGEST SINGLE LEVER ON THIS ROUTE, AND IT WAS
      * UNSET.
+     *
+     * (History. Since 2026-11-04 Quick runs on gpt-4.1, which does not reason,
+     * so this applies to Careful only, and to Quick if `CHAT_QUICK_MODEL` is
+     * ever pointed back at a reasoning model. `chatModelFor` decides.)
      *
      * `CHAT_ROUTING_MODEL` is gpt-5-mini, a reasoning model, and an unset
      * effort means `medium`: the model thinks before every tool decision and
@@ -653,7 +652,7 @@ export async function POST(req: Request) {
      * settings against the same account.
      */
     providerOptions: {
-      openai: { reasoningEffort: reasoningEffortFor(body.askScope?.effort) },
+      openai: reasoningEffort ? { reasoningEffort } : {},
     },
     /*
      * The turn ends when the answer is filed AND written (see `stop.ts`), or
@@ -718,7 +717,7 @@ export async function POST(req: Request) {
       const completionTokens = (usage as { outputTokens?: number } | undefined)
         ?.outputTokens
       logger.info(
-        `[chat] ownerId=${ownerId} convId=${conversationId} ` +
+        `[chat] ownerId=${ownerId} convId=${conversationId} model=${turnModel} ` +
           `systemPromptMs=${systemPromptMs} firstTokenMs=${firstTokenMs ?? "n/a"} ` +
           `totalMs=${totalMs} steps=${stepEndMs.length} stepEndMs=[${stepEndMs.join(",")}] ` +
           `tools=${capturedToolCalls.length} ` +
@@ -735,7 +734,7 @@ export async function POST(req: Request) {
       const aiUsageEventId = await recordAiUsage({
         feature: "chat",
         provider: "openai",
-        model: CHAT_ROUTING_MODEL,
+        model: turnModel,
         inputTokens: promptTokens ?? 0,
         outputTokens: completionTokens ?? 0,
         cachedTokens,
@@ -895,7 +894,7 @@ export async function POST(req: Request) {
         failed: Object.keys(capturedToolErrors),
         failedReasons: capturedToolErrors,
         costUsd: computeCostUsd(
-          CHAT_ROUTING_MODEL,
+          turnModel,
           usage?.inputTokens ?? 0,
           usage?.outputTokens ?? 0,
           cached,

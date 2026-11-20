@@ -30,7 +30,10 @@ import { prisma } from "@/lib/prisma"
 import { chatTools } from "@/lib/chat/tools"
 import { answerFiledAndWritten } from "@/lib/chat/stop"
 import { buildSystemPrompt } from "@/lib/chat/system-prompt"
-import { CHAT_ROUTING_MODEL } from "@/lib/chat/openai-client"
+import { chatModelFor } from "@/lib/chat/openai-client"
+
+// Times what a Quick turn ships, which is nearly every turn.
+const QUICK = chatModelFor("quick")
 import { selectFiledReturn, returnForm, type ReturnPart } from "@/lib/chat/return"
 
 /** Each probe names the form the filing rules say it should produce. */
@@ -68,7 +71,7 @@ async function main() {
     console.error("No OWNER user found — cannot build an owner-scoped prompt.")
     process.exit(1)
   }
-  console.log(`Model: ${CHAT_ROUTING_MODEL}`)
+  console.log(`Model: ${QUICK.model}`)
   console.log(`Owner: ${owner.email}\n`)
 
   const ctx = { ownerId: owner.id, accountId: owner.accountId, prisma }
@@ -97,7 +100,8 @@ async function main() {
     let steps = 0
 
     const result = streamText({
-      model: openai(CHAT_ROUTING_MODEL),
+      model: openai(QUICK.model),
+      providerOptions: { openai: QUICK.reasoningEffort ? { reasoningEffort: QUICK.reasoningEffort } : {} },
       system,
       messages: await convertToModelMessages([
         { id: "u1", role: "user", parts: [{ type: "text", text: probe.q }] },

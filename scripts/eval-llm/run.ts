@@ -29,7 +29,7 @@ import { openai as openaiProvider } from "@ai-sdk/openai"
 import { VERDICT_MODEL, buildVerdictPrompt } from "@/lib/decision-verdict-llm"
 import { PROPOSAL_MODEL, buildProposalPrompt } from "@/lib/proposal-llm"
 import { ADJUDICATOR_MODEL, buildAdjudicatorPrompt } from "@/lib/ingredient-match-llm"
-import { CHAT_REASONING_EFFORT, CHAT_ROUTING_MODEL } from "@/lib/chat/openai-client"
+import { chatModelFor } from "@/lib/chat/openai-client"
 import { chatTools } from "@/lib/chat/tools"
 import { PRICING_PER_MTOK } from "@/lib/monitoring/ai-usage"
 
@@ -323,12 +323,14 @@ async function runToolChoice(only: string | undefined, record: boolean): Promise
   const tools = evalToolSet()
   const system = evalSystemPrompt()
   const out: GradedCase[] = []
+  // What a Quick turn ships: the dock's default, and nearly every turn.
+  const quick = chatModelFor("quick")
 
   for (const c of TOOL_CHOICE_CASES) {
     if (only && only !== c.id) continue
     const started = Date.now()
     const res = await generateText({
-      model: openaiProvider(CHAT_ROUTING_MODEL),
+      model: openaiProvider(quick.model),
       system,
       messages: [{ role: "user", content: c.question }],
       tools,
@@ -345,7 +347,7 @@ async function runToolChoice(only: string | undefined, record: boolean): Promise
        * what makes this an eval of what ships.
        */
       providerOptions: {
-        openai: { reasoningEffort: CHAT_REASONING_EFFORT },
+        openai: quick.reasoningEffort ? { reasoningEffort: quick.reasoningEffort } : {},
       },
       // Two rounds, not one: an orientation call must not consume the agent's
       // only chance to reach a data tool. Not fifteen either — past the first
@@ -357,9 +359,9 @@ async function runToolChoice(only: string | undefined, record: boolean): Promise
       .flatMap((s) => s.toolCalls.map((tc) => tc.toolName))
       .filter((n) => !NON_ROUTING_TOOLS.has(n))
     const grade = gradeToolChoice(called, c.expectedTools)
-    if (record) recordFixture("chat-tool-choice", c.id, { called, model: CHAT_ROUTING_MODEL, ...grade })
+    if (record) recordFixture("chat-tool-choice", c.id, { called, model: quick.model, ...grade })
     out.push(
-      finish("chat-tool-choice", c.id, CHAT_ROUTING_MODEL, {
+      finish("chat-tool-choice", c.id, quick.model, {
         inputTokens: res.usage?.inputTokens ?? 0,
         outputTokens: res.usage?.outputTokens ?? 0,
         cachedTokens: res.usage?.cachedInputTokens ?? 0,
