@@ -56,7 +56,7 @@ export async function getShellStatus(
 ): Promise<ShellStatus> {
   const { accountId, storeIds } = scope
   const raw = await cached<{ startedAt: string | null; completedAt: string | null; status: string | null; open: number }>(
-    `counter:shell-status:${accountId}`,
+    `counter:shell-status:${accountId}:${storeIds ? [...storeIds].sort().join(",") : "active"}`,
     60,
     // Busted by the alert inbox's writes, so the rail's count follows a
     // Clear all or an Undo at once instead of a minute later.
