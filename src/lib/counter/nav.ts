@@ -288,7 +288,7 @@ export const MONITORING_TABS: readonly SubNavItem[] = [
  */
 export const ALERT_TABS: readonly SubNavItem[] = [
   { label: "Now", href: "/dashboard/alerts" },
-  { label: "This week", href: "/dashboard/decisions" },
+  { label: "Week ahead", href: "/dashboard/decisions" },
 ] as const
 
 export const INGREDIENT_TABS: readonly SubNavItem[] = [

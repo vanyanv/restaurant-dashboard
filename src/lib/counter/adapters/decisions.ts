@@ -21,7 +21,13 @@ import {
   weekStartUTC,
 } from "@/lib/counter/week-window"
 import { count, delta, deltaSign, money, pct } from "@/lib/counter/format"
-import { buildDecisionsPlain, type DecisionsPlain } from "@/lib/counter/decisions-plain"
+import {
+  buildWeekPlan,
+  type PlanSalesDayInput,
+  type PlanStoreDayInput,
+  type PlanStoreInput,
+  type WeekPlan,
+} from "@/lib/counter/week-plan"
 import { mergeAttributions, type Attribution } from "@/lib/decisions/attribution"
 import { parseAttribution } from "@/lib/decisions/attribution"
 import { loadRunOut, type RunOut } from "@/lib/counter/run-out"
@@ -333,8 +339,11 @@ export interface PhoneQueue {
 }
 
 export interface DecisionsSections {
-  /** The page made plain: the sentence, expected sales, run-outs and the first calls. */
-  plain: SectionData<DecisionsPlain>
+  /**
+   * The page as a plan (owner's go, 2026-11-20): this week and next, day by
+   * day, with each store's hours and the week's to-dos. See `week-plan.ts`.
+   */
+  plan: SectionData<WeekPlan>
   head: SectionData<DecisionsHead>
   strip: SectionData<StripCell[]>
   briefing: SectionData<BriefingLine[]>
@@ -847,13 +856,33 @@ export async function loadSettledDays(
   const storeIds = resolved.ctx.storeIds
   if (storeIds.length === 0) return []
 
+  return mergeClosedDays((await readClosedDays(storeIds, start, asOf, accountId)).values())
+}
+
+/**
+ * Closed days per store, `[start, end)`: the one read behind both
+ * `loadSettledDays` (this week's closed half, merged) and the Week ahead
+ * plan (each store's sold days, and last week). Newest generation per
+ * (store, day), the reconciled-or-raw choice `getRevenueForecast` makes.
+ * One row per store-day, so a per-store figure is that row as it stands.
+ */
+export async function readClosedDays(
+  storeIds: string[],
+  start: Date,
+  end: Date,
+  /** The tenancy boundary, filtered on here as well as by whoever resolved `storeIds`. */
+  accountId: string,
+): Promise<Map<string, SettledDay[]>> {
+  const out = new Map<string, SettledDay[]>()
+  if (storeIds.length === 0 || start.getTime() >= end.getTime()) return out
   const rows = await prisma.forecastDailyRevenue.findMany({
     where: {
       storeId: { in: storeIds },
+      store: { accountId },
       // Whole-day rows only. `hourBucket` 1-23 is reserved for an hourly
       // forecast; counting one alongside its own day would double the day.
       hourBucket: 0,
-      forecastDate: { gte: start, lt: asOf },
+      forecastDate: { gte: start, lt: end },
     },
     select: {
       storeId: true,
@@ -884,46 +913,59 @@ export async function loadSettledDays(
    * rollback switch flips both halves of the week together.
    */
   const prefer = defaultForecastPreference()
-
-  const byDay = new Map<string, SettledDay & { pending: boolean }>()
-  // One store's waterfall per day, collected before merging — SHAP
-  // contributions are additive, so two stores' "Day of week" effects sum the
-  // same way their forecasts do. `mergeAttributions` is the loader's own.
-  const waterfallsByDay = new Map<string, Attribution[]>()
   for (const row of newestGenerationPerDay(rows)) {
-    const key = row.forecastDate.toISOString().slice(0, 10)
-    const parsed = parseAttribution(row.attribution)
-    if (parsed) waterfallsByDay.set(key, [...(waterfallsByDay.get(key) ?? []), parsed])
-    const held = byDay.get(key) ?? {
-      date: key,
-      forecast: 0,
-      actual: 0,
-      p10: null,
-      p90: null,
-      attribution: null,
-      pending: false,
-    }
     const useReconciled =
       prefer === "reconciled" &&
       row.reconciledRevenue != null &&
       !isReconciledStale(row.reconciledAt)
-    const predicted = useReconciled ? row.reconciledRevenue! : row.predictedRevenue
-    const p10 = useReconciled ? row.reconciledP10 : row.p10
-    const p90 = useReconciled ? row.reconciledP90 : row.p90
-
-    held.forecast += predicted
-    if (row.actualRevenue === null) held.pending = true
-    else held.actual = (held.actual ?? 0) + row.actualRevenue
-    held.p10 = p10 === null ? held.p10 : (held.p10 ?? 0) + p10
-    held.p90 = p90 === null ? held.p90 : (held.p90 ?? 0) + p90
-    byDay.set(key, held)
+    const list = out.get(row.storeId) ?? []
+    list.push({
+      date: row.forecastDate.toISOString().slice(0, 10),
+      forecast: useReconciled ? row.reconciledRevenue! : row.predictedRevenue,
+      actual: row.actualRevenue,
+      p10: useReconciled ? row.reconciledP10 : row.p10,
+      p90: useReconciled ? row.reconciledP90 : row.p90,
+      attribution: parseAttribution(row.attribution),
+    })
+    out.set(row.storeId, list)
   }
+  for (const list of out.values()) list.sort((a, b) => a.date.localeCompare(b.date))
+  return out
+}
 
+/**
+ * Several stores' closed days as one, day by day. A day is sold only when
+ * every store that has a row for it has reconciled (see `loadSettledDays`);
+ * the bands add the way the forecasts do, and the waterfalls merge.
+ */
+export function mergeClosedDays(perStore: Iterable<SettledDay[]>): SettledDay[] {
+  const byDay = new Map<string, SettledDay & { pending: boolean; waterfalls: Attribution[] }>()
+  for (const list of perStore) {
+    for (const d of list) {
+      const held = byDay.get(d.date) ?? {
+        date: d.date,
+        forecast: 0,
+        actual: 0,
+        p10: null,
+        p90: null,
+        attribution: null,
+        pending: false,
+        waterfalls: [],
+      }
+      held.forecast += d.forecast
+      if (d.actual === null) held.pending = true
+      else held.actual = (held.actual ?? 0) + d.actual
+      held.p10 = d.p10 === null ? held.p10 : (held.p10 ?? 0) + d.p10
+      held.p90 = d.p90 === null ? held.p90 : (held.p90 ?? 0) + d.p90
+      if (d.attribution) held.waterfalls.push(d.attribution)
+      byDay.set(d.date, held)
+    }
+  }
   return [...byDay.values()]
-    .map(({ pending, ...d }) => ({
+    .map(({ pending, waterfalls, ...d }) => ({
       ...d,
       actual: pending ? null : d.actual,
-      attribution: mergeAttributions(waterfallsByDay.get(d.date) ?? []),
+      attribution: mergeAttributions(waterfalls),
     }))
     .sort((a, b) => a.date.localeCompare(b.date))
 }
@@ -1629,8 +1671,224 @@ function deadlineWords(a: DecisionAction): string {
  * `chooseSections(sections, PHONE_DECISIONS_SECTIONS)` to its client, so the loads only the
  * desk reads never run on a phone.
  */
-export const PHONE_DECISIONS_SECTIONS = ["plain", "head", "week", "phoneQueue", "phoneRunOut"] as const satisfies ReadonlyArray<keyof DecisionsSections>
+export const PHONE_DECISIONS_SECTIONS = ["plan", "head", "week", "phoneQueue", "phoneRunOut"] as const satisfies ReadonlyArray<keyof DecisionsSections>
 export type PhoneDecisionsSections = Pick<DecisionsSections, (typeof PHONE_DECISIONS_SECTIONS)[number]>
+
+/* ── The Week ahead plan ──────────────────────────────────────────────── */
+
+interface PlanStores {
+  asOf: string
+  stores: Array<{ id: string; name: string; days: DecisionDay[]; failed: boolean }>
+  /** Closed days per store, last Monday up to today. */
+  closed: Map<string, SettledDay[]>
+}
+
+/** Each store's fortnight (days only) and every store's closed days since last Monday. */
+async function loadPlanStores(
+  asOfKey: string,
+  accountId: string,
+  /** The store in view. A saved link can point at an inactive one, which the all-stores list leaves out. */
+  selectedId: string | null,
+): Promise<PlanStores> {
+  const asOf = parseDayKey(asOfKey)
+  const resolved = await resolveStoreContext(undefined, accountId)
+  if (asOf === null || !resolved.ok) return { asOf: asOfKey, stores: [], closed: new Map() }
+  const storeIds = [...resolved.ctx.storeIds]
+  const storeNameById = new Map(resolved.ctx.storeNameById)
+  if (selectedId !== null && !storeIds.includes(selectedId)) {
+    const sel = await resolveStoreContext(selectedId, accountId)
+    if (sel.ok) {
+      storeIds.push(selectedId)
+      storeNameById.set(selectedId, sel.ctx.storeName)
+    }
+  }
+  const lastMonday = weekStartUTC(asOf)
+  lastMonday.setUTCDate(lastMonday.getUTCDate() - 7)
+  const [views, closed] = await Promise.all([
+    Promise.all(
+      storeIds.map((id) =>
+        // The page's business day, not a fresh read of the clock: past midnight
+        // the two would disagree on which day is today.
+        getDecisionsView({ storeId: id, lite: true, asOf: asOfKey })
+          .then((r) => (r.ok ? { days: r.data.ahead, failed: false } : { days: [] as DecisionDay[], failed: true }))
+          // One store's read failing costs that store its card, not the page,
+          // and is said as "didn't load", never as "no forecast".
+          .catch(() => ({ days: [] as DecisionDay[], failed: true })),
+      ),
+    ),
+    readClosedDays(storeIds, lastMonday, asOf, accountId).catch(() => new Map<string, SettledDay[]>()),
+  ])
+  return {
+    asOf: asOfKey,
+    stores: storeIds.map((id, i) => ({ id, name: storeNameById.get(id) ?? "Store", ...views[i] })),
+    closed,
+  }
+}
+
+function forwardStoreDay(d: DecisionDay): PlanStoreDayInput {
+  return {
+    key: d.date,
+    forecast: d.predictedRevenue,
+    actual: null,
+    scheduled: d.labor.scheduledHours,
+    needed: d.labor.neededHours,
+    gap: d.labor.gapHours,
+    // The lane says "unknown" before it looks at shifts when there is no
+    // productivity target; no shifts at all is still "no schedule".
+    status:
+      d.labor.status === "unknown" && d.labor.scheduledHours <= 0 && d.predictedRevenue > 0
+        ? "unscheduled"
+        : d.labor.status,
+    // An hour with no hourly forecast row reads as 0 orders, so 0 needed:
+    // that is "not forecast for that hour", not "nothing needed".
+    hourly: d.hourly.hours.map((h) => ({
+      hour: h.hour,
+      needed: h.forecast === false ? null : h.neededHours,
+      staffed: h.staffedHours,
+    })),
+    worst: d.hourly.worstStretch
+      ? { startHour: d.hourly.worstStretch.startHour, endHour: d.hourly.worstStretch.endHour }
+      : null,
+  }
+}
+
+function closedStoreDay(d: SettledDay): PlanStoreDayInput {
+  return {
+    key: d.date,
+    forecast: d.forecast,
+    actual: d.actual,
+    scheduled: 0,
+    needed: null,
+    gap: null,
+    status: "unknown",
+    hourly: [],
+    worst: null,
+  }
+}
+
+/** Sold Monday to Sunday, or null unless all seven days are on file and reconciled. */
+function soldWeek(days: SettledDay[], monday: string): number | null {
+  const start = parseDayKey(monday)
+  if (start === null) return null
+  const keys = weekDayKeys(start)
+  let total = 0
+  for (const k of keys) {
+    const d = days.find((x) => x.date === k)
+    if (d === undefined || d.actual === null) return null
+    total += d.actual
+  }
+  return total
+}
+
+export function buildPlanFrom(
+  view: DecisionsView,
+  plan: PlanStores,
+  runSd: SectionData<RunOut>,
+  storeId: string | null,
+): WeekPlan {
+  const asOf = parseDayKey(view.asOf)
+  const thisMonday = asOf === null ? view.asOf : ymdUTC(weekStartUTC(asOf))
+  const lastMonday = (() => {
+    const d = parseDayKey(thisMonday)
+    if (d === null) return thisMonday
+    d.setUTCDate(d.getUTCDate() - 7)
+    return ymdUTC(d)
+  })()
+
+  const stores: PlanStoreInput[] = plan.stores.map((s) => {
+    const closed = plan.closed.get(s.id) ?? []
+    const closedThisWeek = closed.filter((d) => d.date >= thisMonday && d.date < view.asOf)
+    return {
+      id: s.id,
+      name: s.name,
+      days: [...closedThisWeek.map(closedStoreDay), ...s.days.map(forwardStoreDay)],
+      lastWeek: soldWeek(closed, lastMonday),
+      failed: s.failed,
+    }
+  })
+
+  const scopedIds = storeId === null ? plan.stores.map((s) => s.id) : [storeId]
+  // Stores with no closed rows at all have never been forecast (not open
+  // yet): they add nothing to either week. Every other store must have a row
+  // for a day before that day counts as sold — one store's sales are not the
+  // whole scope's.
+  const scopedLists = scopedIds.map((id) => plan.closed.get(id) ?? []).filter((l) => l.length > 0)
+  const scopedClosed = mergeClosedDays(scopedLists)
+  const everyStoreHas = (date: string) => scopedLists.every((l) => l.some((d) => d.date === date))
+  const scopedLastWeek = (() => {
+    if (scopedLists.length === 0) return null
+    let total = 0
+    for (const l of scopedLists) {
+      const w = soldWeek(l, lastMonday)
+      if (w === null) return null
+      total += w
+    }
+    return total
+  })()
+  // In an all-stores view the reasons are shown only when every store with a
+  // forecast that day wrote them; otherwise the gap would read as the model's.
+  const whyCovered = (date: string) =>
+    storeId !== null ||
+    plan.stores.every((s) => {
+      if (s.failed) return false
+      const day = s.days.find((x) => x.date === date)
+      return day === undefined || day.predictedRevenue <= 0 || day.attribution !== null
+    })
+  const sales: PlanSalesDayInput[] = [
+    ...scopedClosed
+      .filter((d) => d.date >= thisMonday && d.date < view.asOf)
+      .map((d) => ({
+        key: d.date,
+        forecast: d.forecast,
+        p10: d.p10,
+        p90: d.p90,
+        actual: everyStoreHas(d.date) ? d.actual : null,
+        weatherPhrase: null,
+        weatherHighC: null,
+        event: null,
+        attribution: d.attribution,
+      })),
+    ...view.ahead.map((d) => ({
+      key: d.date,
+      forecast: d.predictedRevenue,
+      p10: d.p10,
+      p90: d.p90,
+      actual: null,
+      weatherPhrase: d.weatherPhrase,
+      weatherHighC: d.weatherHighC,
+      event: d.majorEventCount > 0 ? d.topEventTitle : null,
+      attribution: whyCovered(d.date) ? d.attribution : null,
+      partialWhy: d.attribution !== null && !whyCovered(d.date),
+    })),
+  ]
+
+  const runOut = dataOf(runSd)
+  return buildWeekPlan({
+    asOf: view.asOf,
+    storeId,
+    sales,
+    lastWeek: scopedLastWeek,
+    stores,
+    runOut: runOut === null ? null : runOut.rows,
+    runOutNote:
+      runSd.status === "empty"
+        ? "Count the shelf to see what runs out"
+        : runSd.status === "failed"
+          ? "The shelf did not load, so run-outs are unknown"
+          : runSd.status === "not_computed"
+            ? "Pick one store to see what runs out"
+            : null,
+    calls: buildQueueSection(view).items.map((c) => ({
+      key: c.key,
+      title: c.title,
+      why: firstSentence(c.why),
+      act: c.act,
+      href: c.href,
+    })),
+    accuracy: insideOf(view),
+    basePath: "/dashboard/decisions",
+  })
+}
 
 /**
  * The Needs-you page's ten sections, as ten promises over ONE load — plus a
@@ -1801,36 +2059,28 @@ export function getDecisionsSectionPromises(
     f: (view: DecisionsView, week: WeekDay[]) => SectionData<T>,
   ): Promise<SectionData<T>> => withWeek((view, settled) => f(view, buildDecisionsWeek(view, settled)))
 
+  /*
+   * Every store's fortnight, read store by store so the plan can count hours
+   * where a schedule is posted and leave out a store that has none (an
+   * all-stores lane would read a store with no shifts as hours short). Days
+   * only (`lite`), so the briefing's generators run once, for the page, not
+   * once per store. Plus one read of every store's closed days since last
+   * Monday: this week's sold half and last week's total.
+   */
+  const planStoresP: Promise<PlanStores> = lazy(() => viewP.then(async (sd) => {
+    const view = dataOf(sd)
+    if (view === null) return { asOf: "", stores: [], closed: new Map() }
+    return loadPlanStores(view.asOf, input.accountId, input.storeId ?? null)
+  }))
+
   return {
-    plain: lazy(() => guardSection(
-      // The shelf guarded on its own, so a shelf that throws reaches the
-      // `failed` wording below instead of failing the whole answer.
-      Promise.all([viewP, settledP, guardSection(runOutP, "retryDecisions")]).then(([sd, settled, runSd]) => {
+    plan: lazy(() => guardSection(
+      Promise.all([viewP, guardSection(runOutP, "retryDecisions"), planStoresP]).then(([sd, runSd, perStore]) => {
         if (sd.status !== "ready" && sd.status !== "stale") {
           return mapReady(sd, () => undefined as never)
         }
         const view = sd.data
-        const week = buildDecisionsWeek(view, settled)
-        const gap = view.vitals.laborGap
-        return ready(buildDecisionsPlain({
-          total: weekTotal(week),
-          vsPrior: view.vitals.weekForecast.vsPriorWeek,
-          vsText: weekDelta(view).text,
-          accuracy: insideOf(view),
-          laborGapHours: gap.hours,
-          laborShort: gap.status === "short",
-          runOut: dataOf(runSd),
-          // Said in words, never as "nothing runs out".
-          runOutNote:
-            runSd.status === "not_computed"
-              ? "Pick one store to see what runs out"
-              : runSd.status === "empty"
-                ? "Count the shelf to see what runs out"
-                : runSd.status === "failed"
-                  ? "The shelf did not load, so run-outs are unknown"
-                  : null,
-          calls: buildQueueSection(view).items,
-        }))
+        return ready(buildPlanFrom(view, perStore, runSd, input.storeId ?? null))
       }),
       "retryDecisions",
     )),

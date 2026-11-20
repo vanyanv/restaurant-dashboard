@@ -1,0 +1,102 @@
+/* src/styles/counter-week.css
+ *
+ * The Week ahead plan (src/lib/counter/week-plan.ts, laid out by
+ * src/app/dashboard/(counter)/decisions/week-plan-ui.tsx): the week and
+ * store picks, seven day cells (sold solid, forecast hatched, the likely
+ * range as a thin band), the day's detail with people by hour, and the
+ * small lists inside it. Everything else on the page is a shared `cu-`
+ * block. Desk and phone share every rule; each block rearranges from its
+ * own width (container queries), not the screen's. Every colour is a
+ * Counter token; motion runs on the --ct-dur-* tokens, so reduced motion
+ * turns it off with them.
+ */
+
+.wa-picks{display:flex;flex-wrap:wrap;gap:10px 16px;align-items:center;justify-content:space-between}
+.wa-picks>*{width:auto;flex:0 1 auto}
+.wa-cap{margin:0 0 6px;font-family:var(--mono);font-size:var(--t-micro);color:var(--ink-3);letter-spacing:.06em;text-transform:uppercase}
+.wa-cap--gap{margin-top:14px}
+.wa-note{margin:6px 0 0;font-size:var(--t-cap);line-height:1.45;color:var(--ink-2);text-wrap:pretty}
+.wa-num{font-variant-numeric:tabular-nums lining-nums}
+.wa-sum{margin-left:8px;font-family:var(--mono);font-size:var(--t-micro);color:var(--ink-3);letter-spacing:.04em}
+.wa-h{margin:0;font-size:var(--t-mid);font-weight:700;line-height:1.2}
+.wa-tag{font-family:var(--mono);font-size:var(--t-micro);letter-spacing:.06em;text-transform:uppercase;color:var(--ink-2);border:1px dashed var(--line-strong);border-radius:999px;padding:2px 8px}
+
+/* Key */
+.wa-key{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:var(--t-cap);color:var(--ink-3);margin-bottom:10px}
+.wa-sw{display:inline-block;width:12px;height:10px;border-radius:2px;vertical-align:-1px;margin-right:5px}
+.wa-sw--sold{background:var(--good)}
+.wa-sw--fc{background:repeating-linear-gradient(135deg,var(--good) 0 3px,transparent 3px 6px);border:1px solid var(--good)}
+.wa-sw--rng{background:var(--ink-3);width:2px;height:12px;vertical-align:-2px}
+.wa-sw--staff{background:var(--ink-2)}
+.wa-sw--short{background:var(--bad)}
+
+/* Seven day cells */
+.wa-days{container-type:inline-size;width:100%;min-width:0;display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:8px}
+.wa-day{display:grid;grid-template-rows:auto auto 96px auto auto auto auto;align-content:start;gap:4px;min-width:0;padding:10px 8px;text-align:left;
+  border:1px solid var(--line);border-radius:var(--r);background:var(--surface);color:var(--ink);font:inherit;cursor:pointer;
+  transition:border-color var(--ct-dur-quick) var(--ease),background-color var(--ct-dur-quick) var(--ease),transform var(--ct-dur-spring) var(--ct-ease-spring)}
+@media (hover:hover){.wa-day:hover{border-color:var(--ink-3)}}
+.wa-day:active{transform:scale(var(--ct-press));transition-duration:var(--ct-dur-tap)}
+.wa-day:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.wa-day[aria-pressed="true"]{border-color:var(--ink);box-shadow:inset 0 0 0 1px var(--ink)}
+.wa-day__dow{font-weight:600;font-size:var(--t-body)}
+.wa-day__dow small{font-weight:400;color:var(--ink-3);font-size:var(--t-cap)}
+.wa-day__amt{font-weight:700;font-size:var(--t-mid);white-space:nowrap;overflow:hidden;text-overflow:clip}
+.wa-day[data-kind="none"] .wa-day__amt{color:var(--ink-3)}
+.wa-day__barbox{position:relative;display:block;border-bottom:1px solid var(--line)}
+.wa-day__bar{position:absolute;left:18%;right:18%;bottom:0;height:calc(var(--h)*1%);border-radius:3px 3px 0 0;
+  background:repeating-linear-gradient(135deg,var(--good) 0 4px,transparent 4px 7px);border:1px solid var(--good);border-bottom:0;
+  transform-origin:bottom;animation:ct-bar-grow calc(var(--ct-dur-rise)*2) var(--ease) both;animation-delay:calc(var(--i,0)*var(--ct-dur-step)*.72)}
+.wa-day[data-kind="sold"] .wa-day__bar{background:var(--good)}
+.wa-day__rng{position:absolute;left:calc(50% - 1px);width:2px;bottom:calc(var(--lo)*1%);height:calc((var(--hi) - var(--lo))*1%);background:var(--ink-3);border-radius:1px}
+.wa-day__tag{font-family:var(--mono);font-size:var(--t-micro);letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3)}
+.wa-day[data-kind="today"] .wa-day__tag{color:var(--accent)}
+.wa-day__wx{font-size:var(--t-cap);line-height:1.35;color:var(--ink-2);overflow-wrap:anywhere}
+.wa-day__wx b{display:block;font-weight:600;color:var(--ink)}
+.wa-day__st{min-width:0}
+.wa-day__st .cu-status{white-space:normal;padding:2px 8px}
+.wa-day__due{font-family:var(--mono);font-size:var(--t-micro);color:var(--bad);letter-spacing:.04em;text-transform:uppercase}
+@container (max-width:640px){
+  .wa-days{gap:4px}
+  .wa-day{padding:8px 3px;grid-template-rows:auto auto 72px auto auto;text-align:center;justify-items:center}
+  .wa-day__amt{font-size:var(--t-micro);max-width:100%}
+  .wa-day__barbox{justify-self:stretch}
+  .wa-day__dow{font-size:var(--t-cap)}
+  .wa-day__dow small{display:block}
+  .wa-day__wx{display:none}
+  .wa-day__tag{display:none}
+  .wa-day[data-kind="today"] .wa-day__tag{display:block;font-size:var(--t-micro);letter-spacing:0}
+  .wa-day__st .cu-status{font-size:0;padding:0;gap:0;background:none;border:0}
+  .wa-day__st .cu-status::before{width:9px;height:9px}
+  .wa-day__due{font-size:0}
+  .wa-day__due::before{content:"";display:block;width:6px;height:6px;border-radius:50%;background:var(--bad)}
+}
+
+/* The day's detail */
+.wa-detail{container-type:inline-size}
+.wa-detail__head{display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:space-between;margin-bottom:12px}
+.wa-detail__grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.2fr) minmax(0,1fr);gap:20px}
+@container (max-width:760px){.wa-detail__grid{grid-template-columns:minmax(0,1fr);gap:16px}}
+.wa-why{display:grid;gap:2px}
+.wa-why>div{display:flex;justify-content:space-between;gap:12px;font-size:var(--t-body);padding:3px 0;border-bottom:1px dashed var(--line)}
+.wa-why>div.is-total{border-bottom:0;border-top:1px solid var(--ink);font-weight:700;margin-top:2px;padding-top:5px}
+.wa-why>div>span:first-child{color:var(--ink-2)}
+.wa-why>div.is-total>span:first-child{color:var(--ink)}
+.wa-hrs{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(0,1fr);gap:2px;height:96px;align-items:end;border-bottom:1px solid var(--line)}
+.wa-hrs__h{display:flex;flex-direction:column;justify-content:flex-end;height:100%;min-width:0}
+.wa-hrs__s{display:block;background:var(--ink-2);border-radius:2px 2px 0 0;min-height:1px;transform-origin:bottom;animation:ct-bar-grow calc(var(--ct-dur-rise)*2) var(--ease) both}
+.wa-hrs__x{display:block;background:var(--bad);border-radius:2px 2px 0 0;transform-origin:bottom;animation:ct-bar-grow calc(var(--ct-dur-rise)*2) var(--ease) both}
+.wa-hrs__x+.wa-hrs__s{border-radius:0}
+.wa-hrs__lbl{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(0,1fr);gap:2px;margin:3px 0 8px;font-family:var(--mono);font-size:var(--t-micro);color:var(--ink-3);white-space:nowrap}
+.wa-notes{list-style:none;margin:6px 0 0;padding:0;display:grid;gap:4px;font-size:var(--t-cap)}
+.wa-notes .cu-status{white-space:normal}
+
+/* Small lists: by store, the shelf */
+.wa-list{list-style:none;margin:0;padding:0;display:grid}
+.wa-list>li{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--line)}
+.wa-list>li:last-child{border-bottom:0}
+.wa-list>li>span:first-child{display:grid;gap:2px;min-width:0}
+.wa-list b{font-weight:600}
+.wa-list small{font-size:var(--t-cap);color:var(--ink-2)}
+.wa-list .cu-status{flex:none}
+.wa-group+.wa-group{margin-top:14px}
