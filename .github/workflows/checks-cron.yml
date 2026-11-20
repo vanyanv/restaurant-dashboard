@@ -3,6 +3,10 @@ name: Store checks (missed-check alerts)
 # Puts missed and late store checks on Needs you. The dashboard also does
 # this whenever the owner opens Store checks; this run keeps Needs you current
 # when nobody has. Idempotent: an alert is created once per store, check and day.
+#
+# GitHub fired this schedule about 4 times a day over 2026-11-07..16, so
+# sync-ticker.yml dispatches it every half hour; the schedule below is the
+# backup.
 on:
   schedule:
     - cron: '*/30 * * * *'

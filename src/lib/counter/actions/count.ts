@@ -212,15 +212,20 @@ export async function finishCount(countId: string): Promise<ActionResult> {
     if (!count) return { ok: false, error: "That count isn't on your account" }
     if (count.status !== "IN_PROGRESS") return { ok: false, error: "This count is already finished" }
     if (count._count.lines === 0) return { ok: false, error: "Count at least one item first" }
-    // Calibration reads the previous COMPLETED count, so it runs before this
-    // one becomes COMPLETED. Same order as `completeStockCount`.
-    await applyCalibrationUpdatesForCount(count.id, owner.accountId)
-    // Guarded on status, so a double tap can't finish it twice.
-    const done = await prisma.stockCount.updateMany({
-      where: { id: count.id, status: "IN_PROGRESS" },
-      data: { status: "COMPLETED", completedAt: new Date(), countedAt: new Date() },
+    // Calibration reads the previous COMPLETED count, so its reads run while
+    // this one is still IN_PROGRESS. Its writes and the status flip then
+    // commit together, flip first and guarded on status: a double tap, or a
+    // retry after a crash, finishes nothing twice and calibrates nothing twice.
+    // Same shape as `completeStockCount`.
+    const now = new Date()
+    const finished = await applyCalibrationUpdatesForCount(count.id, owner.accountId, async (tx) => {
+      const done = await tx.stockCount.updateMany({
+        where: { id: count.id, status: "IN_PROGRESS" },
+        data: { status: "COMPLETED", completedAt: now, countedAt: now },
+      })
+      return done.count > 0
     })
-    if (done.count === 0) return { ok: false, error: "This count is already finished" }
+    if (!finished) return { ok: false, error: "This count is already finished" }
     revalidateCount()
     return { ok: true, id: count.id }
   } catch (err) {

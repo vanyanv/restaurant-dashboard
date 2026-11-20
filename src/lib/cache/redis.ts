@@ -25,3 +25,19 @@ export function getRedis(): Redis | null {
   cachedClient = Redis.fromEnv()
   return cachedClient
 }
+
+/**
+ * For sync scripts run outside Vercel (GitHub Actions). Without the Upstash
+ * env a script's writes bump no closed-range generation and bust no tag, so
+ * the dashboard can serve pre-sync figures for closed ranges for up to
+ * CLOSED_RANGE_TTL (6h). That used to happen silently; say so in the log and
+ * as an Actions warning annotation. Returns whether Redis is configured.
+ */
+export function warnIfNoRedis(script: string): boolean {
+  if (getRedis()) return true
+  const msg =
+    `${script}: UPSTASH_REDIS_REST_URL / UPSTASH_REDIS_REST_TOKEN not set — ` +
+    `cache will NOT be busted; closed-range figures can stay pre-sync for up to 6h.`
+  console.warn(process.env.GITHUB_ACTIONS === "true" ? `::warning::${msg}` : `[cache] ${msg}`)
+  return false
+}

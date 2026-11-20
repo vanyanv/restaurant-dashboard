@@ -91,7 +91,7 @@ def normalize_open_meteo_hourly(payload: dict[str, Any]) -> pd.DataFrame:
                 "hour": int(ts.hour),
                 "weather_temp_c": _num(_at(hourly, "temperature_2m", idx), np.nan),
                 "weather_apparent_temp_c": _num(_at(hourly, "apparent_temperature", idx), np.nan),
-                "weather_precip_mm": _num(_at(hourly, "precipitation", idx)),
+                "weather_precip_mm": _num(_at(hourly, "precipitation", idx), np.nan),
                 "weather_precip_probability_pct": _num(_at(hourly, "precipitation_probability", idx), np.nan),
                 "weather_wind_speed_kph": _num(_at(hourly, "wind_speed_10m", idx), np.nan),
                 "weather_relative_humidity_pct": _num(_at(hourly, "relative_humidity_2m", idx), np.nan),
@@ -99,7 +99,23 @@ def normalize_open_meteo_hourly(payload: dict[str, Any]) -> pd.DataFrame:
                 "has_weather_signal": 1.0,
             }
         )
-    return fill_weather_hourly_defaults(pd.DataFrame(rows))
+    # Not `fill_weather_hourly_defaults`: that zero-fills for the model, and
+    # this frame is what the sync STORES. A value Open-Meteo did not send must
+    # land as NULL, not as 0 °C / 0 mm. Feature prep fills later, on read.
+    return _weather_hourly_frame(pd.DataFrame(rows))
+
+
+def _weather_hourly_frame(df: pd.DataFrame) -> pd.DataFrame:
+    """Columns present and typed, NaN kept as NaN (missing, not zero)."""
+    out = _date_col(df)
+    if "hour" not in out:
+        out["hour"] = 0
+    for col in WEATHER_HOURLY_COLUMNS:
+        if col not in out:
+            out[col] = np.nan
+        out[col] = pd.to_numeric(out[col], errors="coerce").astype(float)
+    out["hour"] = out["hour"].fillna(0).astype(int)
+    return out
 
 
 def normalize_predicthq_features(

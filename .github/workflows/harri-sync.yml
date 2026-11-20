@@ -55,6 +55,10 @@ jobs:
           END: ${{ inputs.backfill_end }}
           LOG_FILE: logs/harri-sync.log
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          # Cache busts and closed-range version bumps (src/lib/cache). Without
+          # these the sync's writes leave saved figures pre-sync for up to 6h.
+          UPSTASH_REDIS_REST_URL: ${{ secrets.UPSTASH_REDIS_REST_URL }}
+          UPSTASH_REDIS_REST_TOKEN: ${{ secrets.UPSTASH_REDIS_REST_TOKEN }}
           HARRI_COGNITO_CLIENT_ID: ${{ secrets.HARRI_COGNITO_CLIENT_ID }}
           HARRI_COGNITO_USER_POOL_REGION: ${{ secrets.HARRI_COGNITO_USER_POOL_REGION }}
           HARRI_REFRESH_TOKEN: ${{ secrets.HARRI_REFRESH_TOKEN }}
@@ -66,6 +70,10 @@ jobs:
             npx tsx scripts/sync-harri-hourly.ts
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          # Cache busts and closed-range version bumps (src/lib/cache). Without
+          # these the sync's writes leave saved figures pre-sync for up to 6h.
+          UPSTASH_REDIS_REST_URL: ${{ secrets.UPSTASH_REDIS_REST_URL }}
+          UPSTASH_REDIS_REST_TOKEN: ${{ secrets.UPSTASH_REDIS_REST_TOKEN }}
           HARRI_COGNITO_CLIENT_ID: ${{ secrets.HARRI_COGNITO_CLIENT_ID }}
           HARRI_COGNITO_USER_POOL_REGION: ${{ secrets.HARRI_COGNITO_USER_POOL_REGION }}
           HARRI_REFRESH_TOKEN: ${{ secrets.HARRI_REFRESH_TOKEN }}

@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma"
 import { cached } from "@/lib/cache/cached"
+import { isStalledRunning } from "@/lib/monitoring/job-schedules"
 
 /**
  * What feeds the figures on this page, and how fresh each one is.
@@ -52,7 +53,7 @@ const STALE_HOURS: Record<string, number> = {
  */
 const FEEDS: Array<{ job: string; label: string; note: string }> = [
   { job: "otter.metrics.sync", label: "Sales, orders and channels", note: "every 4 hours" },
-  { job: "otter.hourly.sync", label: "Sales by hour", note: "every 4 hours" },
+  { job: "otter.hourly.sync", label: "Sales by hour", note: "hourly while open" },
   { job: "harri-labor-sync", label: "Hours worked and the schedule", note: "every 4 hours" },
   { job: "alerts.ingest", label: "What needs you", note: "nightly" },
 ]
@@ -60,7 +61,7 @@ const FEEDS: Array<{ job: string; label: string; note: string }> = [
 export interface FeedLine {
   key: string
   label: string
-  /** "synced 3h ago", "last run failed", "no run recorded". */
+  /** "synced 3h ago", "last run failed", "last run never finished", "no run recorded". */
   reading: string
   /** `ok` is fresh, `warn` is stale or failed, `off` is a feed that has never run here. */
   tone: "ok" | "warn" | "off"
@@ -129,6 +130,11 @@ export async function getFeedHealth(
       }
     }
     if (row.status === "RUNNING") {
+      // A run killed mid-flight never writes its end, so past the job's bound
+      // a RUNNING row is a run that died, not one still going.
+      if (isStalledRunning(f.job, new Date(row.at), now)) {
+        return { key: f.job, label: f.label, reading: "last run never finished", tone: "warn" }
+      }
       return { key: f.job, label: f.label, reading: "syncing now", tone: "ok" }
     }
     if (row.status === "FAILURE") {

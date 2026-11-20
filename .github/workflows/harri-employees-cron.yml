@@ -29,10 +29,14 @@ jobs:
       - run: npx prisma generate
       - name: Refresh Harri team directory
         id: cron
+        # run-with-cron-logging.sh sets pipefail and writes `status`; a bare
+        # `| tee` under Actions' default shell reported tee's exit code, so a
+        # failed refresh read green.
         run: |
-          mkdir -p logs
-          npx tsx scripts/backfill-harri-employees.ts 2>&1 | tee logs/harri-employees-cron.log
+          bash .github/scripts/run-with-cron-logging.sh \
+            npx tsx scripts/backfill-harri-employees.ts
         env:
+          LOG_FILE: logs/harri-employees-cron.log
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           HARRI_COGNITO_CLIENT_ID: ${{ secrets.HARRI_COGNITO_CLIENT_ID }}
           HARRI_COGNITO_USER_POOL_REGION: ${{ secrets.HARRI_COGNITO_USER_POOL_REGION }}
@@ -44,3 +48,21 @@ jobs:
           name: harri-employees-cron-log-${{ github.run_id }}
           path: logs/harri-employees-cron.log
           retention-days: 14
+      - name: Open or update incident issue
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          WORKFLOW_NAME: Harri Employees Weekly Refresh
+          ISSUE_TITLE: "[Auto] Harri Employees Weekly Refresh failing"
+          ISSUE_LABEL: cron-failure
+          LOG_FILE: logs/harri-employees-cron.log
+          FAILED_EXIT_CODE: ${{ steps.cron.outputs.status }}
+        run: bash .github/scripts/report-workflow-failure.sh
+      - name: Close incident issue on recovery
+        if: success()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          WORKFLOW_NAME: Harri Employees Weekly Refresh
+          ISSUE_TITLE: "[Auto] Harri Employees Weekly Refresh failing"
+          ISSUE_LABEL: cron-failure
+        run: bash .github/scripts/report-workflow-recovery.sh

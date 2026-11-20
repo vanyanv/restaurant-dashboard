@@ -1,9 +1,18 @@
 import { PrismaClient } from '../src/generated/prisma/client'
 import { PrismaPg } from '@prisma/adapter-pg'
 import bcrypt from 'bcryptjs'
+import { DEMO_USER_EMAIL, refuseNonLocal, refuseRealUsers } from '../scripts/db-guard'
 
 const databaseUrl = process.env.DATABASE_URL
 if (!databaseUrl) throw new Error('DATABASE_URL is required')
+
+// Never seed production by accident: local Postgres only, unless
+// ALLOW_DB_RESET=I_UNDERSTAND (scripts/db-guard.ts).
+const hostRefusal = refuseNonLocal(databaseUrl)
+if (hostRefusal) {
+  console.error(hostRefusal)
+  process.exit(1)
+}
 
 // SSL for a real host, never for localhost — a local Postgres does not speak
 // TLS. Same rule `src/lib/prisma.ts` states in full; kept in step by hand
@@ -20,6 +29,16 @@ const adapter = new PrismaPg({ connectionString: databaseUrl, ssl: !localHost(da
 const prisma = new PrismaClient({ adapter })
 
 async function main() {
+  // A database with real users is a real account, wherever it lives: the
+  // seed writes demo stores under every OWNER it finds.
+  const realUsers = await prisma.user.count({ where: { email: { not: DEMO_USER_EMAIL } } })
+  const usersRefusal = refuseRealUsers(realUsers)
+  if (usersRefusal) {
+    console.error(usersRefusal)
+    process.exitCode = 1
+    return
+  }
+
   console.log('🌱 Starting database seed...')
 
   // Default Account — every seeded user/store/etc. lives under this single
@@ -38,10 +57,10 @@ async function main() {
   const hashedPassword = await bcrypt.hash('demo123', 10)
 
   const demoUser = await prisma.user.upsert({
-    where: { email: 'demo@restaurantos.com' },
+    where: { email: DEMO_USER_EMAIL },
     update: {},
     create: {
-      email: 'demo@restaurantos.com',
+      email: DEMO_USER_EMAIL,
       password: hashedPassword,
       name: 'Mario Rossi',
       role: 'OWNER',

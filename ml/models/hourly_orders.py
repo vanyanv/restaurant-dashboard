@@ -13,6 +13,7 @@ to the legacy holdout-residual-std heuristic and tag the flavor with
 from __future__ import annotations
 
 import datetime as dt
+import logging
 from dataclasses import dataclass, field
 from typing import Optional
 
@@ -21,7 +22,11 @@ import pandas as pd
 from xgboost import XGBRegressor
 
 from ml.evaluation.conformal import ConformalWrapper, wrap_xgboost_conformal
-from ml.features.external_signals import external_signal_coverage
+from ml.features.external_signals import (
+    drop_dead_signal_columns,
+    external_signal_coverage,
+    external_signal_coverage_by_family,
+)
 from ml.features.hourly_orders import (
     build_enriched_feature_matrix,
     build_feature_matrix,
@@ -33,6 +38,8 @@ from ml.features.hourly_orders import (
     load_order_external_signals,
     split_train_holdout,
 )
+
+_LOG = logging.getLogger(__name__)
 
 
 # MAPIE's 95% wrapper needs >=20 samples (1/alpha). With hourly granularity
@@ -113,7 +120,17 @@ def train(store_id: str, *, enriched: bool = False) -> Optional[TrainResult]:
         if signal_coverage < 0.6:
             return None
         feats = build_enriched_feature_matrix(hourly, daily, harri_daily, external_hourly)
-        cols = enriched_feature_columns()
+        # Same per-family gate as the revenue model: a family that never landed
+        # (events, while PredictHQ is off) would otherwise enter the fit as
+        # constant zero-filled columns — "no events" rather than "unknown".
+        # `forecast` reads `feature_names`, so it follows whatever is kept here.
+        cols, dead_cols = drop_dead_signal_columns(
+            enriched_feature_columns(), external_signal_coverage_by_family(external_hourly)
+        )
+        if dead_cols:
+            _LOG.warning(
+                "hourly_orders.train: dropping %s dead signal column(s)", len(dead_cols)
+            )
         flavor = "weather-events"
     else:
         feats = build_feature_matrix(hourly, daily, harri_daily)

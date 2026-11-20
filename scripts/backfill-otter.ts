@@ -113,6 +113,8 @@ async function main() {
   const { runMetricsSyncForStore } = await import("../src/lib/otter-metrics-sync")
   const { withPrismaRetry } = await import("../src/lib/prisma-retry")
   const { shouldSyncStore } = await import("../src/lib/store-lifecycle")
+  const { warnIfNoRedis } = await import("../src/lib/cache/redis")
+  warnIfNoRedis("backfill-otter")
 
   const { days, dailyOnly, storeIdFilter, includeRatings } = parseArgs()
 

@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma"
+import { EVENTS_PROVIDER, eventsFeedConnected } from "@/lib/monitoring/events-feed"
 import type { ChartSpec } from "@/lib/counter/chart-geometry"
 import { bytes, count, money, pct } from "@/lib/counter/format"
 import {
@@ -334,8 +335,15 @@ async function loadMonitoring(_input: MonitoringInput): Promise<Data> {
 /* -- helpers ---------------------------------------------------------- */
 
 const failPct = (p: Provider): number => (p.runs === 0 ? 0 : (p.failed / p.runs) * 100)
-const isDead = (p: Provider): boolean => failPct(p) >= DEAD_PCT
-const isFlaky = (p: Provider): boolean => p.failed > 0 && !isDead(p)
+/**
+ * The events feed switched off on purpose (see `events-feed.ts`) is neither
+ * down nor flaky: its old failures inside the window are history, not a live
+ * integration being called on a schedule.
+ */
+const isSwitchedOff = (p: Provider): boolean =>
+  p.provider === EVENTS_PROVIDER && !eventsFeedConnected()
+const isDead = (p: Provider): boolean => !isSwitchedOff(p) && failPct(p) >= DEAD_PCT
+const isFlaky = (p: Provider): boolean => !isSwitchedOff(p) && p.failed > 0 && !isDead(p)
 
 const ago = (d: Date | null): string => {
   if (d === null) return "never"
@@ -438,7 +446,7 @@ function subsystemsOf(d: Data): MonitoringSubsystems {
   interface Sub {
     key: string
     system: string
-    state: "OK" | "Flaky" | "Down"
+    state: "OK" | "Flaky" | "Down" | "Not connected"
     last: string
     duration: string
     volume: string
@@ -449,11 +457,15 @@ function subsystemsOf(d: Data): MonitoringSubsystems {
     ...d.providers.map((p): Sub => ({
       key: p.provider,
       system: p.provider,
-      state: isDead(p) ? "Down" : isFlaky(p) ? "Flaky" : "OK",
+      state: isSwitchedOff(p) ? "Not connected" : isDead(p) ? "Down" : isFlaky(p) ? "Flaky" : "OK",
       last: ago(p.lastRun),
       duration: p.avgMs === null ? "—" : `${(p.avgMs / 1000).toFixed(1)}s`,
       volume: `${count(p.runs - p.failed)} of ${count(p.runs)} ran`,
-      note: p.failed > 0 && p.lastError ? p.lastError.slice(0, 44) : "no failures",
+      note: isSwitchedOff(p)
+        ? "switched off — no longer called"
+        : p.failed > 0 && p.lastError
+          ? p.lastError.slice(0, 44)
+          : "no failures",
     })),
     {
       key: "cache",
@@ -497,7 +509,7 @@ function subsystemsOf(d: Data): MonitoringSubsystems {
     key: x.key,
     cells: {
       system: x.system,
-      state: x.state === "OK" ? x.state : { v: x.state, cls: "hot" },
+      state: x.state === "OK" || x.state === "Not connected" ? x.state : { v: x.state, cls: "hot" },
       last: x.last,
       duration: x.duration,
       volume: x.volume,
@@ -515,7 +527,12 @@ function subsystemsOf(d: Data): MonitoringSubsystems {
       detail: x.note.slice(0, 40),
       value: x.volume,
       note: x.state,
-      noteTone: x.state === "OK" ? ("up" as const) : ("down" as const),
+      noteTone:
+        x.state === "Not connected"
+          ? undefined
+          : x.state === "OK"
+            ? ("up" as const)
+            : ("down" as const),
     })),
     meta: `${count(rows.length)} subsystems · ${count(WINDOW_DAYS)} days`,
     note:

@@ -91,6 +91,10 @@ jobs:
         id: cron
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          # Cache busts and closed-range version bumps (src/lib/cache). Without
+          # these the sync's writes leave saved figures pre-sync for up to 6h.
+          UPSTASH_REDIS_REST_URL: ${{ secrets.UPSTASH_REDIS_REST_URL }}
+          UPSTASH_REDIS_REST_TOKEN: ${{ secrets.UPSTASH_REDIS_REST_TOKEN }}
           OTTER_JWT: ${{ secrets.OTTER_JWT }}
           OTTER_EMAIL: ${{ secrets.OTTER_EMAIL }}
           OTTER_PASSWORD: ${{ secrets.OTTER_PASSWORD }}

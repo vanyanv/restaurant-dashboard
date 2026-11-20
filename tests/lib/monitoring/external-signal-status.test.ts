@@ -11,10 +11,20 @@ import { getExternalSignalStatus } from "@/lib/monitoring/queries"
 
 beforeEach(() => {
   vi.clearAllMocks()
+  vi.unstubAllEnvs()
 })
+
+function mockRows(staleEvents: boolean) {
+  vi.mocked(prisma.$queryRaw)
+    .mockResolvedValueOnce([{ activeStores: 1, geocodedStores: 1, missingCoordinates: 0 }] as never)
+    .mockResolvedValueOnce([{ storeId: "s1", storeName: "Store 1", staleWeather: false, staleEvents }] as never)
+    .mockResolvedValueOnce([] as never)
+}
 
 describe("getExternalSignalStatus", () => {
   it("reports geocode coverage, stale providers, backfill ranges, and model flavor", async () => {
+    // Events connected: a stale event feed reads stale.
+    vi.stubEnv("EVENTS_PROVIDER_ENABLED", "1")
     vi.mocked(prisma.$queryRaw)
       .mockResolvedValueOnce([
         { activeStores: 2, geocodedStores: 1, missingCoordinates: 1 },
@@ -57,5 +67,14 @@ describe("getExternalSignalStatus", () => {
     expect(status.freshness[0].radiusMiles).toBe(2.1)
     expect(status.promotedModels[0].modelVersion).toContain("weather-events")
     expect(prisma.$queryRaw).toHaveBeenCalledTimes(3)
+  })
+
+  it("a switched-off events feed reads not connected, never stale", async () => {
+    vi.stubEnv("EVENTS_PROVIDER_ENABLED", "")
+    mockRows(true)
+    const status = await getExternalSignalStatus()
+    expect(status.eventsConnected).toBe(false)
+    expect(status.freshness[0].staleEvents).toBe(false)
+    expect(status.freshness[0].staleWeather).toBe(false)
   })
 })

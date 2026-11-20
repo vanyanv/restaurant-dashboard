@@ -2,6 +2,7 @@
 // promotion gate, and external-signal (weather/events) freshness.
 
 import { prisma } from "@/lib/prisma"
+import { eventsFeedConnected } from "@/lib/monitoring/events-feed"
 
 export type BusyHoursRunRow = {
   storeId: string
@@ -434,6 +435,8 @@ export type PromotedModelFlavorRow = {
 
 export type ExternalSignalStatus = {
   coverage: ExternalSignalCoverageSummary
+  /** False while the paid events feed is switched off (`events-feed.ts`). */
+  eventsConnected: boolean
   freshness: ExternalSignalFreshnessRow[]
   promotedModels: PromotedModelFlavorRow[]
 }
@@ -513,9 +516,12 @@ export async function getExternalSignalStatus(): Promise<ExternalSignalStatus> {
       ORDER BY target, "startedAt" DESC
     `,
   ])
+  // A switched-off events feed is "not connected", never "stale".
+  const eventsConnected = eventsFeedConnected()
   return {
     coverage: coverageRows[0] ?? { activeStores: 0, geocodedStores: 0, missingCoordinates: 0 },
-    freshness,
+    eventsConnected,
+    freshness: eventsConnected ? freshness : freshness.map((r) => ({ ...r, staleEvents: false })),
     promotedModels,
   }
 }

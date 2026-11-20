@@ -5,7 +5,8 @@ name: Sync Ticker
 # so the dashboard's "synced" chip regularly read 6-9 hours old.
 #
 # workflow_dispatch is not throttled. This workflow stays running (~5h40m,
-# well inside the 6h job limit), dispatches the sales syncs on their intended
+# well inside the 6h job limit), dispatches the sales syncs, the store-checks
+# cron (every 30 min) and the staleness check (every 2h) on their intended
 # cadence, then dispatches itself to carry on. The repo is public, so the
 # runner minutes are free. The old `schedule:` lines stay on every workflow as
 # a backup: a late extra run only re-reads the same rolling window.
@@ -20,7 +21,7 @@ on:
   workflow_dispatch:
     inputs:
       last:
-        description: 'UTC hour (YYYYMMDDHH) already dispatched by the previous link'
+        description: 'UTC half-hour (YYYYMMDDHH + 0|1) already dispatched by the previous link'
         default: ''
       pending:
         description: 'Workflows from that hour the previous link could not dispatch'
@@ -58,12 +59,24 @@ jobs:
               return 1
             fi
           }
+          add() {  # queue a workflow unless it is already pending
+            case " $pending " in *" $1 "*) ;; *) pending="$pending $1" ;; esac
+          }
           while [ "$(date +%s)" -lt "$end" ]; do
-            key=$(date -u +%Y%m%d%H)
+            # Half-hour key: YYYYMMDDHH plus 0 (:00-:29) or 1 (:30-:59). The
+            # hour syncs key off its first 10 characters, so a LAST handed on
+            # in the old hour-only form still means "this hour is done".
+            key=$(date -u +%Y%m%d%H)$(( 10#$(date -u +%M) / 30 ))
             if [ "$key" != "$last" ]; then
-              last=$key
+              # checks-cron.yml every half hour, as its own cron asks.
+              add checks-cron.yml
+            fi
+            if [ "${key:0:10}" != "${last:0:10}" ]; then
               h=$((10#$(date -u +%H)))
-              pending=""
+              # A new hour: whatever the last hour could not dispatch is
+              # dropped, the next run of each covers its window. The half-hour
+              # check queued just above stays.
+              pending=" checks-cron.yml"
               # Same hours as otter-hourly-sync.yml's cron (trading hours, LA).
               if [ "$h" -ge 17 ] || [ "$h" -le 10 ]; then
                 pending="$pending otter-hourly-sync.yml"
@@ -76,7 +89,12 @@ jobs:
               if [ "$h" -eq 14 ] || [ "$h" -eq 20 ] || [ "$h" -eq 2 ]; then
                 pending="$pending invoices-sync.yml"
               fi
+              # Same cadence as staleness-check.yml's cron: every 2 hours.
+              if [ $((h % 2)) -eq 0 ]; then
+                pending="$pending staleness-check.yml"
+              fi
             fi
+            last=$key
             # A failed dispatch stays pending and is retried each minute for the
             # rest of the hour; one that went through is never sent twice.
             still=""

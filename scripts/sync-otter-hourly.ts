@@ -26,6 +26,8 @@ loadEnvLocal()
 
 async function main() {
   const { runHourlySync } = await import("../src/lib/hourly-sync")
+  const { warnIfNoRedis } = await import("../src/lib/cache/redis")
+  warnIfNoRedis("sync-otter-hourly")
   // The workflow passes --skip-if-recent: sync-ticker.yml dispatches this hour
   // on time and the workflow's own backup `schedule:` can fire the same hour
   // again later. A run that finds a SUCCESS in the last 20 minutes prints

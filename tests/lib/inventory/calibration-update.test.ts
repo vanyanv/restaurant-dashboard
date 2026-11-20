@@ -256,3 +256,91 @@ describe("applyCalibrationUpdatesForCount", () => {
     expect(vi.mocked(prisma.stockCount.findFirst).mock.calls[0][0]?.where).toMatchObject({ store: { accountId: "acct-A" } })
   })
 })
+
+describe("applyCalibrationUpdatesForCount with a status flip (one transaction)", () => {
+  /** An interactive-transaction client that logs every call in order. */
+  function interactiveTx(flipped: boolean) {
+    const log: string[] = []
+    const txClient = {
+      stockCount: {
+        updateMany: vi.fn(async () => {
+          log.push("flip")
+          return { count: flipped ? 1 : 0 }
+        }),
+      },
+      $executeRaw: vi.fn(async () => {
+        log.push("update-states")
+        return 1
+      }),
+      ingredientModelState: {
+        createMany: vi.fn(async (arg: { data: unknown[] }) => {
+          log.push("create-states")
+          return { count: arg.data.length }
+        }),
+      },
+    }
+    vi.mocked(prisma.$transaction).mockImplementation((async (arg: unknown) =>
+      typeof arg === "function" ? (arg as (t: unknown) => unknown)(txClient) : arg) as never)
+    const finish = async (tx: Prisma.TransactionClient) => {
+      const done = await tx.stockCount.updateMany({
+        where: { id: "sc-1", status: "IN_PROGRESS" },
+        data: { status: "COMPLETED" },
+      })
+      return done.count > 0
+    }
+    return { log, txClient, finish }
+  }
+
+  beforeEach(() => {
+    mockCount([{ canonicalIngredientId: "ing-1", qtyInRecipeUnit: 6, estimatedQtyAtCount: 7 }])
+    mockOnHand({ baseQty: 10, baseAt, deliveriesQty: 5, depletionQty: 8, adjustmentsQty: 1 })
+  })
+
+  it("flips the status first, then writes calibration on the same transaction client", async () => {
+    const { log, txClient, finish } = interactiveTx(true)
+    const ok = await applyCalibrationUpdatesForCount("sc-1", "acct-A", finish)
+    expect(ok).toBe(true)
+    expect(log).toEqual(["flip", "create-states"])
+    expect(prisma.$transaction).toHaveBeenCalledTimes(1)
+    // Nothing went through the non-transactional client.
+    expect(prisma.ingredientModelState.createMany).not.toHaveBeenCalled()
+    expect(prisma.$executeRaw).not.toHaveBeenCalled()
+    // Same figures as the batch path: factor 1.0, residual 1.0, one sample.
+    const created = (txClient.ingredientModelState.createMany.mock.calls[0] as unknown as [{ data: Array<Record<string, number>> }])[0].data[0]
+    expect(created.calibrationFactor).toBeCloseTo(1.0, 5)
+    expect(created.recountDeltaMean).toBeCloseTo(1.0, 5)
+    expect(created.sampleSize).toBe(1)
+  })
+
+  it("a second call (already COMPLETED) writes no calibration at all", async () => {
+    const { log, finish } = interactiveTx(false)
+    const ok = await applyCalibrationUpdatesForCount("sc-1", "acct-A", finish)
+    expect(ok).toBe(false)
+    expect(log).toEqual(["flip"])
+  })
+
+  it("updates existing model states through the transaction too", async () => {
+    vi.mocked(prisma.ingredientModelState.findMany).mockResolvedValue([
+      {
+        canonicalIngredientId: "ing-1",
+        calibrationFactor: 1,
+        recountDeltaMean: 0,
+        recountDeltaM2: 0,
+        sampleSize: 3,
+        consecutiveTightWeeks: 0,
+        isGraduated: false,
+        graduatedAt: null,
+      },
+    ] as never)
+    const { log, finish } = interactiveTx(true)
+    await applyCalibrationUpdatesForCount("sc-1", "acct-A", finish)
+    expect(log).toEqual(["flip", "update-states"])
+  })
+
+  it("still flips a count that has nothing to calibrate", async () => {
+    mockCount([{ canonicalIngredientId: "ing-1", qtyInRecipeUnit: 6, estimatedQtyAtCount: null }])
+    const { log, finish } = interactiveTx(true)
+    expect(await applyCalibrationUpdatesForCount("sc-1", "acct-A", finish)).toBe(true)
+    expect(log).toEqual(["flip"])
+  })
+})

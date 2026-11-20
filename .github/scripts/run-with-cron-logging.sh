@@ -11,6 +11,10 @@ output_file="${GITHUB_OUTPUT:-}"
 # detectors, where retrying a true negative verdict just delays the alert.
 retries="${CRON_RETRIES:-0}"
 retry_delay="${CRON_RETRY_DELAY:-30}"
+# Exit codes that are never retried. 124 is curl-cron-json.sh's (and
+# timeout(1)'s) "gave up waiting": the work may still be running server-side,
+# and a retry would run it twice at once.
+no_retry_codes=" ${CRON_NO_RETRY_CODES:-124} "
 
 mkdir -p "$(dirname "$log_file")"
 
@@ -37,6 +41,10 @@ while :; do
 
   [[ "$status" -eq 0 ]] && break
   [[ "$attempt" -gt "$retries" ]] && break
+  if [[ "$no_retry_codes" == *" $status "* ]]; then
+    echo "Exit $status is not retried (the run may still be in progress server-side)" | tee -a "$log_file"
+    break
+  fi
 
   # 30s, then 90s. Long enough for a rate limit or a cold start to clear,
   # short enough to stay well inside the job timeout.
