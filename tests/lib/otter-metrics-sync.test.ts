@@ -7,6 +7,11 @@
 // fake rows tagged with BOTH storeA's UUID and a foreign UUID; the runner's
 // internal `otterUuidSet.has()` filter must drop the foreign rows. We then
 // inspect every prisma call's args and assert nothing leaked.
+//
+// Since 2026-11-20 the phases write with one change-only
+// INSERT ... ON CONFLICT ... WHERE IS DISTINCT FROM per chunk
+// (`@/lib/upsert-changed`), so the writes are `$executeRaw` calls whose bound
+// values we inspect, and `changed` is what the database said it wrote.
 
 import { describe, it, expect, vi, beforeEach } from "vitest"
 
@@ -50,6 +55,9 @@ vi.mock("@/lib/otter", () => {
 // ─── Mock Prisma so we can inspect every call's args ───
 type Call = { method: string; args: unknown }
 const prismaCalls: Call[] = []
+type RawSql = { sql: string; values: unknown[] }
+// What the database "reports" for each raw write. Default: every row changed.
+let executeRawImpl: (sql: RawSql) => Promise<number> = async () => 1
 
 function track(method: string) {
   return vi.fn((args: unknown) => {
@@ -80,6 +88,10 @@ vi.mock("@/lib/prisma", () => {
       otterStore: {
         updateMany: track("otterStore.updateMany"),
       },
+      $executeRaw: vi.fn((sql: { sql: string; values: unknown[] }) => {
+        prismaCalls.push({ method: "$executeRaw", args: sql })
+        return executeRawImpl(sql)
+      }),
       $transaction: vi.fn(async (ops: unknown) => {
         if (Array.isArray(ops)) {
           return Promise.all(ops as Promise<unknown>[])
@@ -91,7 +103,7 @@ vi.mock("@/lib/prisma", () => {
 })
 
 // We import the system-under-test AFTER setting up the mocks above.
-import { runMetricsSyncForStore } from "@/lib/otter-metrics-sync"
+import { runMetricsSyncForStore, totalChangedRows } from "@/lib/otter-metrics-sync"
 import * as otter from "@/lib/otter"
 
 const STORE_A = "store-A-id"
@@ -101,8 +113,14 @@ const UUID_B = "uuid-B1" // foreign — must never make it into a write
 
 beforeEach(() => {
   prismaCalls.length = 0
+  executeRawImpl = async () => 1
   vi.clearAllMocks()
 })
+
+const rawWrites = () =>
+  prismaCalls.filter((c) => c.method === "$executeRaw").map((c) => c.args as RawSql)
+const writesTo = (table: string) =>
+  rawWrites().filter((w) => w.sql.includes(`INSERT INTO "${table}"`))
 
 describe("runMetricsSyncForStore — store-scoping invariant", () => {
   it("does not write/update any row belonging to a foreign store", async () => {
@@ -138,17 +156,15 @@ describe("runMetricsSyncForStore — store-scoping invariant", () => {
       includeRatings: false,
     })
 
-    // ── Invariant 1: every upsert is scoped to STORE_A ──
-    const upserts = prismaCalls.filter((c) => c.method.endsWith(".upsert"))
-    expect(upserts.length).toBeGreaterThan(0)
-    for (const call of upserts) {
-      const args = call.args as { create?: { storeId?: string }; where?: Record<string, unknown> }
-      // create must carry storeId = STORE_A
-      expect(args.create?.storeId).toBe(STORE_A)
-      // composite where keys also include storeId
-      const flatWhere = JSON.stringify(args.where ?? {})
-      expect(flatWhere).toContain(STORE_A)
-      expect(flatWhere).not.toContain(STORE_B)
+    // ── Invariant 1: every write is scoped to STORE_A ──
+    const writes = rawWrites()
+    expect(writes.length).toBeGreaterThan(0)
+    for (const w of writes) {
+      expect(w.sql).toMatch(/IS DISTINCT FROM/)
+      expect(w.values).toContain(STORE_A)
+      expect(w.values).not.toContain(STORE_B)
+      // the foreign row's figure never reaches a write
+      expect(w.values).not.toContain(999)
     }
 
     // ── Invariant 2: lastSyncAt update is scoped to STORE_A only ──
@@ -183,8 +199,97 @@ describe("runMetricsSyncForStore — store-scoping invariant", () => {
       includeRatings: false,
     })
 
-    expect(prismaCalls.find((c) => c.method === "otterMenuItem.upsert")).toBeUndefined()
-    expect(prismaCalls.find((c) => c.method === "otterMenuCategory.upsert")).toBeUndefined()
-    expect(prismaCalls.find((c) => c.method === "otterRating.upsert")).toBeUndefined()
+    expect(writesTo("OtterMenuItem")).toHaveLength(0)
+    expect(writesTo("OtterMenuCategory")).toHaveLength(0)
+    expect(writesTo("OtterRating")).toHaveLength(0)
+  })
+})
+
+describe("runMetricsSyncForStore — writes only what changed", () => {
+  const windowStart = new Date("2026-05-01T00:00:00.000Z")
+  const windowEnd = new Date("2026-05-01T23:59:59.999Z")
+
+  function mockAllPhases() {
+    vi.mocked(otter.queryMetrics).mockResolvedValue([
+      {
+        store: UUID_A,
+        eod_date_with_timezone: "2026-05-01",
+        pos_summary_ofo: "css-pos",
+        multi_value_pos_payment_method: "CARD",
+        fp_sales_financials_gross_sales: 100,
+        menu_parent_entity_name: "Sliders",
+        item: "Classic",
+        fp_order_items_quantity_sold: 3,
+      },
+    ])
+    vi.mocked(otter.queryRatings).mockResolvedValue([
+      { external_review_id: "r1", order_rating: 5, order_reviewed_at: "2026-05-01T12:00:00Z" },
+      // Same review twice: one statement cannot upsert a key twice, so the
+      // runner keeps the last one.
+      { external_review_id: "r1", order_rating: 4, order_reviewed_at: "2026-05-01T12:00:00Z" },
+    ])
+  }
+
+  it("issues one change-only statement per phase, not a transaction of per-row upserts", async () => {
+    mockAllPhases()
+    await runMetricsSyncForStore(STORE_A, [UUID_A], windowStart, windowEnd, {
+      triggeredBy: "manual",
+      includeRatings: true,
+    })
+    expect(prismaCalls.filter((c) => c.method.endsWith(".upsert"))).toHaveLength(0)
+    expect(writesTo("OtterDailySummary")).toHaveLength(1)
+    expect(writesTo("OtterMenuCategory")).toHaveLength(1)
+    // items + modifiers share the table, distinguished by isModifier
+    const menuItemWrites = writesTo("OtterMenuItem")
+    expect(menuItemWrites).toHaveLength(2)
+    expect(menuItemWrites[0].values).toContain(false)
+    expect(menuItemWrites[1].values).toContain(true)
+    for (const w of menuItemWrites) {
+      expect(w.sql).toContain(`ON CONFLICT ("storeId", "date", "category", "itemName", "isModifier")`)
+    }
+    const ratingWrites = writesTo("OtterRating")
+    expect(ratingWrites).toHaveLength(1)
+    expect(ratingWrites[0].values.filter((v) => v === "r1")).toHaveLength(1)
+    expect(ratingWrites[0].values).toContain(4)
+  })
+
+  it("reports synced rows separately from rows the database actually changed", async () => {
+    mockAllPhases()
+    // Nothing changed except the daily row.
+    executeRawImpl = async (sql) => (sql.sql.includes(`INSERT INTO "OtterDailySummary"`) ? 1 : 0)
+    const result = await runMetricsSyncForStore(STORE_A, [UUID_A], windowStart, windowEnd, {
+      triggeredBy: "manual",
+      includeRatings: true,
+    })
+    expect(result.daily).toEqual({ synced: 1, failed: 0, changed: 1 })
+    expect(result.items).toEqual({ synced: 1, failed: 0, changed: 0 })
+    expect(result.ratings).toEqual({ synced: 1, failed: 0, changed: 0 })
+    expect(totalChangedRows(result)).toBe(1)
+  })
+
+  it("reports zero changed when a re-run finds the window already current", async () => {
+    mockAllPhases()
+    executeRawImpl = async () => 0
+    const result = await runMetricsSyncForStore(STORE_A, [UUID_A], windowStart, windowEnd, {
+      triggeredBy: "manual",
+      includeRatings: true,
+    })
+    expect(totalChangedRows(result)).toBe(0)
+    expect(result.items.synced).toBe(1)
+  })
+
+  it("counts a failing statement as failed and carries on with the next phase", async () => {
+    mockAllPhases()
+    executeRawImpl = async (sql) => {
+      if (sql.sql.includes(`INSERT INTO "OtterMenuCategory"`)) throw new Error("boom")
+      return 1
+    }
+    const spy = vi.spyOn(console, "error").mockImplementation(() => {})
+    const result = await runMetricsSyncForStore(STORE_A, [UUID_A], windowStart, windowEnd, {
+      triggeredBy: "manual",
+    })
+    spy.mockRestore()
+    expect(result.categories).toEqual({ synced: 0, failed: 1, changed: 0 })
+    expect(result.items).toEqual({ synced: 1, failed: 0, changed: 1 })
   })
 })

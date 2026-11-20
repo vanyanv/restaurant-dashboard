@@ -87,8 +87,6 @@ model Invite {
   createdBy User    @relation("InvitesCreated", fields: [createdByUserId], references: [id])
   usedBy    User?   @relation("InvitesUsed", fields: [usedByUserId], references: [id])
 
-  @@index([accountId])
-  @@index([token])
   @@index([accountId, email])
 }
 
@@ -131,7 +129,6 @@ model User {
   stockCountsCreated   StockCount[]          @relation("StockCountsCreated")
   inventoryAdjustments InventoryAdjustment[] @relation("InventoryAdjustmentsCreated")
 
-  @@index([email])
   @@index([accountId])
 }
 
@@ -362,9 +359,7 @@ model OtterDailySummary {
   store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
 
   @@unique([storeId, date, platform, paymentMethod])
-  @@index([storeId])
   @@index([date])
-  @@index([storeId, date, platform], map: "OtterDailySummary_store_date_platform_idx")
 }
 
 model OtterHourlySummary {
@@ -380,7 +375,6 @@ model OtterHourlySummary {
 
   @@unique([storeId, date, hour])
   @@index([date])
-  @@index([storeId, date])
 }
 
 model OtterMenuCategory {
@@ -401,7 +395,6 @@ model OtterMenuCategory {
   store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
 
   @@unique([storeId, date, category])
-  @@index([storeId, date])
 }
 
 model OtterMenuItem {
@@ -425,7 +418,6 @@ model OtterMenuItem {
   store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
 
   @@unique([storeId, date, category, itemName, isModifier])
-  @@index([storeId, date])
   @@index([storeId, isModifier, date, itemName], map: "OtterMenuItem_store_modifier_date_item_idx")
 }
 
@@ -447,7 +439,7 @@ model OtterRating {
   store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
 
   @@unique([storeId, externalReviewId])
-  @@index([storeId])
+  @@index([storeId, reviewedAt])
   @@index([reviewedAt])
   @@index([platform])
 }
@@ -510,8 +502,6 @@ model Invoice {
   store     Store?            @relation(fields: [storeId], references: [id], onDelete: SetNull)
   lineItems InvoiceLineItem[]
 
-  @@index([ownerId])
-  @@index([accountId])
   @@index([storeId])
   @@index([vendorName])
   @@index([invoiceDate])
@@ -604,8 +594,6 @@ model Recipe {
 
   @@unique([ownerId, itemName, category])
   @@unique([accountId, itemName, category])
-  @@index([ownerId])
-  @@index([accountId])
 }
 
 /// A line in a recipe. Exactly one of `canonicalIngredientId` or `componentRecipeId`
@@ -693,8 +681,6 @@ model CanonicalIngredient {
 
   @@unique([ownerId, name])
   @@unique([accountId, name])
-  @@index([ownerId])
-  @@index([accountId])
 }
 
 /// Learned (vendor, sku) → canonical ingredient matches. Future invoice line
@@ -724,8 +710,6 @@ model IngredientSkuMatch {
   @@unique([ownerId, vendorKey, sku])
   @@unique([accountId, vendorKey, sku])
   @@index([canonicalIngredientId])
-  @@index([ownerId])
-  @@index([accountId])
 }
 
 model IngredientAlias {
@@ -761,7 +745,6 @@ model OtterItemMapping {
   recipe Recipe @relation(fields: [recipeId], references: [id], onDelete: Cascade)
 
   @@unique([storeId, otterItemName])
-  @@index([storeId])
   @@index([recipeId])
   @@index([skuId])
 }
@@ -786,7 +769,6 @@ model OtterSubItemMapping {
   recipe Recipe @relation(fields: [recipeId], references: [id], onDelete: Cascade)
 
   @@unique([storeId, skuId])
-  @@index([storeId])
   @@index([recipeId])
 }
 
@@ -930,7 +912,6 @@ model DailyCogsItem {
   recipe Recipe? @relation(fields: [recipeId], references: [id], onDelete: SetNull)
 
   @@unique([storeId, date, itemName, category])
-  @@index([storeId, date])
   @@index([recipeId, date])
 }
 
@@ -965,6 +946,7 @@ model OtterOrder {
   //   prisma/manual-migrations/2026-05-03_otter_pending_details_index.sql
   // — index name `OtterOrder_pending_details_idx`.
   @@index([platform])
+  @@index([externalDisplayId])
   // Covering index for range totals over raw orders: commission on every P&L
   // rollup (src/lib/counter/commission.ts) and the Orders page strip. Every
   // column they filter, group or sum is here, so they read the index alone.
@@ -1500,7 +1482,6 @@ model VendorLeadTime {
   account Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
 
   @@unique([accountId, vendorNameNormalized])
-  @@index([accountId])
 }
 
 enum IngredientConfidenceLevel {
@@ -1690,7 +1671,6 @@ model ForecastDailyRevenue {
   store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
 
   @@unique([storeId, forecastDate, hourBucket, generatedAt])
-  @@index([storeId, forecastDate])
   @@index([storeId, forecastDate, hourBucket, generatedAt(sort: Desc)], map: "ForecastDailyRevenue_store_date_hour_generated_idx")
   @@index([generatedAt(sort: Desc)])
   @@index([storeId, forecastSource])
@@ -1717,7 +1697,6 @@ model ForecastHourlyOrders {
   store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
 
   @@unique([storeId, forecastDate, hourBucket, generatedAt])
-  @@index([storeId, forecastDate])
   @@index([storeId, forecastDate, hourBucket, generatedAt(sort: Desc)], map: "ForecastHourlyOrders_store_date_hour_generated_idx")
   @@index([generatedAt(sort: Desc)])
   @@index([storeId, forecastSource])
@@ -1748,7 +1727,6 @@ model ForecastMenuItem {
   store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
 
   @@unique([storeId, otterItemSkuId, forecastDate, generatedAt])
-  @@index([storeId, forecastDate])
   @@index([storeId, forecastDate, otterItemSkuId, generatedAt(sort: Desc)], map: "ForecastMenuItem_store_date_sku_generated_idx")
   @@index([generatedAt(sort: Desc)])
   @@index([storeId, forecastSource])
@@ -1814,7 +1792,6 @@ model ForecastDailyCategory {
   store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
 
   @@unique([storeId, date, categoryName])
-  @@index([storeId, date])
 }
 
 /// Phase 1 W6-8: one row per (store, date) capturing pre/post discrepancy
@@ -1993,7 +1970,6 @@ model StoreWeatherSignal {
   store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
 
   @@unique([storeId, date, hour])
-  @@index([storeId, date])
   @@index([syncedAt(sort: Desc)])
 }
 
@@ -2032,7 +2008,6 @@ model StoreEventSignal {
   store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
 
   @@unique([storeId, date])
-  @@index([storeId, date])
   @@index([syncedAt(sort: Desc)])
 }
 
@@ -2060,7 +2035,6 @@ model StoreEventDetailSignal {
   store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
 
   @@unique([storeId, providerEventId])
-  @@index([storeId, date])
   @@index([storeId, date, localRank(sort: Desc)])
   @@index([syncedAt(sort: Desc)])
 }
@@ -2171,7 +2145,6 @@ model AlertPreference {
   store   Store?  @relation(fields: [storeId], references: [id], onDelete: Cascade)
 
   @@unique([accountId, storeId, target])
-  @@index([accountId])
 }
 
 enum AlertSource {
@@ -2275,7 +2248,6 @@ model HarriDailyLabor {
 
   @@unique([storeId, date])
   @@index([date])
-  @@index([storeId, date])
 }
 
 // Per-day, per-position labor breakdown. One row per (storeId, date,
@@ -2302,7 +2274,6 @@ model HarriPositionDaily {
   store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
 
   @@unique([storeId, date, categoryCode, positionCode, payType])
-  @@index([storeId, date])
 }
 
 model HarriTimekeepingAlert {
@@ -2388,7 +2359,6 @@ model HarriEmployee {
   store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
 
   @@unique([storeId, userId])
-  @@index([storeId])
   @@index([userId])
 }
 
@@ -2505,7 +2475,6 @@ model CrewMember {
 
   @@unique([storeId, pin])
   @@unique([storeId, harriUserId])
-  @@index([storeId])
 }
 
 /// One completed check. `content` is a snapshot of the wording crew saw and

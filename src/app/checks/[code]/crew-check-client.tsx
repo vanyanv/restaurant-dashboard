@@ -38,7 +38,10 @@ type Receipt = {
 }
 type Screen = "home" | "pin" | "list" | "done"
 
+/** Refresh while someone is working the list: others' ticks show within seconds. */
 const POLL_MS = 6_000
+/** Refresh on the store and PIN screens, which only need to see a check open, lock or get sent. */
+const IDLE_POLL_MS = 20_000
 
 const T = {
   en: {
@@ -295,25 +298,49 @@ export function CrewCheckClient({ code, initial }: { code: string; initial: Crew
   const active = view.active
 
   // Keeps every phone on the check in step: others' ticks, the window
-  // opening or locking, someone else submitting.
-  const refresh = useCallback(async () => {
-    try {
-      const res = await fetch(`/api/checks/${encodeURIComponent(code)}/state`, { cache: "no-store" })
-      if (res.ok) setView(((await res.json()) as { view: CrewView }).view)
-    } catch {}
-  }, [code])
+  // opening or locking, someone else submitting. With the version of the
+  // view on screen, the server answers "unchanged" from one small query and
+  // only sends the whole view when something did change.
+  const refresh = useCallback(
+    async (version?: string) => {
+      try {
+        const q = version ? `?v=${encodeURIComponent(version)}` : ""
+        const res = await fetch(`/api/checks/${encodeURIComponent(code)}/state${q}`, { cache: "no-store" })
+        if (!res.ok) return
+        const body = (await res.json()) as { unchanged?: boolean; view?: CrewView }
+        if (body.view) setView(body.view)
+      } catch {}
+    },
+    [code],
+  )
+  // The version of the view on screen when the timer fires, not when it started.
+  const poll = useEffectEvent(() => void refresh(view.version))
+  const pollMs = screen === "list" ? POLL_MS : IDLE_POLL_MS
   useEffect(() => {
     if (screen === "done") return
-    const id = window.setInterval(() => {
-      if (document.visibilityState === "visible") void refresh()
-    }, POLL_MS)
-    const onShow = () => document.visibilityState === "visible" && void refresh()
-    document.addEventListener("visibilitychange", onShow)
-    return () => {
-      window.clearInterval(id)
-      document.removeEventListener("visibilitychange", onShow)
+    // Nothing while the phone is locked or the tab is in the background; one
+    // check straight away when it comes back, then the timer again.
+    let id: number | undefined
+    const stop = () => {
+      if (id !== undefined) window.clearInterval(id)
+      id = undefined
     }
-  }, [refresh, screen])
+    const start = () => {
+      stop()
+      id = window.setInterval(() => poll(), pollMs)
+    }
+    const onVisibility = () => {
+      if (document.hidden) return stop()
+      poll()
+      start()
+    }
+    if (!document.hidden) start()
+    document.addEventListener("visibilitychange", onVisibility)
+    return () => {
+      stop()
+      document.removeEventListener("visibilitychange", onVisibility)
+    }
+  }, [screen, pollMs])
 
   const signOut = useCallback(() => {
     setWho(null)

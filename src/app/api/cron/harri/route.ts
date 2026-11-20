@@ -78,7 +78,9 @@ export const POST = withCronAuth(
         },
       )
 
-      if (result.daysWritten > 0 || Number(schedule.shiftsWritten ?? 0) > 0) {
+      // `rowsChanged`, not `daysWritten`: the labour sync re-reads the same
+      // window every run and now rewrites only rows that moved.
+      if (result.rowsChanged > 0 || Number(schedule.shiftsWritten ?? 0) > 0) {
         /*
          * The P&L half is busted by month rather than through the broad "pnl"
          * tag — same reason as the hourly Otter route: this runs every four

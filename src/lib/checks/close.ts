@@ -14,10 +14,13 @@ import { dayToDb, lateMinutes, windowBounds, type CheckKindName, type CheckWindo
  * when, and every task nobody ticked is recorded as missed. Then the owners
  * get the same email a crew submit sends, listing both.
  *
- * It runs inside `loadCheckGrid`, so every screen that reads checks (Today,
- * History, the crew page, Needs you, the cron, the chat) closes a finished
- * window the first time it looks, and none of them depends on the cron being
- * on time. The record's unique key (store, check, day) means a crew submit
+ * It runs inside `loadCheckGrid`, so the owners' screens that read checks
+ * (Today, History, Needs you, the chat) and the checks cron (every 30
+ * minutes) close a finished window the first time they look. The public crew
+ * page does not: its phones refresh every few seconds and that read path
+ * stays read-only (`loadCrewView` passes `autoClose: false`), so a window
+ * that ends while only crew are looking closes at the next cron run or owner
+ * view, and the phones pick the record up on their next refresh. The record's unique key (store, check, day) means a crew submit
  * and an auto-close, or two loaders at once, can never both write one.
  */
 

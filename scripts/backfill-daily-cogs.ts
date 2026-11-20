@@ -46,6 +46,7 @@ type StoreJobResult =
       daysProcessed: number
       rowsUpserted: number
       rowsDeleted: number
+      rowsChanged: number
       durationMs: number
     }
   | {
@@ -111,7 +112,8 @@ async function main() {
         const ms = Date.now() - start
         console.log(
           `  ${job.ownerEmail} / ${job.store.name}: ${result.daysProcessed} day(s), ` +
-            `${result.rowsUpserted} upserted, ${result.rowsDeleted} cleaned — ${ms}ms`
+            `${result.rowsUpserted} upserted (${result.rowsChanged} changed), ` +
+            `${result.rowsDeleted} cleaned — ${ms}ms`
         )
         return {
           ok: true,

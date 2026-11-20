@@ -1,13 +1,16 @@
 name: Invoices Sync
 on:
   schedule:
-    # Every 15 minutes since 2026-10-28. A run reads only six emails (the PDF
-    # reads have to fit in one function call), so hourly still left a 50-email
-    # September backfill waiting ~9 hours. A run with nothing new is one Gmail
-    # search. Concurrency lock prevents pile-up. GitHub fires this hours late
-    # in practice, so one run keeps calling while emails are deferred
-    # (invoices-sync-drain.sh) instead of leaving them to the next tick.
-    - cron: '*/15 * * * *'
+    # Three times a day: 6 AM, noon and 6 PM Los Angeles time (owner,
+    # 2026-11-20; it ran every 15 minutes all day and night until then, which
+    # kept the database awake). sync-ticker.yml dispatches these same hours on
+    # time; this schedule is the backup, since GitHub fires schedules hours
+    # late. GitHub runs on UTC, so in summer (PDT) these are 7 AM, 1 PM, 7 PM.
+    # A run reads six emails per call, but invoices-sync-drain.sh keeps calling
+    # while emails are deferred, so a backlog clears in one run. A run with
+    # nothing new is one mail search. Concurrency lock prevents pile-up.
+    # "Run workflow" below still pulls at any hour.
+    - cron: '0 2,14,20 * * *'
   workflow_dispatch:
     inputs:
       lookback_days:

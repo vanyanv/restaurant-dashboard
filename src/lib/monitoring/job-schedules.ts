@@ -18,7 +18,8 @@ export const JOB_SCHEDULES: Record<string, JobSchedule> = {
   // Matrix fan-out for otter-sync (every 4h) and otter-drain (weekly). It was
   // declared daily, which made isOverdue() permanently false for it.
   "otter.stores":           { cadenceMinutes: 60 * 4,  description: "every 4h" },
-  "invoices.email.sync":    { cadenceMinutes: 60 * 6,  description: "every 6h" },
+  // 6 AM, noon, 6 PM LA; the longest gap is overnight, 12h (overdue at 18h).
+  "invoices.email.sync":    { cadenceMinutes: 60 * 12, description: "3 times a day" },
   "cogs.sweep":             { cadenceMinutes: 60 * 4,  description: "every 4h" },
   // Same shape: driven by cogs-sweep (every 4h) and cogs-refresh (daily).
   "cogs.stores":            { cadenceMinutes: 60 * 4,  description: "every 4h" },

@@ -777,7 +777,7 @@ export function getChecksCrewSectionPromises(opts: { accountId: string; storeId?
         const stores = await accountStores(opts.accountId)
         const store = pickStore(stores, opts.storeId)
         if (!store) return null
-        const [crew, synced, brand, code] = await Promise.all([
+        const [crew, synced, lastSync, brand, code] = await Promise.all([
           prisma.crewMember.findMany({
             where: { storeId: store.id, store: { accountId: opts.accountId } },
             orderBy: [{ active: "desc" }, { firstName: "asc" }],
@@ -790,6 +790,14 @@ export function getChecksCrewSectionPromises(opts: { accountId: string; storeId?
             orderBy: { syncedAt: "desc" },
             select: { syncedAt: true },
           }),
+          // The roster sync now writes only people who changed, so a row's
+          // syncedAt says when the roster last changed; the job log says when
+          // it was last checked.
+          prisma.jobRun.findFirst({
+            where: { jobName: "harri-employee-sync", storeId: store.id, status: "SUCCESS" },
+            orderBy: { startedAt: "desc" },
+            select: { completedAt: true, startedAt: true },
+          }),
           prisma.harriBrand.findFirst({ where: { storeId: store.id }, select: { id: true } }),
           prisma.store.findFirst({ where: { id: store.id, accountId: opts.accountId }, select: { checkCode: true } }),
         ])
@@ -797,7 +805,7 @@ export function getChecksCrewSectionPromises(opts: { accountId: string; storeId?
           stores,
           store,
           checkLink: code?.checkCode ? checkLink(code.checkCode) : "",
-          harriSyncedAt: synced ? synced.syncedAt.toISOString() : null,
+          harriSyncedAt: latestOf(lastSync?.completedAt ?? lastSync?.startedAt ?? null, synced?.syncedAt ?? null),
           harriLinked: Boolean(brand),
           emailReady: emailConfigured(),
           crew: crew.map((c) => {
@@ -904,4 +912,10 @@ export function getChecksPostersSectionPromises(opts: { accountId: string }): St
       "checks.posters",
     ),
   }
+}
+
+/** The later of two times, as ISO; null when neither is known. */
+function latestOf(a: Date | null, b: Date | null): string | null {
+  const t = Math.max(a?.getTime() ?? -Infinity, b?.getTime() ?? -Infinity)
+  return Number.isFinite(t) ? new Date(t).toISOString() : null
 }

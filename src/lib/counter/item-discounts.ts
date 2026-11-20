@@ -1,5 +1,7 @@
 import type { PrismaClient } from "@/generated/prisma/client"
 import { prisma } from "@/lib/prisma"
+import { cached, stableKey } from "@/lib/cache/cached"
+import { otterRangeTags, rangeTtl } from "@/lib/cache/range"
 
 /**
  * What an item actually collected once the deals came off — the one function
@@ -139,20 +141,73 @@ export async function getItemDiscounts(input: {
   db?: Pick<PrismaClient, "$queryRaw">
 }): Promise<Map<string, ItemDiscountEntry>> {
   const { accountId, storeIds, startDate, endDate, itemName } = input
+  if (storeIds.length === 0) return new Map()
   const db = input.db ?? prisma
+  // Cached like the commission read beside it (`./commission`): the same
+  // orders feed, so the same tags, and an order sync that writes these days
+  // drops it. Twelve readers ask for it (menu, recipes, product mix, chat),
+  // and on a cold database it was the slowest read on those pages.
+  const rows = await cached(
+    `counter:itemdisc2:${stableKey({
+      a: accountId,
+      ids: [...storeIds].sort(),
+      from: startDate,
+      to: endDate,
+      only: itemName ?? "",
+    })}`,
+    rangeTtl(endDate),
+    otterRangeTags(startDate, endDate),
+    () => loadItemDiscountRows(db, { accountId, storeIds, startDate, endDate, itemName }),
+  )
+  return fromRows(rows)
+}
+
+/** One item's figures, flattened so the result can be cached as JSON. */
+interface ItemDiscountRow {
+  name: string
+  gross: number
+  discount: number
+  byPlatform: Array<[string, ItemDiscount]>
+  byStore: Array<[string, ItemDiscount]>
+}
+
+function fromRows(rows: ItemDiscountRow[]): Map<string, ItemDiscountEntry> {
+  return new Map(
+    rows.map((r) => [
+      r.name,
+      { gross: r.gross, discount: r.discount, byPlatform: new Map(r.byPlatform), byStore: new Map(r.byStore) },
+    ]),
+  )
+}
+
+async function loadItemDiscountRows(
+  db: Pick<PrismaClient, "$queryRaw">,
+  input: { accountId: string; storeIds: string[]; startDate: Date; endDate: Date; itemName?: string },
+): Promise<ItemDiscountRow[]> {
+  const { accountId, storeIds, startDate, endDate, itemName } = input
   const out = new Map<string, ItemDiscountEntry>()
-  if (storeIds.length === 0) return out
   const only = itemName ?? null
 
+  // Order lines are read through each order in the window (LATERAL with
+  // OFFSET 0, so the planner cannot fold it back into a hash join). Joined
+  // plainly, Postgres scanned every line ever written (255k on the live
+  // database, all but 36k outside a 30-day window): 5.1 s on a cold
+  // database, 163 ms warm. Through the orders: 1.8 s cold, 79 ms warm, and
+  // the same rows.
   const [grossRows, discountedLines] = await Promise.all([
     db.$queryRaw<{ name: string; platform: string; storeId: string; gross: number }[]>`
       SELECT i."name" AS name,
              o."platform" AS platform,
              o."storeId" AS "storeId",
              SUM(i."price" * i."quantity")::float AS gross
-      FROM "OtterOrderItem" i
-      JOIN "OtterOrder" o ON o."id" = i."orderId"
+      FROM "OtterOrder" o
       JOIN "Store" s ON s."id" = o."storeId"
+      CROSS JOIN LATERAL (
+        SELECT x."name", x."price", x."quantity"
+        FROM "OtterOrderItem" x
+        WHERE x."orderId" = o."id"
+        OFFSET 0
+      ) i
       WHERE s."accountId" = ${accountId}
         AND o."storeId" = ANY(${storeIds})
         AND o."referenceTimeLocal" BETWEEN ${startDate} AND ${endDate}
@@ -181,7 +236,12 @@ export async function getItemDiscounts(input: {
              i."quantity"::float AS quantity
       FROM "OtterOrder" o
       JOIN "Store" s ON s."id" = o."storeId"
-      JOIN "OtterOrderItem" i ON i."orderId" = o."id"
+      CROSS JOIN LATERAL (
+        SELECT x."name", x."price", x."quantity"
+        FROM "OtterOrderItem" x
+        WHERE x."orderId" = o."id"
+        OFFSET 0
+      ) i
       WHERE s."accountId" = ${accountId}
         AND o."storeId" = ANY(${storeIds})
         AND o."referenceTimeLocal" BETWEEN ${startDate} AND ${endDate}
@@ -239,5 +299,11 @@ export async function getItemDiscounts(input: {
       if (o.storeId) storeOf(entry, o.storeId).discount += dollars
     }
   }
-  return out
+  return [...out].map(([name, e]) => ({
+    name,
+    gross: e.gross,
+    discount: e.discount,
+    byPlatform: [...e.byPlatform],
+    byStore: [...(e.byStore ?? [])],
+  }))
 }

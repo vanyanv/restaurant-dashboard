@@ -77,6 +77,7 @@ import {
   bumpDays,
   isClosedRange,
   isFigureWrite,
+  wroteNoRows,
   laDatesBetween,
   laIsoWeeksSpanning,
   parseClosedMarker,
@@ -247,6 +248,22 @@ describe("bump coalescing", () => {
     const before = incrCalls
     await bumpClosedGeneration()
     expect(incrCalls).toBe(before + 1)
+  })
+})
+
+describe("wroteNoRows", () => {
+  it("recognises a write that touched nothing, so it does not clear the cache", () => {
+    expect(wroteNoRows(0)).toBe(true) // $executeRaw: change-only upsert, all unchanged
+    expect(wroteNoRows({ count: 0 })).toBe(true) // *Many
+  })
+
+  it("treats anything else as a write that may have moved a figure", () => {
+    expect(wroteNoRows(3)).toBe(false)
+    expect(wroteNoRows({ count: 2 })).toBe(false)
+    expect(wroteNoRows({ id: "x", count: 0 })).toBe(false) // a record with a count column
+    expect(wroteNoRows(undefined)).toBe(false)
+    expect(wroteNoRows(null)).toBe(false)
+    expect(wroteNoRows([])).toBe(false)
   })
 })
 
