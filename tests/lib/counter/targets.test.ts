@@ -29,7 +29,7 @@ const withTargets = (...values: Array<number | null>) =>
 beforeEach(() => vi.clearAllMocks())
 
 describe("loadStripTargets", () => {
-  it("publishes no reference for the five the schema cannot answer", async () => {
+  it("publishes no reference for the four the schema cannot answer, nor for labor with no target typed", async () => {
     withTargets(29)
     const t = await loadStripTargets("s1", accountId)
 
@@ -38,7 +38,8 @@ describe("loadStripTargets", () => {
     expect(t.orders).toBeNull()
     // Avg ticket: the prototype's $25.10–$26.40 exists in no column.
     expect(t.ticket).toBeNull()
-    // Labor: `Store.fixedMonthlyLabor` is a dollar budget, not a percent band.
+    // Labor: `Store.fixedMonthlyLabor` is a dollar budget, not a percent. The
+    // target is `Store.targetLaborPct`, and this store has none.
     expect(t.labor).toBeNull()
     // Prime: the ceiling belongs to primeCost(), which already returns it —
     // this module deliberately does not publish a second copy.
@@ -51,6 +52,23 @@ describe("loadStripTargets", () => {
     withTargets(28.5)
     const t = await loadStripTargets("s1", accountId)
     expect(t.foodCost).toEqual({ kind: "target", value: 28.5, better: "low" })
+  })
+
+  it("answers for labor from Store.targetLaborPct, on the food plan's rules", async () => {
+    const withLabor = (...values: Array<number | null>) =>
+      vi.mocked(prisma.store.findMany).mockResolvedValue(
+        values.map((targetLaborPct, i) => ({ id: `s${i + 1}`, targetCogsPct: null, targetLaborPct, isActive: true })) as never,
+      )
+    withLabor(28)
+    expect((await loadStripTargets("s1", accountId)).labor).toEqual({ kind: "target", value: 28, better: "low" })
+    // Stores that agree publish one; a store with none does not break the agreement.
+    withLabor(28, 28, null)
+    expect((await loadStripTargets(null, accountId)).labor).toEqual({ kind: "target", value: 28, better: "low" })
+    // Two different targets are two targets, never their average.
+    withLabor(28, 31)
+    expect((await loadStripTargets(null, accountId)).labor).toBeNull()
+    // And one store of those two still answers for itself.
+    expect((await loadStripTargets("s2", accountId)).labor).toEqual({ kind: "target", value: 31, better: "low" })
   })
 
   it("does not invent a food plan for a store that has none", async () => {

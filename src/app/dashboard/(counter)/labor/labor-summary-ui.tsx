@@ -40,7 +40,7 @@ export function LaborDetailView({
           <ChartKey
             items={[
               { kind: "fill", label: "labor, share of sales" },
-              ...(s.dayMarkLabel ? [{ kind: "mark" as const, label: `the range, ${s.dayMarkLabel}` }] : []),
+              ...(s.dayMarkLabel ? [{ kind: "mark" as const, label: s.dayMarkLabel }] : []),
               ...(s.days.some((d) => d.missing) ? [{ kind: "hatched" as const, label: "labor missing" }] : []),
             ]}
           />
@@ -54,7 +54,7 @@ export function LaborDetailView({
               value: d.share,
               fill: d.fill,
               detail: d.detail,
-              tag: d.provisional ? "so far" : undefined,
+              tag: d.provisional ? "so far" : d.over ? "over target" : undefined,
               hatched: d.missing && d.fill === 0,
               ariaLabel: d.aria,
             }))}

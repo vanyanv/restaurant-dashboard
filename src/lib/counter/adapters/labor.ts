@@ -37,6 +37,8 @@ import {
   type LaborPeopleView,
 } from "@/lib/counter/labor-crew"
 import { loadLaborCrew } from "@/lib/counter/labor-crew-load"
+import { getScopedStores } from "@/lib/account-stores"
+import { loadStripTargets } from "@/lib/counter/targets"
 import { buildLaborSummary, buildLaborWeeks, type LaborSummary, type LaborWeeksView } from "@/lib/counter/labor-summary"
 import {
   dayCount,
@@ -1740,7 +1742,20 @@ function loadEverything(input: LaborSectionsInput) {
     retryAction: "retryLeaks",
   }))
 
-  return { nextDay, scopeP, laborP, leaksP, curveLoadP, gapP, trendLoadP, crewP }
+  // The store rows are the request's shared, account-scoped read (`cache()`),
+  // so this costs no query of its own.
+  const targetsP = lazy(async (): Promise<LaborTargets> => {
+    const [stores, strip] = await Promise.all([
+      getScopedStores(accountId, storeId),
+      loadStripTargets(storeId, accountId),
+    ])
+    return {
+      target: strip.labor?.kind === "target" ? strip.labor.value : null,
+      storeTargets: Object.fromEntries(stores.map((s) => [s.id, s.targetLaborPct])),
+    }
+  })
+
+  return { nextDay, scopeP, laborP, leaksP, curveLoadP, gapP, trendLoadP, crewP, targetsP }
 }
 
 const dayLabel = (d: Date) =>
@@ -1851,8 +1866,18 @@ function plainSection(
   })
 }
 
+/**
+ * The labor targets the owner typed on the store files: the one for what the
+ * page is looking at (`loadStripTargets` owns it: one store's own, or the one
+ * the stores agree on) and each store's own, for the store cards.
+ */
+interface LaborTargets {
+  target: number | null
+  storeTargets: Record<string, number | null>
+}
+
 /** The days, stores and roles brought out of the fold, on either route. */
-function summarySection(laborSd: SectionData<LaborData>): SectionData<LaborSummary> {
+function summarySection(laborSd: SectionData<LaborData>, targets: LaborTargets): SectionData<LaborSummary> {
   return laborSection(laborSd, NO_HARRI_OWED, (d) =>
     buildLaborSummary({
       days: d.days,
@@ -1860,6 +1885,8 @@ function summarySection(laborSd: SectionData<LaborData>): SectionData<LaborSumma
       roles: d.roles,
       storeShares: d.storeShares,
       incompleteStoreIds: incompleteLaborStores(d.storeShares).map((s) => s.storeId),
+      target: targets.target,
+      storeTargets: targets.storeTargets,
     }),
   )
 }
@@ -1955,7 +1982,7 @@ export function getLaborSectionPromises(
 ): StreamedSections<LaborSections> {
   const { range, today } = input
   const granularity = granularityFor(range)
-  const { nextDay, scopeP, laborP, leaksP, curveLoadP, gapP, trendLoadP, crewP } =
+  const { nextDay, scopeP, laborP, leaksP, curveLoadP, gapP, trendLoadP, crewP, targetsP } =
     loadEverything(input)
 
   const curveLabel = new Intl.DateTimeFormat("en-US", {
@@ -1972,7 +1999,10 @@ export function getLaborSectionPromises(
       "retryLabor",
     )),
 
-    summary: lazy(() => guardSection(laborP.then(summarySection), "retryLabor")),
+    summary: lazy(() => guardSection(
+      Promise.all([laborP, targetsP]).then(([laborSd, targets]) => summarySection(laborSd, targets)),
+      "retryLabor",
+    )),
 
     weeks: lazy(() => guardSection(
       Promise.all([scopeP, trendLoadP]).then(([scopeSd, trendSd]) =>
@@ -2095,7 +2125,7 @@ export function getStoreLaborSectionPromises(
 ): StreamedSections<StoreLaborSections> {
   const { range } = input
   const granularity = granularityFor(range)
-  const { nextDay, laborP, leaksP, trendLoadP, scopeP, curveLoadP, crewP } = loadEverything(input)
+  const { nextDay, laborP, leaksP, trendLoadP, scopeP, curveLoadP, crewP, targetsP } = loadEverything(input)
 
   return {
     plain: lazy(() => guardSection(
@@ -2105,7 +2135,10 @@ export function getStoreLaborSectionPromises(
       "retryLabor",
     )),
 
-    summary: lazy(() => guardSection(laborP.then(summarySection), "retryLabor")),
+    summary: lazy(() => guardSection(
+      Promise.all([laborP, targetsP]).then(([laborSd, targets]) => summarySection(laborSd, targets)),
+      "retryLabor",
+    )),
 
     weeks: lazy(() => guardSection(
       Promise.all([scopeP, trendLoadP]).then(([scopeSd, trendSd]) =>
