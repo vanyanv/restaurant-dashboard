@@ -1,0 +1,102 @@
+/* src/styles/counter-labor.css
+ *
+ * The Labor page's detail (src/lib/counter/labor-summary.ts, laid out by
+ * src/app/dashboard/(counter)/labor/labor-summary-ui.tsx): each day's share
+ * as a bar with the range's own share marked on it, the cost by role, the
+ * weeks as sales against labor (the week picker), and two weeks side by
+ * side. Everything else on the page is a shared `cu-` block. Desk and phone
+ * share every rule; each block rearranges from its own width (container
+ * queries), not the screen's. Every colour is a Counter token; motion runs
+ * on the --ct-dur-* tokens, so reduced motion turns it off with them.
+ */
+
+.lb-h{margin:0;font-size:var(--t-mid);font-weight:700;line-height:1.2}
+.lb-top{display:flex;justify-content:space-between;align-items:baseline;gap:6px 14px;flex-wrap:wrap}
+.lb-note{margin:0;font-size:var(--t-cap);line-height:1.45;color:var(--ink-2);text-wrap:pretty}
+.lb-key{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:var(--t-cap);color:var(--ink-3)}
+.lb-sw{display:inline-block;width:12px;height:10px;border-radius:2px;vertical-align:-1px;margin-right:5px}
+.lb-sw--sales{background:var(--line-strong)}
+.lb-sw--labor{background:var(--ct-pl-labor)}
+.lb-sw--miss{background:repeating-linear-gradient(135deg,var(--ink-3) 0 3px,transparent 3px 6px);border:1px solid var(--ink-3)}
+.lb-sw--mark{background:var(--accent);width:2px;height:12px;vertical-align:-2px}
+.lb-tag{font-family:var(--mono);font-size:var(--t-micro);letter-spacing:.06em;text-transform:uppercase;color:var(--ink-2);border:1px dashed var(--line-strong);border-radius:999px;padding:1px 6px;white-space:nowrap}
+
+/* Each day: rows when narrow, cells side by side when wide */
+.lb-days{container-type:inline-size;width:100%;min-width:0}
+.lb-days__in{display:grid;gap:6px;margin:0;padding:0;list-style:none}
+.lb-day{display:grid;grid-template-columns:52px minmax(0,1fr) auto;grid-template-areas:"dow bar share" "det det det";gap:4px 10px;align-items:center;min-width:0;padding:8px 10px;border:1px solid var(--line);border-radius:var(--r-sm);background:var(--surface)}
+.lb-day__dow{grid-area:dow;font-weight:600;font-size:var(--t-body);line-height:1.15}
+.lb-day__dow small{display:block;font-family:var(--mono);font-weight:400;font-size:var(--t-micro);color:var(--ink-3)}
+.lb-day__share{grid-area:share;font-weight:700;font-size:var(--t-body);font-variant-numeric:tabular-nums lining-nums;text-align:right;white-space:nowrap}
+.lb-day[data-missing="true"] .lb-day__share{color:var(--warn);font-weight:600}
+.lb-day__trk{grid-area:bar;position:relative;height:12px;border-radius:3px;background:var(--line)}
+.lb-day__fill{position:absolute;inset:0 auto 0 0;border-radius:3px;background:var(--ct-pl-labor);transform-origin:left;animation:lb-grow-x calc(var(--ct-dur-rise)*2) var(--ease) both;animation-delay:calc(var(--i,0)*var(--ct-dur-step)*.72)}
+.lb-day[data-missing="true"] .lb-day__trk{background:repeating-linear-gradient(135deg,var(--ink-3) 0 3px,transparent 3px 6px);outline:1px solid var(--ink-3);outline-offset:-1px}
+.lb-day__mark{position:absolute;top:-3px;bottom:-3px;width:2px;background:var(--accent)}
+.lb-day__det{grid-area:det;font-size:var(--t-cap);color:var(--ink-2);font-variant-numeric:tabular-nums lining-nums;min-width:0}
+@container (min-width:720px){
+  .lb-days__in{grid-template-columns:repeat(auto-fit,minmax(118px,1fr));gap:8px}
+  .lb-day{grid-template-columns:minmax(0,1fr) auto;grid-template-areas:"dow share" "bar bar" "det det";padding:10px;align-content:start}
+}
+
+/* Cost by role */
+.lb-roles{display:grid;gap:8px;max-width:640px;margin:0;padding:0;list-style:none}
+.lb-role{display:grid;grid-template-columns:minmax(0,1fr) auto;grid-template-areas:"name cost" "bar bar" "det det";gap:3px 10px;align-items:baseline;min-width:0}
+.lb-role__name{grid-area:name;font-size:var(--t-body);min-width:0;overflow-wrap:anywhere}
+.lb-role__cost{grid-area:cost;font-weight:600;font-variant-numeric:tabular-nums lining-nums}
+.lb-role__trk{grid-area:bar;height:8px;border-radius:3px;background:var(--line);overflow:hidden}
+.lb-role__trk i{display:block;height:100%;border-radius:3px;background:var(--ct-pl-labor);transform-origin:left;animation:lb-grow-x calc(var(--ct-dur-rise)*2) var(--ease) both}
+.lb-role__det{grid-area:det;font-size:var(--t-cap);color:var(--ink-3);font-variant-numeric:tabular-nums lining-nums}
+
+/* Weeks: the whole bar is sales, the filled part is labor */
+.lb-weeks{container-type:inline-size;width:100%;min-width:0}
+.lb-weeks__bars{display:grid;gap:6px;align-items:end;height:170px}
+.lb-wk{display:flex;flex-direction:column;justify-content:flex-end;align-items:stretch;gap:4px;height:100%;min-width:0;padding:0;border:0;background:none;font:inherit;color:inherit;cursor:pointer;border-radius:var(--r-sm)}
+.lb-wk:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.lb-wk__top{font-size:var(--t-cap);font-weight:600;text-align:center;color:var(--ink-2);font-variant-numeric:tabular-nums lining-nums;white-space:nowrap;overflow:hidden;text-overflow:clip}
+.lb-wk__bar{position:relative;display:flex;flex-direction:column;justify-content:flex-end;min-height:3px;border-radius:3px 3px 0 0;background:var(--line-strong);overflow:hidden;transform-origin:bottom;animation:lb-grow-y calc(var(--ct-dur-rise)*2) var(--ease) both;animation-delay:calc(var(--i,0)*var(--ct-dur-step)*.72);transition:opacity var(--ct-dur-quick) var(--ease);opacity:.62}
+.lb-wk__bar i{display:block;background:var(--ct-pl-labor)}
+.lb-wk[data-missing="true"] .lb-wk__bar{background:repeating-linear-gradient(135deg,var(--ink-3) 0 3px,transparent 3px 6px);outline:1px solid var(--ink-3);outline-offset:-1px}
+.lb-wk[aria-pressed="true"] .lb-wk__bar{opacity:1}
+@media (hover:hover){.lb-wk:hover .lb-wk__bar{opacity:.85}}
+.lb-wk:active .lb-wk__bar{transform:scaleY(.97);transition-duration:var(--ct-dur-tap)}
+.lb-wk[aria-pressed="true"] .lb-wk__top{color:var(--ink)}
+.lb-wk__lbl{font-family:var(--mono);font-size:var(--t-micro);color:var(--ink-3);text-align:center;border-top:1px solid var(--line);padding-top:4px;white-space:nowrap;overflow:hidden}
+.lb-wk[aria-pressed="true"] .lb-wk__lbl{color:var(--ink);font-weight:500;border-top:2px solid var(--ink)}
+@container (max-width:520px){
+  .lb-weeks__bars{height:130px;gap:3px}
+  /* Twelve columns are narrower than "26.9%": the share prints for the open
+     week only, and every third week is dated. Each bar still says all of it
+     to a screen reader, and the comparison below prints the figures. */
+  .lb-wk__top,.lb-wk__lbl{overflow:visible;display:flex;justify-content:center}
+  .lb-wk__top{font-size:var(--t-micro);visibility:hidden}
+  .lb-wk[aria-pressed="true"] .lb-wk__top{visibility:visible}
+  .lb-wk:not(:nth-child(3n+1)):not([aria-pressed="true"]) .lb-wk__lbl{color:transparent}
+}
+
+/* Two weeks side by side */
+.lb-cmp{container-type:inline-size;width:100%;min-width:0;display:grid;gap:10px}
+.lb-cmp__picks{display:flex;flex-wrap:wrap;gap:8px 14px;align-items:end}
+.lb-cmp__pick{display:grid;gap:3px;min-width:0}
+.lb-cmp__pick span{font-family:var(--mono);font-size:var(--t-micro);color:var(--ink-3);letter-spacing:.06em;text-transform:uppercase}
+.lb-cmp__pick select{font:inherit;color:var(--ink);background:var(--surface);border:1px solid var(--line-strong);border-radius:var(--r-sm);padding:6px 8px;min-height:36px;max-width:100%}
+.lb-cmp__pick select:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.lb-cmp__rows{display:grid;margin:0}
+.lb-cmp__row{display:grid;grid-template-columns:minmax(0,1.4fr) repeat(3,minmax(0,1fr));gap:4px 10px;align-items:baseline;padding:7px 0;border-top:1px solid var(--line);font-variant-numeric:tabular-nums lining-nums}
+.lb-cmp__row dt{font-size:var(--t-body);color:var(--ink-2);min-width:0}
+.lb-cmp__row dd{margin:0;text-align:right;min-width:0;white-space:nowrap}
+.lb-cmp__row dd:first-of-type{font-weight:700}
+.lb-cmp__row--head{border-top:0;padding-top:0}
+.lb-cmp__row--head dt,.lb-cmp__row--head dd{font-family:var(--mono);font-size:var(--t-micro);font-weight:400!important;color:var(--ink-3);letter-spacing:.04em;text-transform:uppercase;white-space:normal}
+.lb-cmp__chg{font-size:var(--t-cap);font-weight:600;color:var(--ink-2)}
+.lb-cmp__chg[data-tone="up"]{color:var(--good)}
+.lb-cmp__chg[data-tone="down"]{color:var(--bad)}
+@container (max-width:460px){
+  .lb-cmp__row{grid-template-columns:repeat(3,minmax(0,1fr))}
+  .lb-cmp__row dt{grid-column:1/-1}
+  .lb-cmp__row dd{text-align:left}
+  .lb-cmp__row--head dt{display:none}
+}
+
+@keyframes lb-grow-x{from{transform:scaleX(0)}}
+@keyframes lb-grow-y{from{transform:scaleY(0)}}

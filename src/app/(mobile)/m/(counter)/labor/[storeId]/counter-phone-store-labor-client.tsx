@@ -2,8 +2,10 @@
 
 import { Fold } from "@/components/counter/ui"
 import { LaborPlainView } from "@/app/dashboard/(counter)/labor/labor-plain-ui"
+import { LaborDetail } from "@/app/dashboard/(counter)/labor/labor-summary-ui"
 import type { PhoneStoreLaborSections } from "@/lib/counter/adapters/labor"
-import { useMemo } from "react"
+import { useCallback, useMemo } from "react"
+import { usePathname, useRouter } from "next/navigation"
 import {
   Chart,
   MList,
@@ -15,7 +17,7 @@ import {
   SubNav,
 } from "@/components/counter"
 import { storeViewTabs } from "@/lib/counter/nav"
-import { readCounterParams } from "@/lib/counter/url-state"
+import { readCounterParams, writeCounterParams } from "@/lib/counter/url-state"
 import { rangeLabel } from "@/lib/counter/date-range"
 import type { StoreLaborSections } from "@/lib/counter/adapters/labor"
 import type { SectionSources } from "@/lib/counter/adapters/types"
@@ -98,7 +100,18 @@ export function CounterPhoneStoreLaborClient({
   // The ONE transition shared with `PhoneShell`'s own store sheet and date
   // sheet, so a store or range change reads as `stale` rather than a blank
   // `loading.tsx`.
-  const { pending } = useCounterTransition()
+  const { pending, startTransition } = useCounterTransition()
+  const router = useRouter()
+  const pathname = usePathname()
+
+  /** A week bar or a store card: the same params the date sheet and the store picker write. */
+  const go = useCallback(
+    (next: Parameters<typeof writeCounterParams>[1]) => {
+      const qs = writeCounterParams(params, next).toString()
+      startTransition(() => router.push(qs ? `${pathname}?${qs}` : pathname, { scroll: false }))
+    },
+    [params, pathname, router, startTransition],
+  )
 
   const { range } = counterParams
   // The window's own ENDS, never a preset's name — same convention as every
@@ -130,6 +143,13 @@ export function CounterPhoneStoreLaborClient({
       <Section bare title="Labor in a sentence" data={sections.plain} pending={pending}>
         {(p) => <LaborPlainView p={p} />}
       </Section>
+
+      {/* The same detail the desk shows, from the same sections. */}
+      <LaborDetail
+        sections={sections}
+        pending={pending}
+        onWeek={(next) => go({ range: next })}
+      />
 
       <Fold summary="Every figure, as before">
 

@@ -1,6 +1,6 @@
 "use client"
 
-import { Answer, Freshness, BigNumber, BigNumbers, Card, Rows, Status, Statuses, type RowsColumn } from "@/components/counter/ui"
+import { Answer, Freshness, BigNumber, BigNumbers, Card, Status, Statuses } from "@/components/counter/ui"
 import type { LaborPlain } from "@/lib/counter/labor-plain"
 
 /**
@@ -8,14 +8,9 @@ import type { LaborPlain } from "@/lib/counter/labor-plain"
  * store pages (mock https://claude.ai/artifact/Sr98ngzuijqUUhPbJNJAv4). Every
  * figure and word arrives from `labor-plain.ts`; this file only lays it out.
  */
-type Line = LaborPlain["lines"][number]
-
-const COLUMNS: RowsColumn<Line>[] = [
-  { key: "label", label: "", slot: "title", render: (r) => r.label },
-  { key: "value", label: "", slot: "amount", align: "end", render: (r) => r.value },
-]
-
 export function LaborPlainView({ p, title = "Labor in a sentence" }: { p: LaborPlain; title?: string }) {
+  // The cost is already the lead figure's own sub; the other lines sit beside it.
+  const side = p.lines.filter((l) => l.key !== "cost")
   return (
     <div className="cu-stack">
       <Card label={title}>
@@ -29,6 +24,9 @@ export function LaborPlainView({ p, title = "Labor in a sentence" }: { p: LaborP
             vs={p.vs ?? undefined}
             missing={p.big.missing}
           />
+          {side.map((l) => (
+            <BigNumber key={l.key} label={l.label} value={l.value} />
+          ))}
         </BigNumbers>
       </Card>
       {p.statuses.length > 0 ? (
@@ -40,9 +38,6 @@ export function LaborPlainView({ p, title = "Labor in a sentence" }: { p: LaborP
           ))}
         </Statuses>
       ) : null}
-      <Card caption="The hours and the money">
-        <Rows columns={COLUMNS} rows={p.lines} rowKey={(r) => r.key} />
-      </Card>
     </div>
   )
 }

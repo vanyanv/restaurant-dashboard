@@ -2,6 +2,7 @@
 
 import { Fold } from "@/components/counter/ui"
 import { LaborPlainView } from "@/app/dashboard/(counter)/labor/labor-plain-ui"
+import { LaborDetail } from "@/app/dashboard/(counter)/labor/labor-summary-ui"
 import { Fragment, useCallback, useMemo } from "react"
 import { usePathname, useRouter } from "next/navigation"
 import {
@@ -311,6 +312,16 @@ export function CounterLaborClient({
       <Section bare title="Labor in a sentence" data={sections.plain} pending={pending}>
         {(p) => <LaborPlainView p={p} />}
       </Section>
+
+      {/* The detail brought out of the fold (owner's go, 2026-11-20; mock
+          https://claude.ai/artifact/VVoyXKUEykrCL6MK5K78ms): the weeks as
+          sales against labor with two side by side, then each day, the stores and the roles. */}
+      <LaborDetail
+        sections={sections}
+        pending={pending}
+        onWeek={(next) => push({ range: next })}
+        onStore={(id) => push({ storeId: id })}
+      />
 
       <Fold summary="Every figure, the schedule, roles and the trend">
 
