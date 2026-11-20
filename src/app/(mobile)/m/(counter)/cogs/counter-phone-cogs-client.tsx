@@ -1,6 +1,6 @@
 "use client"
 
-import { Fold } from "@/components/counter/ui"
+import { PageTabs } from "@/components/counter/ui"
 import { CogsPlainView } from "@/app/dashboard/(counter)/cogs/cogs-plain-ui"
 import { useMemo } from "react"
 import { Chart, MList, MStrip, Section, useCounterTransition, SubNav } from "@/components/counter"
@@ -123,34 +123,60 @@ export function CounterPhoneCogsClient({
       {/* Food cost made plain (owner's go, 2026-11-18; mock
           https://claude.ai/artifact/Sr98ngzuijqUUhPbJNJAv4). Every figure
           below is folded underneath, unchanged. */}
-      <Section bare title="Food cost in a sentence" data={sections.plain} pending={pending}>
-        {(p) => <CogsPlainView p={p} />}
-      </Section>
+      <PageTabs
+        label="Food cost views"
+        tabs={[
+          {
+            key: "summary",
+            label: "Summary",
+            content: (
+              <>
+                <Section bare title="Food cost in a sentence" data={sections.plain} pending={pending}>
+                  {(p) => <CogsPlainView p={p} />}
+                </Section>
+              </>
+            ),
+          },
+          {
+            key: "plan",
+            label: "Plan",
+            content: (
+              <>
 
-      <Fold summary="Every figure, as before">
+                {/* Two cells: Food cost, Against plan. `h.phoneCells`, never a slice of
+                    `h.cells` — see the file note above. */}
+                <Section bare title="The figures" data={sections.headline} pending={pending}>
+                  {(h) => <MStrip cells={h.phoneCells} />}
+                </Section>
 
-      {/* Two cells: Food cost, Against plan. `h.phoneCells`, never a slice of
-          `h.cells` — see the file note above. */}
-      <Section bare title="The figures" data={sections.headline} pending={pending}>
-        {(h) => <MStrip cells={h.phoneCells} />}
-      </Section>
+                {/* `p.phoneChart` is the adapter's own shorter, tickless, single-series
+                    chart — not a reshaping done here. No sentence, no note: at 340px
+                    there is no room left for the desk's prose beside its own chart, and
+                    the prototype's phone composition stops at the chart too. */}
+                <Section title="Against plan" meta={(p) => p.meta} data={sections.plan} pending={pending}>
+                  {(p) => <Chart {...p.phoneChart} fmt={PCT} />}
+                </Section>
 
-      {/* `p.phoneChart` is the adapter's own shorter, tickless, single-series
-          chart — not a reshaping done here. No sentence, no note: at 340px
-          there is no room left for the desk's prose beside its own chart, and
-          the prototype's phone composition stops at the chart too. */}
-      <Section title="Against plan" meta={(p) => p.meta} data={sections.plan} pending={pending}>
-        {(p) => <Chart {...p.phoneChart} fmt={PCT} />}
-      </Section>
-
-      {/* `m.phoneRows` — the adapter's own `MListRow[]`, built beside the
-          desk's table so the two surfaces cannot format one movement two
-          ways. The category ring and the item table are not on this surface
-          at all; see the file note's departure table. */}
-      <Section title="What moved" meta={(m) => m.meta} data={sections.moved} pending={pending}>
-        {(m) => <MList rows={m.phoneRows} />}
-      </Section>
-      </Fold>
+                {/* `m.phoneRows` — the adapter's own `MListRow[]`, built beside the
+                    desk's table so the two surfaces cannot format one movement two
+                    ways. The category ring and the item table are not on this surface
+                    at all; see the file note's departure table. */}
+              </>
+            ),
+          },
+          {
+            key: "moved",
+            label: "What moved",
+            content: (
+              <>
+                <Section title="What moved" meta={(m) => m.meta} data={sections.moved} pending={pending}>
+                  {(m) => <MList rows={m.phoneRows} />}
+                </Section>
+              </>
+            ),
+          },
+        ]}
+      />
     </>
   )
 }

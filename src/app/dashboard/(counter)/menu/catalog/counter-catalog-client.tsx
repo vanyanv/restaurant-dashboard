@@ -22,7 +22,7 @@ import {
   type SwitchableStore,
   SubNav,
 } from "@/components/counter"
-import { Fold } from "@/components/counter/ui"
+import { PageTabs } from "@/components/counter/ui"
 import { CatalogPlainView } from "./catalog-plain-ui"
 import { MENU_TABS } from "@/lib/counter/nav"
 import { useUrlParam, useUrlFlag } from "@/components/counter/keep/use-url-param"
@@ -327,84 +327,122 @@ export function CounterCatalogClient({
       {/* Made plain (owner's go, 2026-11-19; mock
           https://claude.ai/artifact/YNwJ7EneNdAaC7vDp4HhBe): the links first,
           one tap each. The page as it was is folded below, unchanged. */}
-      <Section bare title="The catalog in a sentence" data={sections.plain} pending={pending}>
-        {(p) => <CatalogPlainView p={p} />}
-      </Section>
+      <PageTabs
+        label="Catalog views"
+        tabs={[
+          {
+            key: "summary",
+            label: "Summary",
+            content: (
+              <>
+                <Section bare title="The catalog in a sentence" data={sections.plain} pending={pending}>
+                  {(p) => <CatalogPlainView p={p} />}
+                </Section>
+              </>
+            ),
+          },
+          {
+            key: "catalog",
+            label: "Catalog",
+            content: (
+              <>
+                <Section bare title="The figures" data={sections.headline} pending={pending}>
+                  {(h) => <Strip cells={h.cells} />}
+                </Section>
 
-      <Fold summary="The whole catalog, proposals and categories, as before">
-      <Section bare title="The figures" data={sections.headline} pending={pending}>
-        {(h) => <Strip cells={h.cells} />}
-      </Section>
+                {/* The prototype's own headless `.sec` — filters and table, no head. */}
+                <div className="sec">
+                  <Section bare title="The catalog" data={sections.list} pending={pending}>
+                    {(l) => (
+                      <CatalogTable
+                        list={l}
+                        search={search}
+                        query={query}
+                        onSearch={setSearch}
+                        unmappedOnly={unmappedOnly}
+                        withModifiers={withModifiers}
+                        onToggle={(id) => {
+                          if (id === "unmapped") setUnmappedOnly(!unmappedOnly)
+                          else setWithModifiers(!withModifiers)
+                        }}
+                        onClear={
+                          search || unmappedOnly || withModifiers
+                            ? () => {
+                                setSearch("")
+                                setUnmappedOnly(false)
+                                setWithModifiers(false)
+                              }
+                            : undefined
+                        }
+                      />
+                    )}
+                  </Section>
+                </div>
+              </>
+            ),
+          },
+          {
+            key: "unmapped",
+            label: "Unmapped",
+            content: (
+              <>
+                <Section
+                  title="Unmapped items"
+                  meta={(g) => g.meta}
+                  data={sections.gaps}
+                  pending={pending}
+                  askAbout="how many modifier servings go out uncosted"
+                >
+                  {(g) => <Queue items={g.items} />}
+                </Section>
+              </>
+            ),
+          },
+          {
+            key: "categories",
+            label: "Categories",
+            content: (
+              <>
+                  <Section
+                    title="By category"
+                    meta={(c) => c.meta}
+                    data={sections.categories}
+                    pending={pending}
+                  >
+                    {(c) => (
+                      <>
+                        <Donut slices={c.slices} center={c.centre} />
+                        <Note>
+                          {c.note}
+                        </Note>
+                      </>
+                    )}
+                  </Section>
 
-      {/* The prototype's own headless `.sec` — filters and table, no head. */}
-      <div className="sec">
-        <Section bare title="The catalog" data={sections.list} pending={pending}>
-          {(l) => (
-            <CatalogTable
-              list={l}
-              search={search}
-              query={query}
-              onSearch={setSearch}
-              unmappedOnly={unmappedOnly}
-              withModifiers={withModifiers}
-              onToggle={(id) => {
-                if (id === "unmapped") setUnmappedOnly(!unmappedOnly)
-                else setWithModifiers(!withModifiers)
-              }}
-              onClear={
-                search || unmappedOnly || withModifiers
-                  ? () => {
-                      setSearch("")
-                      setUnmappedOnly(false)
-                      setWithModifiers(false)
-                    }
-                  : undefined
-              }
-            />
-          )}
-        </Section>
-      </div>
-
-      <div className="split">
-        <Section
-          title="Unmapped items"
-          meta={(g) => g.meta}
-          data={sections.gaps}
-          pending={pending}
-          askAbout="how many modifier servings go out uncosted"
-        >
-          {(g) => <Queue items={g.items} />}
-        </Section>
-
-        <Section
-          title="By category"
-          meta={(c) => c.meta}
-          data={sections.categories}
-          pending={pending}
-        >
-          {(c) => (
-            <>
-              <Donut slices={c.slices} center={c.centre} />
-              <Note>
-                {c.note}
-              </Note>
-            </>
-          )}
-        </Section>
-      </div>
-
-      {/* `P.menucatalog`'s AI-proposal card, with the actions behind it. See
-          `Proposals`. */}
-      <Section
-        title="Mapping proposals"
-        meta={(p) => p.meta}
-        data={sections.proposals}
-        pending={pending}
-        pad={false}
-      >
-        {(p) => <Proposals data={p} />}
-      </Section>
-      </Fold>
+                {/* `P.menucatalog`'s AI-proposal card, with the actions behind it. See
+                    `Proposals`. */}
+              </>
+            ),
+          },
+          {
+            key: "proposals",
+            label: "Proposals",
+            content: (
+              <>
+                <Section
+                  title="Mapping proposals"
+                  meta={(p) => p.meta}
+                  data={sections.proposals}
+                  pending={pending}
+                  pad={false}
+                >
+                  {(p) => <Proposals data={p} />}
+                </Section>
+              </>
+            ),
+          },
+        ]}
+      />
     </>
   )
 }

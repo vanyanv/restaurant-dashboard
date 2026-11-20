@@ -23,6 +23,7 @@ import {
   type SwitchableStore,
   useSurfaceHref,
 } from "@/components/counter"
+import { PageTabs } from "@/components/counter/ui"
 import { readCounterParams, writeCounterParams } from "@/lib/counter/url-state"
 import {
   costDraftRecipe,
@@ -341,225 +342,246 @@ export function CounterRecipeClient({
         />
       </PageHead>
 
-      {editing ? null : (
-        <Section bare title="The recipe in a sentence" data={sections.plain} pending={pending}>
-          {(p) => <RecipePlainView p={p} editFold="recipe-editor" />}
-        </Section>
-      )}
-
-      {/* A recipe just started opens on its editor: there is nothing to read yet. */}
-      <Fold id="recipe-editor" summary="Edit lines, batch, notes and photo" defaultOpen={editing || params.get("new") === "1"}>
-      <DishPhoto name={title} justCreated={params.get("new") === "1"} warn={params.get("warn")} />
-
-      <Section bare title="The figures" data={sections.head} pending={pending}>
-        {(h) => (
-          <>
-            {/* Category, yield and confirmation state. These belong under the
-                title and cannot go there: the masthead renders before the
-                loader resolves, and a sentence that appears a beat late reads
-                as a layout shift rather than as information. */}
-            <Note lede>
-              {h.sub}
-            </Note>
-            <Strip cells={h.cells} />
-          </>
-        )}
-      </Section>
-
-      <div className="split">
-        <Section
-          title="The recipe"
-          meta={(b) => b.meta}
-          data={sections.builder}
-          pending={pending}
-          askAbout="what is this plate's food cost"
-        >
-          {(b) => (
-            <Builder
-              builder={b}
-              draft={draftOf(b)}
-              live={live}
-              onLines={(fn) => editLines(b, fn)}
-              onField={(key, value) => editField(b, key, value)}
-              onSaved={clearDraft}
-            />
-          )}
-        </Section>
-
-        {/* `P.recipe`'s pantry sheet. `pad={false}` because the prototype
-            builds this one with `raw()` — a `.sec` and a `.sec__head` with the
-            sheet directly under them and no `.sec__body`, since the sheet
-            draws its own border and a body's padding would double it. */}
-        <Section
-          title="Add an ingredient"
-          meta={() => "search the pantry"}
-          data={sections.builder}
-          pending={pending}
-          pad={false}
-        >
-          {(b) => (
-            <Picker
-              builder={b}
-              lines={draftOf(b).lines}
-              onAdd={(o) =>
-                editLines(b, (prev) => [...prev, lineFromOption(o, prev.length)])
-              }
-            />
-          )}
-        </Section>
-
-        {/* `.rcost` is the design's cost rail, and the ONLY rule that sizes
-            the `.big` figure below is `.rcost .big` (counter-components.css).
-            Nothing in `src/` emitted `.rcost`, so that rule never matched and
-            the number this whole page exists to show inherited body size —
-            13px where the design specifies `--t-hero`, 30px. The fidelity
-            gate could not see it: its landmark set for this route is
-            `.btn .btnrow .ch .moneyline .sec .sec__body .sec__head .strip`,
-            and `.rcost` is not counted, so a green run said nothing about a
-            figure rendering at 43% of its size.
-
-            This wraps the one Section rather than rebuilding the prototype's
-            full `.rgrid` rail: moving the other two panels into it would
-            reorder landmarks, and reordering is what the fidelity comparison
-            actually checks. The wrapper is a grid item in the same `.split`
-            cell the Section already occupied, so nothing moves. */}
-        <div className="rcost">
-          <Section
-            title="What it costs"
-            meta={() => (live ? "unsaved" : "live")}
-            data={sections.cost}
-            pending={pending}
-          >
-            {(c) => (
+      {/* A recipe just started, or opened to edit, opens on its editor tab: there is nothing to read yet. */}
+      <PageTabs
+        label="Recipe views"
+        initial={editing || params.get("new") === "1" ? "recipe" : undefined}
+        tabs={[
+          // While editing there is no summary to read, so the tab row is the
+          // editor alone.
+          ...(editing
+            ? []
+            : [
+                {
+                  key: "summary",
+                  label: "Summary",
+                  content: (
+                    <Section bare title="The recipe in a sentence" data={sections.plain} pending={pending}>
+                      {(p) => <RecipePlainView p={p} editTab="recipe" />}
+                    </Section>
+                  ),
+                },
+              ]),
+          {
+            key: "recipe",
+            label: "Edit recipe",
+            content: (
               <>
-                <span className="k">Cost per serving</span>
-                <div className="big" style={{ margin: "2px 0 10px" }}>
-                  {/* The draft's figure when there is a draft, because a panel
-                      showing the SAVED cost next to an edited line is the one
-                      thing this screen must never do: it answers the question
-                      the owner is asking with the answer to the old one. */}
-                  {live ? COST(live.perServing) : c.perServing}
-                </div>
-                {/* Where that figure came from, when it was divided. A batch
-                    recipe's per-serving cost is `batch ÷ yield`, and without
-                    this line the two numbers on this page look unrelated. */}
-                {live ? (
-                  <Note bare>
-                    Unsaved. Batch {COST(live.batch)}
-                    {live.partial ? " so far — at least one line has no cost." : "."}
-                  </Note>
-                ) : c.batch ? (
-                  <Note bare>{c.batch}</Note>
-                ) : null}
-                {/* CostBar draws its own legend — this rendered it twice. */}
-                <CostBar bands={c.bands} />
-                <div
-                  style={{
-                    marginTop: 12,
-                    paddingTop: 11,
-                    borderTop: "1px solid var(--line-strong)",
-                  }}
-                >
-                  <MoneyLines rows={c.money} />
-                </div>
-                <Note>
-                  {c.foot}
-                </Note>
-                <Note>
-                  {c.note}
-                </Note>
-              </>
-            )}
-          </Section>
-        </div>
+                <DishPhoto name={title} justCreated={params.get("new") === "1"} warn={params.get("warn")} />
 
-        {/* `P.recipe`'s "One line has no cost", which was a red paragraph at
-            the foot of "What it costs". The design gives it a panel, and it
-            deserves one: it is the reason the figure above is a floor rather
-            than a price.
+                <Section bare title="The figures" data={sections.head} pending={pending}>
+                  {(h) => (
+                    <>
+                      {/* Category, yield and confirmation state. These belong under the
+                          title and cannot go there: the masthead renders before the
+                          loader resolves, and a sentence that appears a beat late reads
+                          as a layout shift rather than as information. */}
+                      <Note lede>
+                        {h.sub}
+                      </Note>
+                      <Strip cells={h.cells} />
+                    </>
+                  )}
+                </Section>
 
-            `P.recipe` puts "Match it now" here. The button is real and the
-            WORDS are not the design's, because nothing in this product
-            matches a SKU to an ingredient by hand — the matcher is a nightly
-            ladder and the ingredient page is a read-only audit of what it
-            decided. So the button goes where the answer is and says that
-            instead of promising a fix it cannot perform. It appears only on
-            the branch that has an ingredient to point at; a recipe with no
-            lines at all gets the sentence and no button. */}
-        <Section
-          title="One line has no cost"
-          meta={(c) => c.gap?.lead ?? "every line priced"}
-          data={sections.cost}
-          pending={pending}
-        >
-          {(c) =>
-            c.gap ? (
-              <>
-                <p
-                  style={{
-                    margin: c.gap.href ? "0 0 10px" : 0,
-                    fontSize: "var(--ct-t-cap)",
-                    lineHeight: 1.5,
-                  }}
-                >
-                  {c.gap.body}
-                </p>
-                {c.gap.href ? (
-                  <Link
-                    className="btn"
-                    href={surface(c.gap.href)}
-                    style={{ width: "100%", justifyContent: "center" }}
+                <div className="split">
+                  <Section
+                    title="The recipe"
+                    meta={(b) => b.meta}
+                    data={sections.builder}
+                    pending={pending}
+                    askAbout="what is this plate's food cost"
                   >
-                    See what it is matched to
-                  </Link>
-                ) : null}
-              </>
-            ) : (
-              <p style={{ margin: 0, fontSize: "var(--ct-t-cap)", lineHeight: 1.5 }}>
-                Every line on this recipe has a cost, so the plate cost above is exact rather
-                than a floor.
-              </p>
-            )
-          }
-        </Section>
+                    {(b) => (
+                      <Builder
+                        builder={b}
+                        draft={draftOf(b)}
+                        live={live}
+                        onLines={(fn) => editLines(b, fn)}
+                        onField={(key, value) => editField(b, key, value)}
+                        onSaved={clearDraft}
+                      />
+                    )}
+                  </Section>
 
-        {/* `.linkpop` chips, which is what `P.recipe` draws here — see
-            `RecipeSellsAs` for why this stopped being a table. */}
-        <Section title="Sells as" meta={(s) => s.meta} data={sections.sellsAs} pending={pending}>
-          {(s) => (
-            <>
-              {s.links.map((l, i) => (
-                <div className="linkpop" key={l.key} style={i > 0 ? { marginTop: 7 } : undefined}>
-                  {l.name}
-                  <Tag tone={l.kind === "item" ? "good" : "warn"}>
-                    {l.kind === "item" ? "Menu item" : "Modifier"}
-                  </Tag>
+                  {/* `P.recipe`'s pantry sheet. `pad={false}` because the prototype
+                      builds this one with `raw()` — a `.sec` and a `.sec__head` with the
+                      sheet directly under them and no `.sec__body`, since the sheet
+                      draws its own border and a body's padding would double it. */}
+                  <Section
+                    title="Add an ingredient"
+                    meta={() => "search the pantry"}
+                    data={sections.builder}
+                    pending={pending}
+                    pad={false}
+                  >
+                    {(b) => (
+                      <Picker
+                        builder={b}
+                        lines={draftOf(b).lines}
+                        onAdd={(o) =>
+                          editLines(b, (prev) => [...prev, lineFromOption(o, prev.length)])
+                        }
+                      />
+                    )}
+                  </Section>
+
+                  {/* `.rcost` is the design's cost rail, and the ONLY rule that sizes
+                      the `.big` figure below is `.rcost .big` (counter-components.css).
+                      Nothing in `src/` emitted `.rcost`, so that rule never matched and
+                      the number this whole page exists to show inherited body size —
+                      13px where the design specifies `--t-hero`, 30px. The fidelity
+                      gate could not see it: its landmark set for this route is
+                      `.btn .btnrow .ch .moneyline .sec .sec__body .sec__head .strip`,
+                      and `.rcost` is not counted, so a green run said nothing about a
+                      figure rendering at 43% of its size.
+
+                      This wraps the one Section rather than rebuilding the prototype's
+                      full `.rgrid` rail: moving the other two panels into it would
+                      reorder landmarks, and reordering is what the fidelity comparison
+                      actually checks. The wrapper is a grid item in the same `.split`
+                      cell the Section already occupied, so nothing moves. */}
+                  <div className="rcost">
+                    <Section
+                      title="What it costs"
+                      meta={() => (live ? "unsaved" : "live")}
+                      data={sections.cost}
+                      pending={pending}
+                    >
+                      {(c) => (
+                        <>
+                          <span className="k">Cost per serving</span>
+                          <div className="big" style={{ margin: "2px 0 10px" }}>
+                            {/* The draft's figure when there is a draft, because a panel
+                                showing the SAVED cost next to an edited line is the one
+                                thing this screen must never do: it answers the question
+                                the owner is asking with the answer to the old one. */}
+                            {live ? COST(live.perServing) : c.perServing}
+                          </div>
+                          {/* Where that figure came from, when it was divided. A batch
+                              recipe's per-serving cost is `batch ÷ yield`, and without
+                              this line the two numbers on this page look unrelated. */}
+                          {live ? (
+                            <Note bare>
+                              Unsaved. Batch {COST(live.batch)}
+                              {live.partial ? " so far — at least one line has no cost." : "."}
+                            </Note>
+                          ) : c.batch ? (
+                            <Note bare>{c.batch}</Note>
+                          ) : null}
+                          {/* CostBar draws its own legend — this rendered it twice. */}
+                          <CostBar bands={c.bands} />
+                          <div
+                            style={{
+                              marginTop: 12,
+                              paddingTop: 11,
+                              borderTop: "1px solid var(--line-strong)",
+                            }}
+                          >
+                            <MoneyLines rows={c.money} />
+                          </div>
+                          <Note>
+                            {c.foot}
+                          </Note>
+                          <Note>
+                            {c.note}
+                          </Note>
+                        </>
+                      )}
+                    </Section>
+                  </div>
+
+                  {/* `P.recipe`'s "One line has no cost", which was a red paragraph at
+                      the foot of "What it costs". The design gives it a panel, and it
+                      deserves one: it is the reason the figure above is a floor rather
+                      than a price.
+
+                      `P.recipe` puts "Match it now" here. The button is real and the
+                      WORDS are not the design's, because nothing in this product
+                      matches a SKU to an ingredient by hand — the matcher is a nightly
+                      ladder and the ingredient page is a read-only audit of what it
+                      decided. So the button goes where the answer is and says that
+                      instead of promising a fix it cannot perform. It appears only on
+                      the branch that has an ingredient to point at; a recipe with no
+                      lines at all gets the sentence and no button. */}
+                  <Section
+                    title="One line has no cost"
+                    meta={(c) => c.gap?.lead ?? "every line priced"}
+                    data={sections.cost}
+                    pending={pending}
+                  >
+                    {(c) =>
+                      c.gap ? (
+                        <>
+                          <p
+                            style={{
+                              margin: c.gap.href ? "0 0 10px" : 0,
+                              fontSize: "var(--ct-t-cap)",
+                              lineHeight: 1.5,
+                            }}
+                          >
+                            {c.gap.body}
+                          </p>
+                          {c.gap.href ? (
+                            <Link
+                              className="btn"
+                              href={surface(c.gap.href)}
+                              style={{ width: "100%", justifyContent: "center" }}
+                            >
+                              See what it is matched to
+                            </Link>
+                          ) : null}
+                        </>
+                      ) : (
+                        <p style={{ margin: 0, fontSize: "var(--ct-t-cap)", lineHeight: 1.5 }}>
+                          Every line on this recipe has a cost, so the plate cost above is exact rather
+                          than a floor.
+                        </p>
+                      )
+                    }
+                  </Section>
+
+                  {/* `.linkpop` chips, which is what `P.recipe` draws here — see
+                      `RecipeSellsAs` for why this stopped being a table. */}
+                  <Section title="Sells as" meta={(s) => s.meta} data={sections.sellsAs} pending={pending}>
+                    {(s) => (
+                      <>
+                        {s.links.map((l, i) => (
+                          <div className="linkpop" key={l.key} style={i > 0 ? { marginTop: 7 } : undefined}>
+                            {l.name}
+                            <Tag tone={l.kind === "item" ? "good" : "warn"}>
+                              {l.kind === "item" ? "Menu item" : "Modifier"}
+                            </Tag>
+                          </div>
+                        ))}
+                        <Note>
+                          {s.note}
+                        </Note>
+                      </>
+                    )}
+                  </Section>
                 </div>
-              ))}
-              <Note>
-                {s.note}
-              </Note>
-            </>
-          )}
-        </Section>
-      </div>
 
-      <Section
-        title="Cost per serving"
-        meta={(t) => t.meta}
-        data={sections.trend}
-        pending={pending}
-      >
-        {(t) => (
-          <>
-            <Chart {...t.chart} fmt={COST} />
-            <Note>
-              {t.note}
-            </Note>
-          </>
-        )}
-      </Section>
-      </Fold>
+                <Section
+                  title="Cost per serving"
+                  meta={(t) => t.meta}
+                  data={sections.trend}
+                  pending={pending}
+                >
+                  {(t) => (
+                    <>
+                      <Chart {...t.chart} fmt={COST} />
+                      <Note>
+                        {t.note}
+                      </Note>
+                    </>
+                  )}
+                </Section>
+              </>
+            ),
+          },
+        ]}
+      />
     </>
   )
 }

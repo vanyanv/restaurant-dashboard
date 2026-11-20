@@ -1,6 +1,6 @@
 "use client"
 
-import { Fold } from "@/components/counter/ui"
+import { PageTabs } from "@/components/counter/ui"
 import { CogsPlainView } from "@/app/dashboard/(counter)/cogs/cogs-plain-ui"
 import { useCallback, useMemo } from "react"
 import { usePathname, useRouter } from "next/navigation"
@@ -239,118 +239,149 @@ export function CounterCogsClient({
       {/* Food cost made plain (owner's go, 2026-11-18; mock
           https://claude.ai/artifact/Sr98ngzuijqUUhPbJNJAv4). Every figure
           below is folded underneath, unchanged. */}
-      <Section bare title="Food cost in a sentence" data={sections.plain} pending={pending}>
-        {(p) => <CogsPlainView p={p} />}
-      </Section>
+      <PageTabs
+        label="Food cost views"
+        tabs={[
+          {
+            key: "summary",
+            label: "Summary",
+            content: (
+              <>
+                <Section bare title="Food cost in a sentence" data={sections.plain} pending={pending}>
+                  {(p) => <CogsPlainView p={p} />}
+                </Section>
+              </>
+            ),
+          },
+          {
+            key: "plan",
+            label: "Plan",
+            content: (
+              <>
 
-      <Fold summary="Every figure, the plan, what moved and the items">
+                {/* Page level, above the first `.sec`, exactly as `strip([...])` is
+                    written in `P.cogs.desk()`. Four cells on the group route (C-R3, C-R4). */}
+                <Section bare title="The figures" data={sections.headline} pending={pending}>
+                  {(h) => <Strip cells={h.cells} />}
+                </Section>
 
-      {/* Page level, above the first `.sec`, exactly as `strip([...])` is
-          written in `P.cogs.desk()`. Four cells on the group route (C-R3, C-R4). */}
-      <Section bare title="The figures" data={sections.headline} pending={pending}>
-        {(h) => <Strip cells={h.cells} />}
-      </Section>
+                <Section
+                  title="Food cost against plan"
+                  pending={pending}
+                  // The adapter's: the range, the bucket grain, and the denominator that
+                  // decides the page. NOT the prototype's "the red is the overshoot, not
+                  // the measure" — there is no red on a range spent inside plan.
+                  meta={(p) => p.meta}
+                  data={sections.plan}
+                  askAbout="how food cost ran against the plan"
+                >
+                  {(p) => (
+                    <>
+                      {/* `rule` and `fillFrom` are both the adapter's, both the published
+                          `Store.targetCogsPct`, and both absent together when no plan is
+                          published — a line filled from a plan invented here would be the
+                          page grading itself. */}
+                      <Chart {...p.chart} fmt={PCT} />
+                      <Note>
+                        {p.sentence}
+                      </Note>
+                      <Note>
+                        {p.note}
+                      </Note>
+                    </>
+                  )}
+                </Section>
 
-      <Section
-        title="Food cost against plan"
-        pending={pending}
-        // The adapter's: the range, the bucket grain, and the denominator that
-        // decides the page. NOT the prototype's "the red is the overshoot, not
-        // the measure" — there is no red on a range spent inside plan.
-        meta={(p) => p.meta}
-        data={sections.plan}
-        askAbout="how food cost ran against the plan"
-      >
-        {(p) => (
-          <>
-            {/* `rule` and `fillFrom` are both the adapter's, both the published
-                `Store.targetCogsPct`, and both absent together when no plan is
-                published — a line filled from a plan invented here would be the
-                page grading itself. */}
-            <Chart {...p.chart} fmt={PCT} />
-            <Note>
-              {p.sentence}
-            </Note>
-            <Note>
-              {p.note}
-            </Note>
-          </>
-        )}
-      </Section>
+              </>
+            ),
+          },
+          {
+            key: "moved",
+            label: "What moved",
+            content: (
+              <>
+                <Section
+                  title="What moved"
+                  pending={pending}
+                  // Names the 120-day median basis and the unit prices are normalized to,
+                  // because neither follows the date control above.
+                  meta={(m) => m.meta}
+                  data={sections.moved}
+                  // `tbl()` in the prototype IS a `raw()` body — a table fills the
+                  // section edge to edge and must not be inset a second time.
+                  pad={false}
+                  askAbout="which ingredient prices moved"
+                >
+                  {(m) => (
+                    <>
+                      <Table columns={MOVED_COLUMNS} rows={movedRows(m)} />
+                      {/* NO `.sec__body` around these notes. `sec__body` is a landmark
+                          class and `P.cogs.desk()` writes ZERO of them for this section
+                          — `tbl()` returns `raw()`, so the prototype's `sec()` emits the
+                          table alone. They carry the body's own inset
+                          (`.sec__body{padding:13px 15px}`) inline rather than opening a
+                          second landmark to get it. */}
+                      <Note flush>{m.sentence}</Note>
+                      <Note flush>{m.note}</Note>
+                    </>
+                  )}
+                </Section>
+              </>
+            ),
+          },
+          {
+            key: "items",
+            label: "Items",
+            content: (
+              <>
+                  <Section
+                    title="By menu category"
+                    pending={pending}
+                    meta={(c) => c.meta}
+                    data={sections.categories}
+                    askAbout="how the cost splits by menu category"
+                  >
+                    {(c) => (
+                      <>
+                        {/* `donut()` returns a bare string in the prototype, not `raw()`,
+                            so this section keeps its `.sec__body` — unlike the two tables
+                            either side of it. */}
+                        <Donut slices={c.slices} center={c.center} />
+                        <Note>
+                          {c.sentence}
+                        </Note>
+                        <Note>
+                          {c.note}
+                        </Note>
+                      </>
+                    )}
+                  </Section>
 
-      <div className="split">
-        <Section
-          title="What moved"
-          pending={pending}
-          // Names the 120-day median basis and the unit prices are normalized to,
-          // because neither follows the date control above.
-          meta={(m) => m.meta}
-          data={sections.moved}
-          // `tbl()` in the prototype IS a `raw()` body — a table fills the
-          // section edge to edge and must not be inset a second time.
-          pad={false}
-          askAbout="which ingredient prices moved"
-        >
-          {(m) => (
-            <>
-              <Table columns={MOVED_COLUMNS} rows={movedRows(m)} />
-              {/* NO `.sec__body` around these notes. `sec__body` is a landmark
-                  class and `P.cogs.desk()` writes ZERO of them for this section
-                  — `tbl()` returns `raw()`, so the prototype's `sec()` emits the
-                  table alone. They carry the body's own inset
-                  (`.sec__body{padding:13px 15px}`) inline rather than opening a
-                  second landmark to get it. */}
-              <Note flush>{m.sentence}</Note>
-              <Note flush>{m.note}</Note>
-            </>
-          )}
-        </Section>
-
-        <Section
-          title="By menu category"
-          pending={pending}
-          meta={(c) => c.meta}
-          data={sections.categories}
-          askAbout="how the cost splits by menu category"
-        >
-          {(c) => (
-            <>
-              {/* `donut()` returns a bare string in the prototype, not `raw()`,
-                  so this section keeps its `.sec__body` — unlike the two tables
-                  either side of it. */}
-              <Donut slices={c.slices} center={c.center} />
-              <Note>
-                {c.sentence}
-              </Note>
-              <Note>
-                {c.note}
-              </Note>
-            </>
-          )}
-        </Section>
-      </div>
-
-      <Section
-        title="The items costing the most"
-        pending={pending}
-        meta={(i) => i.meta}
-        data={sections.items}
-        pad={false}
-        askAbout="which items are costing the most against plan"
-      >
-        {(i) => (
-          <>
-            <Table columns={ITEM_COLUMNS} rows={itemRows(i)} />
-            {/* Unwrapped, for the reason the moved notes above are unwrapped.
-                Why these rows do not sum to the headline: a different
-                denominator, said out loud rather than left to be discovered. */}
-            <Note flush>
-              {i.note}
-            </Note>
-          </>
-        )}
-      </Section>
-      </Fold>
+                <Section
+                  title="The items costing the most"
+                  pending={pending}
+                  meta={(i) => i.meta}
+                  data={sections.items}
+                  pad={false}
+                  askAbout="which items are costing the most against plan"
+                >
+                  {(i) => (
+                    <>
+                      <Table columns={ITEM_COLUMNS} rows={itemRows(i)} />
+                      {/* Unwrapped, for the reason the moved notes above are unwrapped.
+                          Why these rows do not sum to the headline: a different
+                          denominator, said out loud rather than left to be discovered. */}
+                      <Note flush>
+                        {i.note}
+                      </Note>
+                    </>
+                  )}
+                </Section>
+              </>
+            ),
+          },
+        ]}
+      />
     </>
   )
 }

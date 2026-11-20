@@ -11,7 +11,7 @@ import {
 } from "@/components/counter"
 import type { SectionSources } from "@/lib/counter/adapters/types"
 import type { RecipeSections } from "@/lib/counter/adapters/recipe"
-import { Fold } from "@/components/counter/ui"
+import { PageTabs } from "@/components/counter/ui"
 import { RecipePlainView } from "@/app/dashboard/(counter)/recipes/[id]/recipe-plain-ui"
 
 /**
@@ -45,58 +45,76 @@ export function CounterPhoneRecipeClient({
         )}
       </Section>
 
-      <Section bare title="The recipe in a sentence" data={sections.plain} pending={pending}>
-        {(p) => <RecipePlainView p={p} editHref={`/m/recipes/${p.recipeId}/edit`} />}
-      </Section>
+      <PageTabs
+        label="Recipe views"
+        tabs={[
+          {
+            key: "summary",
+            label: "Summary",
+            content: (
+              <>
+                <Section bare title="The recipe in a sentence" data={sections.plain} pending={pending}>
+                  {(p) => <RecipePlainView p={p} editHref={`/m/recipes/${p.recipeId}/edit`} />}
+                </Section>
+              </>
+            ),
+          },
+          {
+            key: "recipe",
+            label: "Recipe",
+            content: (
+              <>
+                <Section bare title="The figures" data={sections.head} pending={pending}>
+                  {(h) => <MStrip cells={h.phoneCells} />}
+                </Section>
 
-      <Fold summary="Every line and figure, as before">
-      <Section bare title="The figures" data={sections.head} pending={pending}>
-        {(h) => <MStrip cells={h.phoneCells} />}
-      </Section>
+                <Section title="What it costs" meta={() => "live"} data={sections.cost} pending={pending}>
+                  {(c) => (
+                    <>
+                      {/* CostBar draws its own legend — see the desk client. */}
+                      <CostBar bands={c.bands} />
+                      <Note>
+                        {c.foot}
+                      </Note>
+                      {c.gap ? (
+                        <Note tone="bad">
+                          {c.gap.body}
+                        </Note>
+                      ) : null}
+                    </>
+                  )}
+                </Section>
 
-      <Section title="What it costs" meta={() => "live"} data={sections.cost} pending={pending}>
-        {(c) => (
-          <>
-            {/* CostBar draws its own legend — see the desk client. */}
-            <CostBar bands={c.bands} />
-            <Note>
-              {c.foot}
-            </Note>
-            {c.gap ? (
-              <Note tone="bad">
-                {c.gap.body}
-              </Note>
-            ) : null}
-          </>
-        )}
-      </Section>
+                <Section title="The recipe" meta={(b) => b.meta} data={sections.builder} pending={pending}>
+                  {(b) => (
+                    <MList
+                      rows={b.lines.map((l) => ({
+                        key: l.key,
+                        title: l.name,
+                        detail: `${l.quantity} ${l.unit}`,
+                        value: l.ext,
+                        note: l.missing ? "no cost" : undefined,
+                        noteTone: l.missing ? "down" : undefined,
+                      }))}
+                    />
+                  )}
+                </Section>
 
-      <Section title="The recipe" meta={(b) => b.meta} data={sections.builder} pending={pending}>
-        {(b) => (
-          <MList
-            rows={b.lines.map((l) => ({
-              key: l.key,
-              title: l.name,
-              detail: `${l.quantity} ${l.unit}`,
-              value: l.ext,
-              note: l.missing ? "no cost" : undefined,
-              noteTone: l.missing ? "down" : undefined,
-            }))}
-          />
-        )}
-      </Section>
-
-      {/* `P.recipe.phone()` closes on two buttons; this is the one this
-          product offers. It opens the desk editor inside the phone shell,
-          at `/m/recipes/[id]/edit`, so the phone stays a phone. */}
-      <Section bare title="Edit" data={sections.builder} pending={pending}>
-        {(b) => (
-          <Link className="mbtn mbtn--primary" href={`/m/recipes/${b.recipeId}/edit`}>
-            Edit this recipe
-          </Link>
-        )}
-      </Section>
-      </Fold>
+                {/* `P.recipe.phone()` closes on two buttons; this is the one this
+                    product offers. It opens the desk editor inside the phone shell,
+                    at `/m/recipes/[id]/edit`, so the phone stays a phone. */}
+                <Section bare title="Edit" data={sections.builder} pending={pending}>
+                  {(b) => (
+                    <Link className="mbtn mbtn--primary" href={`/m/recipes/${b.recipeId}/edit`}>
+                      Edit this recipe
+                    </Link>
+                  )}
+                </Section>
+              </>
+            ),
+          },
+        ]}
+      />
     </>
   )
 }

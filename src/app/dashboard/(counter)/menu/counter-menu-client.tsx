@@ -20,7 +20,7 @@ import { readCounterParams, writeCounterParams } from "@/lib/counter/url-state";
 import { rangeLabel } from "@/lib/counter/date-range";
 import type { SectionSources } from "@/lib/counter/adapters/types";
 import type { MenuHubSections } from "@/lib/counter/adapters/menu-hub";
-import { Fold } from "@/components/counter/ui";
+import { PageTabs } from "@/components/counter/ui";
 import { MenuPlainView } from "./menu-plain-ui";
 
 /**
@@ -113,51 +113,74 @@ export function CounterMenuClient({
           links to; `.seg` is not a fidelity landmark, so it changes no count. */}
       <SubNav items={MENU_TABS} label="Menu" />
 
-      {/* The menu made plain (owner's go, 2026-11-19; mock
-          https://claude.ai/artifact/YNwJ7EneNdAaC7vDp4HhBe). Everything the
-          page showed before is folded below it, unchanged. */}
-      <Section
-        bare
-        title="The menu in a sentence"
-        data={sections.plain}
-        pending={pending}
-      >
-        {(p) => <MenuPlainView p={p} />}
-      </Section>
-
-      <Fold summary="Every figure, as before">
-        <Section
-          bare
-          title="The figures"
-          data={sections.headline}
-          pending={pending}
-        >
-          {(h) => <Strip cells={h.cells} />}
-        </Section>
-
-        <div className="split">
-          {/* No `meta`: the prototype passes an empty subtitle here (`sec('Where
-            to work', '', ...)`), because three destinations need no window. */}
-          <Section title="Where to work" data={sections.work} pending={pending}>
-            {(w) => <Queue items={w.items} />}
-          </Section>
-
-          <Section
-            title="By category"
-            meta={(c) => c.meta}
-            data={sections.categories}
-            pending={pending}
-            askAbout="how the menu splits by category"
-          >
-            {(c) => (
+      <PageTabs
+        label="Menu views"
+        tabs={[
+          {
+            key: "summary",
+            label: "Summary",
+            content: (
               <>
-                <Donut slices={c.slices} center={c.center} />
-                <Note>{c.note}</Note>
+                {/* The menu made plain (owner's go, 2026-11-19; mock
+                    https://claude.ai/artifact/YNwJ7EneNdAaC7vDp4HhBe). Everything the
+                    page showed before is folded below it, unchanged. */}
+                <Section
+                  bare
+                  title="The menu in a sentence"
+                  data={sections.plain}
+                  pending={pending}
+                >
+                  {(p) => <MenuPlainView p={p} />}
+                </Section>
               </>
-            )}
-          </Section>
-        </div>
-      </Fold>
+            ),
+          },
+          {
+            key: "work",
+            label: "Where to work",
+            content: (
+              <>
+                <Section
+                  bare
+                  title="The figures"
+                  data={sections.headline}
+                  pending={pending}
+                >
+                  {(h) => <Strip cells={h.cells} />}
+                </Section>
+
+                  {/* No `meta`: the prototype passes an empty subtitle here (`sec('Where
+                    to work', '', ...)`), because three destinations need no window. */}
+                  <Section title="Where to work" data={sections.work} pending={pending}>
+                    {(w) => <Queue items={w.items} />}
+                  </Section>
+              </>
+            ),
+          },
+          {
+            key: "categories",
+            label: "Categories",
+            content: (
+              <>
+                <Section
+                  title="By category"
+                  meta={(c) => c.meta}
+                  data={sections.categories}
+                  pending={pending}
+                  askAbout="how the menu splits by category"
+                >
+                  {(c) => (
+                    <>
+                      <Donut slices={c.slices} center={c.center} />
+                      <Note>{c.note}</Note>
+                    </>
+                  )}
+                </Section>
+              </>
+            ),
+          },
+        ]}
+      />
     </>
   );
 }

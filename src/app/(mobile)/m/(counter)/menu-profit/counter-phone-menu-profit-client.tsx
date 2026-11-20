@@ -7,7 +7,7 @@ import { readCounterParams } from "@/lib/counter/url-state"
 import { rangeLabel } from "@/lib/counter/date-range"
 import type { MenuProfitSections } from "@/lib/counter/adapters/menu-profit"
 import type { SectionSources } from "@/lib/counter/adapters/types"
-import { Fold } from "@/components/counter/ui"
+import { PageTabs } from "@/components/counter/ui"
 import { ProfitPlainView } from "@/app/dashboard/(counter)/menu-profit/profit-plain-ui"
 
 /**
@@ -57,33 +57,58 @@ export function CounterPhoneMenuProfitClient({
         <p className="msub">{windowLabel}</p>
       </div>
 
-      <Section bare title="Menu profit in a sentence" data={sections.plain} pending={pending}>
-        {(p) => <ProfitPlainView p={p} />}
-      </Section>
+      <PageTabs
+        label="Menu profit views"
+        tabs={[
+          {
+            key: "summary",
+            label: "Summary",
+            content: (
+              <>
+                <Section bare title="Menu profit in a sentence" data={sections.plain} pending={pending}>
+                  {(p) => <ProfitPlainView p={p} />}
+                </Section>
+              </>
+            ),
+          },
+          {
+            key: "items",
+            label: "Items",
+            content: (
+              <>
+                <Section bare title="The figures" data={sections.headline} pending={pending}>
+                  {(h) => <MStrip cells={h.phoneCells} />}
+                </Section>
 
-      <Fold summary="Every figure, as before">
-      <Section bare title="The figures" data={sections.headline} pending={pending}>
-        {(h) => <MStrip cells={h.phoneCells} />}
-      </Section>
-
-      <Section
-        title="Profit by item"
-        meta={() => windowLabel}
-        data={sections.ledger}
-        pending={pending}
-      >
-        {(l) => <Chart {...l.phoneChart} />}
-      </Section>
-
-      <Section
-        title="The four groups"
-        meta={() => "menu engineering"}
-        data={sections.matrix}
-        pending={pending}
-      >
-        {(m) => <MList rows={m.phoneRows} />}
-      </Section>
-      </Fold>
+                <Section
+                  title="Profit by item"
+                  meta={() => windowLabel}
+                  data={sections.ledger}
+                  pending={pending}
+                >
+                  {(l) => <Chart {...l.phoneChart} />}
+                </Section>
+              </>
+            ),
+          },
+          {
+            key: "margins",
+            label: "Groups",
+            content: (
+              <>
+                <Section
+                  title="The four groups"
+                  meta={() => "menu engineering"}
+                  data={sections.matrix}
+                  pending={pending}
+                >
+                  {(m) => <MList rows={m.phoneRows} />}
+                </Section>
+              </>
+            ),
+          },
+        ]}
+      />
     </>
   )
 }

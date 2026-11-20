@@ -24,7 +24,7 @@ import { readCounterParams, writeCounterParams } from "@/lib/counter/url-state"
 import { rangeLabel } from "@/lib/counter/date-range"
 import type { SectionSources } from "@/lib/counter/adapters/types"
 import type { CoverageSection, MenuProfitSections } from "@/lib/counter/adapters/menu-profit"
-import { Fold } from "@/components/counter/ui"
+import { PageTabs } from "@/components/counter/ui"
 import { ProfitPlainView } from "./profit-plain-ui"
 
 /**
@@ -170,81 +170,113 @@ export function CounterMenuProfitClient({
           links to; `.seg` is not a fidelity landmark, so it changes no count. */}
       <SubNav items={MENU_TABS} label="Menu" />
 
-      <Section bare title="Menu profit in a sentence" data={sections.plain} pending={pending}>
-        {(p) => <ProfitPlainView p={p} />}
-      </Section>
+      <PageTabs
+        label="Menu profit views"
+        tabs={[
+          {
+            key: "summary",
+            label: "Summary",
+            content: (
+              <>
+                <Section bare title="Menu profit in a sentence" data={sections.plain} pending={pending}>
+                  {(p) => <ProfitPlainView p={p} />}
+                </Section>
+              </>
+            ),
+          },
+          {
+            key: "margins",
+            label: "Margins",
+            content: (
+              <>
+                <Section bare title="The figures" data={sections.headline} pending={pending}>
+                  {(h) => <Strip cells={h.cells} />}
+                </Section>
 
-      <Fold summary="The chart, groups, coverage and item ledger, as before">
-      <Section bare title="The figures" data={sections.headline} pending={pending}>
-        {(h) => <Strip cells={h.cells} />}
-      </Section>
+                <div className="split">
+                  <Section
+                    title="Volume against margin"
+                    meta={(m) => m.meta}
+                    data={sections.matrix}
+                    pending={pending}
+                    askAbout="which items sell well but earn badly"
+                  >
+                    {(m) => (
+                      <>
+                        <Matrix
+                          spec={{
+                            points: m.points,
+                            medianUnits: m.medianUnits,
+                            medianMargin: m.medianMargin,
+                          }}
+                          axisLabel={m.axisLabel}
+                        />
+                        <Note>
+                          {m.note}
+                        </Note>
+                      </>
+                    )}
+                  </Section>
 
-      <div className="split">
-        <Section
-          title="Volume against margin"
-          meta={(m) => m.meta}
-          data={sections.matrix}
-          pending={pending}
-          askAbout="which items sell well but earn badly"
-        >
-          {(m) => (
-            <>
-              <Matrix
-                spec={{
-                  points: m.points,
-                  medianUnits: m.medianUnits,
-                  medianMargin: m.medianMargin,
-                }}
-                axisLabel={m.axisLabel}
-              />
-              <Note>
-                {m.note}
-              </Note>
-            </>
-          )}
-        </Section>
-
-        <Section
-          title="What to do about it"
-          meta={(o) => o.meta}
-          data={sections.opportunities}
-          pending={pending}
-        >
-          {(o) => <Queue items={o.items} />}
-        </Section>
-      </div>
-
-      <Section
-        title="What these figures did not see"
-        meta={(c) => c.meta}
-        data={sections.coverage}
-        pending={pending}
-        askAbout="how much of the menu is only partly costed"
-      >
-        {(c) => <CoverageBlock c={c} />}
-      </Section>
-
-      <Section
-        title="Item ledger"
-        meta={(l) => l.meta}
-        data={sections.ledger}
-        pending={pending}
-        pad={false}
-        askAbout="which items contribute the most"
-      >
-        {(l) => (
-          <>
-            <Table columns={LEDGER_COLUMNS} rows={l.rows} />
-            {/* No `.sec__body` wrapper — it is a landmark and the prototype's
-                `sec(..., tbl(...))` emits the table alone. The note carries the
-                body's own inset via `<Note flush>`. */}
-            <Note flush>
-              {l.note}
-            </Note>
-          </>
-        )}
-      </Section>
-      </Fold>
+                  <Section
+                    title="What to do about it"
+                    meta={(o) => o.meta}
+                    data={sections.opportunities}
+                    pending={pending}
+                  >
+                    {(o) => <Queue items={o.items} />}
+                  </Section>
+                </div>
+              </>
+            ),
+          },
+          {
+            key: "missing",
+            label: "Missing",
+            content: (
+              <>
+                <Section
+                  title="What these figures did not see"
+                  meta={(c) => c.meta}
+                  data={sections.coverage}
+                  pending={pending}
+                  askAbout="how much of the menu is only partly costed"
+                >
+                  {(c) => <CoverageBlock c={c} />}
+                </Section>
+              </>
+            ),
+          },
+          {
+            key: "items",
+            label: "Items",
+            content: (
+              <>
+                <Section
+                  title="Item ledger"
+                  meta={(l) => l.meta}
+                  data={sections.ledger}
+                  pending={pending}
+                  pad={false}
+                  askAbout="which items contribute the most"
+                >
+                  {(l) => (
+                    <>
+                      <Table columns={LEDGER_COLUMNS} rows={l.rows} />
+                      {/* No `.sec__body` wrapper — it is a landmark and the prototype's
+                          `sec(..., tbl(...))` emits the table alone. The note carries the
+                          body's own inset via `<Note flush>`. */}
+                      <Note flush>
+                        {l.note}
+                      </Note>
+                    </>
+                  )}
+                </Section>
+              </>
+            ),
+          },
+        ]}
+      />
     </>
   )
 }

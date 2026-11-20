@@ -8,7 +8,7 @@ import { readCounterParams } from "@/lib/counter/url-state"
 import { rangeLabel } from "@/lib/counter/date-range"
 import type { MenuCatalogSections } from "@/lib/counter/adapters/menu-catalog"
 import type { SectionSources } from "@/lib/counter/adapters/types"
-import { Fold } from "@/components/counter/ui"
+import { PageTabs } from "@/components/counter/ui"
 import { CatalogPlainView } from "@/app/dashboard/(counter)/menu/catalog/catalog-plain-ui"
 
 /**
@@ -56,39 +56,64 @@ export function CounterPhoneCatalogClient({
         <p className="msub">{windowLabel}</p>
       </div>
 
-      <Section bare title="The catalog in a sentence" data={sections.plain} pending={pending}>
-        {(p) => <CatalogPlainView p={p} />}
-      </Section>
+      <PageTabs
+        label="Catalog views"
+        tabs={[
+          {
+            key: "summary",
+            label: "Summary",
+            content: (
+              <>
+                <Section bare title="The catalog in a sentence" data={sections.plain} pending={pending}>
+                  {(p) => <CatalogPlainView p={p} />}
+                </Section>
+              </>
+            ),
+          },
+          {
+            key: "unmapped",
+            label: "Unmapped",
+            content: (
+              <>
+                <Section bare title="The figures" data={sections.headline} pending={pending}>
+                  {(h) => <MStrip cells={h.phoneCells} />}
+                </Section>
 
-      <Fold summary="Every figure, as before">
-      <Section bare title="The figures" data={sections.headline} pending={pending}>
-        {(h) => <MStrip cells={h.phoneCells} />}
-      </Section>
+                <Section
+                  title="Unmapped"
+                  meta={(l) => `${l.unmappedModifiers} modifiers`}
+                  data={sections.list}
+                  pending={pending}
+                >
+                  {(l) => <MList rows={l.phoneUnmapped} />}
+                </Section>
+              </>
+            ),
+          },
+          {
+            key: "catalog",
+            label: "Top sellers",
+            content: (
+              <>
+                <Section
+                  title="Top sellers"
+                  meta={() => windowLabel}
+                  data={sections.list}
+                  pending={pending}
+                >
+                  {(l) => <MList rows={l.phoneTop} />}
+                </Section>
 
-      <Section
-        title="Unmapped"
-        meta={(l) => `${l.unmappedModifiers} modifiers`}
-        data={sections.list}
-        pending={pending}
-      >
-        {(l) => <MList rows={l.phoneUnmapped} />}
-      </Section>
-
-      <Section
-        title="Top sellers"
-        meta={() => windowLabel}
-        data={sections.list}
-        pending={pending}
-      >
-        {(l) => <MList rows={l.phoneTop} />}
-      </Section>
-
-      {/* `.mbtn` is class-keyed and styles an `<a>` unchanged — a destination
-          is a link, not a button, the same trade the decisions phone page made. */}
-      <Link className="mbtn mbtn--primary" href="/m/recipes">
-        Map the modifiers
-      </Link>
-      </Fold>
+                {/* `.mbtn` is class-keyed and styles an `<a>` unchanged — a destination
+                    is a link, not a button, the same trade the decisions phone page made. */}
+                <Link className="mbtn mbtn--primary" href="/m/recipes">
+                  Map the modifiers
+                </Link>
+              </>
+            ),
+          },
+        ]}
+      />
     </>
   )
 }
