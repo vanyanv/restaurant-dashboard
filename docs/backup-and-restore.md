@@ -31,11 +31,14 @@ on Vercel.
 1. **Pick the dump.** List `backups/db/` in the R2 dashboard, or run
    `aws --endpoint-url https://<account>.r2.cloudflarestorage.com s3 ls s3://<bucket>/backups/db/`.
    Download the date you want to a local machine, not to a CI runner.
-2. **Create an empty Neon branch** in the Neon console (or
-   `neonctl branches create --name restore-YYYY-MM-DD`). Do not branch from
-   production's current state: choose an empty branch or a new database on
-   it. Copy that branch's **direct** connection string, the host without
-   `-pooler`.
+2. **Create a new Neon branch and an EMPTY database on it.** A new branch
+   (console, or `neonctl branches create --name restore-YYYY-MM-DD`) is a copy
+   of its parent, schema and data, so restoring into its existing database
+   stops on the first table that already exists. On that branch create a new
+   database (console, or `neonctl databases create --branch restore-YYYY-MM-DD
+   --name restored`) and restore into that one. Copy the **direct**
+   connection string (the host without `-pooler`) and check that its path
+   names the new database (`.../restored`), not `neondb`.
 3. **Check that the string is NOT production** before running anything. The
    host must be the new branch's endpoint. Never paste the production
    `DATABASE_URL` into a restore command.

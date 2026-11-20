@@ -130,11 +130,13 @@ export AWS_DEFAULT_REGION="${R2_REGION:-auto}"
 # the operation requires one.
 export AWS_REQUEST_CHECKSUM_CALCULATION=when_required
 export AWS_RESPONSE_CHECKSUM_VALIDATION=when_required
-s3() { aws --endpoint-url "$endpoint" --only-show-errors "$@" 2> >(scrub >&2); }
+# --only-show-errors belongs to the `s3` transfer commands only; `s3api`
+# refuses it, so it is passed on the cp/rm calls, not here.
+s3() { aws --endpoint-url "$endpoint" "$@" 2> >(scrub >&2); }
 
 key="${PREFIX}${day}.dump"
 echo "Uploading ${key}"
-s3 s3 cp "$dump" "s3://${R2_BUCKET_NAME}/${key}" --content-type application/octet-stream
+s3 s3 cp --only-show-errors "$dump" "s3://${R2_BUCKET_NAME}/${key}" --content-type application/octet-stream
 
 remote_size=$(s3 s3api head-object --bucket "$R2_BUCKET_NAME" --key "$key" --query ContentLength --output text)
 if [[ "$remote_size" != "$size" ]]; then
@@ -145,16 +147,22 @@ fi
 # --- 4. Keep the newest $KEEP ------------------------------------------------
 # Keys are YYYY-MM-DD.dump, so name order is date order. Only keys under the
 # prefix matching that pattern are ever considered for deletion.
+# Listed into a variable first: a failure inside `< <(...)` would not stop
+# the script, and a failed listing must not read as "nothing to prune".
+if ! listing=$(s3 s3api list-objects-v2 --bucket "$R2_BUCKET_NAME" --prefix "$PREFIX" \
+    --query 'Contents[].Key' --output text); then
+  echo "Could not list ${PREFIX} for retention" >&2
+  exit 1
+fi
 mapfile -t keys < <(
-  s3 s3api list-objects-v2 --bucket "$R2_BUCKET_NAME" --prefix "$PREFIX" \
-    --query 'Contents[].Key' --output text \
-  | tr '\t' '\n' | grep -E "^${PREFIX}[0-9]{4}-[0-9]{2}-[0-9]{2}\.dump$" | sort
+  printf '%s\n' "$listing" | tr '\t' '\n' \
+    | grep -E "^${PREFIX}[0-9]{4}-[0-9]{2}-[0-9]{2}\.dump$" | sort || true
 )
 echo "${#keys[@]} backup(s) under ${PREFIX}; keeping the newest ${KEEP}"
 if [[ "${#keys[@]}" -gt "$KEEP" ]]; then
   for old in "${keys[@]:0:${#keys[@]}-KEEP}"; do
     echo "Deleting ${old}"
-    s3 s3 rm "s3://${R2_BUCKET_NAME}/${old}"
+    s3 s3 rm --only-show-errors "s3://${R2_BUCKET_NAME}/${old}"
   done
 fi
 
