@@ -168,7 +168,8 @@ export function buildLaborSummary(input: {
             figures: [
               { label: incomplete ? "Share on file" : "Share of sales", value: none ? "missing" : pct(s.laborPct, { scaled: true }) },
               { label: "Labor cost", value: none ? "missing" : money(s.cost) },
-              { label: "Sales on those days", value: money(s.ratedSales) },
+              // With no labor day there are no "those days": $0 here would read as a store that sold nothing.
+              ...(none ? [] : [{ label: "Sales on those days", value: money(s.ratedSales) }]),
             ],
           }
         })
@@ -210,11 +211,14 @@ export interface LaborWeekCell {
   key: string
   /** Last day of the week inside the data, `YYYY-MM-DD`. */
   end: string
-  /** "11/9", or "so far" on the running week. */
+  /** "11/9"; "so far" on the week still running; "part" on a past week the range cuts short. */
   label: string
   /** "Week of Nov 9", for the pickers and screen readers. */
   name: string
+  /** Fewer than seven days: still running, or cut short by the range. */
   running: boolean
+  /** "so far" or "part week"; empty on a whole week. */
+  partWord: string
   missing: boolean
   selected: boolean
   sales: number | null
@@ -242,7 +246,13 @@ export interface LaborWeeksView {
  * The trend's weeks as cells. `rangeStart`/`rangeEnd` are day keys of the
  * range on screen; a week is `selected` only when the range is exactly it.
  */
-export function buildLaborWeeks(weeks: LaborTrendWeek[], rangeStart: string, rangeEnd: string): LaborWeeksView {
+export function buildLaborWeeks(
+  weeks: LaborTrendWeek[],
+  rangeStart: string,
+  rangeEnd: string,
+  /** The reader's day, `YYYY-MM-DD`. A part week ending before it is over, not "so far". */
+  todayKey: string = rangeEnd,
+): LaborWeeksView {
   const topSales = Math.max(1, ...weeks.map((w) => w.sales ?? 0))
   const cells: LaborWeekCell[] = weeks.map((w) => {
     const missing = w.missingStoreDays > 0
@@ -251,16 +261,22 @@ export function buildLaborWeeks(weeks: LaborTrendWeek[], rangeStart: string, ran
     const name = `Week of ${MONTH_DAY.format(localDay(w.key))}`
     const bits = [
       w.sales === null ? "no sales on file" : `sold ${money(w.sales)}`,
-      noLabor ? "no labor on file" : `labor ${money(w.cost)}, ${share} of sales`,
+      noLabor
+        ? "no labor on file"
+        : w.laborPct === null
+        ? `labor ${money(w.cost)}`
+        : `labor ${money(w.cost)}, ${share} of sales${missing ? " on the days with labor" : ""}`,
     ]
     if (missing) bits.push(`labor missing on ${plural(w.missingStoreDays, "store-day")}`)
-    if (w.isPartial) bits.push("week still running")
+    const partWord = !w.isPartial ? "" : w.end >= todayKey ? "so far" : "part week"
+    if (w.isPartial) bits.push(partWord === "so far" ? "week still running" : "not a whole week")
     return {
       key: w.key,
       end: w.end,
-      label: w.isPartial ? "so far" : w.label,
+      label: partWord === "so far" ? "so far" : partWord ? "part" : w.label,
       name,
       running: w.isPartial,
+      partWord,
       missing: missing || (noLabor && (w.sales ?? 0) > 0),
       selected: w.key === rangeStart && w.end === rangeEnd,
       sales: w.sales,
@@ -291,7 +307,7 @@ export function buildLaborWeeks(weeks: LaborTrendWeek[], rangeStart: string, ran
         ? `One whole week has a reading: the ${lc(whole[0].name)}, labor ${whole[0].top} of sales.`
         : `Over ${plural(whole.length, "whole week")}, labor ran from ${lo.top} of sales (the ${lc(lo.name)}) to ${hi.top} (the ${lc(hi.name)}).`
     const short = cells.filter((c) => c.missing).length
-    if (short > 0) sentence += ` ${plural(short, "week is", "weeks are")} hatched: labor is missing for part of ${short === 1 ? "it" : "them"}, so the labor shown is short.`
+    if (short > 0) sentence += ` ${plural(short, "week is", "weeks are")} hatched: labor is missing for part of ${short === 1 ? "it" : "them"}, so the labor shown is short and the share is on the days with labor.`
   }
 
   return { weeks: cells, sentence, compare: a !== null && b !== null ? { a: a.key, b: b.key } : null }

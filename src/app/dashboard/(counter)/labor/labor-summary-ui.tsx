@@ -108,11 +108,12 @@ export function LaborDetailView({ s, onStore }: { s: LaborSummary; onStore?: (st
 export function LaborWeeksBlock({ w, onWeek }: { w: LaborWeeksView; onWeek: (range: DateRange) => void }) {
   const idA = useId()
   const idB = useId()
-  const [picked, setPicked] = useState<{ a: string; b: string } | null>(null)
-  // The picks are remembered only while both weeks are still on screen; a new
-  // range brings new weeks, and the comparison opens on its own pair again.
+  const [picked, setPicked] = useState<{ a: string; b: string; under: string } | null>(null)
+  // The picks belong to the week that was open when they were made: tap
+  // another week and the comparison opens on that week and the one before.
+  const under = w.weeks.find((x) => x.selected)?.key ?? ""
   const has = (k: string) => w.weeks.some((x) => x.key === k)
-  const pair = picked !== null && has(picked.a) && has(picked.b) ? picked : w.compare
+  const pair = picked !== null && picked.under === under && has(picked.a) && has(picked.b) ? picked : w.compare
   const a = pair ? w.weeks.find((x) => x.key === pair.a) : undefined
   const b = pair ? w.weeks.find((x) => x.key === pair.b) : undefined
   const newestFirst = [...w.weeks].reverse()
@@ -156,8 +157,10 @@ export function LaborWeeksBlock({ w, onWeek }: { w: LaborWeeksView; onWeek: (ran
                 }}
               >
                 <span className="lb-wk__top">{x.top}</span>
-                <span className="lb-wk__bar" style={{ height: `${Math.max(2, x.salesFill)}%`, "--i": i } as CSSProperties}>
-                  {x.laborFill > 0 ? <i style={{ height: `${x.laborFill}%` }} /> : null}
+                <span className="lb-wk__trk">
+                  <span className="lb-wk__bar" style={{ height: `${Math.max(2, x.salesFill)}%`, "--i": i } as CSSProperties}>
+                    {x.laborFill > 0 ? <i style={{ height: `${x.laborFill}%` }} /> : null}
+                  </span>
                 </span>
                 <span className="lb-wk__lbl">{x.label}</span>
               </button>
@@ -167,7 +170,8 @@ export function LaborWeeksBlock({ w, onWeek }: { w: LaborWeeksView; onWeek: (ran
         <Answer>{w.sentence}</Answer>
         <p className="lb-note">
           Tap a week to open it. The whole bar is what the week sold and the filled part is what labor cost; the number
-          on top is labor as a share of sales. To go further back, open an older week: the twelve weeks before it follow.
+          on top is labor as a share of sales. To go further back, open an older week: it and the eleven weeks before it are
+          drawn. The date arrows at the top of the page step forward again.
         </p>
       </Card>
 
@@ -177,50 +181,56 @@ export function LaborWeeksBlock({ w, onWeek }: { w: LaborWeeksView; onWeek: (ran
           <div className="lb-cmp">
             <div className="lb-cmp__picks">
               <label className="lb-cmp__pick" htmlFor={idA}>
-                <span>This week</span>
-                <select id={idA} value={a.key} onChange={(e) => setPicked({ a: e.target.value, b: b.key })}>
+                <span>Week</span>
+                <select id={idA} value={a.key} onChange={(e) => setPicked({ a: e.target.value, b: b.key, under })}>
                   {newestFirst.map((x) => (
                     <option key={x.key} value={x.key}>
                       {x.name}
-                      {x.running ? " (so far)" : ""}
+                      {x.partWord ? ` (${x.partWord})` : ""}
                     </option>
                   ))}
                 </select>
               </label>
               <label className="lb-cmp__pick" htmlFor={idB}>
                 <span>Against</span>
-                <select id={idB} value={b.key} onChange={(e) => setPicked({ a: a.key, b: e.target.value })}>
+                <select id={idB} value={b.key} onChange={(e) => setPicked({ a: a.key, b: e.target.value, under })}>
                   {newestFirst.map((x) => (
                     <option key={x.key} value={x.key}>
                       {x.name}
-                      {x.running ? " (so far)" : ""}
+                      {x.partWord ? ` (${x.partWord})` : ""}
                     </option>
                   ))}
                 </select>
               </label>
             </div>
-            <dl className="lb-cmp__rows">
-              <div className="lb-cmp__row lb-cmp__row--head">
-                <dt>Figure</dt>
-                <dd>{a.name}</dd>
-                <dd>{b.name}</dd>
-                <dd>Change</dd>
-              </div>
-              {compareLaborWeeks(a, b).map((r) => (
-                <div key={r.key} className="lb-cmp__row">
-                  <dt>{r.label}</dt>
-                  <dd>{r.a}</dd>
-                  <dd>{r.b}</dd>
-                  <dd className="lb-cmp__chg" data-tone={r.tone}>
-                    {r.change}
-                  </dd>
-                </div>
-              ))}
-            </dl>
+            <table className="lb-cmp__rows">
+              <thead>
+                <tr className="lb-cmp__row lb-cmp__row--head">
+                  <th scope="col">Figure</th>
+                  <th scope="col">{a.name}</th>
+                  <th scope="col">{b.name}</th>
+                  <th scope="col">Change</th>
+                </tr>
+              </thead>
+              <tbody>
+                {compareLaborWeeks(a, b).map((r) => (
+                  <tr key={r.key} className="lb-cmp__row">
+                    <th scope="row">{r.label}</th>
+                    <td>{r.a}</td>
+                    <td>{r.b}</td>
+                    <td className="lb-cmp__chg" data-tone={r.tone}>
+                      {r.change}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
             {a.missing || b.missing || a.running || b.running ? (
               <p className="lb-note">
-                {a.running || b.running ? "A week marked so far is still running, so it is short of a whole week. " : ""}
-                {a.missing || b.missing ? "A week with labor missing shows less labor than was worked." : ""}
+                {a.running || b.running ? "A week marked so far or part week has fewer than seven days. " : ""}
+                {a.missing || b.missing
+                  ? "A week with labor missing shows less labor than was worked, and its share is on the days with labor."
+                  : ""}
               </p>
             ) : null}
           </div>

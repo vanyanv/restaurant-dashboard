@@ -97,7 +97,10 @@ describe("buildLaborSummary", () => {
     const s = buildLaborSummary({ days: [], week: week(), roles: [], storeShares: shares, incompleteStoreIds: ["g"] })
     expect(s.stores.map((c) => c.status.label)).toEqual(["Labor on file", "Labor looks incomplete", "No labor on file"])
     expect(s.stores[1].figures[0]).toEqual({ label: "Share on file", value: "8.2%" })
-    expect(s.stores[2].figures[1].value).toBe("missing")
+    expect(s.stores[2].figures).toEqual([
+      { label: "Share of sales", value: "missing" },
+      { label: "Labor cost", value: "missing" },
+    ])
     expect(buildLaborSummary({ days: [], week: week(), roles: [], storeShares: shares.slice(0, 1) }).stores).toEqual([])
   })
 
@@ -130,7 +133,10 @@ describe("buildLaborWeeks", () => {
     const v = buildLaborWeeks(weeks, "2026-11-09", "2026-11-15")
     expect(v.weeks.map((w) => w.selected)).toEqual([false, false, true, false])
     expect(v.compare).toEqual({ a: "2026-11-09", b: "2026-11-02" })
-    expect(v.weeks[3]).toMatchObject({ label: "so far", running: true })
+    expect(v.weeks[3]).toMatchObject({ label: "so far", partWord: "so far", running: true })
+    // The same part week, read a week later: it is over, not "so far".
+    expect(buildLaborWeeks(weeks, "2026-11-09", "2026-11-15", "2026-11-25").weeks[3]).toMatchObject({ label: "part", partWord: "part week" })
+    expect(buildLaborWeeks(weeks, "2026-11-13", "2026-11-19", "2026-11-19").weeks[3]).toMatchObject({ label: "so far", partWord: "so far" })
     expect(v.weeks[0].salesFill).toBe(100)
     expect(v.weeks[2].laborFill).toBeCloseTo((15610 / 55800) * 100)
   })
@@ -147,6 +153,21 @@ describe("buildLaborWeeks", () => {
     expect(v.weeks[0]).toMatchObject({ top: "missing", missing: true, laborPct: null, laborFill: 0 })
     expect(v.compare).toBeNull()
     expect(v.sentence).toContain("No whole week")
+  })
+})
+
+describe("a week short of labor or of sales", () => {
+  it("says the share is on the days with labor, and never prints an empty share", () => {
+    const v = buildLaborWeeks(
+      [
+        trend("2026-11-02", "2026-11-08", { missingStoreDays: 2, laborPct: 30, cost: 2000, sales: 10000 }),
+        trend("2026-11-09", "2026-11-15", { sales: null, laborPct: null, cost: 500, hours: 20, splh: null }),
+      ],
+      "a",
+      "b",
+    )
+    expect(v.weeks[0].aria).toContain("labor $2,000, 30.0% of sales on the days with labor")
+    expect(v.weeks[1].aria).toBe("Week of Nov 9: no sales on file, labor $500")
   })
 })
 

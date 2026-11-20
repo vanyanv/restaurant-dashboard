@@ -1800,13 +1800,13 @@ function summarySection(laborSd: SectionData<LaborData>): SectionData<LaborSumma
  * The weeks as sales against labor, on either route: the same trend weeks the
  * folded chart draws, so a week tapped here and the bar below cannot disagree.
  */
-function weeksSection(sd: SectionData<LaborTrendWeek[]>, range: DateRange): SectionData<LaborWeeksView> {
+function weeksSection(sd: SectionData<LaborTrendWeek[]>, range: DateRange, today: Date): SectionData<LaborWeeksView> {
   return mapReadyTo(sd, (weeks) =>
     weeks.length === 0 || weeks.every((w) => w.cost === 0 && w.hours === 0 && (w.sales ?? 0) === 0)
       ? notComputed<LaborWeeksView>(
           `No sales or labor are on file for the last ${TREND_WEEKS} weeks, so there are no weeks to compare.`,
         )
-      : ready(buildLaborWeeks(weeks, isoDay(range.start), isoDay(range.end))),
+      : ready(buildLaborWeeks(weeks, isoDay(range.start), isoDay(range.end), isoDay(today))),
   )
 }
 
@@ -1908,7 +1908,7 @@ export function getLaborSectionPromises(
 
     weeks: lazy(() => guardSection(
       Promise.all([scopeP, trendLoadP]).then(([scopeSd, trendSd]) =>
-        weeksSection(gate(scopeSd, trendSd), range),
+        weeksSection(gate(scopeSd, trendSd), range, input.today),
       ),
       "retryTrend",
     )),
@@ -2026,7 +2026,7 @@ export function getStoreLaborSectionPromises(
 
     weeks: lazy(() => guardSection(
       Promise.all([scopeP, trendLoadP]).then(([scopeSd, trendSd]) =>
-        weeksSection(gate(scopeSd, trendSd), range),
+        weeksSection(gate(scopeSd, trendSd), range, input.today),
       ),
       "retryTrend",
     )),
