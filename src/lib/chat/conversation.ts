@@ -389,6 +389,53 @@ export async function getConversation(
   }
 }
 
+/**
+ * The last `limit` user/assistant turns of a thread with non-blank text,
+ * oldest first: exactly what `/api/chat` replays to the model, and nothing
+ * else. `getConversation` loads every message with every tool call's args and
+ * result, which the replay then threw away but for the last 20 texts.
+ *
+ * Same account check and the same errors as `getConversation`. Reads newest
+ * first on `[conversationId, createdAt]` and stops at `limit` kept rows. A
+ * row whose text is only whitespace is dropped after the read (Prisma has no
+ * trim filter), so a short batch is topped up until `limit` rows are kept or
+ * the thread runs out, which is the same set `filter(...).slice(-limit)` gave.
+ */
+export async function getRecentHistory(
+  prisma: PrismaClient,
+  accountId: string,
+  conversationId: string,
+  limit: number,
+): Promise<Array<{ role: string; content: string }>> {
+  const c = await prisma.conversation.findUnique({
+    where: { id: conversationId },
+    select: { accountId: true },
+  })
+  if (!c) {
+    throw new ConversationAccessError("NOT_FOUND", "conversation not found")
+  }
+  if (c.accountId !== accountId) {
+    throw new ConversationAccessError("NOT_OWNED", "conversation not on this account")
+  }
+
+  const kept: Array<{ role: string; content: string }> = []
+  let skip = 0
+  while (kept.length < limit) {
+    const want = limit - kept.length
+    const batch = await prisma.message.findMany({
+      where: { conversationId, role: { in: ["user", "assistant"] }, content: { not: "" } },
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      skip,
+      take: want,
+      select: { role: true, content: true },
+    })
+    for (const m of batch) if (m.content.trim()) kept.push(m)
+    if (batch.length < want) break
+    skip += batch.length
+  }
+  return kept.reverse()
+}
+
 /** Lightweight ownership check for hot paths that only need to confirm the
  * conversation exists on the caller's account. Loading messages here adds
  * avoidable latency before /api/chat can start streaming. */

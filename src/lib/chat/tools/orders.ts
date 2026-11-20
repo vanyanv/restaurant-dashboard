@@ -5,6 +5,7 @@
 // Friday", "what was on order #1234?") without dumping the full Otter API.
 
 import { z } from "zod"
+import { Prisma } from "@/generated/prisma/client"
 import { feeAmount, netOf, ticketOf } from "@/lib/counter/order-signs"
 import {
   dateRangeSchema,
@@ -284,60 +285,49 @@ export const getOrderItemFrequency: ChatTool<
   async execute(args, ctx) {
     const storeIds = await resolveStoreIds(ctx, args.storeIds)
     const { from, to } = parseDateRange(args.dateRange)
-    const toEnd = new Date(to)
-    toEnd.setUTCHours(23, 59, 59, 999)
+    if (storeIds.length === 0) return []
 
-    // Aggregate in two queries: groupBy for sums, then a distinct-order count
-    // (Prisma can't combine these in one groupBy because OtterOrderItem
-    // doesn't carry the storeId column directly).
-    const items = await ctx.prisma.otterOrderItem.findMany({
-      where: {
-        order: {
-          storeId: { in: storeIds },
-          referenceTimeLocal: { gte: from, lte: toEnd },
-        },
-      },
-      select: {
-        name: true,
-        quantity: true,
-        price: true,
-        orderId: true,
-      },
-    })
-
-    const byName = new Map<
-      string,
-      { orderIds: Set<string>; qty: number; revenue: number }
-    >()
-    for (const it of items) {
-      let bucket = byName.get(it.name)
-      if (!bucket) {
-        bucket = { orderIds: new Set(), qty: 0, revenue: 0 }
-        byName.set(it.name, bucket)
-      }
-      bucket.orderIds.add(it.orderId)
-      bucket.qty += it.quantity
-      bucket.revenue += it.quantity * it.price
-    }
-
+    // Grouped in SQL: one row per item name instead of every order line of
+    // the window crossing the wire to be counted here. The day bounds are the
+    // old `gte from, lte 23:59:59.999` as a half-open range, and the revenue
+    // is still SUM(quantity * price), so avgPrice stays revenue / quantity.
     const minOrders = args.minOrders ?? 5
-    const rows: OrderItemFrequencyChatRow[] = []
-    for (const [name, b] of byName.entries()) {
-      if (b.orderIds.size < minOrders) continue
-      rows.push({
-        itemName: name,
-        orderCount: b.orderIds.size,
-        totalQty: b.qty,
-        totalRevenue: b.revenue,
-        // Revenue over quantity, the same two numbers printed beside it. The
-        // unweighted mean of each line's listed price counted a line of one
-        // as much as a line of six, so `avgPrice` and `totalRevenue /
-        // totalQty` could disagree about the same item in the same answer —
-        // and a model asked to check its own arithmetic will do that division.
-        avgPrice: b.qty > 0 ? b.revenue / b.qty : 0,
-      })
-    }
-    rows.sort((a, b) => b.orderCount - a.orderCount)
-    return rows.slice(0, args.limit ?? 20)
+    const grouped = await ctx.prisma.$queryRaw<
+      Array<{ itemName: string; orderCount: number; totalQty: number; totalRevenue: number }>
+    >(Prisma.sql`
+      SELECT i."name" AS "itemName",
+             count(DISTINCT i."orderId")::int AS "orderCount",
+             sum(i."quantity")::float8 AS "totalQty",
+             sum(i."quantity" * i."price")::float8 AS "totalRevenue"
+        FROM "OtterOrder" o
+        -- Lines reached through the orders in range (index on orderId), not
+        -- a hash join over every order line ever; OFFSET 0 keeps the planner
+        -- from flattening it back. Same shape as item-discounts.ts.
+        CROSS JOIN LATERAL (
+          SELECT x."name", x."quantity", x."price", x."orderId"
+            FROM "OtterOrderItem" x
+           WHERE x."orderId" = o."id"
+          OFFSET 0
+        ) i
+       WHERE o."storeId" IN (${Prisma.join(storeIds)})
+         AND o."referenceTimeLocal" >= ${from.toISOString().slice(0, 10)}::date
+         AND o."referenceTimeLocal" < (${to.toISOString().slice(0, 10)}::date + 1)
+       GROUP BY i."name"
+      HAVING count(DISTINCT i."orderId") >= ${minOrders}
+       ORDER BY "orderCount" DESC, i."name" ASC
+       LIMIT ${args.limit ?? 20}`)
+
+    return grouped.map((g) => ({
+      itemName: g.itemName,
+      orderCount: Number(g.orderCount),
+      totalQty: Number(g.totalQty),
+      totalRevenue: Number(g.totalRevenue),
+      // Revenue over quantity, the same two numbers printed beside it. The
+      // unweighted mean of each line's listed price counted a line of one
+      // as much as a line of six, so `avgPrice` and `totalRevenue /
+      // totalQty` could disagree about the same item in the same answer —
+      // and a model asked to check its own arithmetic will do that division.
+      avgPrice: Number(g.totalQty) > 0 ? Number(g.totalRevenue) / Number(g.totalQty) : 0,
+    }))
   },
 }

@@ -24,6 +24,41 @@ beforeEach(() => {
   vi.mocked(assertOwnerOwnsStores).mockImplementation(async (_a, ids) => ids ?? ["s1"])
 })
 
+describe("date range filter is a half-open range on the raw column", () => {
+  const range = { ...scope, from: new Date("2026-10-01T00:00:00Z"), to: new Date("2026-10-31T00:00:00Z") }
+  const q = (dataset: "orders" | "ratings" | "waste_log" | "invoices" | "alerts") =>
+    buildQuery({ dataset, aggregates: [{ fn: "count" }] }, range)
+
+  it.each(["orders"] as const)("%s: no cast of the column", (d) => {
+    const { sql, values } = q(d)
+    expect(sql).toContain(`o."referenceTimeLocal" >= ?::date`)
+    expect(sql).toContain(`o."referenceTimeLocal" < (?::date + 1)`)
+    expect(sql).not.toMatch(/"referenceTimeLocal"::date/)
+    expect(values).toContainEqual(range.from)
+    expect(values).toContainEqual(range.to)
+  })
+
+  it.each([
+    ["ratings", `r."reviewedAt"`],
+    ["waste_log", `ad."occurredAt"`],
+  ] as const)("%s: UTC column, bounds moved from Los Angeles midnight to UTC", (d, col) => {
+    const { sql } = q(d)
+    expect(sql).toContain(`${col} >= (?::date::timestamp`)
+    expect(sql).toContain(`AT TIME ZONE 'America/Los_Angeles' AT TIME ZONE 'UTC'`)
+    expect(sql).not.toMatch(new RegExp(`\\(${col.replace(/\./g, "\\.")} AT TIME ZONE 'UTC'`))
+  })
+
+  it("date-typed columns keep BETWEEN (already index-friendly)", () => {
+    expect(q("invoices").sql).toContain(`v."invoiceDate"::date BETWEEN`)
+    expect(q("alerts").sql).toContain(`a."occurredOn"::date BETWEEN`)
+  })
+
+  it("only the timestamp datasets declare a raw column", () => {
+    const withRaw = Object.entries(DATASETS).filter(([, d]) => "dateRaw" in d).map(([n]) => n)
+    expect(withRaw.sort()).toEqual(["order_items", "order_modifiers", "orders", "ratings", "waste_log"])
+  })
+})
+
 describe("buildQuery", () => {
   it("always binds the account, and counts modifiers by name", () => {
     const q = buildQuery(

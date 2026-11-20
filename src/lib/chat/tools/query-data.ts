@@ -51,6 +51,15 @@ interface Dataset {
   store?: string
   /** Day expression for `dateRange`. */
   date?: string
+  /**
+   * Set when `date` is a cast of a timestamp column. `dateRange` is then
+   * applied to the raw column as a half-open range (index-friendly) instead
+   * of casting every row. `tz` is the zone the cast read the day in: absent
+   * for a zone-less local timestamp, a zone name for a UTC-stored one.
+   * `@db.Date` columns need no entry; comparing them to a date is already
+   * sargable.
+   */
+  dateRaw?: { col: string; tz?: string }
   /** True for datasets too large to read without a date range. */
   needsRange?: boolean
   columns: Record<string, Column>
@@ -77,6 +86,7 @@ export const DATASETS = {
     account: `s."accountId"`,
     store: `o."storeId"`,
     date: `o."referenceTimeLocal"::date`,
+    dateRaw: { col: `o."referenceTimeLocal"` },
     needsRange: true,
     columns: {
       store: STORE,
@@ -99,6 +109,7 @@ export const DATASETS = {
     account: `s."accountId"`,
     store: `o."storeId"`,
     date: `o."referenceTimeLocal"::date`,
+    dateRaw: { col: `o."referenceTimeLocal"` },
     needsRange: true,
     columns: {
       store: STORE,
@@ -118,6 +129,7 @@ export const DATASETS = {
     account: `s."accountId"`,
     store: `o."storeId"`,
     date: `o."referenceTimeLocal"::date`,
+    dateRaw: { col: `o."referenceTimeLocal"` },
     needsRange: true,
     columns: {
       store: STORE,
@@ -195,6 +207,7 @@ export const DATASETS = {
     account: `s."accountId"`,
     store: `r."storeId"`,
     date: `(r."reviewedAt" AT TIME ZONE 'UTC' AT TIME ZONE 'America/Los_Angeles')::date`,
+    dateRaw: { col: `r."reviewedAt"`, tz: "America/Los_Angeles" },
     columns: {
       store: STORE,
       ...dayCols(`(r."reviewedAt" AT TIME ZONE 'UTC' AT TIME ZONE 'America/Los_Angeles')`),
@@ -260,6 +273,7 @@ export const DATASETS = {
     account: `s."accountId"`,
     store: `ad."storeId"`,
     date: `(ad."occurredAt" AT TIME ZONE 'UTC' AT TIME ZONE 'America/Los_Angeles')::date`,
+    dateRaw: { col: `ad."occurredAt"`, tz: "America/Los_Angeles" },
     columns: {
       store: STORE,
       ...dayCols(`(ad."occurredAt" AT TIME ZONE 'UTC' AT TIME ZONE 'America/Los_Angeles')`),
@@ -416,7 +430,7 @@ export function buildQuery(
   const where: Prisma.Sql[] = [Prisma.sql`${Prisma.raw(ds.account)} = ${scope.accountId}`]
   if (scope.storeIds && ds.store) where.push(Prisma.sql`${Prisma.raw(ds.store)} IN (${Prisma.join(scope.storeIds)})`)
   if (scope.from && scope.to && ds.date) {
-    where.push(Prisma.sql`${Prisma.raw(ds.date)} BETWEEN ${scope.from}::date AND ${scope.to}::date`)
+    where.push(dateRangeSql(ds, scope.from, scope.to))
   }
   for (const f of args.filters ?? []) where.push(filterSql(ds, f))
 
@@ -430,6 +444,25 @@ export function buildQuery(
   return Prisma.sql`SELECT ${Prisma.join(select)} FROM ${Prisma.raw(ds.from)} WHERE ${Prisma.join(where, " AND ")}${
     aggs.length > 0 && groups.length > 0 ? Prisma.sql` GROUP BY ${Prisma.join(groups.map((g) => Prisma.raw(col(ds, g).sql)))}` : Prisma.empty
   }${order.length > 0 ? Prisma.sql` ORDER BY ${Prisma.join(order)}` : Prisma.empty} LIMIT ${limit}`
+}
+
+/**
+ * `day BETWEEN from AND to` (inclusive days), written so an index on the raw
+ * column can be used. For a timestamp column that is `col >= from AND col <
+ * to + 1 day`, with the bounds converted from the dataset's zone to the
+ * column's when the column holds UTC. Same rows as the cast.
+ */
+export function dateRangeSql(ds: Dataset, from: Date, to: Date): Prisma.Sql {
+  if (!ds.dateRaw || !ds.date) {
+    return Prisma.sql`${Prisma.raw(ds.date as string)} BETWEEN ${from}::date AND ${to}::date`
+  }
+  const { col, tz } = ds.dateRaw
+  const c = Prisma.raw(col)
+  if (!tz) {
+    return Prisma.sql`${c} >= ${from}::date AND ${c} < (${to}::date + 1)`
+  }
+  const zone = Prisma.raw(`'${tz}'`)
+  return Prisma.sql`${c} >= (${from}::date::timestamp AT TIME ZONE ${zone} AT TIME ZONE 'UTC') AND ${c} < ((${to}::date + 1)::timestamp AT TIME ZONE ${zone} AT TIME ZONE 'UTC')`
 }
 
 function plain(v: unknown): string | number | boolean | null {

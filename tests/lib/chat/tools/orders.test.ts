@@ -103,39 +103,52 @@ describe("listOrdersByDay — a subtotal is not a ticket", () => {
   })
 })
 
-describe("getOrderItemFrequency — the average price it reports", () => {
-  function ctxWithItems(items: Array<{ name: string; quantity: number; price: number; orderId: string }>) {
+describe("getOrderItemFrequency — grouped in SQL", () => {
+  type Grouped = { itemName: string; orderCount: number; totalQty: number; totalRevenue: number }
+  function setup(grouped: Grouped[]) {
+    const $queryRaw = vi.fn(async (..._a: unknown[]) => grouped)
+    const findMany = vi.fn()
     return {
-      ownerId: "u1",
-      accountId: "acct-A",
-      prisma: {
-        otterOrderItem: { findMany: vi.fn(async () => items) },
-      } as unknown as ChatToolContext["prisma"],
+      $queryRaw,
+      findMany,
+      ctx: {
+        ownerId: "u1",
+        accountId: "acct-A",
+        prisma: { $queryRaw, otterOrderItem: { findMany } } as unknown as ChatToolContext["prisma"],
+      },
     }
   }
+  const args = { dateRange: { from: "2026-08-01", to: "2026-08-31" }, minOrders: 3, limit: 7 }
 
-  const run = (items: Parameters<typeof ctxWithItems>[0]) =>
-    getOrderItemFrequency.execute(
-      { dateRange: { from: "2026-08-01", to: "2026-08-31" }, minOrders: 1, limit: 20 },
-      ctxWithItems(items),
-    )
-
-  it("weights by quantity, so it agrees with the revenue beside it", async () => {
-    // One line of six at $10, one line of one at $16. The unweighted mean of
-    // the listed prices is $13; the item actually sold at $76/7 ≈ $10.86.
-    const [row] = await run([
-      { name: "Fries", quantity: 6, price: 10, orderId: "o1" },
-      { name: "Fries", quantity: 1, price: 16, orderId: "o2" },
-    ])
-    expect(row.totalRevenue).toBe(76)
-    expect(row.totalQty).toBe(7)
-    // The model is going to do this division to check itself. It has to match.
-    expect(row.avgPrice).toBeCloseTo(row.totalRevenue / row.totalQty, 10)
-    expect(row.avgPrice).not.toBe(13)
+  it("never loads the order lines, and pushes range, minOrders and limit into one statement", async () => {
+    const t = setup([])
+    await getOrderItemFrequency.execute(args, t.ctx)
+    expect(t.findMany).not.toHaveBeenCalled()
+    expect(t.$queryRaw).toHaveBeenCalledTimes(1)
+    const q = t.$queryRaw.mock.calls[0][0] as { sql: string; values: unknown[] }
+    expect(q.sql).toMatch(/GROUP BY i\."name"/)
+    expect(q.sql).toMatch(/HAVING count\(DISTINCT i\."orderId"\) >= \?/)
+    expect(q.sql).toMatch(/"referenceTimeLocal" >= \?::date/)
+    expect(q.sql).toMatch(/"referenceTimeLocal" < \(\?::date \+ 1\)/)
+    expect(q.values).toEqual(expect.arrayContaining(["s1", "2026-08-01", "2026-08-31", 3, 7]))
   })
 
-  it("reports nothing rather than dividing by no quantity", async () => {
-    const [row] = await run([{ name: "Fries", quantity: 0, price: 10, orderId: "o1" }])
-    expect(row.avgPrice).toBe(0)
+  it("returns the same row shape: weighted avgPrice = revenue / qty, 0 for no quantity", async () => {
+    const t = setup([
+      { itemName: "Fries", orderCount: 2, totalQty: 7, totalRevenue: 76 },
+      { itemName: "Free", orderCount: 1, totalQty: 0, totalRevenue: 0 },
+    ])
+    const rows = await getOrderItemFrequency.execute(args, t.ctx)
+    expect(rows).toEqual([
+      { itemName: "Fries", orderCount: 2, totalQty: 7, totalRevenue: 76, avgPrice: 76 / 7 },
+      { itemName: "Free", orderCount: 1, totalQty: 0, totalRevenue: 0, avgPrice: 0 },
+    ])
+    expect(Object.keys(rows[0])).toEqual(["itemName", "orderCount", "totalQty", "totalRevenue", "avgPrice"])
+  })
+
+  it("coerces bigint/decimal-ish driver values to numbers", async () => {
+    const t = setup([{ itemName: "Fries", orderCount: "4", totalQty: "8", totalRevenue: "16" } as unknown as Grouped])
+    const [row] = await getOrderItemFrequency.execute(args, t.ctx)
+    expect(row).toMatchObject({ orderCount: 4, totalQty: 8, totalRevenue: 16, avgPrice: 2 })
   })
 })
