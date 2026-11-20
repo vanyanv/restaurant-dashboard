@@ -1,6 +1,6 @@
 "use client"
 
-import type { ReactNode } from "react"
+import { useState, type ReactNode } from "react"
 import { usePathname, useSearchParams } from "next/navigation"
 import { Tabs } from "./tabs"
 
@@ -39,7 +39,14 @@ export function PageTabs({
   const fallback = tabs.find((t) => t.key === initial)?.key ?? tabs[0]?.key ?? ""
   const active = tabs.find((t) => t.key === asked)?.key ?? fallback
 
+  // Which way the last pick moved along the row, so the panel comes in from
+  // that side. Unset until a tab is picked: a page that opens does not slide.
+  const [dir, setDir] = useState<"fwd" | "back" | undefined>(undefined)
+
   const select = (key: string) => {
+    const from = tabs.findIndex((t) => t.key === active)
+    const to = tabs.findIndex((t) => t.key === key)
+    if (to !== from) setDir(to > from ? "fwd" : "back")
     const next = new URLSearchParams(search.toString())
     if (key === fallback) next.delete(param)
     else next.set(param, key)
@@ -61,7 +68,13 @@ export function PageTabs({
         onSelect={select}
       />
       {tabs.map((t) => (
-        <div key={t.key} className="cu-pagetabs__panel" data-tab={t.key} hidden={t.key !== active}>
+        <div
+          key={t.key}
+          className="cu-pagetabs__panel"
+          data-tab={t.key}
+          data-dir={t.key === active ? dir : undefined}
+          hidden={t.key !== active}
+        >
           {t.content}
         </div>
       ))}

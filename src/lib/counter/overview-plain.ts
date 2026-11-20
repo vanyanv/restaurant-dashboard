@@ -40,6 +40,13 @@ export interface OverviewStore {
   /** Labor as a share of sales; null when any labor is missing, so it is never read low. */
   laborPct: number | null
   laborMissingDays: number
+  /** What the store kept, its share of sales, and whether that is an upper bound: the P&L's own reading, passed through. */
+  kept: number
+  keptPct: number | null
+  keptAtMost: boolean
+  /** Food and delivery-app fees as a share of each sales dollar; null where the P&L has none. */
+  foodShare: number | null
+  feesShare: number | null
 }
 
 export interface OverviewNeed {
@@ -137,6 +144,11 @@ export function buildOverviewPlain(input: OverviewPlainInput): OverviewPlain {
     orders: input.orders && Object.hasOwn(input.orders, s.storeId) ? input.orders[s.storeId] : null,
     laborPct: s.laborMissingDays > 0 ? null : s.labor,
     laborMissingDays: s.laborMissingDays,
+    kept: s.kept,
+    keptPct: s.keptPct,
+    keptAtMost: s.atMost,
+    foodShare: s.food,
+    feesShare: s.fees,
   }))
 
   /* ── the sentence ── */

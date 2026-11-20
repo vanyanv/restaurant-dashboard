@@ -443,6 +443,17 @@ own motion, so a page built from them gets it with no page code:
   writes money or the books waits for the answer and marks it in `onDone`.
   `Notice onUndo` offers the way back where one exists.
 
+- **Three borrowed ideas (2026-11-20, from the Cult UI catalogue, built here
+  with no new library):** `Tabs` has one highlight pill that slides to the
+  picked tab (transform only; measured after first paint, so the server
+  render is unchanged). `PageTabs` brings the picked panel in from the side
+  the pick moved toward. `StoreCard more=` is a native `<details>` that opens
+  in place, with the card's old press as one button inside. `useDragReorder`
+  + `Grip` drag a row to a new place: the others step aside with transforms
+  and the list is reordered once, on the drop; arrow keys on the grip move
+  it one place. Do not install registry components for these: they bring
+  `motion` and their own colours (rule 5 below, and `npm run tokens`).
+
 ### Motion rules (owner, 2026-11-19)
 
 Every new piece of motion follows these six; `tests/styles/counter-motion.test.ts` checks the ones a test can see.

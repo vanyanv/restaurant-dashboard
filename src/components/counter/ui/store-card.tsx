@@ -10,6 +10,14 @@ export type StoreCardProps = {
   href?: string
   /** Pressing the card does something on this page (e.g. scopes it to the store). */
   onClick?: () => void
+  /**
+   * The next few figures an owner goes looking for. With these the card opens
+   * in place instead of leaving the row, so two stores can be open side by
+   * side; `href`/`onClick` become one button inside the opened part.
+   */
+  more?: { label: string; value: string }[]
+  /** Words for that button, e.g. "Show only Hollywood". */
+  moreAction?: string
 }
 
 /**
@@ -19,8 +27,11 @@ export type StoreCardProps = {
  * Shared block: replaces `.stcard` (desk), `.pstore`/`.prow` (phone),
  * `.pl-store`, `.iv-store`, `.ck-store` and `.cw-store`. Put them in a
  * `StoreCardGrid`: three across on the desk, stacked on the phone.
+ *
+ * With `more`, the card is a native `<details>`: it opens with the keyboard,
+ * needs no script, and slides open the way a `Fold` does.
  */
-export function StoreCard({ name, status, figures, note, href, onClick }: StoreCardProps) {
+export function StoreCard({ name, status, figures, note, href, onClick, more, moreAction }: StoreCardProps) {
   const body = (
     <>
       <span className="cu-store__top">
@@ -40,6 +51,36 @@ export function StoreCard({ name, status, figures, note, href, onClick }: StoreC
       {note ? <span className="cu-store__note">{note}</span> : null}
     </>
   )
+  if (more && more.length > 0) {
+    const action = moreAction ?? `Open ${name}`
+    return (
+      <details className="cu-card cu-store cu-store--opens">
+        <summary className="cu-store__sum">
+          {body}
+          <span className="cu-store__hint" aria-hidden />
+        </summary>
+        <div className="cu-store__more">
+          <dl className="cu-store__rows">
+            {more.map((m) => (
+              <div key={m.label}>
+                <dt>{m.label}</dt>
+                <dd>{m.value}</dd>
+              </div>
+            ))}
+          </dl>
+          {onClick ? (
+            <button type="button" className="cu-btn cu-store__go" onClick={onClick}>
+              {action}
+            </button>
+          ) : href ? (
+            <Link className="cu-btn cu-store__go" href={href}>
+              {action}
+            </Link>
+          ) : null}
+        </div>
+      </details>
+    )
+  }
   if (onClick) {
     return (
       <button type="button" className="cu-card cu-store" onClick={onClick}>

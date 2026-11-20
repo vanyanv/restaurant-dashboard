@@ -12,7 +12,7 @@ import type {
 } from "@/lib/counter/adapters/checks"
 import { ChecksHead, OutcomeLine, StorePicker, type Outcome } from "../checks-ui"
 import { useLeaveGuard } from "@/components/counter/keep/use-leave-guard"
-import { actMarks, useAct } from "@/components/counter/ui"
+import { actMarks, Grip, useAct, useDragReorder } from "@/components/counter/ui"
 
 /**
  * Store checks — Checklists. One store and one check at a time: the window
@@ -71,6 +71,7 @@ function Editor({ data }: { data: ChecklistsData }) {
   useLeaveGuard(Object.values(dirty).some(Boolean))
   const [outcome, setOutcome] = useState<Outcome>(null)
   const { act, stateOf, busy } = useAct()
+  const reorder = useDragReorder()
   const t = drafts[kind]
 
   const update = (fn: (t: EditorTemplate) => void) => {
@@ -357,27 +358,11 @@ function Editor({ data }: { data: ChecklistsData }) {
                 <span />
               </div>
               {s.items.map((it, ii) => (
-                <div className="ck-erow" key={it.id}>
-                  <span className="ck-row" style={{ gap: 4 }}>
-                    <button
-                      type="button"
-                      className="ck-iconbtn"
-                      aria-label="Move up"
-                      disabled={ii === 0}
-                      onClick={() => updateSection(si, (s) => void s.items.splice(ii - 1, 0, ...s.items.splice(ii, 1)))}
-                    >
-                      ↑
-                    </button>
-                    <button
-                      type="button"
-                      className="ck-iconbtn"
-                      aria-label="Move down"
-                      disabled={ii === s.items.length - 1}
-                      onClick={() => updateSection(si, (s) => void s.items.splice(ii + 1, 0, ...s.items.splice(ii, 1)))}
-                    >
-                      ↓
-                    </button>
-                  </span>
+                <div className="ck-erow" key={it.id} data-reorder-row>
+                  <Grip
+                    label={`task ${ii + 1}${it.en ? `, ${it.en}` : ""}`}
+                    {...reorder.grip(ii, (from, to) => updateSection(si, (s) => void s.items.splice(to, 0, ...s.items.splice(from, 1))))}
+                  />
                   <input
                     className="ck-input"
                     aria-label={`Item ${ii + 1} in English`}
