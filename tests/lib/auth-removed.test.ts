@@ -4,7 +4,10 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
 
 vi.mock("@/lib/prisma", () => ({ prisma: { user: { findUnique: vi.fn(), findFirst: vi.fn() } } }))
-vi.mock("@/lib/monitoring/login-audit", () => ({ recordLoginEvent: vi.fn() }))
+vi.mock("@/lib/monitoring/login-audit", async (orig) => ({
+  ...(await orig<typeof import("@/lib/monitoring/login-audit")>()),
+  recordLoginEvent: vi.fn(),
+}))
 vi.mock("@/lib/welcome", () => ({ extractFirstName: () => null, markSignIn: vi.fn(), markSignOut: vi.fn() }))
 
 import { prisma } from "@/lib/prisma"
