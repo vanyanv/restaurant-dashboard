@@ -62,13 +62,20 @@ export function PlainHero({
     <div className="pl-hero">
       <Card>
         <BigNumber
-          label="Kept after every cost"
+          label="Estimated profit"
           value={p.sales > 0 ? money(p.kept) : "No sales"}
           atMost={p.sales > 0 && Boolean(p.atMost)}
           sub={p.sales > 0 ? `${pct(p.keptPct)} of sales` : undefined}
-          missing={p.atMost ?? undefined}
+          missing={p.sales > 0 ? (p.keptNote ?? undefined) : undefined}
           vs={
-            v
+            v && v.kept === null
+              ? // The last day is still trading or syncing: only sales, hour for hour.
+                {
+                  change: `${v.sales >= 0 ? "▲ " : "▼ "}${signed(v.sales)}`,
+                  tone: v.sales >= 0 ? "up" : "down",
+                  against: `sales ${v.against ?? `vs ${v.label}`}`,
+                }
+              : v && v.kept !== null
               ? [
                   {
                     change: `${v.kept >= 0 ? "▲ " : "▼ "}${signed(v.kept)}`,
@@ -80,7 +87,7 @@ export function PlainHero({
                     : []),
                   { change: "", tone: "flat" as const, against: `sales ${signed(v.sales)}` },
                 ]
-              : { change: "", tone: "flat", against: "no earlier period to compare" }
+              : { change: "", tone: "flat", against: p.compareNote ?? "no earlier period to compare" }
           }
         />
         {p.sentence ? <Answer>{p.sentence}</Answer> : null}
@@ -89,15 +96,15 @@ export function PlainHero({
 
       <WeekBars
         title={`Last ${p.weeks.length} weeks · tap a week`}
-        partialLabel="labor missing, true number lower"
+        partialLabel="a cost missing, true number lower"
         weeks={p.weeks.map((w) => ({
           key: w.window.start,
-          label: w.label,
+          label: w.running ? "so far" : w.label,
           value: w.kept,
           top: w.sales > 0 ? pct(w.keptPct) : "—",
           partial: w.atMost,
           selected: isSelected(w.window, range),
-          ariaLabel: `Week of ${w.label}: kept ${w.atMost ? "at most " : ""}${money(w.kept)}`,
+          ariaLabel: `Week of ${w.label}${w.running ? ", so far" : ""}: kept ${w.atMost ? "at most " : ""}${money(w.kept)}`,
         }))}
         onPick={(key) => {
           const w = p.weeks.find((x) => x.window.start === key)

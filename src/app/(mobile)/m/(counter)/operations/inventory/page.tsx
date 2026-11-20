@@ -1,46 +1,18 @@
-import { getServerSession } from "next-auth"
-import { redirect } from "next/navigation"
-import { authOptions } from "@/lib/auth"
-import { readCounterParams } from "@/lib/counter/url-state"
-import { getInventorySectionPromises } from "@/lib/counter/adapters/inventory"
-import { CounterPhoneInventoryClient } from "./counter-phone-inventory-client"
-import { counterToday } from "@/lib/counter/today"
+import { permanentRedirect } from "next/navigation"
+import { carryQuery } from "@/lib/counter/carry-query"
 
 export const dynamic = "force-dynamic"
 
 /**
- * Inventory, on a phone — `P.inventory.phone()`
- * (`docs/counter/counter-prototype.html:5762`).
- *
- * Calls `getInventorySectionPromises`, the same function the desk calls.
+ * `/m/operations/inventory` — a redirect shim onto the phone's Inventory
+ * Shelf. "Stock on hand" folded into Inventory; see the desk shim at
+ * `src/app/dashboard/(counter)/operations/inventory/page.tsx`. `src/proxy.ts`
+ * redirects it before render; this is the fallback.
  */
-export default async function MobileInventoryPage({
+export default async function MobileStockOnHandRedirect({
   searchParams,
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
-  const session = await getServerSession(authOptions)
-  if (!session) redirect("/login")
-
-  const sp = await searchParams
-  const params = new URLSearchParams()
-  for (const [key, value] of Object.entries(sp)) {
-    if (typeof value === "string") params.set(key, value)
-  }
-
-  const today = counterToday()
-  const counterParams = readCounterParams(params, today)
-
-  const sections = getInventorySectionPromises({
-    storeId: counterParams.storeId,
-    accountId: session.user.accountId,
-    today,
-  })
-
-  return (
-    <>
-      <CounterPhoneInventoryClient sections={sections} storeId={counterParams.storeId} />
-      <span hidden data-perf-ready="/m/operations/inventory" />
-    </>
-  )
+  permanentRedirect(`/m/count/shelf${carryQuery(await searchParams)}`)
 }

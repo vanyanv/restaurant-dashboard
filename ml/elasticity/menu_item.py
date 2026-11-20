@@ -36,13 +36,63 @@ class ElasticityFit:
     elasticity_std_err: float | None = None
 
 
+#: Share of an item's day's gross taken back off by deals above which that
+#: day is a promo day and is left out of the fit. Mirrors DEAL_THRESHOLD in
+#: src/lib/counter/item-discounts.ts: above everyday one-off promo codes
+#: (~4%), well below a BOGO (~50%).
+DEAL_DAY_THRESHOLD = 0.10
+
+
 def load_price_qty_history(
     store_id: str, item_name: str, lookback_days: int = 365
 ) -> pd.DataFrame:
-    """Daily (price, qty) for one (store, item). Effective unit price uses
-    blended FP+TP totals so promos/discounts that move the average price
-    are reflected in the regressor."""
+    """Daily (price, qty) for one (store, item), with promo days left out.
+
+    `OtterMenuItem` totals are the price BEFORE discounts (see
+    src/lib/counter/item-discounts.ts). A buy-one-get-one on the delivery apps
+    therefore does not move this "price" at all — it doubles the quantity at
+    the same list price. Fitting through those days read a BOGO's volume as
+    demand at full price and produced "cut the slider by $0.25 → +$541/wk"
+    for an item whose cheap days were free sliders, not a lower price.
+
+    Discounts live on the ORDER, so a day counts as a promo day for this item
+    when the order discounts attributable to it — an order discount that is a
+    whole number of the item's own unit price, the BOGO shape the TS
+    allocator uses — exceed DEAL_DAY_THRESHOLD of the item's gross on the
+    order feed that day. Those days are dropped rather than adjusted: there is
+    no honest way to turn a free slider into a price point.
+
+    What remains is still a BLENDED daily price across channels, whose
+    day-to-day movement is mostly channel mix (app menus carry different list
+    prices from the counter), not a price the owner changed. The reprice
+    generator therefore only reads this fit for price RAISES on inelastic
+    items, and never recommends a cut from it — see
+    ml/growth/generators/reprice.py.
+    """
     sql = """
+        WITH item_orders AS (
+            SELECT o."referenceTimeLocal"::date AS date,
+                   o.id,
+                   ABS(o.discount) AS discount,
+                   SUM(i.price * i.quantity) AS gross,
+                   MAX(i.price) AS unit_price
+            FROM "OtterOrder" o
+            JOIN "OtterOrderItem" i ON i."orderId" = o.id
+            WHERE o."storeId" = %s
+              AND i.name = %s
+              AND o."referenceTimeLocal" >= (CURRENT_DATE - %s::int)
+            GROUP BY 1, 2, 3
+        ),
+        promo_days AS (
+            SELECT date
+            FROM item_orders
+            GROUP BY date
+            HAVING SUM(
+                     CASE WHEN discount > 0 AND unit_price > 0
+                           AND ABS(discount / unit_price - ROUND(discount / unit_price)) * unit_price < 0.02
+                          THEN discount ELSE 0 END
+                   ) > %s * NULLIF(SUM(gross), 0)
+        )
         SELECT date::date AS date,
                SUM(COALESCE("fpQuantitySold", 0) + COALESCE("tpQuantitySold", 0)) AS qty,
                (SUM(COALESCE("fpTotalSales", 0) + COALESCE("tpTotalSales", 0))
@@ -52,11 +102,19 @@ def load_price_qty_history(
           AND "itemName" = %s
           AND "isModifier" = false
           AND date >= (CURRENT_DATE - %s::int)
+          AND date::date NOT IN (SELECT date FROM promo_days)
         GROUP BY date
         ORDER BY date
     """
     with connect() as conn:
-        df = pd.read_sql_query(sql, conn, params=(store_id, item_name, lookback_days))
+        df = pd.read_sql_query(
+            sql,
+            conn,
+            params=(
+                store_id, item_name, lookback_days, DEAL_DAY_THRESHOLD,
+                store_id, item_name, lookback_days,
+            ),
+        )
     if df.empty:
         return df
     df["date"] = pd.to_datetime(df["date"])

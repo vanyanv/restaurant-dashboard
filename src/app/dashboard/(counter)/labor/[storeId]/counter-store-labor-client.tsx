@@ -78,8 +78,8 @@ import type { QueueEntry } from "@/lib/counter/adapters/overview"
  *    `.split` cannot carry six numeric columns, and a reader on one store's
  *    page is looking at the two codes they can act on rather than at the whole
  *    ledger. The queue is `leaks.items`, which the adapter builds from the
- *    LEAK rows only — savings and the uncostable codes are not in it, and the
- *    note under it is what says so.
+ *    missed punches to fix first, then the LEAK rows. Short shifts (late in,
+ *    left early) are not in it, and the note under it is what says so.
  *
  * 3. **The role table's Pay column stays.** The prototype has four columns
  *    (Role · Hours · Cost · Share); this keeps the group page's five, because
@@ -381,8 +381,8 @@ export function CounterStoreLaborClient({
         >
           {(l) => (
             <>
-              {/* The LEAK codes only (departure 2). A range whose only alerts
-                  were savings or uncostable codes has an empty worklist and no
+              {/* Missed punches, then the LEAK codes (departure 2). A range
+                  whose only alerts were short shifts has an empty worklist and no
                   `.queue` at all — the note below is then the whole reading,
                   and it is the sentence that explains why. */}
               {l.items.length > 0 ? <Queue items={queueItems(l.items)} /> : null}

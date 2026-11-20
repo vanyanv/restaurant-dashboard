@@ -75,6 +75,7 @@ export default async function MobileAlertsPage({
     sources: counterParams.sources,
     search: counterParams.search,
     today,
+    accountId: session.user.accountId,
   })
 
   return (

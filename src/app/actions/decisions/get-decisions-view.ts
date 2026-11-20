@@ -67,7 +67,7 @@ import {
   weatherPhrase,
   eventPhrase,
 } from "@/lib/decisions/translate"
-import type { OpportunityType, OpportunityConfidence } from "@/types/growth"
+import type { GrowthOpportunity, OpportunityType, OpportunityConfidence } from "@/types/growth"
 
 export interface DecisionDay {
   date: string // YYYY-MM-DD
@@ -161,6 +161,12 @@ export interface DecisionAction {
    */
   impactRangeUsdPerWeek: { low: number; high: number } | null
   why: string
+  /**
+   * What the $/wk figure IS, and the assumption under it, in plain words —
+   * "an estimate, if …" or "a forecast, …". A bare "+$541/wk" read as money
+   * the owner would book; it is a modelled figure and the card has to say so.
+   */
+  basis: string
   /** Derived from the generator's own horizon, not a flat today+7. */
   deadline: DecisionDeadline
   dots: DotCount
@@ -972,6 +978,50 @@ function parseFrozen(raw: unknown): FrozenDay[] {
   return out
 }
 
+type Opportunity = GrowthOpportunity
+
+function evidenceNumber(o: Opportunity, kind: string): number | null {
+  const e = o.evidence.find((x) => x.kind === kind)
+  const n = e == null ? NaN : Number(e.value)
+  return Number.isFinite(n) ? n : null
+}
+
+/**
+ * What the card's $/wk is, and what it assumes. Every number here is one the
+ * generator recorded as evidence; where it recorded none the sentence says
+ * what the figure is without inventing one.
+ */
+export function impactBasis(o: Opportunity): string {
+  switch (o.opportunityType) {
+    case "reprice": {
+      const days = evidenceNumber(o, "sample_size")
+      return `Estimate: what the change adds a week if sales respond to price the way ${
+        days != null ? `the last ${days} non-promo days` : "past sales"
+      } suggest.`
+    }
+    case "menu_engineering":
+      return "Estimate: a week's extra profit if the item wins back 30% of its gap to the category's typical seller."
+    case "channel_mix":
+      return "Estimate: a week's extra take if 10% of app orders move to your own channel, after app commission."
+    case "food_cost_risk": {
+      const uncosted = evidenceNumber(o, "uncosted_items")
+      return `Forecast: food cost over your target for the next 7 days at forecast sales${
+        uncosted != null && uncosted > 0
+          ? `; ${uncosted} item${uncosted === 1 ? " has" : "s have"} no cost on file, so the real figure is higher`
+          : ""
+      }.`
+    }
+    case "profit_risk": {
+      const gaps = o.evidence.some((e) => e.kind === "missing_inputs")
+      return `Forecast: profit for the next 7 days at forecast sales, after the costs on file${
+        gaps ? "; some costs are not on file, so the real figure is lower" : ""
+      }.`
+    }
+    default:
+      return "Estimate."
+  }
+}
+
 function buildActionCards(
   result: OpportunitiesResult,
   todayKey: string,
@@ -988,10 +1038,18 @@ function buildActionCards(
       // confidence weight is the older, coarser proxy for the same idea, so it
       // still applies to opportunities whose fit reported no standard error —
       // otherwise an estimate would be promoted merely for lacking error bars.
-      const score =
+      //
+      // Ranked on SIZE, not sign. A profit risk carries the projected profit,
+      // which is negative for a loss, and a highest-first sort on the signed
+      // figure put every loss below every gain — a store heading for a $2,000
+      // loss could never reach the top five beside a $40 reprice.
+      // Only a profit risk is ranked on size: for a gain, a negative P25 is
+      // a wide interval and must stay at the bottom, not be promoted by abs().
+      const raw =
         o.impactP25 != null
           ? o.impactP25 * weekly
           : o.estimatedDollarImpact * weekly * (CONFIDENCE_WEIGHT[o.confidence] ?? 0.5)
+      const score = o.opportunityType === "profit_risk" ? Math.abs(raw) : raw
       return { o, score }
     })
     .sort((a, b) => b.score - a.score)
@@ -1017,6 +1075,7 @@ function buildActionCards(
           }
         : null,
     why: stripJargon(o.suggestedAction || ""),
+    basis: impactBasis(o),
     deadline: deadlineFor(o.horizonDays, todayKey),
     dots: translateConfidence(o.confidence),
     confidence: o.confidence,

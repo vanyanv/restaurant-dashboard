@@ -673,7 +673,7 @@ export function CounterOverviewClient({
                     }
                     notes={[
                       `Every figure is ${windowLabel}.`,
-                      "Net sales across the cards sum to the headline, because both come from one rollup.",
+                      "Net sales across the store cards add up to the total at the top.",
                     ]}
                   />
                 )}

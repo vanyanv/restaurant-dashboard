@@ -3,6 +3,8 @@ import { getAlertsSections } from "@/lib/counter/adapters/alerts"
 import { getAlertInbox } from "@/app/actions/alerts/inbox-actions"
 import { dataOf } from "@/lib/counter/section-data"
 
+// Imports @/lib/prisma at load, which throws without DATABASE_URL (CI).
+vi.mock("@/lib/counter/labor-leaks", () => ({ loadTimeRecordsNeed: vi.fn(async () => null), loadLeakLedger: vi.fn() }))
 vi.mock("@/app/actions/alerts/inbox-actions", () => ({ getAlertInbox: vi.fn() }))
 
 /**

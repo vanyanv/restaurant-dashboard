@@ -33,7 +33,16 @@ import { describe, it, expect, vi } from "vitest"
 // `tests/lib/counter/service-profile.test.ts`.
 vi.mock("@/lib/prisma", () => ({ prisma: {} }))
 
-import { laborDay, laborRole, laborTrendWeek, laborWeek, type LaborDay } from "@/lib/counter/labor-week"
+import {
+  incompleteLaborStores,
+  laborDay,
+  laborRole,
+  laborStoreShares,
+  laborTrendWeek,
+  laborWeek,
+  provisionalWindow,
+  type LaborDay,
+} from "@/lib/counter/labor-week"
 
 /* ── The measured window, 2026-08-20 … 2026-08-26 ────────────────────── */
 
@@ -457,5 +466,91 @@ describe("laborTrendWeek — missing days and SPLH pairing", () => {
       td({ hours: 0, cost: 0 }), // sold, nobody clocked in
     ])
     expect(w.splh as number).toBeCloseTo(1000 / 8, 6)
+  })
+})
+
+describe("laborWeek — the schedule is read only over store-days with hours", () => {
+  /*
+   * The outside audit's case: "50 h worked vs 178 h scheduled", called
+   * "under the published schedule" in a good tone. Most of that gap was days
+   * Harri had not sent hours for yet, read as hours nobody worked.
+   */
+  const day = (key: string, hours: number, scheduled: number | null) =>
+    laborDay({
+      key,
+      label: key,
+      actualSeconds: hours * 3600,
+      scheduledMinutes: scheduled === null ? null : scheduled * 60,
+      cost: hours * 20,
+      totalSales: 1000,
+    })
+
+  it("leaves a scheduled day with no hours out of both sides and counts it as waiting", () => {
+    const week = laborWeek([day("2026-11-17", 50, 52), day("2026-11-18", 0, 63), day("2026-11-19", 0, 63)], 0)
+    expect(week.scheduledHours).toBeCloseTo(178, 6)
+    expect(week.compare).toEqual({ actualHours: 50, scheduledHours: 52 })
+    expect(week.awaitingDays).toEqual(["2026-11-18", "2026-11-19"])
+    expect(week.awaitingStoreDays).toBe(2)
+  })
+
+  it("has no comparison at all when no day has both", () => {
+    const week = laborWeek([day("2026-11-18", 0, 63)], 0)
+    expect(week.compare).toBeNull()
+    expect(week.awaitingDays).toEqual(["2026-11-18"])
+  })
+
+  it("takes a multi-store day's matched store-days from the loader, not the day totals", () => {
+    // Hollywood worked 40 h of 42 published; Glendale published 30 h and Harri sent none.
+    const d = laborDay({
+      key: "2026-11-17",
+      label: "Mon Nov 17",
+      actualSeconds: 40 * 3600,
+      scheduledMinutes: 72 * 60,
+      matched: { seconds: 40 * 3600, scheduledMinutes: 42 * 60 },
+      awaitingStoreDays: 1,
+      cost: 800,
+      totalSales: 4000,
+    })
+    const week = laborWeek([d], 0)
+    expect(week.compare).toEqual({ actualHours: 40, scheduledHours: 42 })
+    expect(week.awaitingStoreDays).toBe(1)
+  })
+})
+
+describe("provisionalWindow / laborWeek provisional days", () => {
+  it("marks today and the two days before it (LA) provisional, and nothing older", () => {
+    // 2026-11-19 at 05:00Z is still the 18th in Los Angeles.
+    const w = provisionalWindow(new Date("2026-11-19T05:00:00Z"))
+    expect(w).toEqual({ from: "2026-11-16", today: "2026-11-18" })
+    const days = ["2026-11-15", "2026-11-16", "2026-11-17", "2026-11-18"].map((key) =>
+      laborDay({ key, label: key, actualSeconds: 3600, scheduledMinutes: 60, cost: 20, totalSales: 100 }),
+    )
+    expect(laborWeek(days, 0, { provisional: w }).provisionalDays).toEqual(["2026-11-16", "2026-11-17", "2026-11-18"])
+    expect(laborWeek(days, 0).provisionalDays).toEqual([])
+  })
+})
+
+describe("laborStoreShares / incompleteLaborStores", () => {
+  it("flags a store whose labor is under 10% of the sales it rang (Glendale at 2.2%)", () => {
+    const sales = new Map([
+      ["gl", new Map([["2026-11-17", 5000], ["2026-11-18", 5000]])],
+      ["hw", new Map([["2026-11-17", 5000], ["2026-11-18", 5000]])],
+    ])
+    const shares = laborStoreShares(
+      [{ id: "gl", name: "Glendale" }, { id: "hw", name: "Hollywood" }],
+      { gl: 220, hw: 2400 },
+      {},
+      sales,
+    )
+    expect(shares[0].laborPct).toBeCloseTo(2.2, 6)
+    expect(incompleteLaborStores(shares).map((s) => s.name)).toEqual(["Glendale"])
+  })
+
+  it("leaves a store-day with no labor reading out of that store's sales, and never flags no sales", () => {
+    const sales = new Map([["gl", new Map([["2026-11-17", 1000], ["2026-11-18", 9000]])]])
+    const [s] = laborStoreShares([{ id: "gl", name: "Glendale" }], { gl: 200 }, { "2026-11-18": ["gl"] }, sales)
+    expect(s.ratedSales).toBe(1000)
+    expect(s.laborPct).toBeCloseTo(20, 6)
+    expect(incompleteLaborStores([{ ...s, ratedSales: 0, laborPct: null }])).toEqual([])
   })
 })

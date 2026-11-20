@@ -203,6 +203,7 @@ describe("Counter Overview", () => {
     expect(stack.querySelectorAll(".cu-weeks__bars button")).toHaveLength(2)
     expect(stack.querySelector(".cu-weeks__bars button[aria-pressed='true']")).toBeNull()
     expect(within(stack).getByText("Every cost on file")).toBeTruthy()
+    expect(Array.from(stack.querySelectorAll(".cu-big__label")).map((l) => l.textContent)).toEqual(["Sales", "Estimated profit"])
     // Needs you is folded by default (owner, 2026-11-03).
     const needs = main.querySelector("details.cu-needs") as HTMLDetailsElement
     expect(needs.open).toBe(false)

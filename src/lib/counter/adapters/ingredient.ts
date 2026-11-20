@@ -905,7 +905,7 @@ function usedInOf(d: Loaded): IngredientUsedIn {
           : `${moveText(d.move)} against its ${count(HISTORY_DAYS)}-day median is about ` +
             `${money(Math.abs(total))} ${total > 0 ? "more than" : "less than"} these recipes ` +
             `would have cost at the median price, across what they sold in ${d.rangeLabel}. ` +
-            `${total > 0 ? "Spent." : "Saved — the column is signed, because this one fell."}`,
+            `${total > 0 ? "Spent." : "Saved, because the price fell."}`,
   }
 }
 

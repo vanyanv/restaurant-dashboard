@@ -33,6 +33,8 @@ export type WasteOne = WasteData & {
   change: MoneyChange | null
   /** Theft and sent back: shown apart, never in the total. */
   apart: ApartFigure[]
+  /** Everything logged in the last 7 days, theft and sent back included. See `StoreWaste.logged`. */
+  logged: StoreWaste["logged"]
 }
 
 export type WasteView = {
@@ -68,6 +70,7 @@ export function getInventoryWasteSectionPromises(opts: { accountId: string; stor
             before: w.before,
             change: moneyChange(w.week, w.before),
             apart: w.apart,
+            logged: w.logged,
           }
         }
         return {

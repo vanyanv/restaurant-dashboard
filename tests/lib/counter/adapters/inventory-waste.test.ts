@@ -154,6 +154,8 @@ describe("thrown out at one store", () => {
     expect(one?.week).toMatchObject({ entries: 1, dollars: 8 })
     expect(one?.week.reasons.map((r) => r.id)).toEqual(["DROPPED"])
     expect(one?.recent).toHaveLength(1)
+    // The "What was logged" list shows them all, so a theft logged by mistake can be undone.
+    expect(one?.logged.map((e) => e.reason)).toEqual(["Dropped", "Theft", "Sent back", "Sent back"])
     expect(one?.apart.map((r) => [r.label, r.entries, r.unpriced, r.dollars])).toEqual([
       ["Theft", 1, 0, 20],
       ["Sent back", 2, 1, 10],

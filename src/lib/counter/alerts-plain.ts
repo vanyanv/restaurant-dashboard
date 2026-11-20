@@ -1,5 +1,6 @@
 import { alertGroupWords, countByTarget } from "@/lib/counter/alert-groups"
 import { count } from "@/lib/counter/format"
+import { timeRecordsGroup, type TimeRecordsNeed } from "@/lib/counter/time-records"
 
 /**
  * The Alerts page "made plain" (owner's go on the mock, 2026-11-18:
@@ -51,6 +52,12 @@ export interface AlertsPlainInput {
   counts: { open: number; critical: number }
   /** Closed alerts among those loaded: a floor, so it is worded "recently", never as a total. */
   closed: number
+  /**
+   * Missed clock-ins and clock-outs Harri flagged this week, read off Harri's
+   * own alerts (no `Alert` row is written for them). Null when there are none
+   * or the read failed.
+   */
+  timeRecords?: TimeRecordsNeed | null
 }
 
 /** Serious conditions listed before "and N more". */
@@ -73,14 +80,20 @@ export function buildAlertsPlain(input: AlertsPlainInput): AlertsPlain {
   const note = partial
     ? `Counted from the ${count(input.openRows.length)} most serious of ${count(open)} open alerts.`
     : null
-  const groups = countByTarget(others).map(([target, n]) => {
+  const alertGroups = countByTarget(others).map(([target, n]) => {
     const g = alertGroupWords(target)
     return { key: target, what: `${count(n)} ${n === 1 ? g.one : g.many}`, why: note, action: g.fix }
   })
+  // Time records lead the groups: they are not `Alert` rows and are not in the
+  // open count above, so they are said on their own line and in a status.
+  const time = input.timeRecords ? timeRecordsGroup(input.timeRecords) : null
+  const groups: AlertsPlainGroup[] = time
+    ? [{ key: "time-records", what: time.what, why: time.why, action: time.action }, ...alertGroups]
+    : alertGroups
 
   const parts: string[] = []
   if (open === 0) {
-    parts.push("Nothing is open. Every alert has been dealt with.")
+    parts.push(time ? "No alerts are open." : "Nothing is open. Every alert has been dealt with.")
   } else {
     parts.push(`${count(open)} ${open === 1 ? "alert is" : "alerts are"} open.`)
     const conditions = input.serious.length
@@ -99,17 +112,19 @@ export function buildAlertsPlain(input: AlertsPlainInput): AlertsPlain {
     }
     const top = countByTarget(others)[0]
     if (top && rest > 1) {
-      const what = groups[0].what
+      const what = alertGroups[0].what
       parts.push(top[1] * 2 > others.length ? `Most of the rest are ${what}.` : `The biggest group is ${what}.`)
     }
   }
+  if (time) parts.push(`${time.what}.`)
 
   const loadedCritical = input.openRows.filter((a) => a.severity === "CRITICAL").length
   const statuses: AlertsPlain["statuses"] = []
+  if (time) statuses.push({ tone: "warn", text: time.what })
   if (critical > 0) statuses.push({ tone: "bad", text: `${count(critical)} serious` })
   if (rest > 0) statuses.push({ tone: "warn", text: `${count(rest)} to glance at` })
   if (input.closed > 0) statuses.push({ tone: "good", text: `${count(input.closed)} closed recently` })
-  if (open === 0) statuses.push({ tone: "good", text: "Nothing open" })
+  if (open === 0) statuses.push({ tone: "good", text: time ? "No alerts open" : "Nothing open" })
 
   return {
     sentence: parts.join(" "),

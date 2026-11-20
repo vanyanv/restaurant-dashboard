@@ -586,9 +586,9 @@ function buildVerdict(
     tone = "warn"
     headline = "No published plan"
     say(
-      " No food-cost plan is published for this selection, so the figure above is not read " +
-        "against one. Store.targetCogsPct is the only published reference this schema carries, " +
-        "and either no store here has set it or the stores selected disagree on it.",
+      " No food-cost target is set for this selection, so the figure above is not compared " +
+        "with one. Either no store here has a COGS target, or the stores selected have different " +
+        "ones. Next step: set a COGS target on each store.",
     )
   } else if (w.againstPlan === null) {
     tone = "warn"

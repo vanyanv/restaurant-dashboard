@@ -1,48 +1,23 @@
-import { getServerSession } from "next-auth"
-import { redirect } from "next/navigation"
-import { authOptions } from "@/lib/auth"
-import { readCounterParams } from "@/lib/counter/url-state"
-import { getInventorySectionPromises } from "@/lib/counter/adapters/inventory"
-import { getOverviewStores } from "@/lib/counter/adapters/overview"
-import { CounterInventoryClient } from "./counter-inventory-client"
-import { counterToday } from "@/lib/counter/today"
+import { permanentRedirect } from "next/navigation"
+import { carryQuery } from "@/lib/counter/carry-query"
 
 export const dynamic = "force-dynamic"
 
-/** Inventory — `P.inventory` (`docs/counter/counter-prototype.html:5730`). */
-export default async function InventoryPage({
+/**
+ * `/dashboard/operations/inventory` — a redirect shim onto Inventory's Shelf.
+ *
+ * "Stock on hand" was a second rail item over the same counts as Inventory,
+ * without the count list or the waste log, and with nothing to show on All
+ * stores. It folded into `/dashboard/count/shelf`, which shows every store's
+ * last finished count. `src/proxy.ts` redirects this path before render; this
+ * page is the fallback if that map and the tree ever disagree. The past-counts
+ * pages under it (`counts`, `counts/<id>`) still render, as Inventory's "Past
+ * counts" tab.
+ */
+export default async function StockOnHandRedirect({
   searchParams,
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
-  const session = await getServerSession(authOptions)
-  if (!session) redirect("/login")
-
-  const sp = await searchParams
-  const params = new URLSearchParams()
-  for (const [key, value] of Object.entries(sp)) {
-    if (typeof value === "string") params.set(key, value)
-  }
-
-  const today = counterToday()
-  const counterParams = readCounterParams(params, today)
-  const stores = await getOverviewStores()
-
-  const sections = getInventorySectionPromises({
-    storeId: counterParams.storeId,
-    accountId: session.user.accountId,
-    today,
-  })
-
-  return (
-    <>
-      <CounterInventoryClient
-        params={params.toString()}
-        stores={stores}
-        today={today}
-        sections={sections}
-      />
-      <span hidden data-perf-ready="/dashboard/operations/inventory" />
-    </>
-  )
+  permanentRedirect(`/dashboard/count/shelf${carryQuery(await searchParams)}`)
 }

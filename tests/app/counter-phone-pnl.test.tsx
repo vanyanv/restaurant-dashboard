@@ -213,6 +213,8 @@ describe("Counter P&L — the phone", () => {
     const { container } = renderPhone()
     expect(container.querySelector(".cu-big__value")?.textContent).toBe("≤ $23,916" + "28.4% of sales")
     expect(container.querySelector(".cu-missing")?.textContent).toContain("2 Glendale days of labor missing")
+    expect(container.querySelector(".cu-big__label")?.textContent).toBe("Estimated profit")
+    expect(Array.from(container.querySelectorAll(".cu-weeks__lbl")).at(-1)?.textContent).toBe("so far")
   })
 
   it("makes a week bar move THIS page's range", () => {

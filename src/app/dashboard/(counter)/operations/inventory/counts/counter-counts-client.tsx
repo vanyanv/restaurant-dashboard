@@ -100,7 +100,7 @@ export function CounterCountsClient({
       {/* The design's `VIEWS` bar for this family — see `INVENTORY_TABS` in
           `@/lib/counter/nav`. Without it these siblings are pages nothing
           links to; `.seg` is not a fidelity landmark, so it changes no count. */}
-      <SubNav items={INVENTORY_TABS} label="Stock on hand" />
+      <SubNav items={INVENTORY_TABS} label="Inventory sections" />
 
       <Section bare title="The figures" data={sections.headline} pending={pending}>
         {(h) => <Strip cells={h.cells} />}

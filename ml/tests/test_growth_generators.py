@@ -33,7 +33,7 @@ def test_reprice_generator_produces_opportunity_for_inelastic_item():
     from ml.growth.generators.reprice import generate
 
     # Mocked cursors in the SQL call order of reprice.generate:
-    #   1. Top elastic items query (fitR2 >= 0.10, pricePointCount >= 2):
+    #   1. Top elastic items query (fitR2 >= 0.30, >= 60 clean days, >= 3 prices):
     #      one row: (skuId, elasticity, fitR2, sampleSize, elasticityStdErr,
     #                meanPrice, meanQty)
     elastic_rows = [
@@ -69,7 +69,7 @@ def test_reprice_generator_produces_opportunity_for_inelastic_item():
 def test_reprice_generator_skips_low_confidence_fits():
     from ml.growth.generators.reprice import generate
 
-    # fitR2 < 0.10 means low-confidence — should be skipped by the SQL filter.
+    # fitR2 < 0.30 means low-confidence — should be skipped by the SQL filter.
     # (Test reflects "no candidates returned" since the filter happens server-side.)
     elastic_rows: list[tuple] = []
     cursors = [_mk_cursor([elastic_rows])]
@@ -95,12 +95,12 @@ def test_menu_engineering_generator_flags_slow_movers_in_active_categories():
     from ml.growth.generators.menu_engineering import generate
 
     # Cursor 1: per-(item, category) trailing-30d velocity + margin.
-    # Columns: (itemName, category, item_velocity, item_margin)
+    # Columns: (itemName, category, item_velocity, item_margin, days_on_sale)
     rows = [
-        ("Bacon Eddy", "Sandwiches", 5.0, 4.0),
-        ("Cheesy Eddy", "Sandwiches", 20.0, 4.5),
-        ("Veggie Eddy", "Sandwiches", 22.0, 4.2),
-        ("Iced Coffee", "Drinks", 50.0, 1.5),
+        ("Bacon Eddy", "Sandwiches", 5.0, 4.0, 30),
+        ("Cheesy Eddy", "Sandwiches", 20.0, 4.5, 30),
+        ("Veggie Eddy", "Sandwiches", 22.0, 4.2, 30),
+        ("Iced Coffee", "Drinks", 50.0, 1.5, 30),
     ]
     cursors = [_mk_cursor([rows])]
     conn = _mk_conn(cursors)
@@ -131,9 +131,9 @@ def test_menu_engineering_impact_capped_at_the_items_own_contribution():
     from ml.growth.generators.menu_engineering import generate
 
     rows = [
-        ("Ghost Item", "Sides", 0.1, 10.0),   # gap to median is enormous
-        ("Fries", "Sides", 40.0, 2.0),
-        ("Slaw", "Sides", 44.0, 2.0),
+        ("Ghost Item", "Sides", 0.1, 10.0, 30),   # gap to median is enormous
+        ("Fries", "Sides", 40.0, 2.0, 30),
+        ("Slaw", "Sides", 44.0, 2.0, 30),
     ]
     out = generate(_mk_conn([_mk_cursor([rows])]),
                    store_id="store-hwd", as_of_date=dt.date(2026, 6, 16))
@@ -146,26 +146,59 @@ def test_menu_engineering_impact_capped_at_the_items_own_contribution():
 
 
 def test_channel_mix_generator_recommends_shifting_to_higher_net_channel():
-    """First-party gives $12.50/order net; 3P gives $10.00/order net.
-    A shift of 50 orders/week from 3P → 1P = +$125/week impact."""
+    """Over 14 days: 300 own-channel orders at $12.50, 280 Uber delivery orders
+    at a $14.00 ticket with no fee recorded. The store's Uber rate is 25%, so
+    an app order leaves $10.50. Weekly app orders = 140; 10% = 14/wk; impact
+    = 14 x ($12.50 - $10.50) = $28/wk."""
     from ml.growth.generators.channel_mix import generate
 
-    # Cursor 1: trailing-14d per-channel summary, columns: (channel, order_count, net_per_order)
-    rows = [
-        ("fp", 300, 12.50),  # first-party
-        ("tp", 200, 10.00),  # third-party
+    # Cursor 1: (platform, mode, recorded, orders, fee, ticket)
+    orders = [
+        ("css-pos", "pickup", False, 300, 0.0, 300 * 12.50),
+        ("ubereats", "delivery", False, 280, 0.0, 280 * 14.00),
     ]
-    cursors = [_mk_cursor([rows])]
-    conn = _mk_conn(cursors)
+    # Cursor 2: Store commission rates (uber, uber pickup, dd, dd pickup, gh)
+    rates = [(0.25, 0.10, 0.25, 0.06, 0.25)]
+    conn = _mk_conn([_mk_cursor([orders]), _mk_cursor([rates])])
     out = generate(conn, store_id="store-hwd", as_of_date=dt.date(2026, 6, 16))
     assert len(out) == 1
     o = out[0]
     assert o.opportunity_type == "channel_mix"
-    # Generator should pick a credible shift size — assert sign + ballpark only.
-    assert o.estimated_dollar_impact > 0
-    # Evidence references both channels:
+    assert o.horizon_days == 7
+    assert o.title == "Shift ~14 orders/wk from 3P to 1P"
+    assert o.estimated_dollar_impact == pytest.approx(28.0)
     kinds = [e.kind for e in o.evidence]
     assert "fp_net_per_order" in kinds and "tp_net_per_order" in kinds
+    tp = next(e for e in o.evidence if e.kind == "tp_net_per_order")
+    assert tp.value == pytest.approx(10.50)
+
+
+def test_channel_mix_recorded_fee_wins_over_the_store_rate():
+    from ml.growth.generators.channel_mix import generate
+
+    orders = [
+        ("css-pos", "pickup", False, 100, 0.0, 100 * 12.0),
+        ("doordash", "delivery", True, 100, 100 * 3.0, 100 * 13.0),  # $3 recorded fee
+    ]
+    rates = [(0.27, 0.10, 0.25, 0.06, 0.25)]
+    out = generate(_mk_conn([_mk_cursor([orders]), _mk_cursor([rates])]),
+                   store_id="s", as_of_date=dt.date(2026, 6, 16))
+    tp = next(e for e in out[0].evidence if e.kind == "tp_net_per_order")
+    assert tp.value == pytest.approx(10.0)
+
+
+def test_channel_mix_unknown_commission_is_not_free():
+    """An app with no fee recorded and no rate on file: no card, not a $0 fee."""
+    from ml.growth.generators.channel_mix import generate
+
+    orders = [
+        ("css-pos", "pickup", False, 100, 0.0, 100 * 12.0),
+        ("grubhub", "delivery", False, 100, 0.0, 100 * 13.0),
+    ]
+    rates = [(0.27, 0.10, 0.25, 0.06, None)]
+    out = generate(_mk_conn([_mk_cursor([orders]), _mk_cursor([rates])]),
+                   store_id="s", as_of_date=dt.date(2026, 6, 16))
+    assert out == []
 
 
 def test_food_cost_risk_generator_fires_when_forecast_pct_above_target():
@@ -177,8 +210,8 @@ def test_food_cost_risk_generator_fires_when_forecast_pct_above_target():
     target_rows = [(28.0,)]
     # Cursor 2: 7-day reconciled forecast revenue (sum).
     rev_rows = [(35000.0,)]  # $5k/day x 7
-    # Cursor 3: 7-day projected food cost (sum of forecast_qty × unit_cost).
-    cost_rows = [(11200.0,)]  # 32% of 35000
+    # Cursor 3: per-item forecast qty with unit cost: (sku, qty, unit_cost).
+    cost_rows = [("Burger", 2800.0, 4.0)]  # 11200 = 32% of 35000
     cursors = [_mk_cursor([target_rows]), _mk_cursor([rev_rows]), _mk_cursor([cost_rows])]
     conn = _mk_conn(cursors)
     out = generate(conn, store_id="store-hwd", as_of_date=dt.date(2026, 6, 16))
@@ -187,6 +220,7 @@ def test_food_cost_risk_generator_fires_when_forecast_pct_above_target():
     assert o.opportunity_type == "food_cost_risk"
     # impact = (0.32 − 0.28) × 35000 × 1 = 1400
     assert o.estimated_dollar_impact == pytest.approx(1400.0)
+    assert o.confidence == "high"  # every forecast unit costed
 
 
 def test_profit_risk_generator_fires_when_projected_margin_below_threshold():
@@ -198,12 +232,11 @@ def test_profit_risk_generator_fires_when_projected_margin_below_threshold():
     rev_rows = [(5000.0,)]
     # Cursor 2: 7-day forecast labor cost.
     labor_rows = [(1500.0,)]
-    # Cursor 3: 7-day forecast food cost.
-    food_rows = [(1500.0,)]
-    # Cursor 4: monthly fixed overhead (Store.fixedMonthly* sums) prorated to 7 days.
-    # The generator multiplies its returned scalar by 7/30 internally — but for
-    # the test we mock the raw store field directly. Pass the prorated value here.
-    overhead_rows = [(1000.0 * 30.0 / 7.0,)]  # so prorated = 1000
+    # Cursor 3: per-item forecast food cost: (sku, qty, unit_cost).
+    food_rows = [("Burger", 375.0, 4.0)]  # 1500
+    # Cursor 4: Store (rent, fixed labor, towels, cleaning), monthly; prorated
+    # by 7/30 inside the generator.
+    overhead_rows = [(1000.0 * 30.0 / 7.0, 0.0, 0.0, 0.0)]  # so prorated = 1000
     cursors = [_mk_cursor([rev_rows]), _mk_cursor([labor_rows]), _mk_cursor([food_rows]), _mk_cursor([overhead_rows])]
     conn = _mk_conn(cursors)
     out = generate(conn, store_id="store-hwd", as_of_date=dt.date(2026, 6, 16))
@@ -212,6 +245,7 @@ def test_profit_risk_generator_fires_when_projected_margin_below_threshold():
     assert len(out) >= 1
     o = out[0]
     assert o.opportunity_type == "profit_risk"
+    assert "at most" not in o.title  # every input on file
 
 
 def test_generator_registry_lists_exactly_five_after_w10():
@@ -221,3 +255,91 @@ def test_generator_registry_lists_exactly_five_after_w10():
         "reprice", "menu_engineering", "channel_mix",
         "food_cost_risk", "profit_risk",
     ])
+
+
+def test_food_cost_risk_does_not_cost_an_unmatched_item_at_zero():
+    """An item with no cost on file is left out and named; the % is a floor."""
+    from ml.growth.generators.food_cost_risk import generate
+
+    cost_rows = [("Burger", 2800.0, 4.0), ("New Wrap", 700.0, None)]
+    conn = _mk_conn([_mk_cursor([[(28.0,)]]), _mk_cursor([[(35000.0,)]]), _mk_cursor([cost_rows])])
+    out = generate(conn, store_id="s", as_of_date=dt.date(2026, 6, 16))
+    assert len(out) == 1
+    o = out[0]
+    assert "at least" in o.title
+    assert any("New Wrap" in c for c in o.caveats)
+    assert o.confidence == "medium"  # 80% of units costed
+
+
+def test_food_cost_risk_under_target_with_gaps_says_nothing():
+    from ml.growth.generators.food_cost_risk import generate
+
+    cost_rows = [("Burger", 1000.0, 4.0), ("New Wrap", 5000.0, None)]
+    conn = _mk_conn([_mk_cursor([[(28.0,)]]), _mk_cursor([[(35000.0,)]]), _mk_cursor([cost_rows])])
+    assert generate(conn, store_id="s", as_of_date=dt.date(2026, 6, 16)) == []
+
+
+def test_profit_risk_missing_costs_are_named_not_zero():
+    """No labor and no rent on file: margin is an upper bound and says so."""
+    from ml.growth.generators.profit_risk import generate
+
+    cursors = [
+        _mk_cursor([[(5000.0,)]]),                  # revenue
+        _mk_cursor([[(None,)]]),                    # labor: no Harri rows
+        _mk_cursor([[("Burger", 1200.0, 4.0)]]),    # food 4800 -> margin 4%
+        _mk_cursor([[(None, None, None, None)]]),   # nothing entered
+    ]
+    out = generate(_mk_conn(cursors), store_id="s", as_of_date=dt.date(2026, 6, 16))
+    assert len(out) == 1
+    o = out[0]
+    assert "at most" in o.title
+    assert o.confidence == "low"
+    assert any("labor" in c and "rent" in c for c in o.caveats)
+    assert "forecast_labor" not in [e.kind for e in o.evidence]
+
+
+def test_profit_risk_healthy_with_gaps_is_not_emitted():
+    from ml.growth.generators.profit_risk import generate
+
+    cursors = [
+        _mk_cursor([[(5000.0,)]]),
+        _mk_cursor([[(None,)]]),
+        _mk_cursor([[("Burger", 100.0, 4.0)]]),
+        _mk_cursor([[(None, None, None, None)]]),
+    ]
+    assert generate(_mk_conn(cursors), store_id="s", as_of_date=dt.date(2026, 6, 16)) == []
+
+
+def test_menu_engineering_does_not_call_a_new_item_slow():
+    """Nine days on sale: velocity is per day on sale, and it is too new to judge."""
+    from ml.growth.generators.menu_engineering import generate
+
+    rows = [
+        ("New Dish", "Mains", 1.3, 5.0, 9),
+        ("Old A", "Mains", 20.0, 5.0, 30),
+        ("Old B", "Mains", 22.0, 5.0, 30),
+    ]
+    out = generate(_mk_conn([_mk_cursor([rows])]), store_id="s", as_of_date=dt.date(2026, 6, 16))
+    assert not any("New Dish" in o.title for o in out)
+
+
+def test_reprice_never_recommends_a_cut():
+    """An elastic fit once produced "cut the slider by $0.25"."""
+    from ml.growth.generators.reprice import generate
+
+    elastic_rows = [("Signature Slider", -2.4, 0.45, 90, 0.2, 13.49, 40.0)]
+    conn = _mk_conn([_mk_cursor([elastic_rows]), _mk_cursor([[("Signature Slider", 6.0)]])])
+    assert generate(conn, store_id="s", as_of_date=dt.date(2026, 6, 16)) == []
+
+
+def test_reprice_rejects_thin_or_weak_fits():
+    from ml.growth.generators.reprice import generate
+
+    rows = [
+        ("Weak", -0.4, 0.15, 90, 0.05, 9.5, 30.0),   # R2 below 0.30
+        ("Thin", -0.4, 0.45, 30, 0.05, 9.5, 30.0),   # 30 days
+        ("NoSE", -0.4, 0.45, 90, None, 9.5, 30.0),   # no standard error
+    ]
+    margins = [("Weak", 4.0), ("Thin", 4.0), ("NoSE", 4.0)]
+    conn = _mk_conn([_mk_cursor([rows]), _mk_cursor([margins])])
+    assert generate(conn, store_id="s", as_of_date=dt.date(2026, 6, 16)) == []

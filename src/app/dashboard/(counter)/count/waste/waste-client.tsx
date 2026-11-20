@@ -125,7 +125,7 @@ function OneStore({ data, one }: { data: WasteView; one: WasteOne }) {
           </div>
           {w.reasons.length > 0 ? <Bars rows={reasonRows(w.reasons)} label="Thrown out, by reason" /> : <p className="iv-quiet iv-pad">Nothing logged, so no reasons yet.</p>}
           <p className="iv-note">
-            Thrown out is everything logged as dropped, went bad, burnt, remake, damaged or other, on this tab or on Stock on hand.
+            Thrown out is everything logged as dropped, went bad, burnt, remake, damaged or other.
             Theft and things sent back to a vendor are kept apart, never added in.
             {one.apart.length > 0 && (
               <>
@@ -142,7 +142,7 @@ function OneStore({ data, one }: { data: WasteView; one: WasteOne }) {
             <b>What was logged</b>
             <span className="iv-mono">last 7 days</span>
           </div>
-          <WasteEntries entries={one.recent} />
+          <WasteEntries entries={one.logged} />
         </section>
         {n > 1 && (
           <section className="iv-card" aria-label={`The ${n} stores`}>
@@ -214,7 +214,7 @@ function LogMode({ one, back }: { one: WasteOne; back: string }) {
               <b>What was logged</b>
               <span className="iv-mono">last 7 days</span>
             </div>
-            <WasteEntries entries={one.recent} />
+            <WasteEntries entries={one.logged} />
           </section>
         </div>
       </div>

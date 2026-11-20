@@ -50,6 +50,8 @@ import {
 } from "@/lib/counter/section-data"
 import type { Reference } from "@/lib/counter/bullet-state"
 import { buildPlain, PLAIN_MAX_DAYS, type PnlPlain } from "@/lib/counter/pnl-plain"
+import { elapsedWithoutReads, mayBeIncomplete, type ElapsedCompare } from "@/lib/counter/elapsed-compare"
+import { loadElapsedCompare } from "@/lib/counter/adapters/elapsed-compare"
 import type {
   CascadeCut,
   CascadeEnd,
@@ -1273,6 +1275,19 @@ export function getPnlSectionPromises(input: PnlSectionsInput): StreamedSections
         ))
 
   /*
+   * Whether the range's last day is still trading or syncing, and if so the
+   * hour-for-hour sales comparison (`elapsed-compare.ts`). Null: the range is
+   * complete and compares in full, as it always has. Read only when the last
+   * day is recent enough to be unfinished. A failed read never brings back the
+   * part-day-against-a-whole-day reading for today: it drops the percent.
+   */
+  const elapsedP: Promise<ElapsedCompare | null> = lazy(() =>
+    mayBeIncomplete(range, today)
+      ? loadElapsedCompare({ range, storeId, accountId, now: today }).catch(() => elapsedWithoutReads(range, today))
+      : Promise.resolve(null),
+  )
+
+  /*
    * Every day of the range, for "Day by day". A range of up to a month is
    * already read DAILY (`bucketFor`), so the statement's own periods are its
    * days and no second load is needed; past that the page asks for a week.
@@ -1305,8 +1320,8 @@ export function getPnlSectionPromises(input: PnlSectionsInput): StreamedSections
 
   return {
     plain: lazy(() => guardSection(
-      Promise.all([scopeP, priorP, weeksP, dailyP, filesP]).then(
-        ([scopeSd, priorSd, weeksSd, dailySd, filesSd]) =>
+      Promise.all([scopeP, priorP, weeksP, dailyP, filesP, elapsedP]).then(
+        ([scopeSd, priorSd, weeksSd, dailySd, filesSd, elapsed]) =>
           mapReady(scopeSd, (statement) =>
             buildPlain({
               statement,
@@ -1317,6 +1332,7 @@ export function getPnlSectionPromises(input: PnlSectionsInput): StreamedSections
               daily: dataOf(dailySd) ?? null,
               files: dataOf(filesSd) ?? [],
               storeId,
+              elapsed,
             }),
           ),
       ),
