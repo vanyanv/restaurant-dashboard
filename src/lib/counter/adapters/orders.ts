@@ -1,5 +1,5 @@
 import { buildOrderPlain, buildOrdersPlain, type OrderPlain, type OrdersPlain } from "@/lib/counter/orders-plain"
-import { getOrderDetail, getOrdersList, type OrderDetail, type OrderListResponse } from "@/app/actions/order-actions"
+import { getOrderDetailWithStoreId, getOrdersList, type OrderDetail, type OrderListResponse } from "@/app/actions/order-actions"
 import { getHourlyPatternsForRange } from "@/app/actions/hourly-orders-actions"
 import { batchRecipeCosts } from "@/lib/recipe-cost-batch"
 import { prisma } from "@/lib/prisma"
@@ -1558,45 +1558,36 @@ export async function getOrderSections(input: OrderSectionsInput): Promise<Order
   const today = input.today ?? new Date()
 
   const loaded: SectionData<LoadedOrder | null> = await classify(async () => {
-    const order = await getOrderDetail(orderId)
-    if (!order) return null
+    // ONE read of the order: the detail and the id of its store come back
+    // together. `OrderDetail` carries the store's NAME and not its id, and
+    // `OtterItemMapping` is keyed on `(storeId, otterItemName)` — a name lookup
+    // would match the wrong store the moment two stores share a name.
+    const loadedOrder = await getOrderDetailWithStoreId(orderId)
+    if (!loadedOrder) return null
+    const { order, storeId } = loadedOrder
 
     const lines = flattenOrderLines(order)
-    // `OrderDetail` carries the store's NAME and not its id, and
-    // `OtterItemMapping` is keyed on `(storeId, otterItemName)` — a name lookup
-    // would match the wrong store the moment two stores share a name. One
-    // narrow read for the id rather than widening the action's return.
-    const owner = await prisma.otterOrder.findUnique({
-      where: { id: orderId },
-      select: { storeId: true },
-    })
-    const storeId = owner?.storeId ?? null
-
     const itemLines = lines.filter((l) => !l.modifier)
     const subLines = lines.filter((l) => l.modifier)
 
     const [itemMappings, subMappings, costByRecipe] = await Promise.all([
-      storeId === null
-        ? Promise.resolve([] as ItemMappingRow[])
-        : // BOTH halves of the nullable-sku fallback are asked for in ONE
-          // query: rows whose sku matches, and rows whose NAME matches. Which
-          // of the two wins is `buildRecipeBySku`'s decision, not the query's.
-          prisma.otterItemMapping.findMany({
-            where: {
-              storeId,
-              OR: [
-                { skuId: { in: itemLines.map((l) => l.skuId).filter(isSku) } },
-                { otterItemName: { in: itemLines.map((l) => l.name) } },
-              ],
-            },
-            select: { skuId: true, otterItemName: true, recipeId: true },
-          }),
-      storeId === null
-        ? Promise.resolve([] as SubItemMappingRow[])
-        : prisma.otterSubItemMapping.findMany({
-            where: { storeId, skuId: { in: subLines.map((l) => l.skuId).filter(isSku) } },
-            select: { skuId: true, recipeId: true },
-          }),
+      // BOTH halves of the nullable-sku fallback are asked for in ONE
+      // query: rows whose sku matches, and rows whose NAME matches. Which
+      // of the two wins is `buildRecipeBySku`'s decision, not the query's.
+      prisma.otterItemMapping.findMany({
+        where: {
+          storeId,
+          OR: [
+            { skuId: { in: itemLines.map((l) => l.skuId).filter(isSku) } },
+            { otterItemName: { in: itemLines.map((l) => l.name) } },
+          ],
+        },
+        select: { skuId: true, otterItemName: true, recipeId: true },
+      }),
+      prisma.otterSubItemMapping.findMany({
+        where: { storeId, skuId: { in: subLines.map((l) => l.skuId).filter(isSku) } },
+        select: { skuId: true, recipeId: true },
+      }),
       batchRecipeCosts(accountId),
     ])
 

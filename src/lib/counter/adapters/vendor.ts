@@ -168,7 +168,11 @@ async function loadVendor(input: VendorInput): Promise<Loaded | null> {
   const basketTrends = await getVendorBasketTrends({ accountId, today })
 
   // Every invoice in the range, then folded by normalized name — the SQL
-  // cannot filter on a normalization it does not know about.
+  // cannot filter on a normalization it does not know about. THIS read carries
+  // no line items: it is the whole account's range (the share-of-total
+  // denominator needs every vendor's `totalAmount`, summed in the same order as
+  // before) and the lines of every other vendor are nothing this page prints.
+  // The lines are read below, for this vendor's invoices only.
   const all = await prisma.invoice.findMany({
     where: {
       accountId,
@@ -185,7 +189,6 @@ async function loadVendor(input: VendorInput): Promise<Loaded | null> {
       taxAmount: true,
       status: true,
       pdfBlobPathname: true,
-      lineItems: { select: { productName: true, sku: true, extendedPrice: true } },
     },
     orderBy: { invoiceDate: "desc" },
   })
@@ -196,8 +199,23 @@ async function loadVendor(input: VendorInput): Promise<Loaded | null> {
   // holding a subset of its own invoices — and the two pages would print two
   // spend figures for one supplier.
   const key = vendorMatchKey(vendor)
-  const mine = all.filter((i) => vendorMatchKey(i.vendorName) === key)
-  if (mine.length === 0) return null
+  const mineRows = all.filter((i) => vendorMatchKey(i.vendorName) === key)
+  if (mineRows.length === 0) return null
+
+  // One read for the lines of this vendor's invoices (tenancy through the
+  // invoice's `accountId`), grouped back onto them in the order they arrive —
+  // the order Prisma's nested `lineItems` read gave.
+  const lineRows = await prisma.invoiceLineItem.findMany({
+    where: { invoiceId: { in: mineRows.map((i) => i.id) }, invoice: { accountId } },
+    select: { invoiceId: true, productName: true, sku: true, extendedPrice: true },
+  })
+  const linesByInvoice = new Map<string, Array<{ productName: string; sku: string | null; extendedPrice: number }>>()
+  for (const l of lineRows) {
+    const bucket = linesByInvoice.get(l.invoiceId) ?? []
+    bucket.push({ productName: l.productName, sku: l.sku, extendedPrice: l.extendedPrice })
+    linesByInvoice.set(l.invoiceId, bucket)
+  }
+  const mine = mineRows.map((i) => ({ ...i, lineItems: linesByInvoice.get(i.id) ?? [] }))
 
   const totalSpend = all.reduce((t, i) => t + i.totalAmount, 0)
   const spendRange = mine.reduce((t, i) => t + i.totalAmount, 0)

@@ -333,7 +333,7 @@ describe("completeStockCount", () => {
     }) as never)
     await completeStockCount({ stockCountId: "c1" })
     expect(calls).toEqual(["calibration", "update"])
-    expect(calibrationModule.applyCalibrationUpdatesForCount).toHaveBeenCalledWith("c1")
+    expect(calibrationModule.applyCalibrationUpdatesForCount).toHaveBeenCalledWith("c1", "acct-A")
   })
 })
 

@@ -20,6 +20,7 @@ vi.mock("@/lib/prisma", () => ({
       aggregate: vi.fn(),
       groupBy: vi.fn(),
     },
+    $queryRaw: vi.fn(),
   },
 }))
 vi.mock("next/cache", () => ({
@@ -28,6 +29,7 @@ vi.mock("next/cache", () => ({
 
 import { getServerSession } from "next-auth"
 import { prisma } from "@/lib/prisma"
+import { Prisma } from "@/generated/prisma/client"
 import { getOrdersList } from "@/app/actions/order-actions"
 
 const session = { user: { id: "u1", accountId: "acct-A" } }
@@ -44,22 +46,79 @@ const ZERO = {
   thirdPartyWithFees: 0,
 }
 
-/** One `groupBy` row: a store, platform and mode, and the money behind it. */
-function feeGroup(platform: string, mode: string | null, count: number, subtotal: number, discount: number, commission: number) {
-  return { storeId: "s1", platform, fulfillmentMode: mode, _count: { _all: count }, _sum: { subtotal, discount, commission } }
+/**
+ * The grouped range read's rows (`rangeFigures` in `order-actions.ts`): one
+ * `total_row: 1` row over the whole matched range, and one row per
+ * (store, platform, mode, not-cancelled, fee-recorded) group.
+ */
+type FigureTotal = {
+  n?: number
+  subtotal?: number
+  discount?: number
+  commission?: number
+  tp_n?: number
+  tp_subtotal?: number
+  tp_discount?: number
+  tp_fee_n?: number
+}
+type FigureGroup = {
+  platform: string
+  mode: string | null
+  n: number
+  subtotal: number
+  discount: number
+  commission: number
+  recorded: boolean
+  live?: boolean
+  tp?: boolean
+}
+function figs(total: FigureTotal = {}, groups: FigureGroup[] = []) {
+  return [
+    {
+      total_row: 1,
+      storeId: null,
+      platform: null,
+      fulfillmentMode: null,
+      live: null,
+      recorded: null,
+      tp: null,
+      n: total.n ?? 0,
+      subtotal: total.subtotal ?? null,
+      discount: total.discount ?? null,
+      commission: total.commission ?? null,
+      tp_n: total.tp_n ?? 0,
+      tp_subtotal: total.tp_subtotal ?? null,
+      tp_discount: total.tp_discount ?? null,
+      tp_fee_n: total.tp_fee_n ?? 0,
+    },
+    ...groups.map((g) => ({
+      total_row: 0,
+      storeId: "s1",
+      platform: g.platform,
+      fulfillmentMode: g.mode,
+      live: g.live ?? true,
+      recorded: g.recorded,
+      tp: g.tp ?? true,
+      n: g.n,
+      subtotal: g.subtotal,
+      discount: g.discount,
+      commission: g.commission,
+      tp_n: 0,
+      tp_subtotal: null,
+      tp_discount: null,
+      tp_fee_n: 0,
+    })),
+  ]
 }
 
-/**
- * A single aggregate result shape, matching what `.aggregate` resolves to.
- *
- * `_count` rides on the aggregate now: the row count is the same predicate
- * over the same scan, so asking for it with a separate `count()` was a second
- * round trip for an answer already in flight. Both the overall and the
- * marketplace aggregate carry one.
- */
-function sums(subtotal: number, discount: number, commission: number, count = 0) {
-  return { _count: count, _sum: { subtotal, discount, commission } }
+/** The grouped read as the driver gets it: nested fragments flattened, `?` for each value. */
+function rawQuery(): { sql: string; values: unknown[] } {
+  const [strings, ...values] = vi.mocked(prisma.$queryRaw).mock.calls[0] as unknown as [TemplateStringsArray, ...unknown[]]
+  const q = Prisma.sql(strings, ...values)
+  return { sql: q.sql, values: q.values }
 }
+const rawSqlText = () => rawQuery().sql
+const rawValues = () => rawQuery().values
 
 beforeEach(() => {
   vi.clearAllMocks()
@@ -70,9 +129,8 @@ beforeEach(() => {
   vi.mocked(prisma.otterOrder.findMany).mockResolvedValue([] as never)
   vi.mocked(prisma.otterOrder.groupBy).mockResolvedValue([] as never)
   vi.mocked(prisma.otterOrder.count).mockResolvedValue(0)
-  vi.mocked(prisma.otterOrder.aggregate).mockResolvedValue(
-    sums(0, 0, 0) as never
-  )
+  vi.mocked(prisma.otterOrder.aggregate).mockResolvedValue({ _count: 0, _sum: {} } as never)
+  vi.mocked(prisma.$queryRaw).mockResolvedValue(figs() as never)
 })
 
 describe("getOrdersList — early returns still satisfy OrderListResponse", () => {
@@ -99,40 +157,49 @@ describe("getOrdersList — early returns still satisfy OrderListResponse", () =
 
 describe("getOrdersList — the commission estimate", () => {
   it("leaves cancelled orders out of the commission groups", async () => {
-    await getOrdersList()
-    const where = vi.mocked(prisma.otterOrder.groupBy).mock.calls[0][0]?.where as {
-      AND: Array<Record<string, unknown>>
-    }
-    expect(JSON.stringify(where.AND[1])).toContain("OFO_STATUS_CANCELED")
+    // The groups the fee estimate folds are the marketplace's, not-cancelled
+    // ones: a cancelled order's group is in the read but never priced.
+    vi.mocked(prisma.$queryRaw).mockResolvedValue(
+      figs({ n: 12 }, [
+        { platform: "doordash", mode: "FULFILLMENT_MODE_OFO_DELIVERY", n: 10, subtotal: 1000, discount: 0, commission: 0, recorded: false },
+        { platform: "doordash", mode: "FULFILLMENT_MODE_OFO_DELIVERY", n: 2, subtotal: 400, discount: 0, commission: 0, recorded: false, live: false },
+      ]) as never,
+    )
+    const result = await getOrdersList()
+    expect(result.totals.thirdPartyEstimatedCount).toBe(10)
+    expect(rawSqlText()).toContain("OFO_STATUS_CANCELED")
   })
 
-  it("counts orders WITH a fee over the same non-cancelled orders the fee groups price", async () => {
-    await getOrdersList()
-    const calls = vi.mocked(prisma.otterOrder.count).mock.calls.map((c) => JSON.stringify(c[0]?.where))
-    const withFees = calls.find((w) => w.includes('"commission":{"not":0}'))
-    expect(withFees).toBeDefined()
-    expect(withFees).toContain("OFO_STATUS_CANCELED")
+  it("leaves in-house orders out of the commission groups", async () => {
+    vi.mocked(prisma.$queryRaw).mockResolvedValue(
+      figs({ n: 9 }, [
+        { platform: "css-pos", mode: null, n: 9, subtotal: 900, discount: 0, commission: 0, recorded: false, tp: false },
+      ]) as never,
+    )
+    const result = await getOrdersList()
+    expect(result.totals.thirdPartyEstimatedCount).toBe(0)
+    expect(result.totals.thirdPartyUnknownCount).toBe(0)
   })
 
   it("prices pickup at the pickup rate and reports a platform with no rate as unpriced, not free", async () => {
     vi.mocked(prisma.store.findMany).mockResolvedValue([
       { id: "s1", name: "Hollywood", isActive: true, doordashCommissionRate: 0.25, uberCommissionRate: 0.27, doordashPickupCommissionRate: 0.06, grubhubCommissionRate: null },
     ] as never)
-    vi.mocked(prisma.otterOrder.groupBy)
-      .mockResolvedValueOnce([] as never)
-      .mockResolvedValueOnce([
-        feeGroup("doordash", "FULFILLMENT_MODE_PICKUP", 10, 1000, 0, 0),
-        feeGroup("grubhub", "FULFILLMENT_MODE_OFO_DELIVERY", 5, 500, 0, 0),
-      ] as never)
+    vi.mocked(prisma.$queryRaw).mockResolvedValue(
+      figs({}, [
+        { platform: "doordash", mode: "FULFILLMENT_MODE_PICKUP", n: 10, subtotal: 1000, discount: 0, commission: 0, recorded: false },
+        { platform: "grubhub", mode: "FULFILLMENT_MODE_OFO_DELIVERY", n: 5, subtotal: 500, discount: 0, commission: 0, recorded: false },
+      ]) as never,
+    )
     const result = await getOrdersList()
     expect(result.totals.commission).toBeCloseTo(60)
     expect(result.totals.thirdPartyUnknownCount).toBe(5)
   })
 
   it("is null, never zero, when no marketplace order could be priced", async () => {
-    vi.mocked(prisma.otterOrder.groupBy)
-      .mockResolvedValueOnce([] as never)
-      .mockResolvedValueOnce([feeGroup("chownow", null, 7, 700, 0, 0)] as never)
+    vi.mocked(prisma.$queryRaw).mockResolvedValue(
+      figs({}, [{ platform: "chownow", mode: null, n: 7, subtotal: 700, discount: 0, commission: 0, recorded: false }]) as never,
+    )
     const result = await getOrdersList()
     expect(result.totals.commission).toBeNull()
   })
@@ -175,9 +242,10 @@ describe("getOrdersList — commission on the row", () => {
 
 describe("getOrdersList — undrainedCount", () => {
   it("counts orders in the same scope missing details, separately from totalCount", async () => {
-    // totalCount is the overall aggregate's own `_count`; undrainedCount is
-    // its own query, because `detailsFetchedAt: null` is a different predicate.
-    vi.mocked(prisma.otterOrder.aggregate).mockResolvedValueOnce(sums(0, 0, 0, 41) as never)
+    // totalCount is the grouped read's whole-range row; undrainedCount is its
+    // own query, because `detailsFetchedAt: null` is a different predicate
+    // (and not a column of the covering index the grouped read stays inside).
+    vi.mocked(prisma.$queryRaw).mockResolvedValue(figs({ n: 41 }) as never)
     vi.mocked(prisma.otterOrder.count).mockResolvedValueOnce(7)
 
     const result = await getOrdersList()
@@ -193,48 +261,48 @@ describe("getOrdersList — undrainedCount", () => {
 })
 
 describe("getOrdersList — totals is a range aggregate, not a page sum", () => {
-  it("computes netSales and commission from aggregate, independent of how many rows are returned", async () => {
-    // Page has only 1 row, but the range aggregate reports many more dollars —
+  const onePageRow = {
+    id: "o1",
+    otterOrderId: "oo1",
+    externalDisplayId: "#1",
+    storeId: "s1",
+    platform: "doordash",
+    referenceTimeLocal: new Date("2026-08-20T12:00:00Z"),
+    fulfillmentMode: "delivery",
+    orderStatus: "COMPLETED",
+    customerName: "Jane",
+    subtotal: 20,
+    tax: 2,
+    tip: 3,
+    discount: 0,
+    total: 25,
+    commission: -5,
+    detailsFetchedAt: new Date("2026-08-20T13:00:00Z"),
+    _count: { items: 2 },
+  }
+
+  it("computes netSales and commission from the grouped read, independent of how many rows are returned", async () => {
+    // Page has only 1 row, but the range read reports many more dollars —
     // proving totals isn't derived from `rows`.
-    vi.mocked(prisma.otterOrder.findMany).mockResolvedValue([
-      {
-        id: "o1",
-        otterOrderId: "oo1",
-        externalDisplayId: "#1",
-        storeId: "s1",
-        platform: "doordash",
-        referenceTimeLocal: new Date("2026-08-20T12:00:00Z"),
-        fulfillmentMode: "delivery",
-        orderStatus: "COMPLETED",
-        customerName: "Jane",
-        subtotal: 20,
-        tax: 2,
-        tip: 3,
-        discount: 0,
-        total: 25,
-        commission: -5,
-        detailsFetchedAt: new Date("2026-08-20T13:00:00Z"),
-        _count: { items: 2 },
-      },
-    ] as never)
-    vi.mocked(prisma.otterOrder.aggregate)
-      // Discount and commission are stored NEGATIVE — see
-      // `src/lib/counter/order-signs.ts`. This fixture used positive figures
-      // until 2026-08-26, a shape the database has zero rows of, and it is why
-      // `Σsubtotal − Σdiscount` passed review while inflating every range's net
-      // sales by twice the discounts given.
-      .mockResolvedValueOnce(sums(50000, -1200, -8000, 120) as never) // overall
-      .mockResolvedValueOnce(sums(30000, -500, -8000, 80) as never) // 3P-only
-
-    // count() is called twice now: undrainedCount, and the numerator of the
-    // fee-coverage ratio. Both totals' denominators ride on their aggregate.
-    vi.mocked(prisma.otterOrder.count).mockResolvedValueOnce(0).mockResolvedValueOnce(36)
-
-    // The commission groups: 36 orders with a recorded $8,000, and 44 without
-    // one on a $9,800 discounted ticket, priced at the store's 25% DoorDash rate.
-    vi.mocked(prisma.otterOrder.groupBy)
-      .mockResolvedValueOnce([feeGroup("doordash", "FULFILLMENT_MODE_OFO_DELIVERY", 36, 20000, -300, -8000)] as never)
-      .mockResolvedValueOnce([feeGroup("doordash", "FULFILLMENT_MODE_OFO_DELIVERY", 44, 10000, -200, 0)] as never)
+    vi.mocked(prisma.otterOrder.findMany).mockResolvedValue([onePageRow] as never)
+    // Discount and commission are stored NEGATIVE — see
+    // `src/lib/counter/order-signs.ts`. This fixture used positive figures
+    // until 2026-08-26, a shape the database has zero rows of, and it is why
+    // `Σsubtotal − Σdiscount` passed review while inflating every range's net
+    // sales by twice the discounts given.
+    vi.mocked(prisma.$queryRaw).mockResolvedValue(
+      figs(
+        // Whole range, then the marketplace share of it and the marketplace
+        // orders carrying a fee.
+        { n: 120, subtotal: 50000, discount: -1200, commission: -8000, tp_n: 80, tp_subtotal: 30000, tp_discount: -500, tp_fee_n: 36 },
+        // 36 orders with a recorded $8,000, and 44 without one on a $9,800
+        // discounted ticket, priced at the store's 25% DoorDash rate.
+        [
+          { platform: "doordash", mode: "FULFILLMENT_MODE_OFO_DELIVERY", n: 36, subtotal: 20000, discount: -300, commission: -8000, recorded: true },
+          { platform: "doordash", mode: "FULFILLMENT_MODE_OFO_DELIVERY", n: 44, subtotal: 10000, discount: -200, commission: 0, recorded: false },
+        ],
+      ) as never,
+    )
 
     const result = await getOrdersList()
     expect(result.totals.netSales).toBe(48800)
@@ -250,53 +318,38 @@ describe("getOrdersList — totals is a range aggregate, not a page sum", () => 
     // 0% in May, and the cell printed a confident total on both.
     expect(result.totals.thirdPartyCount).toBe(80)
     expect(result.totals.thirdPartyWithFees).toBe(36)
+    expect(result.totalCount).toBe(120)
   })
 
-  it("counts the fee coverage over MARKETPLACE orders, not over the whole range", async () => {
+  it("answers every range figure in ONE grouped read, not six queries", async () => {
     await getOrdersList()
-    const calls = vi.mocked(prisma.otterOrder.count).mock.calls
-    // undrainedCount and the 3P-with-a-fee count. The ratio's DENOMINATOR is
-    // the marketplace aggregate's `_count`, so it is asserted on that call.
-    expect(calls).toHaveLength(2)
-
-    const marketplace = vi.mocked(prisma.otterOrder.aggregate).mock.calls[1][0]?.where as {
-      AND?: Array<{ platform?: { notIn?: string[] } }>
-    }
-    expect(marketplace.AND?.[1]?.platform?.notIn).toEqual(
-      expect.arrayContaining(["css-pos", "bnm-web"]),
-    )
-
-    const withFees = calls[1][0]?.where as {
-      AND?: Array<{ commission?: unknown; AND?: unknown }>
-    }
-    // Narrowed by commission ON TOP of the same marketplace scope: a ratio
-    // whose halves are drawn from different populations is not a coverage.
-    expect(JSON.stringify(withFees)).toContain("commission")
-    expect(JSON.stringify(withFees)).toContain("css-pos")
+    // The page of rows, the undrained count, and the one grouped read. The
+    // whole-range and marketplace aggregates, the with-a-fee count and the two
+    // commission group-bys are gone.
+    // (`findMany` twice: the page, and the account's platform list, which is
+    // `unstable_cache`d for an hour in production and passes through here.)
+    expect(prisma.otterOrder.findMany).toHaveBeenCalledTimes(2)
+    expect(prisma.otterOrder.count).toHaveBeenCalledTimes(1)
+    expect(prisma.$queryRaw).toHaveBeenCalledTimes(1)
+    expect(prisma.otterOrder.aggregate).not.toHaveBeenCalled()
+    expect(prisma.otterOrder.groupBy).not.toHaveBeenCalled()
   })
 
-  it("excludes the in-house platform from the thirdPartyNetSales aggregate", async () => {
+  it("splits marketplace from in-house by the in-house slugs EXCLUDED, never matched", async () => {
     await getOrdersList()
+    // The platform test is `NOT IN (...)` and the slugs ride as values, so the
+    // inversion that would divide marketplace fees by IN-HOUSE sales (`IN`) is
+    // visible by name.
+    expect(rawSqlText()).toContain('"platform" NOT IN (')
+    expect(rawValues()).toEqual(expect.arrayContaining(["css-pos", "bnm-web"]))
+  })
 
-    // aggregate is called twice: once for the whole range, once excluding
-    // the in-house platform (css-pos) for thirdPartyNetSales.
-    const calls = vi.mocked(prisma.otterOrder.aggregate).mock.calls
-    expect(calls.length).toBe(2)
-    //
-    // Asserted on the QUERY SHAPE, not on a stringified `where`.
-    // `JSON.stringify(where).toMatch(/css-pos/)` is true of `notIn: ["css-pos"]`
-    // and equally true of `in: ["css-pos"]` — the exact inversion that would
-    // divide marketplace fees by IN-HOUSE sales. It passed both ways, so it
-    // pinned nothing; the operator has to be read by name.
-    const thirdPartyCall = calls[1][0] as {
-      where?: { AND?: Array<{ platform?: { in?: string[]; notIn?: string[] } }> }
-    }
-    const platformClause = thirdPartyCall.where?.AND?.find((c) => c.platform)?.platform
-    expect(platformClause).toBeDefined()
-    expect(platformClause?.notIn).toEqual(expect.arrayContaining(["css-pos", "bnm-web"]))
-    // Not merely "mentions css-pos": the in-house slugs must be the set being
-    // EXCLUDED, never the set being matched.
-    expect(platformClause?.in).toBeUndefined()
+  it("counts the fee coverage over MARKETPLACE orders that are not cancelled", async () => {
+    // A ratio whose halves are drawn from different populations is not a
+    // coverage: the numerator is marketplace AND not-cancelled AND fee-recorded.
+    await getOrdersList()
+    expect(rawSqlText()).toMatch(/COUNT\(\*\) FILTER \(WHERE tp AND live AND recorded\)/)
+    expect(rawSqlText()).toContain('(o."commission" <> 0) AS recorded')
   })
 })
 
@@ -316,7 +369,6 @@ describe("getOrdersList — the platforms filter", () => {
     }
     return call.where ?? {}
   }
-
   it("matches any slug in the set, so one channel can mean two platforms", async () => {
     await getOrdersList({ platforms: ["css-pos", "bnm-web"] })
     expect(whereOf().platform).toEqual({ in: ["css-pos", "bnm-web"] })
@@ -325,34 +377,82 @@ describe("getOrdersList — the platforms filter", () => {
   it("treats an empty set as no platform filter at all, not as matching nothing", async () => {
     await getOrdersList({ platforms: [] })
     expect(whereOf().platform).toBeUndefined()
+    // …and the grouped read agrees with the list: no platform predicate besides
+    // the in-house split.
+    expect(rawSqlText()).not.toContain('o."platform" IN')
+    expect(rawSqlText()).not.toContain('o."platform" =')
   })
 
   it("still honours a single `platform` for callers that pass one", async () => {
     await getOrdersList({ platform: "doordash" })
     expect(whereOf().platform).toBe("doordash")
+    expect(rawSqlText()).toContain('o."platform" = ?')
+    expect(rawValues()).toContain("doordash")
   })
 
   it("lets a non-empty set supersede a single `platform`", async () => {
     await getOrdersList({ platform: "doordash", platforms: ["grubhub"] })
     expect(whereOf().platform).toEqual({ in: ["grubhub"] })
+    expect(rawValues()).toContain("grubhub")
+    expect(rawValues()).not.toContain("doordash")
   })
 
-  it("keeps the platform filter inside the third-party aggregate", async () => {
-    // `thirdPartyNetSales` is what "X% of 3P" is a percentage OF. Spreading
-    // `...where` and then re-keying `platform` DROPPED the reader's own filter
-    // from that aggregate: filter to DoorDash and the strip would divide
-    // DoorDash fees by every marketplace's sales. Both conditions have to hold.
+  it("keeps the platform filter inside the grouped read, with the marketplace split on top", async () => {
+    // `thirdPartyNetSales` is what "X% of 3P" is a percentage OF. Dropping the
+    // reader's own platform filter from it would divide DoorDash fees by every
+    // marketplace's sales. Both conditions hold: the WHERE carries the filter,
+    // and `tp` (not in-house) is a column of the rows it keeps.
     await getOrdersList({ platforms: ["doordash"] })
-    const calls = vi.mocked(prisma.otterOrder.aggregate).mock.calls
-    expect(calls.length).toBe(2)
-    // Read by shape for the same reason as above: a stringified match cannot
-    // tell `in` from `notIn`, and both conditions have to hold at once.
-    const where = calls[1][0].where as {
-      AND?: Array<{ platform?: unknown }>
-    }
-    expect(where.AND?.[0]).toMatchObject({ platform: { in: ["doordash"] } })
-    expect(where.AND?.[1]).toMatchObject({
-      platform: { notIn: expect.arrayContaining(["css-pos", "bnm-web"]) },
-    })
+    expect(rawSqlText()).toContain('o."platform" IN (?)')
+    expect(rawSqlText()).toContain('(o."platform" NOT IN (')
+    expect(rawValues()).toContain("doordash")
+  })
+})
+
+describe("getOrdersList — the grouped read matches the list's filters", () => {
+  it("scopes the read to the account's stores, or to the one store asked for", async () => {
+    await getOrdersList()
+    expect(rawSqlText()).toContain('o."storeId" IN (?)')
+    const values = rawValues()
+    expect(values).toContain("s1")
+
+    vi.clearAllMocks()
+    vi.mocked(prisma.store.findMany).mockResolvedValue([
+      { id: "s1", name: "Hollywood", isActive: true },
+      { id: "s2", name: "Beach", isActive: true },
+    ] as never)
+    vi.mocked(prisma.otterOrder.findMany).mockResolvedValue([] as never)
+    vi.mocked(prisma.otterOrder.count).mockResolvedValue(0)
+    vi.mocked(prisma.$queryRaw).mockResolvedValue(figs() as never)
+    await getOrdersList({ storeId: "s2" })
+    expect(rawSqlText()).toContain('o."storeId" = ?')
+    expect(rawSqlText()).not.toContain('o."storeId" IN')
+  })
+
+  it("applies the date range and the search to the totals as it does to the rows", async () => {
+    await getOrdersList({ startDate: "2026-08-01", endDate: "2026-08-31", search: " 1042 ", detailsOnly: true })
+    const text = rawSqlText()
+    expect(text).toContain('o."referenceTimeLocal" >= ?')
+    expect(text).toContain('o."referenceTimeLocal" <= ?')
+    expect(text).toContain('o."detailsFetchedAt" IS NOT NULL')
+    expect(text).toContain('(o."externalDisplayId" ILIKE ? OR o."customerName" ILIKE ? OR o."otterOrderId" ILIKE ?)')
+    const values = rawValues()
+    // Prisma's `contains` is `ILIKE '%term%'`, trimmed, with no escaping.
+    expect(values.filter((v) => v === "%1042%")).toHaveLength(3)
+    expect(values).toContainEqual(new Date("2026-08-01T00:00:00"))
+    expect(values).toContainEqual(new Date("2026-08-31T23:59:59"))
+  })
+
+  it("reads a summary load (the comparison range) with ONE aggregate and no grouped read", async () => {
+    vi.mocked(prisma.otterOrder.aggregate).mockResolvedValue({
+      _count: 5,
+      _sum: { subtotal: 100, discount: -10, commission: -3 },
+    } as never)
+    const r = await getOrdersList({ summaryOnly: true })
+    expect(r.totalCount).toBe(5)
+    expect(r.totals.netSales).toBe(90)
+    expect(prisma.otterOrder.aggregate).toHaveBeenCalledTimes(1)
+    expect(prisma.$queryRaw).not.toHaveBeenCalled()
+    expect(prisma.otterOrder.findMany).not.toHaveBeenCalled()
   })
 })

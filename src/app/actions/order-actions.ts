@@ -6,7 +6,7 @@ import { getSession } from "@/lib/auth-scope"
 import { unstable_cache } from "next/cache"
 import { prisma } from "@/lib/prisma"
 import { getAccountStoreRows } from "@/lib/account-stores"
-import type { Prisma } from "@/generated/prisma/client"
+import { Prisma } from "@/generated/prisma/client"
 import { persistOrderItems } from "@/lib/otter-orders-sync"
 import { HOUSE_PLATFORMS } from "@/lib/counter/channel-mix"
 import {
@@ -152,6 +152,62 @@ export type OrderListResponse = {
   totals: OrderListTotals
 }
 
+/** One row of the range-figures read: a group, or the whole range (`total_row` 1). */
+type RangeFigureRow = {
+  total_row: number
+  storeId: string | null
+  platform: string | null
+  fulfillmentMode: string | null
+  live: boolean | null
+  recorded: boolean | null
+  tp: boolean | null
+  n: number
+  subtotal: number | null
+  discount: number | null
+  commission: number | null
+  tp_n: number
+  tp_subtotal: number | null
+  tp_discount: number | null
+  tp_fee_n: number
+}
+
+/**
+ * `contains` + `mode: "insensitive"` as Prisma sends it: `ILIKE '%term%'` with
+ * the term NOT escaped, so a `%` or `_` typed into the search box is a LIKE
+ * wildcard, exactly as it is on the list query. Escaping them here would make
+ * the totals describe different orders than the rows beside them.
+ */
+const containsPattern = (term: string): string => `%${term}%`
+
+/**
+ * The filters `getOrdersList` hands Prisma as `where`, as a SQL fragment over
+ * `"OtterOrder" o` — the same predicate, restated for the grouped read.
+ * `storeIds` is the account's own store list: a requested `storeId` outside
+ * it has already returned empty by the time this runs.
+ */
+function matchedWhere(filters: OrderListFilters, storeIds: string[]): Prisma.Sql {
+  const parts: Prisma.Sql[] = [
+    filters.storeId
+      ? Prisma.sql`o."storeId" = ${filters.storeId}`
+      : Prisma.sql`o."storeId" IN (${Prisma.join(storeIds)})`,
+  ]
+  if (filters.platforms && filters.platforms.length > 0) {
+    parts.push(Prisma.sql`o."platform" IN (${Prisma.join(filters.platforms)})`)
+  } else if (filters.platform) {
+    parts.push(Prisma.sql`o."platform" = ${filters.platform}`)
+  }
+  if (filters.detailsOnly) parts.push(Prisma.sql`o."detailsFetchedAt" IS NOT NULL`)
+  if (filters.startDate) parts.push(Prisma.sql`o."referenceTimeLocal" >= ${new Date(filters.startDate + "T00:00:00")}`)
+  if (filters.endDate) parts.push(Prisma.sql`o."referenceTimeLocal" <= ${new Date(filters.endDate + "T23:59:59")}`)
+  if (filters.search && filters.search.trim()) {
+    const pattern = containsPattern(filters.search.trim())
+    parts.push(
+      Prisma.sql`(o."externalDisplayId" ILIKE ${pattern} OR o."customerName" ILIKE ${pattern} OR o."otterOrderId" ILIKE ${pattern})`,
+    )
+  }
+  return Prisma.join(parts, " AND ")
+}
+
 export async function getOrdersList(
   filters: OrderListFilters = {}
 ): Promise<OrderListResponse> {
@@ -225,14 +281,8 @@ export async function getOrdersList(
     ]
   }
 
-  /*
-   * The marketplace half of the range, ANDed rather than spread for the same
-   * reason the aggregate below is: `{ ...where, platform }` would OVERWRITE the
-   * reader's own platform filter.
-   */
-  const thirdPartyWhere: Prisma.OtterOrderWhereInput = {
-    AND: [where, { platform: { notIn: [...HOUSE_PLATFORMS] } }],
-  }
+  /** The same filters as `where`, as SQL — see `rangeFigures`. */
+  const matchedWhereSql = matchedWhere(filters, storeIds)
 
   /*
    * WHAT THE CALLER ACTUALLY READS.
@@ -280,28 +330,59 @@ export async function getOrdersList(
         },
       })
 
-  /*
-   * The commission groups: marketplace orders under the reader's own filter,
-   * cancelled ones out, split by platform, mode and whether a fee landed —
-   * the shape `totalCommission` folds. Prisma cannot group on an expression,
-   * so the ticket is Σ subtotal + Σ discount per group rather than the
-   * per-order `max(0, …)` the SQL loader uses; the two differ only on an
-   * order whose discount exceeds its subtotal.
-   */
-  const notCancelled: Prisma.OtterOrderWhereInput = {
-    OR: [{ orderStatus: null }, { orderStatus: { not: "OFO_STATUS_CANCELED" } }],
-  }
-  const feeGroups = (recorded: boolean) =>
-    prisma.otterOrder.groupBy({
-      by: ["storeId", "platform", "fulfillmentMode"],
-      where: {
-        AND: [thirdPartyWhere, notCancelled, recorded ? { commission: { not: 0 } } : { commission: 0 }],
-      },
-      _count: { _all: true },
-      _sum: { subtotal: true, discount: true, commission: true },
-    })
 
-  const [rows, undrainedCount, platforms, overallSums, thirdPartySums, thirdPartyWithFees, recordedGroups, unrecordedGroups] =
+  /*
+   * ONE grouped read for every range figure that is not a row.
+   *
+   * This was six queries over the same `where`: the whole-range aggregate, the
+   * marketplace aggregate, the count of marketplace orders carrying a fee, and
+   * the commission groups twice (fee recorded, fee not recorded). They differ
+   * only in which orders they keep, so one `GROUP BY` over
+   * (store, platform, mode, not-cancelled, fee-recorded) answers all of them,
+   * and the whole-range totals come off a `GROUPING SETS ()` row computed
+   * straight over the matched rows — not by re-adding the group sums, which
+   * would change the last bits of a float total.
+   *
+   * It is raw SQL because Prisma cannot group on an expression. The `WHERE` is
+   * `matchedWhereSql`, the same filters `where` above states, written once more
+   * in SQL; `tests/app/actions/order-actions.test.ts` pins the pair together.
+   * Tenancy is the store list: every id in it came from the session's account.
+   *
+   * The undrained count stays its own query on purpose: `detailsFetchedAt` is
+   * not in the covering index (`OtterOrder_store_time_fees_idx`) that keeps
+   * every column read here index-only, and folding it in would send the whole
+   * grouped read to the table.
+   */
+  const rangeFigures = () => {
+    // `Prisma.join([])` throws; with no house platforms every order is third-party.
+    const thirdParty =
+      HOUSE_PLATFORMS.length > 0
+        ? Prisma.sql`(o."platform" NOT IN (${Prisma.join([...HOUSE_PLATFORMS])}))`
+        : Prisma.sql`TRUE`
+    return prisma.$queryRaw<RangeFigureRow[]>`
+      WITH t AS (
+        SELECT o."storeId", o."platform", o."fulfillmentMode", o."subtotal", o."discount", o."commission",
+               (o."orderStatus" IS NULL OR o."orderStatus" <> 'OFO_STATUS_CANCELED') AS live,
+               (o."commission" <> 0) AS recorded,
+               ${thirdParty} AS tp
+        FROM "OtterOrder" o
+        WHERE ${matchedWhereSql}
+      )
+      SELECT GROUPING("storeId")::int AS total_row,
+             "storeId", "platform", "fulfillmentMode", live, recorded, tp,
+             COUNT(*)::int AS n,
+             SUM("subtotal")::float8 AS subtotal,
+             SUM("discount")::float8 AS discount,
+             SUM("commission")::float8 AS commission,
+             COUNT(*) FILTER (WHERE tp)::int AS tp_n,
+             SUM("subtotal") FILTER (WHERE tp)::float8 AS tp_subtotal,
+             SUM("discount") FILTER (WHERE tp)::float8 AS tp_discount,
+             COUNT(*) FILTER (WHERE tp AND live AND recorded)::int AS tp_fee_n
+      FROM t
+      GROUP BY GROUPING SETS ((), ("storeId", "platform", "fulfillmentMode", live, recorded, tp))`
+  }
+
+  const [rows, undrainedCount, platforms, figureRows, summarySums] =
     await Promise.all([
       summaryOnly
         ? Promise.resolve([] as Awaited<ReturnType<typeof listRows>>)
@@ -314,61 +395,52 @@ export async function getOrdersList(
       summaryOnly
         ? Promise.resolve([] as string[])
         : getPlatformsForAccount(session.user.accountId),
-      // The Orders strip is about the whole matched range, not the single
-      // page `rows` covers (findMany is capped at `limit`), so netSales and
-      // commission need their own aggregate under the same `where`.
-      //
-      // `_count` RIDES ALONG rather than being its own `count()` call. It is
-      // the same predicate answered by the same scan, and asking twice cost a
-      // second round trip on every load of this page, on both surfaces.
-      prisma.otterOrder.aggregate({
-        where,
-        _count: true,
-        _sum: { subtotal: true, discount: true, commission: true },
-      }),
-      // thirdPartyNetSales is what "X% of 3P" is a percentage OF, so it can't
-      // be derived from overallSums — it needs the in-house platforms
-      // excluded in its own aggregate. Its `_count` is the denominator of the
-      // coverage ratio the strip grades its fee cell by, and rides along here
-      // for the same reason as above.
-      //
-      // ANDed rather than spread: `{ ...where, platform: … }` OVERWRITES the
-      // reader's own platform filter, so filtering to DoorDash would divide
-      // DoorDash fees by every marketplace's sales. Both conditions hold.
+      summaryOnly ? Promise.resolve([] as RangeFigureRow[]) : rangeFigures(),
+      // The comparison range's load: `totalCount` and the net-sales sums, from
+      // one aggregate and nothing else.
       summaryOnly
-        ? Promise.resolve(null)
-        : prisma.otterOrder.aggregate({
-            where: thirdPartyWhere,
+        ? prisma.otterOrder.aggregate({
+            where,
             _count: true,
-            _sum: { subtotal: true, discount: true },
-          }),
-      // `not: 0`, not `lt: 0`: the question is whether a figure LANDED, and a
-      // positive commission would mean the column's convention had changed —
-      // which is a thing to notice, not a row to count as missing. `feeAmount`
-      // makes its own decision about what such a row is worth.
-      summaryOnly
-        ? Promise.resolve(0)
-        : prisma.otterOrder.count({
-            // Cancelled orders excluded, as in the fee groups below: the count
-            // of orders with a fee and the fee itself describe the same orders.
-            where: { AND: [thirdPartyWhere, notCancelled, { commission: { not: 0 } }] },
-          }),
-      summaryOnly ? Promise.resolve([]) : feeGroups(true),
-      summaryOnly ? Promise.resolve([]) : feeGroups(false),
+            _sum: { subtotal: true, discount: true, commission: true },
+          })
+        : Promise.resolve(null),
     ])
+
+  const totalRow = figureRows.find((r) => r.total_row === 1)
+  const overallSums = summarySums ?? {
+    _count: totalRow?.n ?? 0,
+    _sum: {
+      subtotal: totalRow?.subtotal ?? null,
+      discount: totalRow?.discount ?? null,
+      commission: totalRow?.commission ?? null,
+    },
+  }
+  const thirdPartySums = summaryOnly
+    ? null
+    : {
+        _count: totalRow?.tp_n ?? 0,
+        _sum: { subtotal: totalRow?.tp_subtotal ?? null, discount: totalRow?.tp_discount ?? null },
+      }
+  const thirdPartyWithFees = totalRow?.tp_fee_n ?? 0
+  // Marketplace orders under the reader's filter, cancelled ones out, as the
+  // pair of group lists `totalCommission` folds: fee recorded, then not.
+  const feeGroupRows = figureRows.filter((r) => r.total_row === 0 && r.tp && r.live)
+  const recordedGroups = feeGroupRows.filter((r) => r.recorded)
+  const unrecordedGroups = feeGroupRows.filter((r) => !r.recorded)
 
   const groups: OrderFeeGroup[] = [
     ...recordedGroups.map((g) => ({ g, recorded: true })),
     ...unrecordedGroups.map((g) => ({ g, recorded: false })),
   ].map(({ g, recorded }) => ({
-    storeId: g.storeId,
+    storeId: g.storeId as string,
     day: "",
-    platform: g.platform,
+    platform: g.platform as string,
     mode: fulfillmentKind(g.fulfillmentMode),
     recorded,
-    orders: g._count._all,
-    fee: Math.max(0, -(g._sum.commission ?? 0)),
-    ticket: Math.max(0, (g._sum.subtotal ?? 0) + (g._sum.discount ?? 0)),
+    orders: g.n,
+    fee: Math.max(0, -(g.commission ?? 0)),
+    ticket: Math.max(0, (g.subtotal ?? 0) + (g.discount ?? 0)),
   }))
   const fees = totalCommission(
     groups,
@@ -466,6 +538,18 @@ export type OrderDetail = {
 export async function getOrderDetail(
   orderId: string
 ): Promise<OrderDetail | null> {
+  return (await getOrderDetailWithStoreId(orderId))?.order ?? null
+}
+
+/**
+ * `getOrderDetail`, and the id of the store the order belongs to, from the
+ * one read. `OrderDetail` carries the store's NAME; a caller that needs the id
+ * (the order page's recipe mappings are keyed on it) used to read the order a
+ * second time to get it. The row is already account-scoped here.
+ */
+export async function getOrderDetailWithStoreId(
+  orderId: string
+): Promise<{ order: OrderDetail; storeId: string } | null> {
   const session = await getSession()
   if (!session?.user) return null
 
@@ -481,7 +565,7 @@ export async function getOrderDetail(
 
   if (!order) return null
 
-  return {
+  const detail: OrderDetail = {
     id: order.id,
     otterOrderId: order.otterOrderId,
     externalDisplayId: order.externalDisplayId,
@@ -516,6 +600,7 @@ export async function getOrderDetail(
       })),
     })),
   }
+  return { order: detail, storeId: order.storeId }
 }
 
 /**

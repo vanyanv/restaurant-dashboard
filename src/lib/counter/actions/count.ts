@@ -214,7 +214,7 @@ export async function finishCount(countId: string): Promise<ActionResult> {
     if (count._count.lines === 0) return { ok: false, error: "Count at least one item first" }
     // Calibration reads the previous COMPLETED count, so it runs before this
     // one becomes COMPLETED. Same order as `completeStockCount`.
-    await applyCalibrationUpdatesForCount(count.id)
+    await applyCalibrationUpdatesForCount(count.id, owner.accountId)
     // Guarded on status, so a double tap can't finish it twice.
     const done = await prisma.stockCount.updateMany({
       where: { id: count.id, status: "IN_PROGRESS" },

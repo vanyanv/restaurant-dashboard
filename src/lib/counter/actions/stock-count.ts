@@ -1,10 +1,7 @@
 "use server"
 
 import { revalidatePath } from "next/cache"
-import {
-  getCountEntryData,
-  startOrResumeStockCount,
-} from "@/app/actions/inventory/count-entry-actions"
+import { startOrResumeStockCount } from "@/app/actions/inventory/count-entry-actions"
 import {
   completeStockCount,
   saveStockCountLine,
@@ -35,72 +32,29 @@ export async function beginStockCount(input: { storeId: string }): Promise<
 /**
  * WHAT THE COUNT SESSION PAGE NEEDS TO STOP BEING A DEAD END.
  *
- * `beginStockCount` above has been wired since the Counter inventory pages
- * were built, and it pushes the owner to
- * `/dashboard/operations/inventory/counts/<id>` — a page with no input on it.
- * You could start a count and then not count anything. That is worse than an
- * absent feature: it looks like a working one, and this account's three
- * attempts (all in May, the fullest of them ten lines of soda syrup) are what
- * a flow that dead-ends leaves behind.
- *
- * `saveStockCountLine` upserts per (count, ingredient), so re-entering a
- * number corrects it rather than doubling it, and the page can save on every
- * blur without inventing a dirty-tracking layer.
+ * `beginStockCount` above pushes the owner to
+ * `/dashboard/operations/inventory/counts/<id>`; `recordCountLine` below is the
+ * input on that page. `saveStockCountLine` upserts per (count, ingredient), so
+ * re-entering a number corrects it rather than doubling it, and the page can
+ * save on every blur without inventing a dirty-tracking layer.
  *
  * `estimatedQtyAtCount` is the expectation taken at `StockCount.startedAt` —
  * one as-of moment for every line on the session — and it travels back down
- * with the line here, because it is the training target the model is later
- * scored against. Recomputing it at save time would both score the model on a
- * number it produced after seeing the answer and put a recipe walk in front of
- * a write that happens in a walk-in on one bar of signal.
+ * with the line, because it is the training target the model is later scored
+ * against. Recomputing it at save time would both score the model on a number
+ * it produced after seeing the answer and put a recipe walk in front of a
+ * write that happens in a walk-in on one bar of signal.
  *
  * The page's copy of it comes from `loadCountEntry` in
  * `@/lib/counter/adapters/stock-counts` (six store-wide queries via
- * `loadStoreInventoryContext`), NOT from `getCountEntryData` below, which
- * computes the same figure one ingredient at a time and was measured at 180s
- * for a 76-ingredient catalogue. It is null for an ingredient with no CLOSED
- * count behind it to be expected from; `saveStockCountLine` leaves the column
- * alone in that case rather than nulling what is already there.
+ * `loadStoreInventoryContext`). An action-layer `loadCountEntry` lived here
+ * once, built on `getCountEntryData`, which computes the same figure one
+ * ingredient at a time (measured at 180s for a 76-ingredient catalogue);
+ * nothing called it and it is gone. The estimate is null for an ingredient
+ * with no CLOSED count behind it to be expected from; `saveStockCountLine`
+ * leaves the column alone in that case rather than nulling what is already
+ * there.
  */
-export interface CountEntryLine {
-  ingredientId: string
-  name: string
-  category: string
-  unit: string
-  /**
-   * What the model expected on the shelf when the count opened. Null when the
-   * ingredient has no closed count behind it to be expected from.
-   */
-  estimate: number | null
-  /** What has already been entered for this ingredient on this count. */
-  entered: number | null
-}
-
-export async function loadCountEntry(stockCountId: string): Promise<
-  { ok: true; storeName: string; open: boolean; lines: CountEntryLine[] }
-  | { ok: false; error: string }
-> {
-  const result = await getCountEntryData({ stockCountId })
-  if (result === null) return { ok: false, error: "not_signed_in" }
-  if (!result.ok) return { ok: false, error: result.error }
-  return {
-    ok: true,
-    storeName: result.count.storeName,
-    open: result.count.status === "IN_PROGRESS",
-    lines: result.ingredients.map((i) => ({
-      ingredientId: i.id,
-      name: i.name,
-      category: i.category,
-      // The unit the number is IN. An ingredient with no recipe unit is
-      // counted in whatever "each" means for it, which is what the entry form
-      // shows rather than leaving the box unlabelled.
-      unit: i.recipeUnit ?? "each",
-      estimate: i.estimatedOnHand,
-      entered: i.existingLine?.qtyInRecipeUnit ?? null,
-    })),
-  }
-}
-
 export async function recordCountLine(input: {
   stockCountId: string
   ingredientId: string
