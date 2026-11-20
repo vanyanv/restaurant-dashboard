@@ -270,6 +270,9 @@ export default withAuth(
 
 export const config = {
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|manifest.webmanifest|icons/).*)",
+    // `splash/` holds the iOS launch images (`@/lib/apple-startup-images`),
+    // fetched when the icon is added to the home screen; like `icons/` they
+    // must load without a sign-in redirect.
+    "/((?!_next/static|_next/image|favicon.ico|manifest.webmanifest|icons/|splash/).*)",
   ],
 }

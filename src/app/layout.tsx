@@ -1,4 +1,5 @@
 import type { Metadata } from "next"
+import { APPLE_STARTUP_IMAGES } from "@/lib/apple-startup-images"
 import { Bricolage_Grotesque, DM_Sans, JetBrains_Mono } from "next/font/google"
 import { CounterThemeProvider, themeNoFlashScript } from "@/components/counter/theme-provider"
 import { Toaster } from "sonner"
@@ -25,6 +26,7 @@ export const metadata: Metadata = {
     capable: true,
     title: "Chris Neddy's",
     statusBarStyle: "default",
+    startupImage: APPLE_STARTUP_IMAGES,
   },
   manifest: "/manifest.webmanifest",
   icons: {
