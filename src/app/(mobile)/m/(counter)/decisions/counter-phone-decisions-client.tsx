@@ -2,9 +2,9 @@
 
 import { useAct } from "@/components/counter/ui"
 import type { PhoneDecisionsSections } from "@/lib/counter/adapters/decisions"
-import { businessQueryDate } from "@/lib/counter/business-date"
 import { Fold } from "@/components/counter/ui"
-import { DecisionsPlainView } from "@/app/dashboard/(counter)/decisions/decisions-plain-ui"
+import { WeekPlanView } from "@/app/dashboard/(counter)/decisions/week-plan-ui"
+import { weekParam } from "@/lib/counter/week-plan"
 
 import { useMemo, useState } from "react"
 import {
@@ -18,7 +18,6 @@ import {
 } from "@/components/counter"
 import { PHONE_ALERT_TABS } from "@/lib/counter/nav"
 import { readCounterParams } from "@/lib/counter/url-state"
-import { weekLabel } from "@/lib/counter/week-window"
 import type { DecisionsSections, PhoneQueue } from "@/lib/counter/adapters/decisions"
 import { useRouter } from "next/navigation"
 import { recordDecision } from "@/lib/counter/actions/decision"
@@ -183,11 +182,6 @@ export function CounterPhoneDecisionsClient({
    */
   const { pending } = useCounterTransition()
 
-  // The week the chart draws, named by its ends. `today` came from the
-  // server, which is also where the adapter's `asOf` came from, so the sub
-  // and the seven bars cannot name two different weeks — and the desk's own
-  // sub is this same string from this same function.
-  const window = weekLabel(businessQueryDate(today))
 
   return (
     /*
@@ -205,14 +199,15 @@ export function CounterPhoneDecisionsClient({
           one element up. */}
       <div>
         <h2 className="mtitle">The week ahead</h2>
-        <p className="msub">{window}</p>
+        <p className="msub">This week and next</p>
       </div>
 
-      {/* The page made plain, the same block the desk renders (mock
-          https://claude.ai/artifact/Sr98ngzuijqUUhPbJNJAv4). The rest is
-          folded underneath, unchanged. */}
-      <Section bare title="The week ahead" data={sections.plain} pending={pending}>
-        {(p) => <DecisionsPlainView p={p} />}
+      {/* The week as a plan (owner's go, 2026-11-20; mock
+          https://claude.ai/artifact/9X3YWGHNAKdimeJh6ToQNF): this week and
+          next, each day, each store's hours, the to-dos. Desk and phone draw
+          the same block. Everything the page said before is folded below. */}
+      <Section bare title="The week ahead" data={sections.plan} pending={pending}>
+        {(p) => <WeekPlanView plan={p} initialWeek={weekParam(params)} initialDay={params.get("day")} />}
       </Section>
 
       <Fold summary="Every figure, as before">

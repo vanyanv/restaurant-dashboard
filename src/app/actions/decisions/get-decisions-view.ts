@@ -175,6 +175,12 @@ export interface DecisionsView {
   isAggregate: boolean
   confidence: DotCount
   days: DecisionDay[]
+  /**
+   * Today and the thirteen days after it: `days` plus the whole of next
+   * week, for the Week ahead plan's "Next week". Same mapping, same sources,
+   * so a day reads the same in either list.
+   */
+  ahead: DecisionDay[]
   actions: DecisionAction[]
   /** Sum of the shown actions' weekly impact — the week's pot. */
   potUsdPerWeek: number
@@ -253,6 +259,14 @@ const CONFIDENCE_WEIGHT: Record<OpportunityConfidence, number> = {
 
 export async function getDecisionsView(input: {
   storeId?: string
+  /**
+   * Days only: the forecast, weather, events, shifts and hourly cover for the
+   * fortnight, without the briefing's generators (opportunities, cash, lost
+   * sales, menu engineering, food cost, the ledger, the scorecard). The
+   * Week ahead plan reads one of these per store for its store cards, and
+   * each of those generators already fails closed to null or [] here.
+   */
+  lite?: boolean
 } = {}): Promise<GetDecisionsViewResult> {
   const session = await getSession()
   if (!session?.user) return { ok: false, error: "no_session" }
@@ -267,6 +281,7 @@ export async function getDecisionsView(input: {
   if (storeIds.length === 0) return { ok: false, error: "no_stores" }
 
   const isAggregate = storeIdOut == null
+  const lite = input.lite === true
   const today = businessQueryDate(new Date())
   const todayKey = ymd(today)
 
@@ -291,22 +306,25 @@ export async function getDecisionsView(input: {
     actualsRows,
     evaluationRows,
   ] = await Promise.all([
-    getRevenueForecast({ storeId: input.storeId, horizonDays: 14 }),
+    // The business day, not the server clock's: on a UTC server the evening
+    // in Los Angeles is already tomorrow, and today's forecast fell out of
+    // the window between 4pm and midnight.
+    getRevenueForecast({ storeId: input.storeId, horizonDays: 14, asOf: today }),
     getOpenAnomalies({ storeId: input.storeId, limit: 50 }),
-    getLaborStaffingForecast({ storeId: input.storeId, horizonDays: 7 }).catch(
+    lite ? null : getLaborStaffingForecast({ storeId: input.storeId, horizonDays: 7 }).catch(
       () => null,
     ),
-    getFoodCostForecast({ storeId: input.storeId }).catch(() => null),
-    getOpportunities({ storeId: input.storeId }).catch(() => null),
+    lite ? null : getFoodCostForecast({ storeId: input.storeId }).catch(() => null),
+    lite ? null : getOpportunities({ storeId: input.storeId }).catch(() => null),
     // These three were passed to buildBriefing as `null`, which made the cash,
     // stockout and menu generators unreachable. They are independent of each
     // other and of the forecasts above, so they join the same fan-out rather
     // than adding a serial hop.
-    getCashPositionForecast({ storeId: input.storeId, horizonDays: 14 }).catch(
+    lite ? null : getCashPositionForecast({ storeId: input.storeId, horizonDays: 14 }).catch(
       () => null,
     ),
-    getLostSales({ storeId: input.storeId }).catch(() => null),
-    getMenuEngineering({ storeId: input.storeId }).catch(() => null),
+    lite ? null : getLostSales({ storeId: input.storeId }).catch(() => null),
+    lite ? null : getMenuEngineering({ storeId: input.storeId }).catch(() => null),
     // `cogsLine` has two branches and production could only ever reach the
     // target-less one, which reports a percentage and passes no judgment.
     // The target is per-store, so the portfolio view keeps the neutral branch.
@@ -321,7 +339,7 @@ export async function getDecisionsView(input: {
     prisma.storeWeatherSignal.findMany({
       where: {
         storeId: { in: storeIds },
-        date: { gte: today, lte: addDays(today, 7) },
+        date: { gte: today, lte: addDays(today, AHEAD_DAYS) },
       },
       select: {
         date: true,
@@ -332,7 +350,7 @@ export async function getDecisionsView(input: {
     prisma.storeEventSignal.findMany({
       where: {
         storeId: { in: storeIds },
-        date: { gte: today, lte: addDays(today, 7) },
+        date: { gte: today, lte: addDays(today, AHEAD_DAYS) },
       },
       select: {
         date: true,
@@ -348,7 +366,7 @@ export async function getDecisionsView(input: {
         storeId: { in: storeIds },
         // Back 60 days as well: the throughput rate behind "needed hours" is
         // the store's own orders per labor hour, and that needs history.
-        date: { gte: addDays(today, -60), lte: addDays(today, 7) },
+        date: { gte: addDays(today, -60), lte: addDays(today, AHEAD_DAYS) },
         status: { not: "DELETED" },
       },
       select: {
@@ -363,10 +381,10 @@ export async function getDecisionsView(input: {
     prisma.forecastHourlyOrders.findMany({
       where: {
         storeId: { in: storeIds },
-        forecastDate: { gte: today, lte: addDays(today, 7) },
+        forecastDate: { gte: today, lte: addDays(today, AHEAD_DAYS) },
       },
       orderBy: { generatedAt: "desc" },
-      take: 24 * 8 * 4,
+      take: 24 * (AHEAD_DAYS + 1) * 2 * Math.max(1, storeIds.length),
       select: {
         forecastDate: true,
         hourBucket: true,
@@ -397,15 +415,15 @@ export async function getDecisionsView(input: {
       where: {
         storeId: { in: storeIds },
         hourBucket: 0,
-        forecastDate: { gte: today, lte: addDays(today, 7) },
+        forecastDate: { gte: today, lte: addDays(today, AHEAD_DAYS) },
         attribution: { not: Prisma.DbNull },
       },
       orderBy: { generatedAt: "desc" },
-      take: 8 * 4 * Math.max(1, storeIds.length),
+      take: (AHEAD_DAYS + 1) * 4 * Math.max(1, storeIds.length),
       select: { storeId: true, forecastDate: true, attribution: true },
     }).catch(() => []),
     // What the owner already decided. The page's memory.
-    prisma.decisionLog.findMany({
+    lite ? [] : prisma.decisionLog.findMany({
       where: { storeId: { in: storeIds } },
       orderBy: { decidedAt: "desc" },
       take: 50,
@@ -434,7 +452,7 @@ export async function getDecisionsView(input: {
     // First reader of MlForecastEvaluation anywhere in src/. Ordered newest
     // first and deduped per store below — Prisma has no latest-per-group, and
     // the row count here is stores x model versions, not unbounded.
-    prisma.mlForecastEvaluation.findMany({
+    lite ? [] : prisma.mlForecastEvaluation.findMany({
       where: {
         storeId: { in: storeIds },
         target: "REVENUE",
@@ -547,8 +565,8 @@ export async function getDecisionsView(input: {
     attributionByDate.set(key, [...(attributionByDate.get(key) ?? []), parsed])
   }
 
-  const next7 = revenueData?.days.slice(0, 7) ?? []
-  const days: DecisionDay[] = next7.map((d) => {
+  const fortnight = revenueData?.days.slice(0, AHEAD_DAYS) ?? []
+  const ahead: DecisionDay[] = fortnight.map((d) => {
     const key = ymd(d.date)
     const bucket = bucketByMean(d.predictedRevenue, trailing7Mean)
     const pct = pctVsTrailing(d.predictedRevenue, trailing7Mean)
@@ -607,6 +625,9 @@ export async function getDecisionsView(input: {
       foodCostNote,
     }
   })
+  // The rolling seven the rest of this view (vitals, briefing, verdict) has
+  // always meant by "the week". `ahead` carries the fortnight for the plan.
+  const days = ahead.slice(0, 7)
 
   const briefing: BriefingLine[] = revenueData
     ? buildBriefing({
@@ -669,7 +690,7 @@ export async function getDecisionsView(input: {
 
   const overallConfidence: DotCount = confidenceFromForecast(
     revenueData,
-    next7[0]?.forecastSource ?? null,
+    fortnight[0]?.forecastSource ?? null,
   )
 
   const potUsdPerWeek = actions.reduce((sum, a) => sum + a.impactUsdPerWeek, 0)
@@ -699,12 +720,15 @@ export async function getDecisionsView(input: {
     potUsdPerWeek,
     topBriefing,
   })
-  const verdict = await getVerdictLine({
-    facts: verdictFacts,
-    storeId: storeIdOut,
-    asOf: todayKey,
-    userId: session.user.id ?? null,
-  })
+  // A days-only read prints no verdict, so it must not pay for one.
+  const verdict = lite
+    ? { line: "", sources: [], model: null, fromBriefing: false }
+    : await getVerdictLine({
+        facts: verdictFacts,
+        storeId: storeIdOut,
+        asOf: todayKey,
+        userId: session.user.id ?? null,
+      })
 
   return {
     ok: true,
@@ -715,6 +739,7 @@ export async function getDecisionsView(input: {
       isAggregate,
       confidence: overallConfidence,
       days,
+      ahead,
       actions,
       potUsdPerWeek,
       decisions,
@@ -740,6 +765,9 @@ export async function getDecisionsView(input: {
 /** How many closed days the strip's sparkline draws. Fourteen is two weeks of
  *  weekday pairs, so the line shows a trend rather than a weekend. */
 const SPLH_SPARK_DAYS = 14
+
+/** Today through the Sunday of next week, whichever weekday today is. */
+const AHEAD_DAYS = 14
 
 /**
  * One row per day, account-wide: hours worked and the statement's Net Sales

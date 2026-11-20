@@ -1,8 +1,8 @@
 "use client"
 
-import { businessQueryDate } from "@/lib/counter/business-date"
 import { Fold, useAct } from "@/components/counter/ui"
-import { DecisionsPlainView } from "./decisions-plain-ui"
+import { WeekPlanView } from "./week-plan-ui"
+import { weekParam } from "@/lib/counter/week-plan"
 
 import { Fragment, useCallback, useMemo, useState } from "react"
 import { usePathname, useRouter } from "next/navigation"
@@ -37,7 +37,7 @@ import {
 } from "@/components/counter"
 import { ALERT_TABS } from "@/lib/counter/nav"
 import { readCounterParams, writeCounterParams } from "@/lib/counter/url-state"
-import { weekDayLabel, weekLabel } from "@/lib/counter/week-window"
+import { weekDayLabel } from "@/lib/counter/week-window"
 import type { DecisionQueueItem, DecisionsSections, LedgerRow } from "@/lib/counter/adapters/decisions"
 import type { SectionSources } from "@/lib/counter/adapters/types"
 import { recordDecision } from "@/lib/counter/actions/decision"
@@ -329,7 +329,6 @@ export function CounterDecisionsClient({
   // The week the picker draws, named by its ends. `today` came from the
   // server, which is also where the adapter's `asOf` came from, so the sub
   // and the seven cells cannot name two different weeks.
-  const window = weekLabel(businessQueryDate(today))
   // Today when nothing has been pressed — the adapter's own fallback, said
   // here so the picker's `is-sel` cell and the panel below it agree before
   // either has loaded.
@@ -345,7 +344,8 @@ export function CounterDecisionsClient({
         // `P.decisions.title` — the page's NAME. There is no date control
         // here: the week is not a window a reader picks, it is the week.
         title="The week ahead"
-        sub={`${storeName} · ${window}`}
+        // The weeks are named by the plan itself, which switches between two.
+        sub={storeName}
       />
 
       {/* The design's `VIEWS` bar for this family — see `ALERT_TABS` in
@@ -353,11 +353,12 @@ export function CounterDecisionsClient({
           links to; `.seg` is not a fidelity landmark, so it changes no count. */}
       <SubNav items={ALERT_TABS} label="Alerts" />
 
-      {/* The page made plain (owner's go, 2026-11-18; mock
-          https://claude.ai/artifact/Sr98ngzuijqUUhPbJNJAv4). Everything the
-          page said before is folded underneath, unchanged. */}
-      <Section bare title="The week ahead" data={sections.plain} pending={pending}>
-        {(p) => <DecisionsPlainView p={p} />}
+      {/* The week as a plan (owner's go, 2026-11-20; mock
+          https://claude.ai/artifact/9X3YWGHNAKdimeJh6ToQNF): this week and
+          next, each day, each store's hours, the to-dos. Desk and phone draw
+          the same block. Everything the page said before is folded below. */}
+      <Section bare title="The week ahead" data={sections.plan} pending={pending}>
+        {(p) => <WeekPlanView plan={p} initialWeek={weekParam(params)} initialDay={params.get("day")} />}
       </Section>
 
       <Fold summary="Every figure, as before: the forecast, each day, accuracy, the shelf and the ledger">
