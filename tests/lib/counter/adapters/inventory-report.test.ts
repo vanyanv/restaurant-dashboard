@@ -93,7 +93,7 @@ beforeEach(() => {
     { canonicalIngredientId: "ci_fries", reason: "THEFT", qty: 3, occurredAt: new Date("2026-10-24T12:00:00Z"), canonicalIngredient: { costPerRecipeUnit: 2 } },
   ]
 
-  asMock(prisma.store.findMany).mockResolvedValue([{ id: "store_a", name: "Glendale" }, { id: "store_b", name: "Van Nuys" }])
+  asMock(prisma.store.findMany).mockResolvedValue([{ id: "store_a", name: "Glendale", isActive: true }, { id: "store_b", name: "Van Nuys", isActive: true }])
   asMock(prisma.stockCount.findMany).mockImplementation(async (args: { where: { storeId: string }; take?: number }) =>
     (counts[args.where.storeId] ?? []).slice(0, args.take ?? 99),
   )

@@ -23,7 +23,8 @@ import {
 import { hoursText, readSchedule } from "@/lib/counter/schedule-hold"
 import { loadLeakLedger, type LeakLedger } from "@/lib/counter/labor-leaks"
 import { missedPunches, timeRecordsHeadline, type MissedPunches } from "@/lib/counter/time-records"
-import { salesByDayOf, salesByStoreDayOf } from "@/lib/counter/labor-figures"
+import { salesByDayOf, salesByStoreDayOf, salesMapsOfNet } from "@/lib/counter/labor-figures"
+import { getNetSalesByPeriod } from "@/app/actions/store/pnl-actions"
 import { loadScheduleGap, loadStaffingCurve, type StaffingCurve } from "@/lib/counter/staffing-curve"
 import { count, money, pct, plural, points } from "@/lib/counter/format"
 import { buildLaborPlain, listDays, type LaborPlain } from "@/lib/counter/labor-plain"
@@ -1652,9 +1653,12 @@ function loadEverything(input: LaborSectionsInput) {
           start: trendWindows[0].start,
           end: trendWindows[trendWindows.length - 1].end,
         }
-        const trendDaily = await loadStatement({ range: trendRange, storeId, granularity: "daily" })
-        salesByDay = salesByDayOf(trendDaily, trendRange)
-        salesByStoreDay = salesByStoreDayOf(trendDaily, trendRange)
+        // Net Sales only: the trend folds per-day sales and nothing else off
+        // the statement, so the whole statement (fees, food cost, fixed costs,
+        // labor) is not built for it. Same figures — see `getNetSalesByPeriod`.
+        const net = await getNetSalesByPeriod({ ...toQueryBounds(trendRange), granularity: "daily" })
+        if ("error" in net) throw new Error(net.error)
+        ;({ salesByDay, salesByStoreDay } = salesMapsOfNet(net, trendRange, storeId))
       }
       return loadLaborTrend({
         storeId,

@@ -1,3 +1,4 @@
+import { getAccountStoreRows } from "@/lib/account-stores"
 import { prisma } from "@/lib/prisma"
 import { Prisma } from "@/generated/prisma/client"
 import {
@@ -143,10 +144,9 @@ export async function loadRunOut(input: RunOutInput): Promise<RunOut> {
     // Only needed to label a row when the reader is looking at more than one
     // kitchen — stock is per shelf, so an aggregate view has to say whose.
     input.storeIds.length > 1
-      ? prisma.store.findMany({
-          where: { accountId: input.accountId, id: { in: input.storeIds } },
-          select: { id: true, name: true },
-        })
+      ? getAccountStoreRows(input.accountId).then((rows) =>
+          rows.filter((r) => input.storeIds.includes(r.id)),
+        )
       : Promise.resolve([]),
   ])
   if (ingredients.length === 0) return empty

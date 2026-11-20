@@ -19,7 +19,7 @@ vi.mock("@/lib/prisma", () => ({
     invoice: { count: vi.fn(), aggregate: vi.fn(), findFirst: vi.fn(), findMany: vi.fn() },
     canonicalIngredient: { findFirst: vi.fn() },
     recipe: { count: vi.fn(), findFirst: vi.fn() },
-    stockCount: { findMany: vi.fn() },
+    stockCount: { groupBy: vi.fn() },
     stockCountLine: { count: vi.fn() },
     $queryRaw: vi.fn(),
   },
@@ -42,7 +42,7 @@ beforeEach(() => {
   vi.mocked(prisma.canonicalIngredient.findFirst).mockResolvedValue(null as never)
   vi.mocked(prisma.recipe.count).mockResolvedValue(0 as never)
   vi.mocked(prisma.recipe.findFirst).mockResolvedValue(null as never)
-  vi.mocked(prisma.stockCount.findMany).mockResolvedValue([] as never)
+  vi.mocked(prisma.stockCount.groupBy).mockResolvedValue([] as never)
   vi.mocked(prisma.stockCountLine.count).mockResolvedValue(0 as never)
   vi.mocked(prisma.$queryRaw).mockResolvedValue([{ n: 0, spend: 0 }] as never)
 })
@@ -143,5 +143,26 @@ describe("operations — a store id that is not on this account", () => {
       expect(q).toContain("AND FALSE")
       expect(q).not.toContain('i."storeId" IN ()')
     }
+  })
+})
+
+describe("operations — stock counts are tallied, not loaded", () => {
+  it("reads one grouped tally scoped to the account, and gets the same four figures", async () => {
+    vi.mocked(prisma.stockCount.groupBy).mockResolvedValue([
+      { status: "IN_PROGRESS", _count: { _all: 2 }, _max: { createdAt: new Date("2026-08-20T10:00:00Z") } },
+      { status: "COMPLETED", _count: { _all: 3 }, _max: { createdAt: new Date("2026-08-22T10:00:00Z") } },
+    ] as never)
+    const s = getOperationsSectionPromises({ storeId: null, accountId: "acct_1", range, today: new Date(2026, 7, 24) })
+    const areas = await s.areas
+    if (areas.status !== "ready") throw new Error(`areas not ready: ${areas.status}`)
+    const rows = JSON.stringify(areas.data)
+    // 2 in progress, and the newest count's day is the "last touched" of both count rows.
+    expect(rows).toContain('"area":"Stock counts","open":{"v":"2","cls":"hot"},"what":"in progress","worth":"—","touched":"Aug 22"')
+    expect(rows).toContain('"area":"Inventory"')
+    expect(prisma.stockCount.groupBy).toHaveBeenCalledTimes(1)
+    expect(vi.mocked(prisma.stockCount.groupBy).mock.calls[0][0]).toMatchObject({
+      by: ["status"],
+      where: { storeId: { in: ["holly"] }, store: { accountId: "acct_1" } },
+    })
   })
 })

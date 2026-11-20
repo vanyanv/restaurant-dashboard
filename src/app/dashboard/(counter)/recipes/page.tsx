@@ -26,7 +26,9 @@ export default async function RecipesPage({
 
   const today = counterToday()
   const counterParams = readCounterParams(params, today)
-  const stores = await getOverviewStores()
+  // Started now, awaited after the section promises have started: the store
+  // list does not feed them, so they do not wait behind it.
+  const storesP = getOverviewStores()
 
   const sections = getRecipesSectionPromises({
     storeId: counterParams.storeId,
@@ -34,6 +36,8 @@ export default async function RecipesPage({
     range: counterParams.range,
     today,
   })
+
+  const stores = await storesP
 
   return (
     <>

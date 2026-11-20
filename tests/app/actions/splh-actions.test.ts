@@ -11,18 +11,17 @@ import { describe, it, expect, vi, beforeEach } from "vitest"
 vi.mock("next-auth", () => ({ getServerSession: vi.fn() }))
 vi.mock("@/lib/auth", () => ({ authOptions: {}, hasOwnerAccess: () => true }))
 vi.mock("@/lib/prisma", () => ({
-  prisma: { harriPositionDaily: { groupBy: vi.fn() }, store: { findMany: vi.fn() } },
+  prisma: { harriPositionDaily: { findMany: vi.fn() }, store: { findMany: vi.fn() } },
 }))
-vi.mock("@/app/actions/store/pnl-actions", () => ({ getAllStoresPnL: vi.fn() }))
+vi.mock("@/app/actions/store/pnl-actions", () => ({ getNetSalesByPeriod: vi.fn() }))
 vi.mock("@/lib/counter/labor-cost", () => ({ loadLaborCost: vi.fn() }))
 
 import { getServerSession } from "next-auth"
 import { prisma } from "@/lib/prisma"
 import { toQueryBounds } from "@/lib/counter/date-range"
 import { getSplhSeries } from "@/app/actions/splh-actions"
-import { getAllStoresPnL } from "@/app/actions/store/pnl-actions"
+import { getNetSalesByPeriod } from "@/app/actions/store/pnl-actions"
 import { loadLaborCost } from "@/lib/counter/labor-cost"
-import { TOTAL_SALES_CODE } from "@/lib/pnl"
 
 /** TARGET_HISTORY_DAYS in splh-actions — the medians' lookback, not a bar. */
 const TARGET_HISTORY_DAYS = 56
@@ -63,11 +62,11 @@ type Row = Omit<ReturnType<typeof row>, "net"> & { net: number | null }
  * price at all.
  */
 function feed(rows: Row[]) {
-  vi.mocked(prisma.harriPositionDaily.groupBy).mockResolvedValue(
+  vi.mocked(prisma.harriPositionDaily.findMany).mockResolvedValue(
     rows.map((r) => ({
       storeId: r.storeId,
       date: r.date,
-      _sum: { actualSeconds: r.hours * 3600 },
+      actualSeconds: r.hours * 3600,
     })) as never,
   )
   const byDay: Record<string, { amount: number; source: "daily" }> = {}
@@ -80,12 +79,12 @@ function feed(rows: Row[]) {
     missingStoreDays: 0,
   } as never)
   const priced = rows.filter((r) => r.net !== null)
-  vi.mocked(getAllStoresPnL).mockResolvedValue({
+  vi.mocked(getNetSalesByPeriod).mockResolvedValue({
     periods: priced.map((r) => ({ startDate: r.date })),
     perStore: [
       {
         storeId: "s1",
-        rows: [{ code: TOTAL_SALES_CODE, label: "Net Sales", values: priced.map((r) => r.net) }],
+        net: priced.map((r) => r.net),
       },
     ],
   } as never)
@@ -93,7 +92,7 @@ function feed(rows: Row[]) {
 
 /** The where-clause the hours read was made with. */
 function hoursWhere(): { date: { gte: Date; lte: Date }; store: unknown } {
-  const call = vi.mocked(prisma.harriPositionDaily.groupBy).mock.calls[0]?.[0] as
+  const call = vi.mocked(prisma.harriPositionDaily.findMany).mock.calls[0]?.[0] as
     | { where: { date: { gte: Date; lte: Date }; store: unknown } }
     | undefined
   if (!call) throw new Error("the hours read never happened")
@@ -115,7 +114,7 @@ describe("getSplhSeries — no range (the behaviour every existing caller has)",
     const w = hoursWhere()
     expect(w.date.lte).toBeInstanceOf(Date)
     expect(w.store).toEqual({ accountId: "acct-A" })
-    const sales = vi.mocked(getAllStoresPnL).mock.calls[0][0]
+    const sales = vi.mocked(getNetSalesByPeriod).mock.calls[0][0]
     expect(sales.startDate.getTime()).toBe(w.date.gte.getTime())
     expect(sales.endDate.getTime()).toBe(w.date.lte.getTime())
     expect(sales.granularity).toBe("daily")
@@ -146,8 +145,11 @@ describe("getSplhSeries — with a range", () => {
     // day, not a local midnight. Hand a query the raw `end` and the last day
     // of every range disappears; `toQueryBounds` exists for exactly this and
     // the action must not undo it.
-    expect(until.getTime()).toBe(bounds.endDate.getTime())
-    expect(vi.mocked(getAllStoresPnL).mock.calls[0][0].endDate.getTime()).toBe(bounds.endDate.getTime())
+    // The hours read goes through the day-batch, which asks for whole days:
+    // the rows of a `@db.Date` column are the same either way, so the read's
+    // last day must be the range's last day (and not the one before it).
+    expect(until.toISOString().slice(0, 10)).toBe(bounds.endDate.toISOString().slice(0, 10))
+    expect(vi.mocked(getNetSalesByPeriod).mock.calls[0][0].endDate.getTime()).toBe(bounds.endDate.getTime())
 
     // The lower bound reaches TARGET_HISTORY_DAYS behind the range's start,
     // because a day is scored against the median of the same weekday before
@@ -264,12 +266,12 @@ describe("getSplhSeries — a day the statement does not price", () => {
     const rows = daysBetween("2026-06-01", "2026-08-24")
     feed(rows)
     // The statement's Net Sales is not the old hourly-summary figure.
-    vi.mocked(getAllStoresPnL).mockResolvedValue({
+    vi.mocked(getNetSalesByPeriod).mockResolvedValue({
       periods: rows.map((r) => ({ startDate: r.date })),
       perStore: [
         {
           storeId: "s1",
-          rows: [{ code: TOTAL_SALES_CODE, label: "Net Sales", values: rows.map(() => 3200) }],
+          net: rows.map(() => 3200),
         },
       ],
     } as never)

@@ -36,6 +36,24 @@ export function salesByStoreDayOf(
   return out
 }
 
+/**
+ * `salesByDayOf` and `salesByStoreDayOf` for a caller that read only Net Sales
+ * (`getNetSalesByPeriod`) instead of the whole statement: the same per-day
+ * map from the same figures, with `storeId` choosing the consolidated line
+ * (`null`) or that store's own, as `loadStatement` does.
+ */
+export function salesMapsOfNet(
+  net: { combined: number[]; perStore: Array<{ storeId: string; net: number[] }> },
+  range: DateRange,
+  storeId: string | null,
+): { salesByDay: Map<string, number>; salesByStoreDay: Map<string, Map<string, number>> } {
+  const selected = net.perStore.filter((s) => storeId === null || s.storeId === storeId)
+  const line = storeId === null ? net.combined : (selected[0]?.net ?? [])
+  const salesByStoreDay = new Map<string, Map<string, number>>()
+  for (const s of selected) salesByStoreDay.set(s.storeId, dayMap(s.net, range))
+  return { salesByDay: dayMap(line, range), salesByStoreDay }
+}
+
 function dayMap(net: number[], range: DateRange): Map<string, number> {
   const out = new Map<string, number>()
   for (let i = 0; i < dayCount(range); i++) {

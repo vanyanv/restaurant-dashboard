@@ -19,6 +19,7 @@ import {
   CUSTOM_FIXED_CODE_PREFIX,
   summarySlices,
   rowSales,
+  salesRowValues,
   type CustomFixedExpense,
   type Granularity,
   type Period,
@@ -44,8 +45,6 @@ import {
   type StoreCommissionRates,
 } from "@/lib/counter/commission"
 import type {
-  PnLMover,
-  StorePnLResult,
   AllStoresPnLResult,
   PnLPeriodLines,
 } from "./pnl-types"
@@ -293,75 +292,6 @@ function summarizeDailyCogs(rows: DailyCogsRow[], periods: Period[]): {
   return { cogsValues, unmappedItems, missingCostItems, rowCountPerPeriod, uncostedSales, daysWithRows }
 }
 
-function computeMovers(
-  rows: DailyCogsRow[],
-  periods: Period[],
-  currentIdx: number,
-  priorIdx: number,
-  limit = 5
-): PnLMover[] {
-  if (periods.length < 2 || currentIdx === priorIdx) return []
-
-  const byItem = new Map<
-    string,
-    {
-      itemName: string
-      category: string
-      currentRev: number
-      priorRev: number
-      currentQty: number
-      priorQty: number
-    }
-  >()
-
-  const indexOf = periodIndexer(periods)
-
-  for (const row of rows) {
-    const idx = indexOf(row.date)
-    if (idx !== currentIdx && idx !== priorIdx) continue
-
-    const key = `${row.itemName}:::${row.category}`
-    let bucket = byItem.get(key)
-    if (!bucket) {
-      bucket = {
-        itemName: row.itemName,
-        category: row.category,
-        currentRev: 0,
-        priorRev: 0,
-        currentQty: 0,
-        priorQty: 0,
-      }
-      byItem.set(key, bucket)
-    }
-    if (idx === currentIdx) {
-      bucket.currentRev += row.salesRevenue
-      bucket.currentQty += row.qtySold
-    } else {
-      bucket.priorRev += row.salesRevenue
-      bucket.priorQty += row.qtySold
-    }
-  }
-
-  const movers: PnLMover[] = []
-  for (const b of byItem.values()) {
-    const delta = b.currentRev - b.priorRev
-    if (Math.abs(delta) < 1) continue
-    movers.push({
-      itemName: b.itemName,
-      category: b.category,
-      current: b.currentRev,
-      prior: b.priorRev,
-      delta,
-      pctDelta: b.priorRev === 0 ? (delta > 0 ? 1 : -1) : delta / Math.abs(b.priorRev),
-      qtyCurrent: b.currentQty,
-      qtyPrior: b.priorQty,
-      qtyDelta: b.currentQty - b.priorQty,
-    })
-  }
-  movers.sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta))
-  return movers.slice(0, limit)
-}
-
 /*
  * The two reads inside `getAllStoresPnL` that DO NOT VARY BY DATE, hoisted
  * behind a per-request `cache()`.
@@ -399,233 +329,194 @@ const pnlFixedExpensesCached = cache(async (storeIdsKey: string) =>
   }),
 )
 
-export async function getStorePnL(input: {
-  storeId: string
+/**
+ * The two row reads every statement starts from, as functions of the stores
+ * and bounds only, so `getAllStoresPnL` and the lean readers below read the
+ * same rows the same way (and, inside one render, share one read through
+ * `batchedDayRows` — same `group`, same `select`).
+ *
+ * Both filter by `store: { accountId }` as well as `storeId in`: the ids come
+ * from the account's own store list, and the join makes the tenancy boundary
+ * explicit in the query instead of in the caller.
+ *
+ * A range that does not start at UTC midnight reads on its own, because only
+ * whole days can be cut from a shared read. See @/lib/counter/day-batch.
+ */
+function loadSummaryRows(accountId: string, storeIds: string[], start: Date, end: Date) {
+  const read = (r: { gte: Date; lte: Date }) =>
+    prisma.otterDailySummary.findMany({
+      where: { storeId: { in: storeIds }, store: { accountId }, date: r },
+      select: {
+        storeId: true,
+        date: true,
+        platform: true,
+        paymentMethod: true,
+        fpGrossSales: true,
+        tpGrossSales: true,
+        fpTaxCollected: true,
+        tpTaxCollected: true,
+        fpDiscounts: true,
+        tpDiscounts: true,
+        fpServiceCharges: true,
+        tpServiceCharges: true,
+        tpRefundsAdjustments: true,
+        tpOrderCount: true,
+      },
+    })
+  if (start.getTime() !== dayStart(utcDay(start)).getTime()) return read({ gte: start, lte: end })
+  return batchedDayRows({
+    group: `pnl-summaries|${[...storeIds].sort().join(",")}`,
+    range: { first: utcDay(start), last: utcDay(end) },
+    load: (r) => read({ gte: dayStart(r.first), lte: dayStart(r.last) }),
+    dayOf: (row) => utcDay(row.date),
+  })
+}
+
+function loadCogsRows(accountId: string, storeIds: string[], start: Date, end: Date) {
+  const read = (r: { gte: Date; lte: Date }) =>
+    prisma.dailyCogsItem.findMany({
+      where: { storeId: { in: storeIds }, store: { accountId }, date: r, ...FOOD_COST_ROWS },
+      select: {
+        storeId: true,
+        date: true,
+        itemName: true,
+        category: true,
+        qtySold: true,
+        salesRevenue: true,
+        lineCost: true,
+        status: true,
+        recipeId: true,
+        partialCost: true,
+      },
+    })
+  if (start.getTime() !== dayStart(utcDay(start)).getTime()) return read({ gte: start, lte: end })
+  return batchedDayRows({
+    group: `pnl-cogs|${[...storeIds].sort().join(",")}`,
+    range: { first: utcDay(start), last: utcDay(end) },
+    load: (r) => read({ gte: dayStart(r.first), lte: dayStart(r.last) }),
+    dayOf: (row) => utcDay(row.date),
+  })
+}
+
+/**
+ * Net Sales per period, and nothing else.
+ *
+ * Several pages need only the statement's Net Sales row by day (SPLH, the
+ * Decisions strip, the Labor trend) and built the whole statement for it:
+ * summaries, order-fee groups, food cost, fixed expenses and labor, five reads
+ * and the full cascade. Net Sales depends on the daily summaries alone, so
+ * this reads those and runs the SAME arithmetic `computeStorePnL` runs for
+ * that row (`salesRowValues`, summed per period), in the same order, and the
+ * all-stores line is summed over stores in the same order `consolidateRows`
+ * sums it. The figures are therefore the statement's own, not a second
+ * derivation.
+ *
+ * Same refusals as `getAllStoresPnL`: no session, or a non-owner, is an
+ * `error`. A failed read throws instead of degrading to an empty result.
+ */
+export async function getNetSalesByPeriod(input: {
   startDate: Date
   endDate: Date
   granularity: Granularity
-}): Promise<StorePnLResult> {
-  try {
-    const session = await getSession()
-    if (!session?.user) return { error: "Unauthorized" }
-    if (!hasOwnerAccess(session.user.role)) return { error: "P&L is restricted to owners" }
-
-    const store = await prisma.store.findFirst({
-      where: { id: input.storeId, accountId: session.user.accountId },
-      select: {
-        id: true,
-        name: true,
-        fixedMonthlyLabor: true,
-        fixedMonthlyRent: true,
-        fixedMonthlyTowels: true,
-        fixedMonthlyCleaning: true,
-        uberCommissionRate: true,
-        doordashCommissionRate: true,
-        uberPickupCommissionRate: true,
-        doordashPickupCommissionRate: true,
-        grubhubCommissionRate: true,
-        employerPayrollTaxRate: true,
-      },
-    })
-    if (!store) return { error: "Store not found" }
-
-    const periods = buildPeriods(input.startDate, input.endDate, input.granularity)
-    if (periods.length === 0) {
-      return {
-        storeName: store.name,
-        periods: [],
-        rows: [],
-        fixedLaborConfigured: hasFixedLabor(store.fixedMonthlyLabor),
-        fixedRentConfigured: store.fixedMonthlyRent != null,
-        kpis: {
-          grossSales: 0,
-          netAfterCommissions: 0,
-          fixedCosts: 0,
-          bottomLine: 0,
-          marginPct: 0,
-        },
-        channelMix: [],
-        trend: { totalSales: [], bottomLine: [] },
-        cogs: {
-          totalCogs: 0,
-          grossProfit: 0,
-          grossMarginPct: 0,
-          unmappedItems: [],
-          missingCostItems: [],
-          refillFailedPeriodIndexes: [],
-        },
-        movers: [],
-      }
+}): Promise<
+  | { error: string }
+  | {
+      periods: Period[]
+      /** Net Sales per period summed over every store — the consolidated TOTAL_SALES row. */
+      combined: number[]
+      perStore: Array<{ storeId: string; net: number[] }>
     }
+> {
+  const session = await getSession()
+  if (!session?.user) return { error: "Unauthorized" }
+  if (!hasOwnerAccess(session.user.role)) return { error: "P&L is restricted to owners" }
+  const accountId = session.user.accountId
 
-    const overallStart = periods[0].startDate
-    const overallEnd = periods[periods.length - 1].endDate
+  const stores = await pnlStoresCached(accountId)
+  const periods = buildPeriods(input.startDate, input.endDate, input.granularity)
+  if (stores.length === 0 || periods.length === 0) return { periods, combined: [], perStore: [] }
 
-    // Independent loads, run side by side (they were five round trips in a row).
-    const [summaries, feeGroups, fixedExpenseRows, cogsRows, laborCost] = await Promise.all([
-      prisma.otterDailySummary.findMany({
-        where: {
-          storeId: store.id,
-          date: { gte: overallStart, lte: overallEnd },
-        },
-        select: {
-          date: true,
-          platform: true,
-          paymentMethod: true,
-          fpGrossSales: true,
-          tpGrossSales: true,
-          fpTaxCollected: true,
-          tpTaxCollected: true,
-          fpDiscounts: true,
-          tpDiscounts: true,
-          fpServiceCharges: true,
-          tpServiceCharges: true,
-          tpRefundsAdjustments: true,
-          tpOrderCount: true,
-        },
-      }),
-      loadOrderFeeGroups({
-        accountId: session.user.accountId,
-        storeIds: [store.id],
-        startDate: overallStart,
-        endDate: overallEnd,
-      }),
-      prisma.storeFixedExpense.findMany({
-        where: { storeId: store.id, isActive: true },
-        orderBy: FIXED_EXPENSE_ORDER,
-        select: { id: true, label: true, amount: true, frequency: true },
-      }),
-      prisma.dailyCogsItem.findMany({
-        where: {
-          storeId: store.id,
-          date: { gte: overallStart, lte: overallEnd },
-          ...FOOD_COST_ROWS,
-        },
-        select: {
-          date: true,
-          itemName: true,
-          category: true,
-          qtySold: true,
-          salesRevenue: true,
-          lineCost: true,
-          status: true,
-          recipeId: true,
-          partialCost: true,
-        },
-      }),
-      // Labor dollars: `loadLaborCost` is the one rule (daily actual, else the
-      // position sum, else the day is missing), shared with the Labor page.
-      // computeStorePnL uses the result to override the fixed-monthly labor line
-      // by coverage, with proportional fixed-cost fallback for missing days.
-      loadLaborCost({
-        accountId: session.user.accountId,
-        storeIds: [store.id],
-        startDate: overallStart,
-        endDate: overallEnd,
-      }),
-    ])
+  const storeIds = stores.map((s) => s.id)
+  const summaries = await loadSummaryRows(
+    accountId,
+    storeIds,
+    periods[0].startDate,
+    periods[periods.length - 1].endDate,
+  )
+  const byStore = new Map<string, typeof summaries>()
+  for (const s of summaries) {
+    const arr = byStore.get(s.storeId) ?? []
+    arr.push(s)
+    byStore.set(s.storeId, arr)
+  }
+  const perStore = stores.map((store) => ({
+    storeId: store.id,
+    net: bucketSummariesByPeriod(byStore.get(store.id) ?? [], periods).map((rows) =>
+      salesRowValues(rows).reduce((a, b) => a + b, 0),
+    ),
+  }))
+  const combined = periods.map((_, pi) => perStore.reduce((acc, st) => acc + (st.net[pi] ?? 0), 0))
+  return { periods, combined, perStore }
+}
 
-    const bucketed = bucketSummariesByPeriod(summaries, periods)
-    const customFixedExpenses = toCustomFixedExpenses(fixedExpenseRows)
-    const cogs = summarizeDailyCogs(cogsRows, periods)
+/**
+ * Net Sales and food cost over a range, for a caller that prints those two
+ * figures and nothing else (menu profit). Same rows and same arithmetic as the
+ * statement's `grossSales` (the sum of each store's Net Sales per period, then
+ * over stores) and its COGS row (each store's `-cogsValues`, summed over
+ * stores per period): `cogsRow` is that row, so the caller keeps its own
+ * `-sum` and gets the number it always got. `storeId` null means every store.
+ */
+export async function getSalesAndCogsRow(input: {
+  startDate: Date
+  endDate: Date
+  storeId: string | null
+}): Promise<{ error: string } | { totalSales: number; cogsRow: number[] }> {
+  const session = await getSession()
+  if (!session?.user) return { error: "Unauthorized" }
+  if (!hasOwnerAccess(session.user.role)) return { error: "P&L is restricted to owners" }
+  const accountId = session.user.accountId
 
-    const harriLaborByPeriod = laborByPeriods(laborCost.stores[store.id], periods)
+  const all = await pnlStoresCached(accountId)
+  const stores = input.storeId === null ? all : all.filter((s) => s.id === input.storeId)
+  const periods = buildPeriods(input.startDate, input.endDate, "daily")
+  if (stores.length === 0 || periods.length === 0) return { totalSales: 0, cogsRow: [] }
 
-    const computed = computeStorePnL({
-      bucketed,
-      periods,
-      store,
-      cogsValues: cogs.cogsValues,
-      harriLaborByPeriod,
-      customFixedExpenses,
-      // Order rows checked against the summary's order count per day and
-      // platform: thin or missing rows are priced off the day's sales instead.
-      commission: bucketCommission(
-        feeGroups,
-        periods,
-        new Map([[store.id, store]]),
-        summarySlices(summaries.map((r) => ({ ...r, storeId: store.id }))),
-      ),
-    })
-
-    const refillFailedPeriodIndexes: number[] = []
-    for (let i = 0; i < periods.length; i++) {
-      if (cogs.rowCountPerPeriod[i] === 0 && computed.totalSales[i] > 0) {
-        refillFailedPeriodIndexes.push(i)
-      }
+  const storeIds = stores.map((s) => s.id)
+  const start = periods[0].startDate
+  const end = periods[periods.length - 1].endDate
+  const [summaries, cogsRows] = await Promise.all([
+    loadSummaryRows(accountId, storeIds, start, end),
+    loadCogsRows(accountId, storeIds, start, end),
+  ])
+  const sumsBy = <R extends { storeId: string }>(rows: R[]) => {
+    const m = new Map<string, R[]>()
+    for (const r of rows) {
+      const arr = m.get(r.storeId)
+      if (arr) arr.push(r)
+      else m.set(r.storeId, [r])
     }
-    if (refillFailedPeriodIndexes.length > 0) {
-      console.warn("[getStorePnL] missing DailyCogsItem rows", {
-        storeId: store.id,
-        accountId: session.user.accountId,
-        periodsMissing: refillFailedPeriodIndexes.map((i) => ({
-          start: periods[i].startDate.toISOString().slice(0, 10),
-          end: periods[i].endDate.toISOString().slice(0, 10),
-          sales: computed.totalSales[i],
-        })),
-      })
-    }
-    const movers = periods.length >= 2
-      ? computeMovers(cogsRows, periods, periods.length - 1, periods.length - 2, 5)
-      : []
+    return m
+  }
+  const sumsByStore = sumsBy(summaries)
+  const cogsByStore = sumsBy(cogsRows)
+  const sum = (xs: number[]) => xs.reduce((a, b) => a + b, 0)
 
-    const sum = (xs: number[]) => xs.reduce((a, b) => a + b, 0)
-    const grossSales = sum(computed.totalSales)
-    const netAfterCommissions = sum(computed.netAfterCommissions)
-    const totalCogs = sum(computed.cogsValues)
-    const grossProfit = sum(computed.grossProfit)
-    const grossMarginPct = grossSales <= 0 ? 0 : grossProfit / grossSales
-    const fixedCosts =
-      sum(computed.laborValues) +
-      sum(computed.rentValues) +
-      sum(computed.towelsValues) +
-      sum(computed.cleaningValues) +
-      sum(computed.customFixedValues.flat())
-    const bottomLine = sum(computed.bottomLine)
-    const marginPct = grossSales <= 0 ? 0 : bottomLine / grossSales
-
-    const totalChannelVals = computed.perPeriodSalesValues.reduce<number[]>(
-      (acc, periodVals) => {
-        for (let i = 0; i < periodVals.length; i++) {
-          acc[i] = (acc[i] ?? 0) + periodVals[i]
-        }
-        return acc
-      },
-      []
+  const perStore = stores.map((store) => {
+    const net = bucketSummariesByPeriod(sumsByStore.get(store.id) ?? [], periods).map((rows) =>
+      salesRowValues(rows).reduce((a, b) => a + b, 0),
     )
-
-    return {
-      storeName: store.name,
-      periods,
-      rows: computed.rows,
-      fixedLaborConfigured: hasFixedLabor(store.fixedMonthlyLabor),
-      fixedRentConfigured: store.fixedMonthlyRent != null,
-      kpis: {
-        grossSales,
-        netAfterCommissions,
-        fixedCosts,
-        bottomLine,
-        marginPct,
-      },
-      channelMix: channelMix(totalChannelVals),
-      trend: {
-        totalSales: computed.totalSales,
-        bottomLine: computed.bottomLine,
-      },
-      cogs: {
-        totalCogs,
-        grossProfit,
-        grossMarginPct,
-        unmappedItems: cogs.unmappedItems,
-        missingCostItems: cogs.missingCostItems,
-        refillFailedPeriodIndexes,
-      },
-      movers,
-    }
-  } catch (error) {
-    console.error("getStorePnL error:", error)
-    const msg = error instanceof Error ? error.message : String(error)
-    return { error: `Failed to load P&L: ${msg.slice(0, 300)}` }
+    const cogs = summarizeDailyCogs(cogsByStore.get(store.id) ?? [], periods).cogsValues
+    return { gross: sum(net), cogsRow: cogs.map((v) => -v) }
+  })
+  return {
+    totalSales: sum(perStore.map((p) => p.gross)),
+    // One store's statement reads its own row as it is; the consolidated row
+    // adds the stores up from zero (which turns a -0 into 0).
+    cogsRow:
+      input.storeId !== null
+        ? perStore[0].cogsRow
+        : periods.map((_, pi) => perStore.reduce((acc, p) => acc + (p.cogsRow[pi] ?? 0), 0)),
   }
 }
 
@@ -735,42 +626,6 @@ export async function getAllStoresPnL(input: {
     const days = { first: utcDay(overallStart), last: utcDay(overallEnd) }
     const storeKey = [...storeIds].sort().join(",")
 
-    const readSummaries = (r: { gte: Date; lte: Date }) =>
-      prisma.otterDailySummary.findMany({
-        where: { storeId: { in: storeIds }, date: r },
-      select: {
-        storeId: true,
-        date: true,
-        platform: true,
-        paymentMethod: true,
-        fpGrossSales: true,
-        tpGrossSales: true,
-        fpTaxCollected: true,
-        tpTaxCollected: true,
-        fpDiscounts: true,
-        tpDiscounts: true,
-        fpServiceCharges: true,
-        tpServiceCharges: true,
-        tpRefundsAdjustments: true,
-        tpOrderCount: true,
-      },
-      })
-    const readCogs = (r: { gte: Date; lte: Date }) =>
-      prisma.dailyCogsItem.findMany({
-        where: { storeId: { in: storeIds }, date: r, ...FOOD_COST_ROWS },
-        select: {
-          storeId: true,
-          date: true,
-          itemName: true,
-          category: true,
-          qtySold: true,
-          salesRevenue: true,
-          lineCost: true,
-          status: true,
-          recipeId: true,
-          partialCost: true,
-        },
-      })
     // ONE grouped OtterOrder read for every store's commission — see
     // `@/lib/counter/commission`. Cached on its own key, and inside this
     // rollup's cache too.
@@ -778,14 +633,7 @@ export async function getAllStoresPnL(input: {
       loadOrderFeeGroups({ accountId, storeIds, startDate, endDate })
 
     const [allSummaries, allFeeGroups, allCogsRows, allFixedExpenses, laborCost] = await Promise.all([
-      wholeDays
-        ? batchedDayRows({
-            group: `pnl-summaries|${storeKey}`,
-            range: days,
-            load: (r) => readSummaries({ gte: dayStart(r.first), lte: dayStart(r.last) }),
-            dayOf: (row) => utcDay(row.date),
-          })
-        : readSummaries({ gte: overallStart, lte: overallEnd }),
+      loadSummaryRows(accountId, storeIds, overallStart, overallEnd),
       wholeDays
         ? batchedDayRows({
             group: `pnl-fees|${accountId}|${storeKey}`,
@@ -794,14 +642,7 @@ export async function getAllStoresPnL(input: {
             dayOf: (g) => g.day,
           })
         : readFees(overallStart, overallEnd),
-      wholeDays
-        ? batchedDayRows({
-            group: `pnl-cogs|${storeKey}`,
-            range: days,
-            load: (r) => readCogs({ gte: dayStart(r.first), lte: dayStart(r.last) }),
-            dayOf: (row) => utcDay(row.date),
-          })
-        : readCogs({ gte: overallStart, lte: overallEnd }),
+      loadCogsRows(accountId, storeIds, overallStart, overallEnd),
       pnlFixedExpensesCached(storeIds.join(",")),
       // Labor dollars, batched across stores through the same `loadLaborCost`
       // rule `getStorePnL` uses, so the all-stores roll-up and a store's own P&L

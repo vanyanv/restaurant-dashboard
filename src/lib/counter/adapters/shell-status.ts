@@ -42,12 +42,21 @@ export interface ShellStatus {
 }
 
 export async function getShellStatus(
-  scope: { accountId: string; storeIds: string[] },
+  scope: {
+    accountId: string
+    /**
+     * The account's trading stores, when the caller already holds them. Left
+     * out, both reads filter on the store relation (`accountId`, active)
+     * instead, which names the same stores: the layout starts this beside its
+     * own store read rather than after it.
+     */
+    storeIds?: string[]
+  },
   now = new Date(),
 ): Promise<ShellStatus> {
   const { accountId, storeIds } = scope
   const raw = await cached<{ startedAt: string | null; completedAt: string | null; status: string | null; open: number }>(
-    `counter:shell-status:${accountId}`,
+    `counter:shell-status:${accountId}:${storeIds ? [...storeIds].sort().join(",") : "active"}`,
     60,
     // Busted by the alert inbox's writes, so the rail's count follows a
     // Clear all or an Undo at once instead of a minute later.
@@ -57,17 +66,24 @@ export async function getShellStatus(
         prisma.jobRun.findFirst({
           where: {
             jobName: SYNC_JOB,
-            OR: [{ storeId: null }, { storeId: { in: storeIds } }],
+            OR: [
+              { storeId: null },
+              storeIds ? { storeId: { in: storeIds } } : { store: { accountId, isActive: true } },
+            ],
           },
           orderBy: { startedAt: "desc" },
           select: { startedAt: true, completedAt: true, status: true },
         }),
-        storeIds.length === 0
+        storeIds?.length === 0
           ? Promise.resolve(0)
           : // Same horizon the Needs you page lists over, so the rail's count
           // and the page agree and "Clear all" brings it to zero.
           prisma.alert.count({
-              where: { status: "OPEN", storeId: { in: storeIds }, occurredOn: { gte: anomalyHorizon(now) } },
+              where: {
+                status: "OPEN",
+                ...(storeIds ? { storeId: { in: storeIds } } : { store: { accountId, isActive: true } }),
+                occurredOn: { gte: anomalyHorizon(now) },
+              },
             }),
       ])
       // Dates do not survive the cache (see the Counter cache notes), so

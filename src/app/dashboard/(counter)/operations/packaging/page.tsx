@@ -26,13 +26,17 @@ export default async function PackagingPage({
 
   const today = counterToday()
   const counterParams = readCounterParams(params, today)
-  const stores = await getOverviewStores()
+  // Started now, awaited after the section promises have started: the store
+  // list does not feed them, so they do not wait behind it.
+  const storesP = getOverviewStores()
 
   const sections = getPackagingSectionPromises({
     storeId: counterParams.storeId,
     accountId: session.user.accountId,
     range: counterParams.range,
   })
+
+  const stores = await storesP
 
   return (
     <>

@@ -1,3 +1,4 @@
+import { getAccountStoreRows } from "@/lib/account-stores"
 import { prisma } from "@/lib/prisma"
 import { toQueryBounds, type DateRange } from "@/lib/counter/date-range"
 import {
@@ -35,10 +36,8 @@ export async function loadElapsedCompare(input: {
   const { range, storeId, accountId, now } = input
   if (!mayBeIncomplete(range, now)) return null
 
-  const stores = await prisma.store.findMany({
-    where: { accountId, ...(storeId ? { id: storeId } : {}) },
-    select: { id: true },
-  })
+  // The request's one store read (`@/lib/account-stores`), narrowed to one store.
+  const stores = (await getAccountStoreRows(accountId)).filter((s) => !storeId || s.id === storeId)
   const storeIds = stores.map((s) => s.id)
   if (storeIds.length === 0) return null
 

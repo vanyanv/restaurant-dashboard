@@ -90,8 +90,8 @@ beforeEach(() => {
   h.loadStoreDraft.mockReset()
   h.loadStoreDraft.mockResolvedValue({ vendors: [], covered: 0, notCounted: [], belowZero: [], stock: [], reads: new Map(), skip: false, countsBefore: null })
   h.answers.set("store.findMany", () => [
-    { id: "store_a", name: "Glendale" },
-    { id: "store_b", name: "Van Nuys" },
+    { id: "store_a", name: "Glendale", isActive: true },
+    { id: "store_b", name: "Van Nuys", isActive: true },
   ])
 })
 

@@ -1,3 +1,4 @@
+import { getAccountStoreRows } from "@/lib/account-stores"
 import { prisma } from "@/lib/prisma"
 import { Prisma } from "@/generated/prisma/client"
 import {
@@ -146,14 +147,11 @@ export async function getPackagingCostData(
 ): Promise<PackagingCostData | null> {
   const range = resolveDateRange(options)
 
-  const stores = await prisma.store.findMany({
-    where: {
-      accountId: options.accountId,
-      ...(options.storeId ? { id: options.storeId } : {}),
-    },
-    select: { id: true, name: true },
-    orderBy: { name: "asc" },
-  })
+  // The request's one store read (`@/lib/account-stores`): the account's
+  // stores by name, narrowed to one when asked.
+  const stores = (await getAccountStoreRows(options.accountId)).filter(
+    (s) => !options.storeId || s.id === options.storeId,
+  )
   if (stores.length === 0) return null
 
   const storeIds = stores.map((store) => store.id)

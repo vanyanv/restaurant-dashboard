@@ -4,14 +4,12 @@
 import "server-only"
 import { getSession } from "@/lib/auth-scope"
 import { hasOwnerAccess } from "@/lib/auth"
-import { prisma } from "@/lib/prisma"
 import { getAccountStoreRows } from "@/lib/account-stores"
 import { cached, stableKey } from "@/lib/cache/cached"
 import { otterRangeTags, rangeTtl } from "@/lib/cache/range"
 import { todayInLA } from "@/lib/dashboard-utils"
-import { getAllStoresPnL } from "@/app/actions/store/pnl-actions"
-import { TOTAL_SALES_CODE } from "@/lib/pnl"
-import { rowValues } from "@/lib/counter/statement"
+import { getNetSalesByPeriod } from "@/app/actions/store/pnl-actions"
+import { loadHarriPositionRows, actualSecondsByStoreDay } from "@/lib/harri-position-rows"
 import { loadLaborCost } from "@/lib/counter/labor-cost"
 import {
   buildSplhSeries,
@@ -189,17 +187,11 @@ async function loadSplhSeries(input: {
   // Hollywood), so the Overview's SPLH and the Labor page's disagreed.
   const endDate = until ?? new Date(`${todayInLA()}T00:00:00.000Z`)
   const [hourRows, laborCost, pnl] = await Promise.all([
-    prisma.harriPositionDaily.groupBy({
-      by: ["storeId", "date"],
-      where: {
-        storeId: { in: storeIds },
-        store: { accountId },
-        date: { gte: since, lte: endDate },
-      },
-      _sum: { actualSeconds: true },
-    }),
+    loadHarriPositionRows({ accountId, storeIds, startDate: since, endDate }).then(actualSecondsByStoreDay),
     loadLaborCost({ accountId, storeIds, startDate: since, endDate }),
-    getAllStoresPnL({ startDate: since, endDate, granularity: "daily" }),
+    // Net Sales only: the whole statement (fees, food cost, fixed costs,
+    // labor) was built for one row of it.
+    getNetSalesByPeriod({ startDate: since, endDate, granularity: "daily" }),
   ])
 
   // Net Sales per store and day. A day the statement does not price (no sales
@@ -208,7 +200,7 @@ async function loadSplhSeries(input: {
   const netBy = new Map<string, number>()
   if (!("error" in pnl)) {
     for (const st of pnl.perStore) {
-      const net = rowValues(st.rows, TOTAL_SALES_CODE) ?? []
+      const net = st.net
       pnl.periods.forEach((p, i) => {
         const v = net[i]
         if (typeof v === "number" && Number.isFinite(v) && v > 0) {

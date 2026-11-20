@@ -1,3 +1,4 @@
+import { getAccountStoreRows } from "@/lib/account-stores"
 import { prisma } from "@/lib/prisma"
 import { count, money, pct } from "@/lib/counter/format"
 import {
@@ -73,21 +74,9 @@ export interface NewStoreInput {
 
 async function loadNewStore(input: NewStoreInput): Promise<NewStoreData> {
   const [stores, otter, harri, weatherRows] = await Promise.all([
-    prisma.store.findMany({
-      where: { accountId: input.accountId },
-      orderBy: { name: "asc" },
-      select: {
-        id: true,
-        name: true,
-        lifecycleStage: true,
-        fixedMonthlyRent: true,
-        fixedMonthlyLabor: true,
-        targetCogsPct: true,
-        uberCommissionRate: true,
-        doordashCommissionRate: true,
-        latitude: true,
-      },
-    }),
+    // The one store read a request makes (`@/lib/account-stores`): same
+    // `accountId` filter, `name asc` order and every store.
+    getAccountStoreRows(input.accountId),
     prisma.otterStore.findMany({
       where: { store: { accountId: input.accountId } },
       select: { storeId: true },

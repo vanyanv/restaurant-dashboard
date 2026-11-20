@@ -1,3 +1,5 @@
+import { cache } from "react"
+import { cached, stableKey } from "@/lib/cache/cached"
 import { prisma } from "@/lib/prisma"
 import {
   COST_CANDIDATE_WINDOW,
@@ -253,8 +255,79 @@ export function priceMoveWindows(asOf: Date): { day: Date; since: Date; volumeSi
   }
 }
 
-/** Every canonical ingredient's move, for one account (and optionally some stores). */
+/**
+ * What a move set looks like after a trip through Redis: JSON has no Map and
+ * no Date. `revivePriceMoves` is the only way back, and it is exact — the
+ * dates are ISO strings of the same instants.
+ */
+type StoredPriceMoves = {
+  moves: Array<[string, PriceMove]>
+  unpriceable: number
+  totalCanonicals: number
+}
+
+const reviveReading = (r: PricedReading): PricedReading => ({ ...r, at: new Date(r.at) })
+
+function revivePriceMoves(stored: StoredPriceMoves): PriceMoveSet {
+  return {
+    moves: new Map(
+      stored.moves.map(([id, m]) => [
+        id,
+        {
+          ...m,
+          latestAt: new Date(m.latestAt),
+          setAside: m.setAside.map(reviveReading),
+          readings: m.readings.map(reviveReading),
+        },
+      ]),
+    ),
+    unpriceable: stored.unpriceable,
+    totalCanonicals: stored.totalCanonicals,
+  }
+}
+
+/** Seconds a move set is kept. Short: it also depends on matches and units no invoice write touches. */
+export const PRICE_MOVES_TTL = 120
+
+const priceMovesThisRequest = cache(() => new Map<string, Promise<StoredPriceMoves>>())
+
+/**
+ * Every canonical ingredient's move, for one account (and optionally some stores).
+ *
+ * Ingredients, Prices, COGS, an ingredient's page and the Ask brief each
+ * reloaded this: 120 days of invoice lines every time. It is now saved for
+ * `PRICE_MOVES_TTL` seconds under the same tags every invoice-derived read
+ * carries (`invoices`, `account:<id>`), which every invoice write already
+ * busts; the writers that rematch a line or change an ingredient's unit
+ * (`confirmSkuMatch`, merge, pack definition, create) bust them too. The key
+ * names the account, the stores, the ingredients and the business day the
+ * windows are anchored on, so one account's moves are never served to another.
+ * Within one render the stored value is shared, so two sections asking
+ * read it once even with Redis off.
+ */
 export async function loadPriceMoves(input: PriceMoveInput): Promise<PriceMoveSet> {
+  const { accountId, storeIds, ingredientIds } = input
+  const { day } = priceMoveWindows(input.asOf)
+  const key = `counter:price-moves:v1:${stableKey({
+    a: accountId,
+    s: storeIds ? [...storeIds].sort() : null,
+    i: ingredientIds ? [...ingredientIds].sort() : null,
+    d: day,
+  })}`
+  const memo = priceMovesThisRequest()
+  let shared = memo.get(key)
+  if (!shared) {
+    shared = cached(key, PRICE_MOVES_TTL, ["invoices", `account:${accountId}`], async () => {
+      const set = await loadPriceMovesUncached(input)
+      return { moves: [...set.moves], unpriceable: set.unpriceable, totalCanonicals: set.totalCanonicals }
+    })
+    memo.set(key, shared)
+    shared.catch(() => memo.delete(key))
+  }
+  return revivePriceMoves(structuredClone(await shared))
+}
+
+export async function loadPriceMovesUncached(input: PriceMoveInput): Promise<PriceMoveSet> {
   const { accountId, storeIds, ingredientIds } = input
   const { day, since, volumeSince } = priceMoveWindows(input.asOf)
 

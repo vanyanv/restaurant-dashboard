@@ -1,3 +1,4 @@
+import { getAccountStoreRows } from "@/lib/account-stores"
 import { prisma } from "@/lib/prisma"
 import { count, money } from "@/lib/counter/format"
 import { rangeLabel, type DateRange } from "@/lib/counter/date-range"
@@ -271,10 +272,9 @@ export async function getStoreName(
   storeId: string,
   accountId: string,
 ): Promise<{ name: string } | null> {
-  const row = await prisma.store.findFirst({
-    where: { id: storeId, accountId },
-    select: { name: true },
-  })
+  // The request's one store read (`@/lib/account-stores`), by id: the same
+  // account boundary, and no second round trip beside the layout's own.
+  const row = (await getAccountStoreRows(accountId)).find((s) => s.id === storeId)
   return row ? { name: row.name } : null
 }
 

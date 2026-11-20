@@ -27,8 +27,9 @@ export default async function MobileInvoicesPage({
 
   const today = counterToday()
   const counterParams = readCounterParams(params, today)
-  const stores = await getOverviewStores()
-  const storeName = stores.find((s) => s.id === counterParams.storeId)?.name ?? "All stores"
+  // Started now: the store list only names the page, so the section promises
+  // below do not wait behind it.
+  const storesP = getOverviewStores()
 
   const sections = getInvoicesSectionPromises({
     range: counterParams.range,
@@ -38,6 +39,9 @@ export default async function MobileInvoicesPage({
     today,
   })
   const prices = getPriceSectionPromises(session.user.accountId)
+
+  const stores = await storesP
+  const storeName = stores.find((s) => s.id === counterParams.storeId)?.name ?? "All stores"
 
   return (
     <>
