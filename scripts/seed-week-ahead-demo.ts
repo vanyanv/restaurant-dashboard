@@ -242,7 +242,7 @@ async function main() {
       // line and read "NO VENDOR · LEAD 3D" on the page.
       await prisma.invoiceLineItem.deleteMany({ where: { invoice: { emailMessageId: id } } })
       await prisma.invoice.upsert({
-        where: { emailMessageId: id },
+        where: { emailMessageId_emailAttachmentIndex: { emailMessageId: id, emailAttachmentIndex: 0 } },
         update: { invoiceDate, lineItems: { create: lines } },
         create: {
           emailMessageId: id, ownerId, accountId: ACCOUNT, storeId,

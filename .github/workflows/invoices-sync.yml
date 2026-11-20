@@ -10,6 +10,13 @@ on:
     # while emails are deferred, so a backlog clears in one run. A run with
     # nothing new is one mail search. Concurrency lock prevents pile-up.
     # "Run workflow" below still pulls at any hour.
+    # Catch-up after an outage: "Run workflow" with lookback_days set to the
+    # days since the last good run. The sync keeps that window open across
+    # runs until nothing is deferred, skips every email already stored, and
+    # puts each bill through the same checks as a normal run. (This replaced
+    # scripts/backfill-invoice-emails.ts, deleted 2026-11-20: it skipped
+    # verification, duplicate-bill and statement checks, pack-size correction
+    # and returns.)
     - cron: '0 2,14,20 * * *'
   workflow_dispatch:
     inputs:

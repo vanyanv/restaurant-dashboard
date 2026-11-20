@@ -3,7 +3,7 @@ import { getServerSession } from "next-auth"
 import { authOptions, hasOwnerAccess } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { Prisma } from "@/generated/prisma/client"
-import { fetchInvoiceEmails, getEmailAttachments } from "@/lib/microsoft-graph"
+import { countEmailPdfAttachments, fetchInvoiceEmails, getEmailAttachments, type GraphAttachment } from "@/lib/microsoft-graph"
 import { extractInvoiceData } from "@/lib/gemini-invoice"
 import { matchInvoiceToStore } from "@/lib/address-matcher"
 import { PRICED_INVOICE_STATUSES, verifyInvoice } from "@/lib/invoice-verify"
@@ -27,6 +27,7 @@ import { resolveAutoMatchMode } from "@/lib/ingredient-auto-match-core"
 import { bustTags } from "@/lib/cache/cached"
 import { recentSuccessSkip, withJobRun } from "@/lib/monitoring/job-run"
 import { logger } from "@/lib/logger"
+import { resolveInvoiceMailbox } from "@/lib/invoice-mailbox"
 
 const PRICE_ALERT_PCT_THRESHOLD = 5
 const PRICE_ALERT_MIN_UNIT_PRICE = 0.5
@@ -49,6 +50,24 @@ export const maxDuration = 120
 // emails per run, hourly since 2026-10-28 (it was every 6h, and a week's
 // backlog took four days to drain — 13 emails were still waiting that day).
 const MAX_MESSAGES_PER_RUN = 6
+/**
+ * PDFs read per run, across those emails. Since 2026-11-20 every PDF in an
+ * email is read (one Invoice row each), so one email can bring several; this
+ * keeps the run inside the same extraction budget. The rest are deferred.
+ */
+const MAX_PDFS_PER_RUN = 8
+/**
+ * An email that already has a row is asked (attachment names only, no
+ * download) whether it carries a PDF not stored yet, when it arrived in the
+ * last week. At most this many per run.
+ */
+const RECHECK_STORED_DAYS = 7
+const MAX_STORED_RECHECKS = 60
+/** Ingredient matching retry: recent invoices whose matching never finished. */
+const MATCH_RETRY_DAYS = 30
+const MATCH_RETRY_TAKE = 20
+/** Time the first read (primary model + fallback) may take, inside the 60s task timeout. */
+const FIRST_READ_BUDGET_MS = 50_000
 const EXTRACTION_BUDGET_MS = 30_000
 /**
  * A second read is attempted only when the first took less than this, so
@@ -97,13 +116,38 @@ function computeProgress(emailPct: number, extractPct: number, matchPct: number,
 }
 
 /**
+ * Run `task(signal)` and give up after `ms`: the signal is aborted so the
+ * losing call stops (an LLM request left running after a Promise.race kept
+ * its socket open and its tokens billed until the function was frozen).
+ */
+async function raceWithAbort<T>(task: (signal: AbortSignal) => Promise<T>, ms: number, label: string): Promise<T> {
+  const controller = new AbortController()
+  let timer: ReturnType<typeof setTimeout> | undefined
+  try {
+    return await Promise.race([
+      task(controller.signal),
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => {
+          const err = new Error(`${label} timed out after ${ms}ms`)
+          controller.abort(err)
+          reject(err)
+        }, ms)
+      }),
+    ])
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
+/**
  * Run async tasks with a concurrency limit. When `deadlineAt` (epoch ms) is
  * given, workers stop *starting* tasks once it passes; in-flight tasks still
  * finish. `unstarted` is the count never launched, so the caller can report
- * them as deferred rather than failed.
+ * them as deferred rather than failed. A task past `taskTimeoutMs` has its
+ * signal aborted and counts as failed (null).
  */
 async function withConcurrency<T>(
-  tasks: (() => Promise<T>)[],
+  tasks: ((signal: AbortSignal) => Promise<T>)[],
   limit: number,
   taskTimeoutMs: number = 60_000,
   onProgress?: (completed: number, total: number) => void,
@@ -118,12 +162,7 @@ async function withConcurrency<T>(
       if (deadlineAt !== undefined && Date.now() >= deadlineAt) return
       const index = nextIndex++
       try {
-        results[index] = await Promise.race([
-          tasks[index](),
-          new Promise<never>((_, reject) =>
-            setTimeout(() => reject(new Error(`Task ${index} timed out after ${taskTimeoutMs}ms`)), taskTimeoutMs)
-          ),
-        ])
+        results[index] = await raceWithAbort(tasks[index], taskTimeoutMs, `Task ${index}`)
       } catch (err) {
         logger.error(`Task ${index} failed:`, err)
         results[index] = null as T
@@ -293,6 +332,116 @@ async function detectAndAlertPriceHikes(invoiceIds: string[], userId: string, ac
   }
 }
 
+/**
+ * Recent invoices whose ingredient matching never finished: the sync threw or
+ * timed out after the rows were written, and nothing ran it again, so those
+ * lines sat in "Needs review" though a learned SKU would have matched them.
+ * Bounded by age and count; set-aside bills are never matched.
+ */
+async function loadMatchRetryInvoiceIds(accountId: string, exclude: string[]): Promise<string[]> {
+  const since = new Date(Date.now() - MATCH_RETRY_DAYS * 24 * 60 * 60 * 1000)
+  const rows = await prisma.invoice.findMany({
+    where: {
+      accountId,
+      ingredientMatchedAt: null,
+      status: { not: "REJECTED" },
+      createdAt: { gte: since },
+      ...(exclude.length > 0 ? { id: { notIn: exclude } } : {}),
+      lineItems: { some: { canonicalIngredientId: null } },
+    },
+    orderBy: { createdAt: "desc" },
+    take: MATCH_RETRY_TAKE,
+    select: { id: true },
+  })
+  return rows.map((r) => r.id)
+}
+
+/**
+ * Phase 5 (rule-based matching) and 5b (AI auto-match) over this run's new
+ * invoices plus any recent ones whose matching never finished. An invoice is
+ * stamped `ingredientMatchedAt` only when every phase that applies finished,
+ * so a failure here is retried by the next run instead of forgotten. Never
+ * throws: matching must not turn a successful sync into a failed one.
+ * Returns how many earlier invoices were retried.
+ */
+async function runIngredientMatching(
+  emit: ProgressEmitter,
+  counts: InvoiceSyncProgressEvent["counts"],
+  userId: string,
+  accountId: string,
+  createdInvoiceIds: string[],
+): Promise<number> {
+  let retryIds: string[] = []
+  try {
+    retryIds = await loadMatchRetryInvoiceIds(accountId, createdInvoiceIds)
+  } catch (err) {
+    logger.error("[invoice-sync] match-retry lookup failed — matching only this run's invoices:", err)
+  }
+  if (retryIds.length > 0) {
+    logger.info(`[invoice-sync] retrying ingredient matching on ${retryIds.length} earlier invoice(s)`)
+  }
+  const ids = [...createdInvoiceIds, ...retryIds]
+  if (ids.length === 0) return 0
+
+  let finished = true
+  try {
+    const matchResult = await matchNewLineItems(accountId, ids)
+    logger.info(
+      `[invoice-sync] matched ${matchResult.matchedBySku} by SKU, ` +
+      `${matchResult.matchedByAlias} by alias, ${matchResult.matchedByName} by name, ${matchResult.unmatched} unmatched, ` +
+      `${matchResult.costsUpdated} canonical costs refreshed`
+    )
+  } catch (err) {
+    finished = false
+    logger.error("Ingredient matching failed:", err)
+  }
+
+  // ─── Phase 5b: AI auto-match whatever Phase 5 left unmatched ───
+  // Off by default. `shadow` records what the ladder WOULD have linked
+  // (IngredientMatchDecision rows, status SHADOW) without touching a single
+  // line item; `on` links for real. Its own try/catch because auto-matching
+  // is an enhancement — a provider outage or a bad embedding must never turn
+  // a successful invoice sync into a failed one.
+  const autoMatchMode = resolveAutoMatchMode(process.env.INGREDIENT_AUTO_MATCH)
+  if (finished && autoMatchMode !== "off") {
+    try {
+      emit({
+        phase: "matching", status: "processing",
+        totalProgress: computeProgress(100, 100, 100, 100),
+        detail: `AI auto-matching remaining line items (${autoMatchMode})...`, counts,
+      })
+      const auto = await autoResolveUnmatchedLines(
+        { accountId, ownerId: userId },
+        ids,
+        { mode: autoMatchMode === "shadow" ? "shadow" : "on" }
+      )
+      logger.info(
+        `[invoice-sync] auto-match (${autoMatchMode}): scanned ${auto.scanned}, ` +
+        `${auto.autoExact} exact, ${auto.autoVector} vector, ${auto.autoLlm} llm, ` +
+        `${auto.leftForReview} left for review (${auto.suggested} pre-filled, ` +
+        `${auto.failed} from errors), ` +
+        `${auto.llmCalls} LLM calls, ${auto.costsUpdated} canonical costs refreshed`
+      )
+    } catch (err) {
+      finished = false
+      logger.error("Ingredient auto-match failed:", err)
+    }
+  }
+
+  if (finished) {
+    try {
+      await prisma.invoice.updateMany({
+        where: { id: { in: ids }, accountId },
+        data: { ingredientMatchedAt: new Date() },
+      })
+    } catch (err) {
+      // Unstamped invoices are simply matched again next run; safe to re-run.
+      logger.error("[invoice-sync] could not stamp ingredientMatchedAt:", err)
+    }
+  }
+  return retryIds.length
+}
+
 async function runSync(
   emit: ProgressEmitter,
   userId: string,
@@ -362,22 +511,59 @@ async function runSync(
   })
 
   if (messages.length === 0) {
+    const retried = await runIngredientMatching(emit, counts, userId, accountId, [])
     emit({
       phase: "complete", status: "done", totalProgress: 100,
       detail: "No emails with attachments found", counts,
     })
+    if (retried > 0) await bustTags(["invoices", `account:${accountId}`])
     return { message: `Sync complete`, ...counts, lookbackDays }
   }
 
-  // ─── Dedup: skip already-processed emails ───
+  // ─── Dedup: skip already-processed PDFs ───
+  // A row is (email, PDF position). An email with no row at all is new; one
+  // with rows is done unless it carries a PDF whose position has no row yet
+  // (a second bill in the same email, or a PDF whose read failed last run).
+  // Rows from before 2026-11-20 are all position 0, so an email synced then is
+  // still skipped — after one cheap check, while it is recent, that it holds
+  // no second PDF the old sync never read.
   const messageIds = messages.map((m) => m.id)
   const existingInvoices = await prisma.invoice.findMany({
     where: { emailMessageId: { in: messageIds } },
-    select: { emailMessageId: true },
+    select: { emailMessageId: true, emailAttachmentIndex: true },
   })
-  const processedSet = new Set(existingInvoices.map((i) => i.emailMessageId))
+  const storedByMessage = new Map<string, Set<number>>()
+  for (const row of existingInvoices) {
+    const set = storedByMessage.get(row.emailMessageId) ?? new Set<number>()
+    set.add(row.emailAttachmentIndex)
+    storedByMessage.set(row.emailMessageId, set)
+  }
+  const recheckSince = Date.now() - RECHECK_STORED_DAYS * 24 * 60 * 60 * 1000
+  const toRecheck = messages
+    .filter((m) => storedByMessage.has(m.id) && Date.parse(m.receivedDateTime) >= recheckSince)
+    .sort((a, b) => b.receivedDateTime.localeCompare(a.receivedDateTime))
+    .slice(0, MAX_STORED_RECHECKS)
+  const pdfCounts = new Map<string, number>()
+  if (toRecheck.length > 0) {
+    const { results } = await withConcurrency(
+      toRecheck.map((m) => async () => countEmailPdfAttachments(m.id)),
+      4,
+      15_000,
+    )
+    // A failed check leaves the email counted as done, as before.
+    toRecheck.forEach((m, i) => {
+      if (typeof results[i] === "number") pdfCounts.set(m.id, results[i])
+    })
+  }
+  const hasUnstoredPdf = (m: { id: string }): boolean => {
+    const stored = storedByMessage.get(m.id)
+    if (!stored) return true
+    const n = pdfCounts.get(m.id) ?? 0
+    for (let i = 0; i < n; i++) if (!stored.has(i)) return true
+    return false
+  }
   const pending = messages
-    .filter((m) => !processedSet.has(m.id))
+    .filter(hasUnstoredPdf)
     // Oldest first, so a bounded run drains the backlog from the back and the
     // window shrinks toward steady state instead of re-reading the newest few.
     .sort((a, b) => a.receivedDateTime.localeCompare(b.receivedDateTime))
@@ -392,10 +578,12 @@ async function runSync(
   })
 
   if (newMessages.length === 0) {
+    const retried = await runIngredientMatching(emit, counts, userId, accountId, [])
     emit({
       phase: "complete", status: "done", totalProgress: 100,
       detail: `All ${counts.skipped} emails already synced`, counts,
     })
+    if (retried > 0) await bustTags(["invoices", `account:${accountId}`])
     return { message: `Sync complete`, ...counts, lookbackDays }
   }
 
@@ -409,6 +597,8 @@ async function runSync(
   type ExtractionPayload = Awaited<ReturnType<typeof extractInvoiceData>>["extraction"]
   interface ExtractedInvoice {
     messageId: string
+    /** Position among the email's PDFs — `Invoice.emailAttachmentIndex`. */
+    attachmentIndex: number
     subject: string | null
     receivedAt: string
     attachmentName: string
@@ -418,16 +608,40 @@ async function runSync(
     pdfUpload: InvoicePdfUpload | null
   }
 
-  const extractionTasks = newMessages.map((msg) => async () => {
-    try {
-      // Get PDF attachments
-      const attachments = await getEmailAttachments(msg.id)
-      if (attachments.length === 0) return null
+  // Phase 2a: download each email's PDFs. Every PDF not stored yet is one
+  // unit of work; a statement sent first no longer hides the bill after it.
+  const { results: attachmentLists } = await withConcurrency(
+    newMessages.map((msg) => async () => {
+      try {
+        return await getEmailAttachments(msg.id)
+      } catch (err) {
+        logger.error(`Failed to fetch attachments for email "${msg.subject}":`, err)
+        counts.errors++
+        return null
+      }
+    }),
+    3,
+    30_000,
+  )
+  type PdfUnit = { msg: (typeof newMessages)[number]; pdf: GraphAttachment; index: number }
+  const allUnits: PdfUnit[] = []
+  newMessages.forEach((msg, i) => {
+    const stored = storedByMessage.get(msg.id)
+    ;(attachmentLists[i] ?? []).forEach((pdf, index) => {
+      if (!stored?.has(index)) allUnits.push({ msg, pdf, index })
+    })
+  })
+  const units = allUnits.slice(0, MAX_PDFS_PER_RUN)
+  counts.deferred += allUnits.length - units.length
 
-      // Process the first PDF
-      const pdf = attachments[0]
+  const extractionTasks = units.map(({ msg, pdf, index }) => async (signal: AbortSignal) => {
+    const label = index > 0 ? `"${msg.subject}" (PDF ${index + 1})` : `"${msg.subject}"`
+    try {
       const readStartedAt = Date.now()
-      let { extraction, model } = await extractInvoiceData(pdf.contentBytes, pdf.name)
+      let { extraction, model } = await extractInvoiceData(pdf.contentBytes, pdf.name, {
+        signal,
+        budgetMs: FIRST_READ_BUDGET_MS,
+      })
 
       // Self-heal: when the money does not add up, read the PDF once more —
       // with the other model, told what the first read got wrong — and keep
@@ -438,14 +652,19 @@ async function runSync(
         try {
           // Bounded so the task always finishes inside withConcurrency's 60s
           // timeout with the first read in hand; a timeout there would drop
-          // the invoice without even counting it as an error.
+          // the invoice without even counting it as an error. The re-read is
+          // aborted at its budget, not left running.
           const budget = Math.max(0, REREAD_DEADLINE_MS - (Date.now() - readStartedAt))
-          const second = await Promise.race([
-            extractInvoiceData(pdf.contentBytes, pdf.name, { rereadProblems: problems }),
-            new Promise<never>((_, reject) =>
-              setTimeout(() => reject(new Error(`re-read over its ${budget}ms budget`)), budget)
-            ),
-          ])
+          const second = await raceWithAbort(
+            (rereadSignal) =>
+              extractInvoiceData(pdf.contentBytes, pdf.name, {
+                rereadProblems: problems,
+                signal: AbortSignal.any([signal, rereadSignal]),
+                budgetMs: budget,
+              }),
+            budget,
+            "re-read",
+          )
           const before = moneyProblemScore(extraction)
           const after = moneyProblemScore(second.extraction)
           // The re-read must describe the SAME document: a read that "fixes"
@@ -457,7 +676,7 @@ async function runSync(
             sameMoney(second.extraction.subtotal, extraction.subtotal)
           const keep = sameHeader && after < before
           logger.warn(
-            `[invoice-sync] re-read "${msg.subject}" (${problems.length} problem(s)): score ${before} → ${after}` +
+            `[invoice-sync] re-read ${label} (${problems.length} problem(s)): score ${before} → ${after}` +
               (sameHeader ? "" : ", header differs") +
               (keep ? ", keeping the re-read" : ", keeping the first read")
           )
@@ -466,7 +685,7 @@ async function runSync(
             model = `${second.model} (re-read)`
           }
         } catch (err) {
-          logger.error(`[invoice-sync] re-read failed for "${msg.subject}" — keeping the first read:`, err)
+          logger.error(`[invoice-sync] re-read failed for ${label} — keeping the first read:`, err)
         }
       }
 
@@ -475,12 +694,13 @@ async function runSync(
         const buffer = Buffer.from(pdf.contentBytes, "base64")
         pdfUpload = await putInvoicePdf(msg.id, buffer)
       } catch (uploadErr) {
-        logger.error(`Failed to upload PDF to blob for "${msg.subject}":`, uploadErr)
+        logger.error(`Failed to upload PDF to blob for ${label}:`, uploadErr)
         // Continue without PDF — backfill script can retry later.
       }
 
       return {
         messageId: msg.id,
+        attachmentIndex: index,
         subject: msg.subject,
         receivedAt: msg.receivedDateTime,
         attachmentName: pdf.name,
@@ -490,7 +710,7 @@ async function runSync(
         pdfUpload,
       } satisfies ExtractedInvoice
     } catch (err) {
-      logger.error(`Failed to extract invoice from email "${msg.subject}":`, err)
+      logger.error(`Failed to extract invoice from email ${label}:`, err)
       counts.errors++
       return null
     }
@@ -744,6 +964,7 @@ async function runSync(
       accountId,
       storeId: match?.storeId ?? null,
       emailMessageId: inv.messageId,
+      emailAttachmentIndex: inv.attachmentIndex,
       emailSubject: inv.subject,
       emailReceivedAt,
       attachmentName: inv.attachmentName,
@@ -811,6 +1032,7 @@ async function runSync(
           accountId: inv.accountId,
           storeId: inv.storeId,
           emailMessageId: inv.emailMessageId,
+          emailAttachmentIndex: inv.emailAttachmentIndex,
           emailSubject: inv.emailSubject,
           emailReceivedAt: inv.emailReceivedAt,
           attachmentName: inv.attachmentName,
@@ -891,50 +1113,8 @@ async function runSync(
     })
   }
 
-  // ─── Phase 5: auto-match line items to canonical ingredients ───
-  if (createdInvoiceIds.length > 0) {
-    try {
-      const matchResult = await matchNewLineItems(accountId, createdInvoiceIds)
-      logger.info(
-        `[invoice-sync] matched ${matchResult.matchedBySku} by SKU, ` +
-        `${matchResult.matchedByAlias} by alias, ${matchResult.matchedByName} by name, ${matchResult.unmatched} unmatched, ` +
-        `${matchResult.costsUpdated} canonical costs refreshed`
-      )
-    } catch (err) {
-      logger.error("Ingredient matching failed:", err)
-    }
-  }
-
-  // ─── Phase 5b: AI auto-match whatever Phase 5 left unmatched ───
-  // Off by default. `shadow` records what the ladder WOULD have linked
-  // (IngredientMatchDecision rows, status SHADOW) without touching a single
-  // line item; `on` links for real. Its own try/catch because auto-matching
-  // is an enhancement — a provider outage or a bad embedding must never turn
-  // a successful invoice sync into a failed one.
-  const autoMatchMode = resolveAutoMatchMode(process.env.INGREDIENT_AUTO_MATCH)
-  if (createdInvoiceIds.length > 0 && autoMatchMode !== "off") {
-    try {
-      emit({
-        phase: "matching", status: "processing",
-        totalProgress: computeProgress(100, 100, 100, 100),
-        detail: `AI auto-matching remaining line items (${autoMatchMode})...`, counts,
-      })
-      const auto = await autoResolveUnmatchedLines(
-        { accountId, ownerId: userId },
-        createdInvoiceIds,
-        { mode: autoMatchMode === "shadow" ? "shadow" : "on" }
-      )
-      logger.info(
-        `[invoice-sync] auto-match (${autoMatchMode}): scanned ${auto.scanned}, ` +
-        `${auto.autoExact} exact, ${auto.autoVector} vector, ${auto.autoLlm} llm, ` +
-        `${auto.leftForReview} left for review (${auto.suggested} pre-filled, ` +
-        `${auto.failed} from errors), ` +
-        `${auto.llmCalls} LLM calls, ${auto.costsUpdated} canonical costs refreshed`
-      )
-    } catch (err) {
-      logger.error("Ingredient auto-match failed:", err)
-    }
-  }
+  // ─── Phase 5: match line items to canonical ingredients ───
+  const retried = await runIngredientMatching(emit, counts, userId, accountId, createdInvoiceIds)
 
   // ─── Phase 6: detect price hikes vs prior orders and email the owner ───
   if (createdInvoiceIds.length > 0) {
@@ -956,7 +1136,7 @@ async function runSync(
   // Bust the owner's invoice/dash/pnl caches if anything actually changed.
   // Skipping the call when `created === 0` keeps idle cron runs from
   // burning a Redis round-trip every minute.
-  if (counts.created > 0) {
+  if (counts.created > 0 || retried > 0) {
     await bustTags(["invoices", `account:${accountId}`])
   }
 
@@ -999,12 +1179,13 @@ export async function POST(request: NextRequest) {
   let userId: string
   let accountId: string
 
+  // One mailbox, one account: see resolveInvoiceMailbox.
+  const mailbox = await resolveInvoiceMailbox()
+  if (!mailbox) return NextResponse.json({ error: "No owner user found for the invoice mailbox" }, { status: 500 })
+
   if (fromCron) {
-    // For cron, use the first OWNER user
-    const owner = await prisma.user.findFirst({ where: { role: "OWNER" }, select: { id: true, accountId: true } })
-    if (!owner) return NextResponse.json({ error: "No owner user found" }, { status: 500 })
-    userId = owner.id
-    accountId = owner.accountId
+    userId = mailbox.userId
+    accountId = mailbox.accountId
   } else {
     const session = await getServerSession(authOptions)
     if (!session?.user) {
@@ -1013,6 +1194,11 @@ export async function POST(request: NextRequest) {
     if (!hasOwnerAccess(session.user.role)) {
       return NextResponse.json({ error: "Only owners can sync invoices" }, { status: 403 })
     }
+    // The mailbox's bills belong to its account; another account's owner
+    // pressing Sync would otherwise file them under their own.
+    if (session.user.accountId !== mailbox.accountId) {
+      return NextResponse.json({ error: "The invoice mailbox is not connected to this account" }, { status: 403 })
+    }
     userId = session.user.id
     accountId = session.user.accountId
   }
@@ -1020,6 +1206,10 @@ export async function POST(request: NextRequest) {
   // Optional ?lookbackDays=N override for backfills (e.g. re-pulling a
   // misclassified return, or a month the sync missed). Accepted from the cron
   // secret too since 2026-10-28, so the workflow's manual run can take it.
+  // This is THE catch-up after an outage (the old backfill script that
+  // skipped this route's checks was deleted 2026-11-20): the window stays
+  // open across runs while anything is deferred (see runSync), and dedupe
+  // skips every PDF already stored.
   let lookbackDaysOverride: number | undefined
   {
     const raw = new URL(request.url).searchParams.get("lookbackDays")

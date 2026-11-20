@@ -17,7 +17,11 @@ vi.mock("@/lib/prisma", () => ({
   },
 }))
 
+// Line links are written in bulk, one statement per scanned batch.
+vi.mock("@/lib/ingredient-matching", () => ({ linkLineItems: vi.fn(async () => 0) }))
+
 import { prisma } from "@/lib/prisma"
+import { linkLineItems } from "@/lib/ingredient-matching"
 import { seedCanonicalIngredientsFromInvoices } from "@/lib/canonical-ingredients"
 
 type LineItemRow = {
@@ -122,14 +126,28 @@ describe("seedCanonicalIngredientsFromInvoices — pagination", () => {
     expect(result.skuMatchesCreated).toBe(1)
     expect(prisma.canonicalIngredient.create).toHaveBeenCalledTimes(1)
 
-    const updates = vi.mocked(prisma.invoiceLineItem.update).mock.calls.map(([a]) => a)
-    const linked = updates.filter((u) =>
-      ["li-a-first", "li-z-last"].includes((u as { where: { id: string } }).where.id),
-    )
+    // No per-line UPDATE: each batch's links go out in one bulk write.
+    expect(prisma.invoiceLineItem.update).not.toHaveBeenCalled()
+    const batches = vi.mocked(linkLineItems).mock.calls
+    // One write per scanned batch, never one per line.
+    expect(batches.length).toBeGreaterThan(1)
+    expect(batches.length).toBeLessThanOrEqual(vi.mocked(prisma.invoiceLineItem.findMany).mock.calls.length)
+    const links = batches.flatMap(([l]) => l)
+    const linked = links.filter((l) => ["li-a-first", "li-z-last"].includes(l.id))
     expect(linked).toHaveLength(2)
-    const canonicalIds = new Set(
-      linked.map((u) => (u as { data: { canonicalIngredientId: string } }).data.canonicalIngredientId),
+    expect(new Set(linked.map((l) => l.canonicalIngredientId)).size).toBe(1)
+    expect(linked.every((l) => l.matchSource === "sku")).toBe(true)
+  })
+
+  it("upserts the learned SKU on the account key, not the owner key", async () => {
+    serveLineItems([
+      { id: "li-1", sku: "SKU-9", productName: "Buns", unit: "cs", category: "Bakery", invoice: { vendorName: "Sysco", storeId: "s1" } },
+    ])
+    await seedCanonicalIngredientsFromInvoices("u1", "acct-A")
+    expect(prisma.ingredientSkuMatch.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { accountId_vendorKey_sku: { accountId: "acct-A", vendorKey: "sysco", sku: "SKU-9" } },
+      }),
     )
-    expect(canonicalIds.size).toBe(1)
   })
 })

@@ -67,7 +67,16 @@ async function getGraphToken(): Promise<string> {
   return access_token as string
 }
 
-async function getPdfAttachment(token: string, messageId: string): Promise<{ name: string; base64: string } | null> {
+/**
+ * The PDF this invoice row was read from: the one at its
+ * `emailAttachmentIndex` among the email's PDFs, filtered exactly as the live
+ * sync filters them (one email can carry several bills since 2026-11-20).
+ */
+async function getPdfAttachment(
+  token: string,
+  messageId: string,
+  attachmentIndex: number
+): Promise<{ name: string; base64: string } | null> {
   const userId = process.env.MICROSOFT_MAIL_USER_ID!
   const res = await fetch(
     `${GRAPH_BASE}/users/${encodeURIComponent(userId)}/messages/${messageId}/attachments`,
@@ -76,17 +85,17 @@ async function getPdfAttachment(token: string, messageId: string): Promise<{ nam
   if (!res.ok) return null
   const data = await res.json()
   const atts = (data.value ?? []) as Array<Record<string, unknown>>
-  for (const a of atts) {
-    const name = a.name as string
-    const type = a.contentType as string
-    if (
+  const pdfs = atts.filter((a) => {
+    const name = a.name
+    return (
       a["@odata.type"] === "#microsoft.graph.fileAttachment" &&
-      (type === "application/pdf" || (typeof name === "string" && name.toLowerCase().endsWith(".pdf")))
-    ) {
-      return { name, base64: a.contentBytes as string }
-    }
-  }
-  return null
+      (a.contentType === "application/pdf" || (typeof name === "string" && name.toLowerCase().endsWith(".pdf"))) &&
+      typeof a.size === "number" &&
+      a.size < 20 * 1024 * 1024
+    )
+  })
+  const a = pdfs[attachmentIndex]
+  return a ? { name: a.name as string, base64: a.contentBytes as string } : null
 }
 
 function fmtDateOnly(d: Date | null | undefined): string {
@@ -122,7 +131,7 @@ async function main() {
     select: {
       id: true, ownerId: true, accountId: true, vendorName: true, invoiceNumber: true,
       invoiceDate: true, deliveryAddress: true, storeId: true, status: true,
-      emailMessageId: true, emailReceivedAt: true,
+      emailMessageId: true, emailAttachmentIndex: true, emailReceivedAt: true,
       rawExtractionJson: true,
       lineItems: { select: { id: true, unit: true, packSize: true } },
     },
@@ -162,7 +171,7 @@ async function main() {
       continue
     }
 
-    const pdf = await getPdfAttachment(token, inv.emailMessageId)
+    const pdf = await getPdfAttachment(token, inv.emailMessageId, inv.emailAttachmentIndex)
     if (!pdf) {
       console.log("  ✗ PDF attachment missing — skipping\n")
       skipped++

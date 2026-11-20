@@ -450,11 +450,15 @@ model Invoice {
   accountId String
   storeId   String?
 
-  // Source tracking
-  emailMessageId  String    @unique
-  emailSubject    String?
-  emailReceivedAt DateTime?
-  attachmentName  String?
+  // Source tracking. One email can carry several bills, one PDF each: a row
+  // is (message, PDF), where `emailAttachmentIndex` is the PDF's position
+  // among the email's PDF attachments as `getEmailAttachments` lists them.
+  // Rows from before 2026-11-20 read only the first PDF and carry 0.
+  emailMessageId       String
+  emailAttachmentIndex Int       @default(0)
+  emailSubject         String?
+  emailReceivedAt      DateTime?
+  attachmentName       String?
 
   // Extracted header
   vendorName      String
@@ -483,6 +487,11 @@ model Invoice {
   // that never needed review.
   reviewReasons Json?
 
+  // When the sync last ran ingredient matching on this invoice's lines to
+  // completion. Null = never finished (the matcher threw or timed out), so the
+  // next sync retries it while the invoice is recent.
+  ingredientMatchedAt DateTime?
+
   // Gemini extraction metadata
   rawExtractionJson String?
   extractionModel   String?
@@ -502,6 +511,7 @@ model Invoice {
   store     Store?            @relation(fields: [storeId], references: [id], onDelete: SetNull)
   lineItems InvoiceLineItem[]
 
+  @@unique([emailMessageId, emailAttachmentIndex])
   @@index([storeId])
   @@index([vendorName])
   @@index([invoiceDate])

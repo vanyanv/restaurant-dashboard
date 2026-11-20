@@ -124,13 +124,30 @@ export async function fetchInvoiceEmails(sinceDate: Date): Promise<GraphMessage[
 
 // --- Attachment fetching ---
 
-export async function getEmailAttachments(messageId: string): Promise<GraphAttachment[]> {
+const MAX_PDF_BYTES = 20 * 1024 * 1024
+
+/**
+ * The attachments the invoice sync reads: PDF file attachments under 20MB, in
+ * the order Graph lists them. A PDF's position in this list is the
+ * `emailAttachmentIndex` its Invoice row is stored under, so the full read
+ * and the metadata-only read must filter the same way.
+ */
+function isInvoicePdf(a: Record<string, unknown>): boolean {
+  return (
+    a["@odata.type"] === "#microsoft.graph.fileAttachment" &&
+    (a.contentType === "application/pdf" ||
+      (typeof a.name === "string" && a.name.toLowerCase().endsWith(".pdf"))) &&
+    typeof a.size === "number" &&
+    a.size < MAX_PDF_BYTES
+  )
+}
+
+async function listAttachments(messageId: string, select?: string): Promise<Array<Record<string, unknown>>> {
   const token = await getGraphAccessToken()
   const userId = getMailUserId()
-
-  // Don't $select contentBytes - only available on fileAttachment subtype, not base attachment
   const url =
-    `${GRAPH_BASE}/users/${encodeURIComponent(userId)}/messages/${messageId}/attachments`
+    `${GRAPH_BASE}/users/${encodeURIComponent(userId)}/messages/${messageId}/attachments` +
+    (select ? `?$select=${select}` : "")
 
   const res = await graphGet(url, token)
 
@@ -140,23 +157,27 @@ export async function getEmailAttachments(messageId: string): Promise<GraphAttac
   }
 
   const data = await res.json()
-  const attachments = (data.value ?? []) as Array<Record<string, unknown>>
+  return (data.value ?? []) as Array<Record<string, unknown>>
+}
 
-  // Filter to PDF attachments under 20MB
-  return attachments
-    .filter(
-      (a) =>
-        a["@odata.type"] === "#microsoft.graph.fileAttachment" &&
-        (a.contentType === "application/pdf" ||
-          (typeof a.name === "string" && a.name.toLowerCase().endsWith(".pdf"))) &&
-        typeof a.size === "number" &&
-        a.size < 20 * 1024 * 1024
-    )
-    .map((a) => ({
-      id: a.id as string,
-      name: a.name as string,
-      contentType: (a.contentType as string) ?? "application/pdf",
-      contentBytes: a.contentBytes as string,
-      size: a.size as number,
-    }))
+export async function getEmailAttachments(messageId: string): Promise<GraphAttachment[]> {
+  // Don't $select contentBytes - only available on fileAttachment subtype, not base attachment
+  const attachments = await listAttachments(messageId)
+  return attachments.filter(isInvoicePdf).map((a) => ({
+    id: a.id as string,
+    name: a.name as string,
+    contentType: (a.contentType as string) ?? "application/pdf",
+    contentBytes: a.contentBytes as string,
+    size: a.size as number,
+  }))
+}
+
+/**
+ * How many invoice PDFs an email carries, without downloading them: the
+ * base attachment properties only. The sync asks this of emails it has
+ * already stored a row for, to find a second bill it has not read yet.
+ */
+export async function countEmailPdfAttachments(messageId: string): Promise<number> {
+  const attachments = await listAttachments(messageId, "id,name,contentType,size")
+  return attachments.filter(isInvoicePdf).length
 }

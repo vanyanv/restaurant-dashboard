@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma"
+import { Prisma } from "@/generated/prisma/client"
 import { vendorMatchKey } from "@/lib/vendor-normalize"
 import { recomputeCanonicalCost } from "@/lib/ingredient-cost"
 
@@ -85,6 +86,7 @@ export async function matchNewLineItems(
   let unmatched = 0
   const now = new Date()
   const touchedCanonicals = new Set<string>()
+  const links: LineLink[] = []
 
   for (const inv of invoices) {
     const vendor = vendorMatchKey(inv.vendorName)
@@ -111,14 +113,7 @@ export async function matchNewLineItems(
       }
 
       if (canonicalId && source) {
-        await prisma.invoiceLineItem.update({
-          where: { id: li.id },
-          data: {
-            canonicalIngredientId: canonicalId,
-            matchSource: source,
-            matchedAt: now,
-          },
-        })
+        links.push({ id: li.id, canonicalIngredientId: canonicalId, matchSource: source })
         touchedCanonicals.add(canonicalId)
         if (source === "sku") matchedBySku++
         else if (source === "alias") matchedByAlias++
@@ -128,6 +123,10 @@ export async function matchNewLineItems(
       }
     }
   }
+
+  // Every link in one statement (it was one UPDATE per line, which on a
+  // 40-line Sysco bill was 40 round trips and the slowest part of a sync).
+  await linkLineItems(links, now)
 
   // Now that new line items are linked, refresh each touched canonical's
   // cost-per-recipe-unit from its most recent matched line (respects costLocked).
@@ -142,6 +141,28 @@ export async function matchNewLineItems(
   }
 
   return { matchedBySku, matchedByAlias, matchedByName, unmatched, costsUpdated }
+}
+
+export type LineLink = { id: string; canonicalIngredientId: string; matchSource: string }
+
+/**
+ * Link many invoice lines to their ingredients in one
+ * `UPDATE ... FROM (VALUES ...)`. Only lines still unmatched are touched, so a
+ * line someone matched by hand in the meantime keeps their pick. Returns the
+ * number of rows written.
+ */
+export async function linkLineItems(links: LineLink[], matchedAt: Date): Promise<number> {
+  if (links.length === 0) return 0
+  const values = Prisma.join(
+    links.map((l) => Prisma.sql`(${l.id}::text, ${l.canonicalIngredientId}::text, ${l.matchSource}::text)`)
+  )
+  return prisma.$executeRaw`
+    UPDATE "InvoiceLineItem" AS li SET
+      "canonicalIngredientId" = v.cid,
+      "matchSource" = v.src,
+      "matchedAt" = ${matchedAt}::timestamp
+    FROM (VALUES ${values}) AS v(id, cid, src)
+    WHERE li."id" = v.id AND li."canonicalIngredientId" IS NULL`
 }
 
 /** Case, punctuation and spacing are noise in a product name, as in a vendor's. */
