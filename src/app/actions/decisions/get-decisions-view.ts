@@ -6,6 +6,7 @@ import { getSession } from "@/lib/auth-scope"
 import { ymdUTC as ymd } from "@/lib/date-utils"
 import { businessQueryDate } from "@/lib/counter/business-date"
 import { prisma } from "@/lib/prisma"
+import { batchedStoreRows, sumByDate } from "@/lib/counter/store-batch"
 import { Prisma } from "@/generated/prisma/client"
 import { weekdayTargets, type SplhInput } from "@/lib/splh"
 import { foldSplhHistory, type SplhHistoryRow } from "@/lib/decisions/splh-history"
@@ -350,47 +351,56 @@ export async function getDecisionsView(input: {
             select: { targetCogsPct: true },
           })
           .catch(() => null),
-    prisma.storeWeatherSignal.findMany({
+    // The reads marked "shared" go through `batchedStoreRows`: Week ahead
+    // builds the all-stores view and one view per store in the same render,
+    // and those share one read of every store, cut back to each view's
+    // stores. See @/lib/counter/store-batch.
+    batchedStoreRows({ group: `decisions-weather|${todayKey}`, storeIds, storeOf: (r) => r.storeId, load: (ids: string[]) => prisma.storeWeatherSignal.findMany({
       where: {
-        storeId: { in: storeIds },
+        storeId: { in: ids },
         date: { gte: today, lte: addDays(today, AHEAD_DAYS) },
       },
       select: {
+        storeId: true,
         date: true,
         temperatureC: true,
         precipitationMm: true,
       },
-    }),
-    prisma.storeEventSignal.findMany({
+    }) }),
+    // Shared, as above.
+    batchedStoreRows({ group: `decisions-events|${todayKey}`, storeIds, storeOf: (r) => r.storeId, load: (ids: string[]) => prisma.storeEventSignal.findMany({
       where: {
-        storeId: { in: storeIds },
+        storeId: { in: ids },
         date: { gte: today, lte: addDays(today, AHEAD_DAYS) },
       },
       select: {
+        storeId: true,
         date: true,
         topEventTitle: true,
         majorEventCount: true,
       },
-    }),
+    }) }),
     // Published shifts covering the forecast week. HarriShift runs ~2 weeks
     // ahead of today once the manager publishes; nothing else in the fan-out
     // reaches forward.
-    prisma.harriShift.findMany({
+    // Shared, as above.
+    batchedStoreRows({ group: `decisions-shifts|${todayKey}`, storeIds, storeOf: (r) => r.storeId, load: (ids: string[]) => prisma.harriShift.findMany({
       where: {
-        storeId: { in: storeIds },
+        storeId: { in: ids },
         // Back 60 days as well: the throughput rate behind "needed hours" is
         // the store's own orders per labor hour, and that needs history.
         date: { gte: addDays(today, -60), lte: addDays(today, AHEAD_DAYS) },
         status: { not: "DELETED" },
       },
       select: {
+        storeId: true,
         date: true,
         minutes: true,
         isVirtual: true,
         startTime: true,
         endTime: true,
       },
-    }).catch(() => []),
+    }) }).catch(() => []),
     // Hourly demand forecast for the week, newest generation only.
     prisma.forecastHourlyOrders.findMany({
       where: {
@@ -407,14 +417,15 @@ export async function getDecisionsView(input: {
       },
     }).catch(() => []),
     // Orders actually taken, for the throughput denominator's other half.
-    prisma.otterHourlySummary.groupBy({
-      by: ["date"],
+    // Shared, as above: read per (store, date), summed back to per date.
+    batchedStoreRows({ group: `decisions-hourly-history|${todayKey}`, storeIds, storeOf: (r) => r.storeId, load: (ids: string[]) => prisma.otterHourlySummary.groupBy({
+      by: ["storeId", "date"],
       where: {
-        storeId: { in: storeIds },
+        storeId: { in: ids },
         date: { gte: addDays(today, -60), lt: today },
       },
       _sum: { orderCount: true },
-    }).catch(() => []),
+    }) }).then((rows) => sumByDate(rows, ["orderCount"] as const)).catch(() => []),
     // Labor hours against net sales, for the per-weekday productivity median.
     // Hours: HarriPositionDaily.actualSeconds per store-day. Sales: the
     // statement's Net Sales — the same figure `getSplhSeries`, the P&L and the
@@ -455,14 +466,15 @@ export async function getDecisionsView(input: {
     }).catch(() => []),
     // Actuals to judge those decisions against. A frozen forecast reaches at
     // most 14 days past the decision, so 60 days back covers every open one.
-    prisma.otterDailySummary.groupBy({
-      by: ["date"],
+    // Shared, as above: read per (store, date), summed back to per date.
+    batchedStoreRows({ group: `decisions-daily-actuals|${todayKey}`, storeIds, storeOf: (r) => r.storeId, load: (ids: string[]) => prisma.otterDailySummary.groupBy({
+      by: ["storeId", "date"],
       where: {
-        storeId: { in: storeIds },
+        storeId: { in: ids },
         date: { gte: addDays(today, -60), lt: today },
       },
       _sum: { fpNetSales: true, tpNetSales: true },
-    }).catch(() => []),
+    }) }).then((rows) => sumByDate(rows, ["fpNetSales", "tpNetSales"] as const)).catch(() => []),
     // First reader of MlForecastEvaluation anywhere in src/. Ordered newest
     // first and deduped per store below — Prisma has no latest-per-group, and
     // the row count here is stores x model versions, not unbounded.

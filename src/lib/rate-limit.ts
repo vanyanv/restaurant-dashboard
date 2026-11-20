@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server"
 import { timingSafeEqual } from "crypto"
-import { getServerSession } from "next-auth"
-import { authOptions } from "@/lib/auth"
+import { readSessionToken } from "@/lib/session-token"
 import { getRedis } from "@/lib/cache/redis"
 
 // --- Cron request helper (consolidated from 3 duplicated copies) ---
@@ -113,8 +112,12 @@ async function resolveIdentity(
 ): Promise<string> {
   if (identifyBy === "ip") return `ip:${getClientIp(request)}`
 
-  const session = await getServerSession(authOptions)
-  if (session?.user?.id) return `user:${session.user.id}`
+  // Who is asking, from the signed session cookie alone: a rate-limit key
+  // does not need the database's "is this user still here" check, and that
+  // check cost every rate-limited request a user read (the page-view beacon
+  // paid it twice, once here and once in the route).
+  const token = await readSessionToken()
+  if (typeof token?.id === "string") return `user:${token.id}`
 
   return `ip:${getClientIp(request)}`
 }

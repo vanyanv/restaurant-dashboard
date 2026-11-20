@@ -32,7 +32,7 @@ import type {
   AlertsSections,
 } from "@/lib/counter/adapters/alerts"
 import type { SectionSources } from "@/lib/counter/adapters/types"
-import { closeAlert } from "@/lib/counter/actions/alert"
+import { closeAlertRow } from "@/lib/counter/actions/alert"
 import { clearQuestion, useClearAlerts } from "@/lib/counter/use-clear-alerts"
 import type { AlertSeverity, AlertSource, AlertStatus } from "@/generated/prisma/client"
 
@@ -175,7 +175,6 @@ function AlertDecision({
   /** The row is closed and about to go: let the table show it leaving. */
   onLeaving?: () => void
 }) {
-  const router = useRouter()
   const [saving, startSaving] = useTransition()
   const [why, setWhy] = useState("")
   const [failed, setFailed] = useState(false)
@@ -190,10 +189,10 @@ function AlertDecision({
    * silently refill under the reader, which is a worse page than the one that
    * at least showed all fourteen.
    *
-   * Sequential rather than `Promise.all`: these are writes against one row
-   * each, the runs are tens of ids and not thousands, and a serial loop stops
-   * at the first failure with the rest untouched — which is the behaviour a
-   * reader can reason about when the note below says it did not save.
+   * One save for the whole row (`closeAlertRow`), all or nothing: if any
+   * alert cannot be closed none is, which is the behaviour a reader can
+   * reason about when the note below says it did not save. It used to be one
+   * request per alert, each re-rendering the inbox.
    *
    * The reason is recorded against every alert in the run. It is one
    * decision about one condition, and splitting it would leave thirteen
@@ -202,15 +201,7 @@ function AlertDecision({
   const close = (how: "acknowledge" | "dismiss") => {
     setFailed(false)
     startSaving(async () => {
-      let ok = true
-      for (const id of alert.ids) {
-        const r = await closeAlert(id, how, how === "acknowledge" ? why : undefined)
-        if (!r.ok) {
-          ok = false
-          break
-        }
-      }
-      const result = { ok }
+      const result = await closeAlertRow(alert.ids, how, how === "acknowledge" ? why : undefined)
       if (!result.ok) {
         setFailed(true)
         return
@@ -218,10 +209,8 @@ function AlertDecision({
       setWhy("")
       onLeaving?.()
       onDone()
-      // The row's status, the strip's open count and the topbar dispatch badge
-      // all read the same column. Refresh so none of them can disagree with
-      // the alert the owner just closed.
-      router.refresh()
+      // No router.refresh(): the save revalidates both inbox pages, and Next
+      // sends the fresh page (status, open count, topbar badge) back with it.
     })
   }
 

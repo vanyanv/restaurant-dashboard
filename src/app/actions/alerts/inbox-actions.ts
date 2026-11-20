@@ -284,6 +284,50 @@ export async function acknowledgeAlert(input: {
   return { ok: true }
 }
 
+/**
+ * Close every alert behind one inbox row in ONE save. The row is one
+ * condition and can stand for a dozen alerts; the clients used to close them
+ * one request at a time, and each request re-rendered the whole inbox, so a
+ * row of fourteen cost fifteen page renders.
+ *
+ * All or nothing (stricter than the old loop, which left the alerts before a
+ * failure closed): if any id is missing or belongs to another account,
+ * nothing changes. Same status rules
+ * as `acknowledgeAlert` / `dismissAlert`.
+ */
+export async function closeAlerts(input: {
+  ids: string[]
+  how: "acknowledge" | "dismiss"
+  explanation?: string
+}): Promise<AlertActionResult> {
+  const session = await getSession()
+  if (!session?.user || !hasOwnerAccess(session.user.role)) {
+    return { ok: false, error: "unauthorized" }
+  }
+  const accountId = session.user.accountId
+  const ids = [...new Set(input.ids)]
+  if (ids.length === 0) return { ok: true }
+  // Refused rather than cut short: closing the first thousand and saying it
+  // worked would leave the rest open behind a row the reader thinks is gone.
+  if (ids.length > CLEAR_LIMIT) return { ok: false, error: "not_found" }
+
+  const explanation = input.how === "acknowledge" ? input.explanation?.trim() || null : null
+  const data =
+    input.how === "dismiss"
+      ? { status: "DISMISSED" as const, acknowledgedAt: new Date() }
+      : { status: explanation ? ("EXPLAINED" as const) : ("ACKNOWLEDGED" as const), explanation, acknowledgedAt: new Date() }
+
+  const changed = await prisma.$transaction(async (tx) => {
+    const owned = await tx.alert.count({ where: { id: { in: ids }, store: { accountId } } })
+    if (owned !== ids.length) return false
+    await tx.alert.updateMany({ where: { id: { in: ids }, store: { accountId } }, data })
+    return true
+  })
+  if (!changed) return { ok: false, error: "not_found" }
+  await afterWrite(accountId)
+  return { ok: true }
+}
+
 /** Dismiss without explanation — "not worth tracking". */
 export async function dismissAlert(input: {
   alertId: string

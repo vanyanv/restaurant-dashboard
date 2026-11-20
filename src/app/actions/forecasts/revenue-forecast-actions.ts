@@ -3,6 +3,8 @@
 // Browser saves go through `src/lib/counter/actions/`.
 import "server-only"
 import { startOfDayLocal as startOfDay } from "@/lib/date-utils"
+import { cache } from "react"
+import { batchedStoreRows } from "@/lib/counter/store-batch"
 import { prisma } from "@/lib/prisma"
 import {
   defaultForecastPreference,
@@ -92,12 +94,21 @@ export async function getRevenueForecast(input: {
     : Promise.resolve(null)
 
   // Forecast rows and the latest training run are independent — fetch in parallel.
+  const fromDay = startOfDay(asOf)
+  const toDay = startOfDay(horizonEnd)
   const [rows, lastRun, storeRow] = await Promise.all([
-    prisma.forecastDailyRevenue.findMany({
+    // Shared with every other store set asked for in this render (Week ahead
+    // reads all stores and then each store): one read, cut back to these
+    // stores. See @/lib/counter/store-batch.
+    batchedStoreRows({
+      group: `revenue-forecast|${fromDay.toISOString()}|${toDay.toISOString()}`,
+      storeIds,
+      storeOf: (r) => r.storeId,
+      load: (ids: string[]) => prisma.forecastDailyRevenue.findMany({
       where: {
-        storeId: { in: storeIds },
+        storeId: { in: ids },
         hourBucket: 0,
-        forecastDate: { gte: startOfDay(asOf), lt: startOfDay(horizonEnd) },
+        forecastDate: { gte: fromDay, lt: toDay },
       },
       select: {
         storeId: true,
@@ -114,12 +125,8 @@ export async function getRevenueForecast(input: {
         reconciledAt: true,
         attribution: true,
       },
-    }),
-    prisma.mlTrainingRun.findFirst({
-      where: { target: "REVENUE", status: "SUCCEEDED", mape: { not: null } },
-      orderBy: { startedAt: "desc" },
-      select: { mape: true },
-    }),
+    }) }),
+    latestRevenueTrainingRun(),
     storeOpenedAtPromise,
   ])
 
@@ -228,3 +235,14 @@ export async function getRevenueForecast(input: {
   }
 }
 
+/**
+ * The newest successful revenue training run, read once per render: Week
+ * ahead asks for a forecast per store and each asked for this same row.
+ */
+const latestRevenueTrainingRun = cache(() =>
+  prisma.mlTrainingRun.findFirst({
+    where: { target: "REVENUE", status: "SUCCEEDED", mape: { not: null } },
+    orderBy: { startedAt: "desc" },
+    select: { mape: true },
+  }),
+)

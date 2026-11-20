@@ -2,6 +2,7 @@ import { cache } from "react"
 import { prisma } from "@/lib/prisma"
 import { cached, stableKey } from "@/lib/cache/cached"
 import { CLOSED_RANGE_TTL, rangeScopedTags } from "@/lib/cache/closed-range"
+import { batchedDayRows, dayStart, type DayRange } from "@/lib/counter/day-batch"
 import {
   daysBetween,
   foldLaborCost,
@@ -109,22 +110,51 @@ async function loadLaborCostFor(
   }
   const where = { storeId: { in: storeIds }, store: { accountId }, date: range }
 
-  const [daily, positions, rates] = await Promise.all([
+  // On the app's own client the three reads are shared across one render:
+  // Overview's rollups ask for four overlapping ranges, and the rows of a
+  // wider read cut to these days are the rows this read returns. See
+  // @/lib/counter/day-batch. A chat tool's `ctx.prisma` reads on its own.
+  const shared = db === prisma
+  const storeKey = [...storeIds].sort().join(",")
+  const readDaily = (r: { gte: Date; lte: Date }) =>
     db.harriDailyLabor.findMany({
-      where,
+      where: { ...where, date: r },
       select: { storeId: true, date: true, actualCost: true },
-    }),
+    })
+  const readPositions = (r: { gte: Date; lte: Date }) =>
     db.harriPositionDaily.groupBy({
       by: ["storeId", "date"],
-      where,
+      where: { ...where, date: r },
       _sum: { totalLabor: true },
-    }),
+    })
+  const wide = (r: DayRange) => ({ gte: dayStart(r.first), lte: dayStart(r.last) })
+  const dayRange = { first: days[0], last: days[days.length - 1] }
+
+  const [daily, positions, rates] = await Promise.all([
+    shared
+      ? batchedDayRows({
+          group: `labor-daily|${accountId}|${storeKey}`,
+          range: dayRange,
+          load: (r) => readDaily(wide(r)),
+          dayOf: (row) => isoDay(row.date),
+        })
+      : readDaily(range),
+    shared
+      ? batchedDayRows({
+          group: `labor-positions|${accountId}|${storeKey}`,
+          range: dayRange,
+          load: (r) => readPositions(wide(r)),
+          dayOf: (row) => isoDay(row.date),
+        })
+      : readPositions(range),
     // The employer payroll tax each store's wages are loaded with — the
     // owner's setting on the store file. Same tenancy boundary as above.
-    db.store.findMany({
-      where: { id: { in: storeIds }, accountId },
-      select: { id: true, employerPayrollTaxRate: true },
-    }),
+    shared
+      ? payrollTaxRatesThisRequest(accountId, storeKey)
+      : db.store.findMany({
+          where: { id: { in: storeIds }, accountId },
+          select: { id: true, employerPayrollTaxRate: true },
+        }),
   ])
 
   return foldLaborCost({
@@ -139,3 +169,14 @@ async function loadLaborCostFor(
     payrollTaxRates: Object.fromEntries(rates.map((r) => [r.id, r.employerPayrollTaxRate])),
   })
 }
+
+/**
+ * Each store's payroll tax rate, read once per render for a store set (React
+ * `cache` keys on the two strings). Outside a render it reads every call.
+ */
+const payrollTaxRatesThisRequest = cache((accountId: string, storeKey: string) =>
+  prisma.store.findMany({
+    where: { id: { in: storeKey.split(",") }, accountId },
+    select: { id: true, employerPayrollTaxRate: true },
+  }),
+)

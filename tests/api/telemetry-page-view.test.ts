@@ -4,23 +4,26 @@
 
 import { describe, it, expect, vi, beforeEach } from "vitest"
 
-vi.mock("next-auth", () => ({ getServerSession: vi.fn() }))
-vi.mock("@/lib/auth", () => ({ authOptions: {} }))
+// Who sent the beacon comes from the signed session cookie, not a database
+// read (see the route), so the token is what the tests set.
+vi.mock("@/lib/session-token", () => ({ readSessionToken: vi.fn() }))
 
 vi.mock("@/lib/prisma", () => ({
   prisma: { pageView: { create: vi.fn() } },
 }))
 
-import { getServerSession } from "next-auth"
+import { readSessionToken } from "@/lib/session-token"
 import { prisma } from "@/lib/prisma"
 import { POST } from "@/app/api/telemetry/page-view/route"
 import { MAX_DWELL_MS } from "@/lib/monitoring/page-view"
 
-const mockedSession = vi.mocked(getServerSession)
+const mockedSession = vi.mocked(readSessionToken)
 const create = vi.mocked(prisma.pageView.create)
 
 const session = (role: "OWNER" | "DEVELOPER" = "OWNER") => ({
-  user: { id: "u1", accountId: "acct-A", role },
+  id: "u1",
+  accountId: "acct-A",
+  role,
 })
 
 function req(body: unknown): Request {
