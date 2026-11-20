@@ -16,6 +16,7 @@ import {
   type Column,
   type SwitchableStore,
 } from "@/components/counter"
+import { PageTabs } from "@/components/counter/ui"
 import { ingredientPhoto } from "@/lib/counter/ingredient-photos"
 import { readCounterParams, writeCounterParams } from "@/lib/counter/url-state"
 import type { SectionSources } from "@/lib/counter/adapters/types"
@@ -264,112 +265,140 @@ export function CounterIngredientClient({
 
       <IngredientPhoto name={title} />
 
-      <Section bare title="The figures" data={sections.head} pending={pending}>
-        {(h) => (
-          <>
-            {/* Recipe unit and category. These belong under the title and
-                cannot go there: the masthead renders before the loader
-                resolves. */}
-            <Note lede>
-              {h.sub}
-            </Note>
-            <Strip cells={h.cells} />
-          </>
-        )}
-      </Section>
+      <PageTabs
+        label="Ingredient views"
+        tabs={[
+          {
+            key: "prices",
+            label: "Prices",
+            content: (
+              <>
+                <Section bare title="The figures" data={sections.head} pending={pending}>
+                  {(h) => (
+                    <>
+                      {/* Recipe unit and category. These belong under the title and
+                          cannot go there: the masthead renders before the loader
+                          resolves. */}
+                      <Note lede>
+                        {h.sub}
+                      </Note>
+                      <Strip cells={h.cells} />
+                    </>
+                  )}
+                </Section>
 
-      <Section
-        title="Price history"
-        meta={(p) => p.meta}
-        data={sections.prices}
-        pending={pending}
-        askAbout="how has this ingredient's price moved"
-      >
-        {(p) => (
-          <>
-            <Chart {...p.chart} fmt={PRICE} />
-            <Note>
-              {p.note}
-            </Note>
-          </>
-        )}
-      </Section>
+                <Section
+                  title="Price history"
+                  meta={(p) => p.meta}
+                  data={sections.prices}
+                  pending={pending}
+                  askAbout="how has this ingredient's price moved"
+                >
+                  {(p) => (
+                    <>
+                      <Chart {...p.chart} fmt={PRICE} />
+                      <Note>
+                        {p.note}
+                      </Note>
+                    </>
+                  )}
+                </Section>
 
-      {/* The arrivals, under the prices. Both are read off the same invoice
-          lines, and "when did it last turn up, and how much" is the question
-          a reader asks straight after "what has it been costing". It sits
-          ABOVE the SKU split rather than below it because the reader who has
-          just seen a delivery is the one who then wants to know which code it
-          was billed under — and because the split is where this page stops
-          being one column. */}
-      <Section
-        title="Deliveries"
-        meta={(x) => x.meta}
-        data={sections.deliveries}
-        pending={pending}
-        pad={false}
-        askAbout="when did this ingredient last arrive"
-      >
-        {(x) => (
-          <>
-            <Table columns={deliveryColumns(x.unit)} rows={x.rows} />
-            {/* No `.sec__body` on a table section, so the note carries the
-                body's own inset — same as the two tables below. */}
-            <Note flush>
-              {x.note}
-            </Note>
-          </>
-        )}
-      </Section>
+                {/* The arrivals, under the prices. Both are read off the same invoice
+                    lines, and "when did it last turn up, and how much" is the question
+                    a reader asks straight after "what has it been costing". It sits
+                    ABOVE the SKU split rather than below it because the reader who has
+                    just seen a delivery is the one who then wants to know which code it
+                    was billed under — and because the split is where this page stops
+                    being one column. */}
+                <Section
+                  title="What this costs"
+                  meta={(c) => c.meta}
+                  data={sections.cost}
+                  pending={pending}
+                  pad={false}
+                >
+                  {(c) => <CostForm cost={c} />}
+                </Section>
+              </>
+            ),
+          },
+          {
+            key: "deliveries",
+            label: "Deliveries",
+            content: (
+              <>
+                <Section
+                  title="Deliveries"
+                  meta={(x) => x.meta}
+                  data={sections.deliveries}
+                  pending={pending}
+                  pad={false}
+                  askAbout="when did this ingredient last arrive"
+                >
+                  {(x) => (
+                    <>
+                      <Table columns={deliveryColumns(x.unit)} rows={x.rows} />
+                      {/* No `.sec__body` on a table section, so the note carries the
+                          body's own inset — same as the two tables below. */}
+                      <Note flush>
+                        {x.note}
+                      </Note>
+                    </>
+                  )}
+                </Section>
+              </>
+            ),
+          },
+          {
+            key: "used",
+            label: "Where used",
+            content: (
+              <>
+                <div className="split">
+                  <Section
+                    title="Matched SKUs"
+                    meta={(s) => s.meta}
+                    data={sections.skus}
+                    pending={pending}
+                    pad={false}
+                  >
+                    {(s) => (
+                      <>
+                        <Table columns={SKU_COLUMNS} rows={s.rows} />
+                        {/* No `.sec__body` — a table section emits the table alone, so
+                            the note carries the body's own inset via `<Note flush>`. */}
+                        <Note flush>
+                          {s.note}
+                        </Note>
+                      </>
+                    )}
+                  </Section>
 
-      <div className="split">
-        <Section
-          title="Matched SKUs"
-          meta={(s) => s.meta}
-          data={sections.skus}
-          pending={pending}
-          pad={false}
-        >
-          {(s) => (
-            <>
-              <Table columns={SKU_COLUMNS} rows={s.rows} />
-              {/* No `.sec__body` — a table section emits the table alone, so
-                  the note carries the body's own inset via `<Note flush>`. */}
-              <Note flush>
-                {s.note}
-              </Note>
-            </>
-          )}
-        </Section>
+                  <Section
+                    title="Used in"
+                    meta={(u) => u.meta}
+                    data={sections.usedIn}
+                    pending={pending}
+                    pad={false}
+                    askAbout="which recipes use this ingredient"
+                  >
+                    {(u) => (
+                      <>
+                        <Table columns={USED_COLUMNS} rows={u.rows} />
+                        <Note flush>
+                          {u.note}
+                        </Note>
+                      </>
+                    )}
+                  </Section>
+                </div>
+              </>
+            ),
+          },
+        ]}
+      />
 
-        <Section
-          title="Used in"
-          meta={(u) => u.meta}
-          data={sections.usedIn}
-          pending={pending}
-          pad={false}
-          askAbout="which recipes use this ingredient"
-        >
-          {(u) => (
-            <>
-              <Table columns={USED_COLUMNS} rows={u.rows} />
-              <Note flush>
-                {u.note}
-              </Note>
-            </>
-          )}
-        </Section>
-      </div>
-
-      <Section
-        title="What this costs"
-        meta={(c) => c.meta}
-        data={sections.cost}
-        pending={pending}
-        pad={false}
-      >
-        {(c) => <CostForm cost={c} />}
-      </Section>
     </>
   )
 }

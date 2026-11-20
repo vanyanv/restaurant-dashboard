@@ -21,6 +21,7 @@ import {
   type SwitchableStore,
   SubNav,
 } from "@/components/counter"
+import { PageTabs } from "@/components/counter/ui"
 import { INGREDIENT_TABS } from "@/lib/counter/nav"
 import { ingredientPhoto } from "@/lib/counter/ingredient-photos"
 import { readCounterParams, writeCounterParams } from "@/lib/counter/url-state"
@@ -333,85 +334,113 @@ export function CounterIngredientsClient({
           links to; `.seg` is not a fidelity landmark, so it changes no count. */}
       <SubNav items={INGREDIENT_TABS} label="Ingredients" />
 
-      <Section bare title="The figures" data={sections.headline} pending={pending}>
-        {(h) => <Strip cells={h.cells} />}
-      </Section>
+      <PageTabs
+        label="Ingredient views"
+        tabs={[
+          {
+            key: "prices",
+            label: "Prices",
+            content: (
+              <>
+                <Section bare title="The figures" data={sections.headline} pending={pending}>
+                  {(h) => <Strip cells={h.cells} />}
+                </Section>
 
-      <Section
-        title="Price monitor"
-        meta={(p) => p.meta}
-        data={sections.prices}
-        pending={pending}
-        askAbout="which ingredient prices moved most over the last 8 weeks"
-      >
-        {(p) => <Chart {...p.chart} fmt={PRICE} />}
-      </Section>
+                <Section
+                  title="Price monitor"
+                  meta={(p) => p.meta}
+                  data={sections.prices}
+                  pending={pending}
+                  askAbout="which ingredient prices moved most over the last 8 weeks"
+                >
+                  {(p) => <Chart {...p.chart} fmt={PRICE} />}
+                </Section>
+              </>
+            ),
+          },
+          {
+            key: "catalogue",
+            label: "Catalogue",
+            content: (
+              <>
+                <div className="split">
+                  <Section
+                    title="Catalogue"
+                    meta={(c) => c.meta}
+                    data={sections.catalogue}
+                    pending={pending}
+                    pad={false}
+                  >
+                    {(c) => <Table columns={CATALOGUE_COLUMNS} rows={c.rows.map(withPhoto)} />}
+                  </Section>
 
-      <div className="split">
-        <Section
-          title="Catalogue"
-          meta={(c) => c.meta}
-          data={sections.catalogue}
-          pending={pending}
-          pad={false}
-        >
-          {(c) => <Table columns={CATALOGUE_COLUMNS} rows={c.rows.map(withPhoto)} />}
-        </Section>
+                  <Section title="Review inbox" meta={(i) => i.meta} data={sections.inbox} pending={pending}>
+                    {(i) => (
+                      <>
+                        {i.clusters.map((c) => (
+                          <InboxRow key={c.key} cluster={c} candidates={i.candidates} />
+                        ))}
+                        <Note>
+                          {i.note}
+                        </Note>
+                      </>
+                    )}
+                  </Section>
 
-        <Section title="Review inbox" meta={(i) => i.meta} data={sections.inbox} pending={pending}>
-          {(i) => (
-            <>
-              {i.clusters.map((c) => (
-                <InboxRow key={c.key} cluster={c} candidates={i.candidates} />
-              ))}
-              <Note>
-                {i.note}
-              </Note>
-            </>
-          )}
-        </Section>
+                  <Section
+                    title="Modifier mapping"
+                    meta={(m) => m.meta}
+                    data={sections.modifiers}
+                    pending={pending}
+                    pad={false}
+                  >
+                    {(m) => <Table columns={MODIFIER_COLUMNS} rows={m.rows} />}
+                  </Section>
+                </div>
+              </>
+            ),
+          },
+          {
+            key: "review",
+            label: "Review",
+            content: (
+              <>
+                <div className="split">
+                  <Section
+                    title="Needs review"
+                    meta={(w) => w.meta}
+                    data={sections.work}
+                    pending={pending}
+                    askAbout="how much do I buy that is in no recipe"
+                  >
+                    {(w) => <Queue items={w.items} />}
+                  </Section>
 
-        <Section
-          title="Modifier mapping"
-          meta={(m) => m.meta}
-          data={sections.modifiers}
-          pending={pending}
-          pad={false}
-        >
-          {(m) => <Table columns={MODIFIER_COLUMNS} rows={m.rows} />}
-        </Section>
-      </div>
+                  <Section
+                    title="The pantry"
+                    meta={(p) => p.meta}
+                    data={sections.pantry}
+                    pending={pending}
+                    pad={false}
+                  >
+                    {(p) => (
+                      <>
+                        <Table columns={pantryCols} rows={p.rows} />
+                        {/* No `.sec__body` — a table section emits the table alone, so
+                            the note carries the body's own inset via `<Note flush>`. */}
+                        <Note flush>
+                          {p.note}
+                        </Note>
+                      </>
+                    )}
+                  </Section>
+                </div>
+              </>
+            ),
+          },
+        ]}
+      />
 
-      <div className="split">
-        <Section
-          title="Needs review"
-          meta={(w) => w.meta}
-          data={sections.work}
-          pending={pending}
-          askAbout="how much do I buy that is in no recipe"
-        >
-          {(w) => <Queue items={w.items} />}
-        </Section>
-
-        <Section
-          title="The pantry"
-          meta={(p) => p.meta}
-          data={sections.pantry}
-          pending={pending}
-          pad={false}
-        >
-          {(p) => (
-            <>
-              <Table columns={pantryCols} rows={p.rows} />
-              {/* No `.sec__body` — a table section emits the table alone, so
-                  the note carries the body's own inset via `<Note flush>`. */}
-              <Note flush>
-                {p.note}
-              </Note>
-            </>
-          )}
-        </Section>
-      </div>
     </>
   )
 }

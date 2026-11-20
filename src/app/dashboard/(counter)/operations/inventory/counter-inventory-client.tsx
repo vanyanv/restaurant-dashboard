@@ -22,7 +22,7 @@ import {
   SubNav,
 } from "@/components/counter"
 import { INVENTORY_TABS } from "@/lib/counter/nav"
-import { actMarks, useAct } from "@/components/counter/ui"
+import { PageTabs, actMarks, useAct } from "@/components/counter/ui"
 import { readCounterParams, writeCounterParams } from "@/lib/counter/url-state"
 import type { SectionSources } from "@/lib/counter/adapters/types"
 import { recordInventoryAdjustment } from "@/lib/counter/actions/inventory"
@@ -288,120 +288,156 @@ export function CounterInventoryClient({
           links to; `.seg` is not a fidelity landmark, so it changes no count. */}
       <SubNav items={INVENTORY_TABS} label="Stock on hand" />
 
-      <Section bare title="The figures" data={sections.headline} pending={pending}>
-        {(h) => <Strip cells={h.cells} />}
-      </Section>
+      <PageTabs
+        label="Stock on hand views"
+        tabs={[
+          {
+            key: "onhand",
+            label: "On hand",
+            content: (
+              <>
+                <Section bare title="The figures" data={sections.headline} pending={pending}>
+                  {(h) => <Strip cells={h.cells} />}
+                </Section>
 
-      <Section
-        title="On hand"
-        meta={(r) => r.meta}
-        data={sections.roster}
-        pending={pending}
-        pad={false}
-        askAbout="which ingredients cannot be counted yet"
-      >
-        {(r) => (
-          <>
-            <Table columns={ROSTER_COLUMNS} rows={r.rows} />
-            {/* No `.sec__body` — `sec(..., tbl(...))` emits the table alone, so
-                the note carries the body's own inset via `<Note flush>`. */}
-            <Note flush>
-              {r.note}
-            </Note>
-          </>
-        )}
-      </Section>
+                <Section
+                  title="On hand"
+                  meta={(r) => r.meta}
+                  data={sections.roster}
+                  pending={pending}
+                  pad={false}
+                  askAbout="which ingredients cannot be counted yet"
+                >
+                  {(r) => (
+                    <>
+                      <Table columns={ROSTER_COLUMNS} rows={r.rows} />
+                      {/* No `.sec__body` — `sec(..., tbl(...))` emits the table alone, so
+                          the note carries the body's own inset via `<Note flush>`. */}
+                      <Note flush>
+                        {r.note}
+                      </Note>
+                    </>
+                  )}
+                </Section>
+              </>
+            ),
+          },
+          {
+            key: "coverage",
+            label: "Coverage",
+            content: (
+              <>
+                <Section
+                  title="Coverage health"
+                  meta={(c) => c.meta}
+                  data={sections.readiness}
+                  pending={pending}
+                >
+                  {(c) => (
+                    <>
+                      <CostBar bands={c.bands} />
+                      <Note>
+                        {c.note}
+                      </Note>
+                      <div className="btnrow" style={{ marginTop: 12 }}>
+                        {c.actions.map((a) => (
+                          <Link key={a.href} className={btnClass(a)} href={a.href}>
+                            {a.label}
+                          </Link>
+                        ))}
+                      </div>
+                    </>
+                  )}
+                </Section>
 
-      <Section
-        title="Coverage health"
-        meta={(c) => c.meta}
-        data={sections.readiness}
-        pending={pending}
-      >
-        {(c) => (
-          <>
-            <CostBar bands={c.bands} />
-            <Note>
-              {c.note}
-            </Note>
-            <div className="btnrow" style={{ marginTop: 12 }}>
-              {c.actions.map((a) => (
-                <Link key={a.href} className={btnClass(a)} href={a.href}>
-                  {a.label}
-                </Link>
-              ))}
-            </div>
-          </>
-        )}
-      </Section>
+                <Section
+                  title="What a count would settle"
+                  meta={(s) => s.meta}
+                  data={sections.settle}
+                  pending={pending}
+                  askAbout="how much has been delivered since the last count"
+                >
+                  {(s) => (
+                    <>
+                      <MoneyLines rows={s.money} />
+                      <p className="callout" style={{ marginTop: 11 }}>
+                        {s.callout}
+                      </p>
+                      <div className="btnrow" style={{ marginTop: 11 }}>
+                        {s.actions.map((a) => (
+                          <Link key={a.href} className={btnClass(a)} href={a.href}>
+                            {a.label}
+                          </Link>
+                        ))}
+                      </div>
+                    </>
+                  )}
+                </Section>
 
-      <div className="split">
-        <Section
-          title="Delivered, 8 weeks"
-          meta={(v) => v.meta}
-          data={sections.delivered}
-          pending={pending}
-        >
-          {(v) => <Chart {...v.chart} />}
-        </Section>
+                {/* `P.inventory`'s own last section. See `AdjustOnHand`. */}
+              </>
+            ),
+          },
+          {
+            key: "deliveries",
+            label: "Deliveries",
+            content: (
+              <>
+                <div className="split">
+                  <Section
+                    title="Delivered, 8 weeks"
+                    meta={(v) => v.meta}
+                    data={sections.delivered}
+                    pending={pending}
+                  >
+                    {(v) => <Chart {...v.chart} />}
+                  </Section>
 
-        <Section
-          title="Next count"
-          meta={(n) => n.meta}
-          data={sections.nextCount}
-          pending={pending}
-        >
-          {(n) => (
-            <>
-              <Lede>
-                {n.lead}
-              </Lede>
-              <div className="btnrow">
-                {n.actions.map((a) => (
-                  <Link key={a.href} className={btnClass(a)} href={a.href}>
-                    {a.label}
-                  </Link>
-                ))}
-              </div>
-            </>
-          )}
-        </Section>
-      </div>
+                  <Section
+                    title="Next count"
+                    meta={(n) => n.meta}
+                    data={sections.nextCount}
+                    pending={pending}
+                  >
+                    {(n) => (
+                      <>
+                        <Lede>
+                          {n.lead}
+                        </Lede>
+                        <div className="btnrow">
+                          {n.actions.map((a) => (
+                            <Link key={a.href} className={btnClass(a)} href={a.href}>
+                              {a.label}
+                            </Link>
+                          ))}
+                        </div>
+                      </>
+                    )}
+                  </Section>
+                </div>
+              </>
+            ),
+          },
+          {
+            key: "adjust",
+            label: "Adjust",
+            content: (
+              <>
+                <Section
+                  title="Adjust on hand"
+                  meta={(a) => a.meta}
+                  data={sections.adjust}
+                  pending={pending}
+                  pad={false}
+                >
+                  {(a) => <AdjustOnHand data={a} />}
+                </Section>
+              </>
+            ),
+          },
+        ]}
+      />
 
-      <Section
-        title="What a count would settle"
-        meta={(s) => s.meta}
-        data={sections.settle}
-        pending={pending}
-        askAbout="how much has been delivered since the last count"
-      >
-        {(s) => (
-          <>
-            <MoneyLines rows={s.money} />
-            <p className="callout" style={{ marginTop: 11 }}>
-              {s.callout}
-            </p>
-            <div className="btnrow" style={{ marginTop: 11 }}>
-              {s.actions.map((a) => (
-                <Link key={a.href} className={btnClass(a)} href={a.href}>
-                  {a.label}
-                </Link>
-              ))}
-            </div>
-          </>
-        )}
-      </Section>
-
-      {/* `P.inventory`'s own last section. See `AdjustOnHand`. */}
-      <Section
-        title="Adjust on hand"
-        meta={(a) => a.meta}
-        data={sections.adjust}
-        pending={pending}
-        pad={false}
-      >
-        {(a) => <AdjustOnHand data={a} />}
-      </Section>
     </>
   )
 }

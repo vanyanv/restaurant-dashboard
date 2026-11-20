@@ -130,13 +130,10 @@ export const KNOWN: string[] = [
   "src/app/(mobile)/m/(counter)/labor/[storeId]/counter-phone-store-labor-client.tsx",
   "src/app/(mobile)/m/(counter)/labor/counter-phone-labor-client.tsx",
   "src/app/dashboard/(counter)/admin/monitoring/activity/counter-activity-client.tsx",
-  "src/app/dashboard/(counter)/ingredients/[id]/counter-ingredient-client.tsx",
-  "src/app/dashboard/(counter)/ingredients/counter-ingredients-client.tsx",
   "src/app/dashboard/(counter)/invoices/[id]/counter-invoice-client.tsx",
   "src/app/dashboard/(counter)/invoices/counter-invoices-client.tsx",
   "src/app/dashboard/(counter)/labor/[storeId]/counter-store-labor-client.tsx",
   "src/app/dashboard/(counter)/labor/counter-labor-client.tsx",
-  "src/app/dashboard/(counter)/operations/inventory/counter-inventory-client.tsx",
   "src/app/dashboard/(counter)/settings/counter-settings-client.tsx",
   "src/app/dashboard/(counter)/stores/[id]/counter-store-file-client.tsx",
 ]
