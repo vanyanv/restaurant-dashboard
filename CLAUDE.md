@@ -103,6 +103,16 @@ Two things the linter cannot check, because they need judgment:
   `src/lib/mobile/**`). New patterns discovered during a split get added back
   to the playbook.
 
+## Database queries
+
+**Read [`docs/query-rules.md`](docs/query-rules.md) before adding or changing
+any query, loader, adapter, bulk write or per-page background call.** In
+short: load a figure once for the widest span and slice it; per-store views
+filter the all-stores load; no queries in loops; independent loads in
+parallel; bulk writes with one revalidate; one background call per page view;
+and a before/after query count and timing, with identical figures, in every
+PR that changes a query.
+
 ## Database migrations
 
 Convention is `prisma db push` + a hand-written `prisma/manual-migrations/YYYY-MM-DD_*.sql`.

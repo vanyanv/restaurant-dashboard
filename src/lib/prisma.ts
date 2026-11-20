@@ -1,5 +1,7 @@
 import { PrismaClient } from '@/generated/prisma/client'
 import { PrismaPg } from '@prisma/adapter-pg'
+import { attachDatabasePool } from '@vercel/functions'
+import { Pool } from 'pg'
 import { after } from 'next/server'
 import {
   bumpClosedGeneration,
@@ -9,6 +11,7 @@ import {
 
 const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined
+  pgPool: Pool | undefined
 }
 
 // Strip sslmode from the connection string. SSL is configured explicitly via
@@ -50,13 +53,49 @@ const needsSsl = (raw: string): boolean => {
   }
 }
 
-const createPrismaClient = () => {
+/**
+ * Connections each server instance may hold open at once.
+ *
+ * Neon and Vercel both suggest a small per-instance pool on Neon's pooled
+ * (`-pooler`) host. Measured here on 2026-11-20 (local Postgres behind a 20 ms
+ * proxy, 5 loads per page, median): max 5 left Overview, P&L, Labor, Count,
+ * Analytics and phone Overview within 1% of max 10 but made Decisions 13%
+ * slower (1,095 -> 1,236 ms), because pages already have 20-47 queries in
+ * flight at once. So this stays at node-postgres's 10 until the per-page
+ * query counts come down; re-measure before lowering it.
+ * `DATABASE_POOL_MAX` overrides it.
+ */
+const DEFAULT_POOL_MAX = 10
+const poolMax = (): number => {
+  const n = Number(process.env.DATABASE_POOL_MAX)
+  return Number.isInteger(n) && n > 0 ? n : DEFAULT_POOL_MAX
+}
+
+/**
+ * The one `pg` pool per server instance. `src/lib/chat/prisma-chat.ts` builds
+ * its client on this same pool, so `DATABASE_POOL_MAX` is the whole instance's
+ * connection budget and `attachDatabasePool` covers every connection.
+ */
+export const getPgPool = (): Pool => {
+  if (globalForPrisma.pgPool) return globalForPrisma.pgPool
   const databaseUrl = process.env.DATABASE_URL
   if (!databaseUrl) throw new Error('DATABASE_URL is required')
-  const adapter = new PrismaPg({
+  const pool = new Pool({
     connectionString: stripSslMode(databaseUrl),
     ssl: needsSsl(databaseUrl),
+    max: poolMax(),
   })
+  // Closes idle clients before a Vercel function suspends, so a frozen
+  // instance does not hold Neon pooler connections. Does nothing off Vercel.
+  attachDatabasePool(pool)
+  globalForPrisma.pgPool = pool
+  return pool
+}
+
+const createPrismaClient = () => {
+  // This client owns the pool: `$disconnect()` (scripts) ends it, so the
+  // process exits without waiting out idle clients.
+  const adapter = new PrismaPg(getPgPool(), { disposeExternalPool: true })
 
   return new PrismaClient({
     adapter,
