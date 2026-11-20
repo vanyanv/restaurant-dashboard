@@ -137,7 +137,50 @@ export const TOOL_AS_OF: Partial<Record<ChatToolName, AsOfSource>> = {
 }
 
 /**
- * One MAX() per source, memoised for the life of a turn and a little beyond.
+ * The sync job whose last SUCCESS run is the stamp for a source, read from
+ * `JobRun` (index `[jobName, startedAt]`) instead of `MAX(col)` over the data
+ * table, which has no index on the freshness column (85 ms live) and stays
+ * put after a delete-only change.
+ *
+ * Only sources written by nothing but a job are listed. Absent on purpose:
+ * - `invoices`: people edit, approve and move invoices in the app, which
+ *   bumps `updatedAt` with no job run; a job stamp would let the answer cache
+ *   keep serving figures from before the edit.
+ * - `cogs`: `pnl-actions` recomputes `DailyCogsItem` on demand outside the
+ *   cron, for the same reason.
+ * - `forecasts`, `forecastEval`, `alerts`: no job of their own.
+ * These keep the table read below.
+ *
+ * `ratings` ride on the metrics sync (`otter-metrics-sync.ts` writes them).
+ * `otterOrders` is also written by the weekly drain.
+ */
+const SOURCE_JOBS: Partial<Record<AsOfSource, readonly string[]>> = {
+  otterDaily: ["otter.metrics.sync"],
+  otterHourly: ["otter.hourly.sync"],
+  otterOrders: ["otter.orders.sync", "otter.orders.drain"],
+  labor: ["harri-labor-sync"],
+  ratings: ["otter.metrics.sync"],
+}
+
+/** Newest SUCCESS completion across a source's jobs, or null if none exists. */
+async function readFromJobRuns(jobs: readonly string[]): Promise<Date | null> {
+  const runs = await Promise.all(
+    jobs.map((jobName) =>
+      prisma.jobRun.findFirst({
+        where: { jobName, status: "SUCCESS", completedAt: { not: null } },
+        orderBy: { startedAt: "desc" },
+        select: { completedAt: true },
+      }),
+    ),
+  )
+  return runs.reduce<Date | null>(
+    (acc, r) => (r?.completedAt && (!acc || r.completedAt > acc) ? r.completedAt : acc),
+    null,
+  )
+}
+
+/**
+ * One read per source, memoised for the life of a turn and a little beyond.
  *
  * The syncs run every four hours at best, so a reading minutes old is the
  * same reading. The TTL exists to keep several tools in one turn — and the
@@ -155,8 +198,16 @@ async function readSource(source: AsOfSource): Promise<Date | null> {
   if (existing) return existing
 
   const { table, column } = SOURCE_TABLES[source]
+  const jobs = SOURCE_JOBS[source]
   const p = (async () => {
     try {
+      // A fresh database, or a retention sweep that emptied `JobRun`, has no
+      // SUCCESS run: fall through to the table so the stamp is what it was.
+      const fromJobs = jobs ? await readFromJobRuns(jobs) : null
+      if (fromJobs) {
+        cache.set(source, { at: Date.now(), value: fromJobs })
+        return fromJobs
+      }
       const rows = await prisma.$queryRaw<{ max: Date | null }[]>(
         Prisma.sql`SELECT MAX(${Prisma.raw(`"${column}"`)}) AS max FROM ${Prisma.raw(`"${table}"`)}`,
       )

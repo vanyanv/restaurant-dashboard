@@ -36,7 +36,7 @@ import {
   appendMessage,
   assertConversationAccess,
   createConversation,
-  getConversation,
+  getRecentHistory,
   setConversationTitle,
 } from "@/lib/chat/conversation"
 import { buildSystemPrompt } from "@/lib/chat/system-prompt"
@@ -287,19 +287,19 @@ export async function POST(req: Request) {
   if (conversationId) {
     try {
       if (historyDelegated) {
-        const detail = await getConversation(chatPrisma, accountId, conversationId)
-        priorMessages = detail.messages
-          // `system` and `tool` rows are plumbing; the two roles a turn is
-          // made of are the two the model is replayed.
-          .filter((m) => (m.role === "user" || m.role === "assistant") && m.content.trim())
-          // The last N turns, not the thread's whole life. Every message here
-          // is billed input on every follow-up, and a thread long enough to
-          // matter is a thread whose opening is no longer what it is about.
-          .slice(-HISTORY_MESSAGES)
-          .map((m) => ({
-            role: m.role === "user" ? ("user" as const) : ("assistant" as const),
-            content: m.content,
-          }))
+        // Only the rows the model is replayed: `system` and `tool` rows are
+        // plumbing, and the last N turns, not the thread's whole life, are
+        // billed as input on every follow-up. The read stops at N.
+        const recent = await getRecentHistory(
+          chatPrisma,
+          accountId,
+          conversationId,
+          HISTORY_MESSAGES,
+        )
+        priorMessages = recent.map((m) => ({
+          role: m.role === "user" ? ("user" as const) : ("assistant" as const),
+          content: m.content,
+        }))
       } else {
         await assertConversationAccess(chatPrisma, accountId, conversationId)
       }
