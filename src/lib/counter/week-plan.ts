@@ -495,27 +495,29 @@ export function buildWeekPlan(input: WeekPlanInput): WeekPlan {
           (x) => x.d!.status !== "unscheduled" && x.d!.status !== "unknown" && x.d!.hourly.some((h) => h.needed !== null),
         )
         if (counted.length > 0) {
-          const byHour = new Map<number, { staffed: number; needed: number }>()
+          // Each store's shortfall is its own: one store's spare cook does
+          // not cover another store's rush, so deficits add, surpluses don't.
+          const byHour = new Map<number, { staffed: number; short: number }>()
           for (const { d } of counted) {
             for (const h of d!.hourly) {
-              const cur = byHour.get(h.hour) ?? { staffed: 0, needed: 0 }
+              const cur = byHour.get(h.hour) ?? { staffed: 0, short: 0 }
               cur.staffed += h.staffed
-              cur.needed += h.needed ?? 0
+              const gap = (h.needed ?? 0) - h.staffed
+              if (h.needed !== null && gap > 0.25) cur.short += gap
               byHour.set(h.hour, cur)
             }
           }
-          hours = [...byHour.entries()].map(([hour, v]) => {
-            const gap = v.needed - v.staffed
-            return {
-              hour,
-              label: clockWord(hour),
-              staffed: Math.round(v.staffed * 10) / 10,
-              short: gap > 0.25 ? Math.round(gap * 10) / 10 : 0,
-            }
-          })
+          hours = [...byHour.entries()].map(([hour, v]) => ({
+            hour,
+            label: clockWord(hour),
+            staffed: Math.round(v.staffed * 10) / 10,
+            short: Math.round(v.short * 10) / 10,
+          }))
         }
         for (const { st, d } of storeDays) {
-          if (d === undefined || d.forecast === null) {
+          if (st.failed) {
+            hoursNotes.push({ tone: "wait", text: `${st.name} didn't load.` })
+          } else if (d === undefined || d.forecast === null) {
             hoursNotes.push({ tone: "wait", text: `${st.name} has no forecast for this day.` })
           } else if (d.status === "unscheduled") {
             hoursNotes.push({ tone: "warn", text: `${st.name} has no schedule in Harri, so it is not counted.` })
@@ -538,7 +540,7 @@ export function buildWeekPlan(input: WeekPlanInput): WeekPlan {
         id: st.id,
         name: st.name,
         amount: d === undefined ? money(null) : money(sold ? d.actual : d.forecast),
-        status: sold ? null : staffWord(d),
+        status: sold ? null : st.failed ? { tone: "wait" as const, text: "Didn't load" } : staffWord(d),
       }))
 
       return {

@@ -225,6 +225,17 @@ describe("week plan", () => {
     expect(w.stores.find((s) => s.id === "vn")!.status).toEqual({ tone: "wait", label: "Didn't load" })
   })
 
+  it("does not let one store's spare hours cover another store's short hours", () => {
+    const input = base()
+    input.stores[1] = store(
+      "gl",
+      "Glendale",
+      NEXT.map((k) => fwd(k, { hourly: [{ hour: 17, needed: 5, staffed: 8 }, { hour: 18, needed: 7, staffed: 7 }] })),
+    )
+    const fri = buildWeekPlan(input).weeks.next.days.find((d) => d.key === "2026-11-27")!
+    expect(fri.detail.hours!.map((h) => h.short)).toEqual([3, 4])
+  })
+
   it("shows no total, not $0, when nothing was forecast", () => {
     const w = buildWeekPlan(base({ sales: [] })).weeks.next
     expect(w.sales.value).toBeNull()

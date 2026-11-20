@@ -1718,7 +1718,12 @@ function forwardStoreDay(d: DecisionDay): PlanStoreDayInput {
     scheduled: d.labor.scheduledHours,
     needed: d.labor.neededHours,
     gap: d.labor.gapHours,
-    status: d.labor.status,
+    // The lane says "unknown" before it looks at shifts when there is no
+    // productivity target; no shifts at all is still "no schedule".
+    status:
+      d.labor.status === "unknown" && d.labor.scheduledHours <= 0 && d.predictedRevenue > 0
+        ? "unscheduled"
+        : d.labor.status,
     // A day with no hourly forecast rows reads every hour as 0 orders, so 0
     // needed: that is "not forecast by the hour", not "nothing needed".
     hourly: d.hourly.hours.some((h) => h.predictedOrders > 0)

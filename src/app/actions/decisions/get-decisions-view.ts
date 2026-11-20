@@ -310,7 +310,7 @@ export async function getDecisionsView(input: {
     // in Los Angeles is already tomorrow, and today's forecast fell out of
     // the window between 4pm and midnight.
     getRevenueForecast({ storeId: input.storeId, horizonDays: 14, asOf: today }),
-    getOpenAnomalies({ storeId: input.storeId, limit: 50 }),
+    lite ? null : getOpenAnomalies({ storeId: input.storeId, limit: 50 }),
     lite ? null : getLaborStaffingForecast({ storeId: input.storeId, horizonDays: 7 }).catch(
       () => null,
     ),

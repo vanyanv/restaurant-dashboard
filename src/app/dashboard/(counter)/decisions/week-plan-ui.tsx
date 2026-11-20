@@ -174,7 +174,7 @@ export function WeekPlanView({
               ) : day.detail.hours ? (
                 <HourChart bars={day.detail.hours} />
               ) : (
-                <p className="wa-note">No store in view has a schedule to check against the forecast.</p>
+                <p className="wa-note">Hourly cover can't be checked for this day.</p>
               )}
               {day.detail.hoursNotes.length > 0 ? (
                 <ul className="wa-notes">
@@ -319,7 +319,7 @@ function DayCell({
     "--lo": pct(d.p10),
     "--hi": pct(d.p90),
   } as CSSProperties
-  const tag = d.kind === "sold" ? "sold" : d.kind === "today" ? "today" : d.kind === "forecast" ? "forecast" : "none yet"
+  const tag = d.kind === "sold" ? (d.amount === null ? "not counted" : "sold") : d.kind === "today" ? "today" : d.kind === "forecast" ? "forecast" : "none yet"
   return (
     <button
       type="button"
