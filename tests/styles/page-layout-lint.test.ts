@@ -1,8 +1,11 @@
 import { describe, it, expect } from "vitest"
+import { mkdtempSync, writeFileSync } from "node:fs"
+import { tmpdir } from "node:os"
 import { join } from "node:path"
 import {
   checkSource,
   findPageLayoutViolations,
+  measureLayout,
   KNOWN,
   MAX_OPEN_BLOCKS,
 } from "../../scripts/page-layout-lint"
@@ -34,6 +37,24 @@ describe("page layout lint", () => {
   it("does not count blocks inside a fold as open, or blocks in comments", () => {
     const src = `${blocks(4)}\n// <Section title="old" />\n<Fold summary="x">\n<Card />\n<Card />\n</Fold>\n<Section title="after" />`
     expect(checkSource("a.tsx", src)).toEqual([])
+  })
+
+  it("reads a string holding \"/*\" as a string, not a comment", () => {
+    const src = `<input accept="image/*" />\n${blocks(MAX_OPEN_BLOCKS + 1)}\n{/* note */}`
+    expect(checkSource("a.tsx", src).map((x) => x.rule)).toEqual(["page-too-long"])
+  })
+
+  it("takes tags on one line in source order", () => {
+    const m = measureLayout(`<Fold summary="x"><Card /></Fold><Card /><Card />`)
+    expect(m.folds).toEqual([{ line: 1, blocks: 1 }])
+    expect(m.openBlocks).toBe(2)
+  })
+
+  it("checks a page.tsx that renders its own sections", () => {
+    const dir = mkdtempSync(join(tmpdir(), "page-layout-"))
+    writeFileSync(join(dir, "page.tsx"), blocks(MAX_OPEN_BLOCKS + 1))
+    const v = findPageLayoutViolations([dir], [])
+    expect(v.map((x) => x.rule)).toEqual(["page-too-long"])
   })
 
   it("passes the compliant fixture", () => {

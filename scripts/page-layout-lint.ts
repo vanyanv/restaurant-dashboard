@@ -9,7 +9,9 @@
  * rules lived in prose and project notes; nothing failed. Now something does.
  *
  * Two rules, over every `.tsx` under the two `(counter)` route groups except
- * `page.tsx`/`layout.tsx`/`loading.tsx`/`error.tsx` (those render no sections):
+ * `layout.tsx`/`loading.tsx`/`error.tsx`/`not-found.tsx` (those render no
+ * sections). A `page.tsx` is checked like any client file: most hand their
+ * sections to a client, but one that renders them itself gets no pass.
  *
  *   - `page-too-long` — a file that renders more than MAX_OPEN_BLOCKS
  *     `<Section>`/`<Card>` blocks outside any `<Fold>` and has no shared
@@ -18,8 +20,9 @@
  *     `<Section>`/`<Card>` blocks. A fold holds ONE thing (the method, the
  *     full statement), never the rest of the page.
  *
- * Regex over comment-stripped source, not an AST, like the rest of
- * `npm run tokens`. Known holes, written down so nobody mistakes them for
+ * Regex over comment-stripped source (the same string-aware stripper as
+ * counter-lint, so `accept="image/*"` is not read as a comment), not an
+ * AST, like the rest of `npm run tokens`. Known holes, written down so nobody mistakes them for
  * coverage: a block rendered by a child component in another file is counted
  * in THAT file, not the page (so a page can hide length by splitting files —
  * the written rule still applies); a `.map()` that renders N sections counts
@@ -35,6 +38,7 @@
  */
 import { readFileSync, readdirSync, statSync } from "node:fs"
 import { join, relative, sep } from "node:path"
+import { stripComments } from "./strip-comments"
 
 export const MAX_OPEN_BLOCKS = 5
 export const MAX_FOLD_BLOCKS = 2
@@ -46,18 +50,10 @@ export interface LayoutViolation {
   text: string
 }
 
-const BLOCK = /<(Section|Card)\b/g
-const FOLD_OPEN = /<Fold\b/
-const FOLD_CLOSE = /<\/Fold>/
+/** Fold opens, fold closes and blocks, matched in source order on a line. */
+const TAG = /<Fold\b|<\/Fold>|<(?:Section|Card)\b/g
 const TABS = /<(Page)?Tabs\b/
-const SKIP_FILE = /[/\\](page|layout|loading|error|not-found)\.tsx$/
-
-/** Same contract as counter-lint's: comments become spaces, newlines stay. */
-function stripComments(source: string): string {
-  return source
-    .replace(/\/\*[\s\S]*?\*\//g, (m) => m.replace(/[^\n]/g, " "))
-    .replace(/(^|[^:"'`])\/\/[^\n]*/g, (m, lead: string) => lead + " ".repeat(m.length - lead.length))
-}
+const SKIP_FILE = /[/\\](layout|loading|error|not-found)\.tsx$/
 
 /**
  * Counts blocks open vs inside folds, and each fold's own block count.
@@ -76,23 +72,23 @@ export function measureLayout(source: string): {
   const folds: Array<{ line: number; blocks: number }> = []
   const stack: Array<{ line: number; blocks: number }> = []
   lines.forEach((text, i) => {
-    // Order matters on one line: `<Fold summary="x"><Section …` opens first.
-    if (FOLD_OPEN.test(text)) {
-      depth++
-      stack.push({ line: i + 1, blocks: 0 })
-    }
-    const n = text.match(BLOCK)?.length ?? 0
-    if (n > 0) {
-      if (depth > 0) {
-        for (const f of stack) f.blocks += n
+    // Tags are taken in source order, so `<Fold summary="x"><Card /></Fold><Card />`
+    // counts one block in the fold and one open.
+    for (const [tag] of text.matchAll(TAG)) {
+      if (tag === "<Fold") {
+        depth++
+        stack.push({ line: i + 1, blocks: 0 })
+      } else if (tag === "</Fold>") {
+        if (depth > 0) {
+          depth--
+          folds.push(stack.pop()!)
+        }
+      } else if (depth > 0) {
+        for (const f of stack) f.blocks++
       } else {
-        openBlocks += n
+        openBlocks++
         if (!firstBlockLine) firstBlockLine = i + 1
       }
-    }
-    if (FOLD_CLOSE.test(text) && depth > 0) {
-      depth--
-      folds.push(stack.pop()!)
     }
   })
   return { openBlocks, hasTabs: lines.some((l) => TABS.test(l)), firstBlockLine, folds }

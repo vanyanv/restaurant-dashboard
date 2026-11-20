@@ -730,8 +730,11 @@ plain top, then an "Every figure, as before" fold holding the whole old
 page (Overview 13 sections, Decisions 10, Labor 10), or 6–9 sections
 stacked with no tabs (P&L, Inventory, Ingredients, Store file). Owners read
 these pages on a phone between rushes; a page they have to scroll through
-is a page they stop opening. Rules 1–5 are checked by `npm run tokens`
-(rule 9 above); the rest need judgment and are the reviewer's job.
+is a page they stop opening. `npm run tokens` (rule 9 above) checks part
+of rules 2 and 3 only: a file with more than five open sections and no tabs,
+and a `Fold` wrapping more than two. The Made Plain head (rule 1), Needs
+you grouping, list caps and the rest need judgment and are the reviewer's
+job.
 
 **1. Made Plain on top.** Every owner page opens with the owner-approved
 "Made Plain" head, in this order: one plain sentence that answers the
