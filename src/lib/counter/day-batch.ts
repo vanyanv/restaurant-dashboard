@@ -152,7 +152,9 @@ function flush<Row>(group: string, queue: Queue<Row>): void {
   const list = reads.get(group) ?? []
   reads.set(group, list)
   for (const plan of planReads(waiters.map((w) => w.range))) {
-    const rows = load(plan.read)
+    // Through a promise, so a loader that throws synchronously still rejects
+    // its callers instead of leaving them waiting.
+    const rows = Promise.resolve().then(() => load(plan.read))
     const entry = { range: plan.read, rows: rows as Promise<unknown[]> }
     list.push(entry)
     // A failed read is dropped so a later caller in the render reads again.

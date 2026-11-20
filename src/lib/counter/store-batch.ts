@@ -88,7 +88,9 @@ export function batchedStoreRows<Row>(input: {
 function flush<Row>(group: string, queue: Queue<Row>): void {
   const { waiters, load, storeOf } = queue
   const union = [...new Set(waiters.flatMap((w) => w.storeIds))].sort()
-  const rows = load(union)
+  // Through a promise, so a loader that throws synchronously still rejects
+  // its callers instead of leaving them waiting.
+  const rows = Promise.resolve().then(() => load(union))
   const reads = readsThisRequest()
   const list = reads.get(group) ?? []
   const entry = { ids: new Set(union), rows: rows as Promise<unknown[]> }

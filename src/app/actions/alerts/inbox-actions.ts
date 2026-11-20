@@ -290,8 +290,9 @@ export async function acknowledgeAlert(input: {
  * one request at a time, and each request re-rendered the whole inbox, so a
  * row of fourteen cost fifteen page renders.
  *
- * All or nothing, as the one-at-a-time loop promised its reader: if any id is
- * missing or belongs to another account, nothing changes. Same status rules
+ * All or nothing (stricter than the old loop, which left the alerts before a
+ * failure closed): if any id is missing or belongs to another account,
+ * nothing changes. Same status rules
  * as `acknowledgeAlert` / `dismissAlert`.
  */
 export async function closeAlerts(input: {
@@ -304,8 +305,11 @@ export async function closeAlerts(input: {
     return { ok: false, error: "unauthorized" }
   }
   const accountId = session.user.accountId
-  const ids = [...new Set(input.ids)].slice(0, CLEAR_LIMIT)
+  const ids = [...new Set(input.ids)]
   if (ids.length === 0) return { ok: true }
+  // Refused rather than cut short: closing the first thousand and saying it
+  // worked would leave the rest open behind a row the reader thinks is gone.
+  if (ids.length > CLEAR_LIMIT) return { ok: false, error: "not_found" }
 
   const explanation = input.how === "acknowledge" ? input.explanation?.trim() || null : null
   const data =
