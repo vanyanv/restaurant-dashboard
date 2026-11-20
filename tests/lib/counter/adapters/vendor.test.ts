@@ -12,7 +12,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
 
 vi.mock("@/lib/prisma", () => ({
-  prisma: { invoice: { findMany: vi.fn() }, $queryRaw: vi.fn() },
+  prisma: { invoice: { findMany: vi.fn() }, invoiceLineItem: { findMany: vi.fn() }, $queryRaw: vi.fn() },
 }))
 vi.mock("@/lib/account-stores", () => ({ getScopedStores: vi.fn() }))
 // `vendor.ts` imports `displayName` from `adapters/vendors.ts` (the list-page
@@ -64,6 +64,7 @@ beforeEach(() => {
   vi.clearAllMocks()
   vi.mocked(getScopedStores).mockResolvedValue([{ id: "holly", name: "Hollywood" }] as never)
   vi.mocked(getVendorBasketTrends).mockResolvedValue({ trend: new Map() } as never)
+  vi.mocked(prisma.invoiceLineItem.findMany).mockResolvedValue([] as never)
   vi.mocked(prisma.invoice.findMany).mockResolvedValue([
     invoice("i1", "Sysco Los Angeles", "2026-08-10"),
   ] as never)

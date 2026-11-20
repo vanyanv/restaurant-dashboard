@@ -20,7 +20,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
 
 vi.mock("@/lib/prisma", () => ({
-  prisma: { invoice: { findMany: vi.fn(), groupBy: vi.fn() }, $queryRaw: vi.fn() },
+  prisma: { invoice: { findMany: vi.fn(), groupBy: vi.fn() }, invoiceLineItem: { findMany: vi.fn() }, $queryRaw: vi.fn() },
 }))
 vi.mock("@/lib/account-stores", () => ({ getScopedStores: vi.fn() }))
 vi.mock("@/lib/counter/vendor-basket", async (importOriginal) => {
@@ -53,6 +53,14 @@ function invoice(vendorName: string, day: number | null, total: number) {
   }
 }
 
+/** The invoices read, and the line read for them — two queries since lines left the first. */
+function useInvoices(rows: Array<Record<string, any>>) {
+  asMock(prisma.invoice.findMany).mockResolvedValue(rows)
+  asMock(prisma.invoiceLineItem.findMany).mockResolvedValue(
+    rows.flatMap((i) => (i.lineItems ?? []).map((l: object) => ({ invoiceId: i.id, sku: null, ...l }))),
+  )
+}
+
 function dataOfOrThrow<T>(sd: SectionData<T>): T {
   if (!hasData(sd)) throw new Error(`section is ${sd.status}, not ready`)
   return sd.data
@@ -77,7 +85,7 @@ describe("vendor detail adapter", () => {
   })
 
   it("does not print a hand-measured ingredient count the adapter never computes", async () => {
-    asMock(prisma.invoice.findMany).mockResolvedValue([invoice("Sysco", 5, 1000)])
+    useInvoices([invoice("Sysco", 5, 1000)])
     asMock(prisma.$queryRaw).mockResolvedValue([
       { cid: "ci_beef", name: "Beef", vendor: "Sysco", px: 4, unit: "LB", n: 3 },
       { cid: "ci_bun", name: "Bun", vendor: "Sysco", px: 1, unit: "EA", n: 2 },
@@ -93,7 +101,7 @@ describe("vendor detail adapter", () => {
   })
 
   it("does not claim there was no delivery when the delivery simply has no date", async () => {
-    asMock(prisma.invoice.findMany).mockResolvedValue([
+    useInvoices([
       invoice("Sysco", null, 1000),
       invoice("Sysco", null, 400),
     ])
@@ -106,7 +114,7 @@ describe("vendor detail adapter", () => {
   })
 
   it("leaves the weekly chart alone when the invoices are dated", async () => {
-    asMock(prisma.invoice.findMany).mockResolvedValue([invoice("Sysco", 5, 1000)])
+    useInvoices([invoice("Sysco", 5, 1000)])
 
     const spend = dataOfOrThrow(await run("Sysco").spend)
 
@@ -116,7 +124,7 @@ describe("vendor detail adapter", () => {
   })
 
   it("gathers every casing of the vendor's name, the way the list's row does", async () => {
-    asMock(prisma.invoice.findMany).mockResolvedValue([
+    useInvoices([
       invoice("Bear State Kitchen", 5, 2000),
       invoice("BEAR STATE KITCHEN", 6, 1400),
     ])
@@ -130,7 +138,7 @@ describe("vendor detail adapter", () => {
   })
 
   it("resolves a vendor whose URL segment differs only in casing", async () => {
-    asMock(prisma.invoice.findMany).mockResolvedValue([
+    useInvoices([
       { vendorName: "Bear State Kitchen" },
     ])
 
@@ -150,7 +158,7 @@ describe("vendor detail adapter", () => {
     // an unordered `distinct` read, which could print either one. `getVendorName`
     // now counts, the way `adapters/vendors`'s `displayName` does for the row
     // that links here, so the title always matches what the list called it.
-    asMock(prisma.invoice.findMany).mockResolvedValue([
+    useInvoices([
       { vendorName: "BEAR STATE KITCHEN" },
       { vendorName: "Bear State Kitchen" },
     ])

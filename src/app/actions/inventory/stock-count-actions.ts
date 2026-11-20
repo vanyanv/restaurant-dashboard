@@ -213,7 +213,7 @@ export async function completeStockCount(input: {
   // Run calibration update BEFORE marking complete, so the running-on-hand
   // anchor query (which filters status=COMPLETED) still picks the previous
   // count rather than this one.
-  await applyCalibrationUpdatesForCount(input.stockCountId)
+  await applyCalibrationUpdatesForCount(input.stockCountId, user.accountId)
 
   await prisma.stockCount.update({
     where: { id: input.stockCountId },

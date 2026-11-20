@@ -25,7 +25,9 @@ const { db } = vi.hoisted(() => ({
     stockCountLine: { findMany: vi.fn(), upsert: vi.fn() },
     canonicalIngredient: { findMany: vi.fn(), findUnique: vi.fn() },
     ingredientSkuMatch: { findMany: vi.fn() },
-    ingredientModelState: { findUnique: vi.fn(), upsert: vi.fn() },
+    ingredientModelState: { findMany: vi.fn(), createMany: vi.fn((arg) => ({ op: "createMany", arg })) },
+    $executeRaw: vi.fn(),
+    $transaction: vi.fn(async (ops: unknown[]) => ops),
     store: { findMany: vi.fn() },
   },
 }))
@@ -37,14 +39,12 @@ vi.mock("@/lib/inventory/store-inventory-context", () => ({
   loadStoreInventoryContext: vi.fn(),
   runningOnHandFromContext: vi.fn(),
 }))
-vi.mock("@/lib/inventory/running-on-hand", () => ({ computeRunningOnHand: vi.fn() }))
 
 import { getServerSession } from "next-auth"
 import {
   loadStoreInventoryContext,
   runningOnHandFromContext,
 } from "@/lib/inventory/store-inventory-context"
-import { computeRunningOnHand } from "@/lib/inventory/running-on-hand"
 import { getCountSessionSectionPromises } from "@/lib/counter/adapters/stock-counts"
 import { saveStockCountLine } from "@/app/actions/inventory/stock-count-actions"
 import { applyCalibrationUpdatesForCount } from "@/lib/inventory/calibration-update"
@@ -145,7 +145,7 @@ describe("the count -> estimate -> calibration loop", () => {
 
     // 3. Closing the count no longer early-returns at
     //    `linesWithEstimate.length === 0`.
-    db.stockCount.findUnique.mockResolvedValue({
+    db.stockCount.findFirst.mockResolvedValue({
       id: "count_ours",
       storeId: "store_a",
       countedAt: COUNTED_AT,
@@ -157,8 +157,12 @@ describe("the count -> estimate -> calibration loop", () => {
         },
       ],
     })
-    db.ingredientModelState.findUnique.mockResolvedValue(null)
-    asMock(computeRunningOnHand).mockResolvedValue({
+    db.canonicalIngredient.findMany.mockResolvedValue([
+      { id: "ci_beef", name: "beef", recipeUnit: "oz", caseUnit: "CS", recipeUnitsPerCase: 160, innerPackUnit: null, innerPacksPerCase: null },
+    ])
+    db.ingredientModelState.findMany.mockResolvedValue([])
+    asMock(loadStoreInventoryContext).mockResolvedValue({ storeId: "store_a" })
+    asMock(runningOnHandFromContext).mockReturnValue({
       asOf: COUNTED_AT,
       storeId: "store_a",
       ingredientId: "ci_beef",
@@ -173,14 +177,13 @@ describe("the count -> estimate -> calibration loop", () => {
       partial: false,
     })
 
-    await applyCalibrationUpdatesForCount("count_ours")
+    await applyCalibrationUpdatesForCount("count_ours", "acct_ours")
 
-    expect(db.ingredientModelState.upsert).toHaveBeenCalledTimes(1)
-    const upserted = db.ingredientModelState.upsert.mock.calls[0][0] as {
-      where: { storeId_canonicalIngredientId: { storeId: string; canonicalIngredientId: string } }
-      create: { recountDeltaMean: number; sampleSize: number }
+    expect(db.ingredientModelState.createMany).toHaveBeenCalledTimes(1)
+    const upserted = {
+      create: (db.ingredientModelState.createMany.mock.calls[0][0] as { data: Array<{ storeId: string; canonicalIngredientId: string; recountDeltaMean: number; sampleSize: number }> }).data[0],
     }
-    expect(upserted.where.storeId_canonicalIngredientId).toEqual({
+    expect(upserted.create).toMatchObject({
       storeId: "store_a",
       canonicalIngredientId: "ci_beef",
     })
@@ -193,7 +196,7 @@ describe("the count -> estimate -> calibration loop", () => {
   it("still early-returns for a count whose lines have no expectation", async () => {
     // Which is the correct outcome for the first count a store ever closes:
     // there was nothing to expect from, so there is nothing to learn.
-    db.stockCount.findUnique.mockResolvedValue({
+    db.stockCount.findFirst.mockResolvedValue({
       id: "count_first",
       storeId: "store_a",
       countedAt: COUNTED_AT,
@@ -202,9 +205,9 @@ describe("the count -> estimate -> calibration loop", () => {
       ],
     })
 
-    await applyCalibrationUpdatesForCount("count_first")
+    await applyCalibrationUpdatesForCount("count_first", "acct_ours")
 
-    expect(db.ingredientModelState.upsert).not.toHaveBeenCalled()
+    expect(db.$transaction).not.toHaveBeenCalled()
   })
 
   it("a re-save with no expectation in hand does not erase the one already stored", async () => {

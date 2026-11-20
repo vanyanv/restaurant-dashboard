@@ -27,6 +27,7 @@ import { describe, it, expect, vi } from "vitest"
 vi.mock("@/app/actions/order-actions", () => ({
   getOrdersList: vi.fn(),
   getOrderDetail: vi.fn(),
+  getOrderDetailWithStoreId: vi.fn(),
 }))
 vi.mock("@/app/actions/hourly-orders-actions", () => ({
   getHourlyPatternsForRange: vi.fn(),
