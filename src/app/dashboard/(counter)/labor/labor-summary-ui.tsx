@@ -227,18 +227,20 @@ export function LaborClockBlock({ c }: { c: LaborClockView }) {
 
 const LEAK_COLUMNS: RowsColumn<LeakRowView>[] = [
   { key: "leak", label: "What happened", slot: "title", render: (r) => r.leak },
-  { key: "alerts", label: "Times", slot: "detail", render: (r) => `${r.alerts} times · ${r.people} people` },
+  { key: "alerts", label: "Times", slot: "detail", render: (r) => `${r.alerts} ${r.alerts === "1" ? "time" : "times"} · ${r.people} ${r.people === "1" ? "person" : "people"}` },
   { key: "hours", label: "Hours", slot: "status", align: "end", render: (r) => r.hours },
   { key: "cost", label: "Cost", slot: "amount", align: "end", render: (r) => r.cost },
 ]
 
 /**
  * Early and late minutes, in hours and dollars: the leak ledger's own rows.
- * The rows with no duration (missed and unscheduled punches) are left to the
- * card above and to the ledger's note, which counts them.
+ * Only the rows the crew was paid for outside the schedule: clocking in late
+ * and leaving early ran the other way and are not a cost, and the rows with
+ * no duration are missed punches, in the card above. The ledger's note
+ * accounts for both.
  */
 export function LaborMinutesBlock({ l }: { l: LeaksSection }) {
-  const rows = l.rows.filter((r) => r.kind !== "uncostable")
+  const rows = l.rows.filter((r) => r.kind === "leak")
   return (
     <div className="cu-stack">
       <Card as="section" label="Early and late minutes" caption="Early and late minutes">

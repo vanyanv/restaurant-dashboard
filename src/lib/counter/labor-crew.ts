@@ -1,4 +1,5 @@
 import type { StaffingCurve } from "@/lib/counter/staffing-curve"
+import { MISSED_CLOCK_IN_CODES, MISSED_CLOCK_OUT_CODES } from "@/lib/counter/time-records"
 
 /**
  * The Labor page's second set of tabs: Hours of the day, People, Time clock.
@@ -42,16 +43,30 @@ export interface CrewNameRow {
   lastName: string | null
 }
 
+/** One person's whole published week, every store on the account, whatever the range. */
+export interface CrewWeekRow {
+  userId: number
+  weekStart: string
+  minutes: number
+}
+
 export interface LaborCrew {
   stores: Array<{ id: string; name: string }>
+  /** The shifts inside the range, at the stores the page is looking at. */
   shifts: CrewShiftRow[]
+  /**
+   * The whole weeks those shifts belong to, summed per person across every
+   * store on the account. The past-40 flag reads these and not `shifts`: a
+   * range that cuts a week, or one store of two, would hide a 45-hour week.
+   */
+  weeks: CrewWeekRow[]
   alerts: CrewAlertRow[]
   names: CrewNameRow[]
 }
 
 /** The codes a person is counted under. Anything else Harri sends is not shown per person. */
-const MISSED = new Set(["MISSED_CLOCK_IN", "MISSED_CLOCK_OUT", "MISSED_CLOCK_OUT_OT_NOW"])
-const MISSED_IN = new Set(["MISSED_CLOCK_IN"])
+const MISSED_IN = MISSED_CLOCK_IN_CODES
+const MISSED = new Set<string>([...MISSED_CLOCK_IN_CODES, ...MISSED_CLOCK_OUT_CODES])
 const LATE_IN = new Set(["LATE_CLOCK_IN"])
 
 /** Scheduled hours in one week past which a person is flagged. */
@@ -102,7 +117,11 @@ export interface LaborPeopleView {
 
 export function buildLaborPeople(crew: LaborCrew): LaborPeopleView | null {
   const storeName = new Map(crew.stores.map((s) => [s.id, s.name]))
-  const nameOf = new Map(crew.names.map((n) => [n.userId, n]))
+  // One person can be in the crew list at two stores: keep a row that has a name.
+  const nameOf = new Map<number, CrewNameRow>()
+  for (const n of crew.names) {
+    if (crewName(nameOf.get(n.userId)) === null) nameOf.set(n.userId, n)
+  }
 
   interface Acc {
     minutes: number
@@ -127,8 +146,11 @@ export function buildLaborPeople(crew: LaborCrew): LaborPeopleView | null {
     const a = acc(s.userId)
     a.minutes += s.minutes
     a.shifts += 1
-    a.weeks.set(s.weekStart, (a.weeks.get(s.weekStart) ?? 0) + s.minutes)
     a.stores.add(s.storeId)
+  }
+  for (const w of crew.weeks) {
+    const a = people.get(w.userId)
+    if (a) a.weeks.set(w.weekStart, (a.weeks.get(w.weekStart) ?? 0) + w.minutes)
   }
   for (const r of crew.alerts) {
     const missed = MISSED.has(r.alertCode)
@@ -174,7 +196,8 @@ export function buildLaborPeople(crew: LaborCrew): LaborPeopleView | null {
       hours: a.minutes > 0 ? hoursWord(Math.round(a.minutes / 6) / 10) : "none",
       shifts: a.shifts > 0 ? plural(a.shifts, "shift", "shifts") : "not on the schedule",
       records: records.join(" · "),
-      over: overKey ? `${hoursWord(Math.round(overMin / 6) / 10)} the week of ${weekLabel(overKey)}` : null,
+      // Rounded up, so a week a few minutes past 40 never reads "40 h".
+      over: overKey ? `${hoursWord(Math.ceil(overMin / 6) / 10)} the week of ${weekLabel(overKey)}` : null,
       fill: top > 0 ? Math.round((a.minutes / top) * 100) : 0,
     }
   })
@@ -187,12 +210,12 @@ export function buildLaborPeople(crew: LaborCrew): LaborPeopleView | null {
 
   const sentence = [
     scheduled.length > 0
-      ? `${plural(scheduled.length, "person is", "people are")} on the published schedule for ${totalHours.toLocaleString("en-US")} hours.`
+      ? `${plural(scheduled.length, "person is", "people are")} on the published schedule for ${totalHours.toLocaleString("en-US")} ${totalHours === 1 ? "hour" : "hours"}.`
       : "Nobody is on a published schedule for these days.",
     over > 0
-      ? `${plural(over, "person is", "people are")} scheduled past ${OVERTIME_WEEK_HOURS} hours in one week.`
+      ? `${plural(over, "person is", "people are")} scheduled past ${OVERTIME_WEEK_HOURS} hours in one week, counting every store.`
       : scheduled.length > 0
-        ? `Nobody is scheduled past ${OVERTIME_WEEK_HOURS} hours in one week.`
+        ? `Nobody is scheduled past ${OVERTIME_WEEK_HOURS} hours in one week, counting every store.`
         : "",
     missed > 0 ? `${plural(missed, "person has", "people have")} a missed punch flagged.` : "",
   ]
@@ -200,7 +223,8 @@ export function buildLaborPeople(crew: LaborCrew): LaborPeopleView | null {
     .join(" ")
 
   const note = [
-    "Hours are the published schedule: Harri sends hours worked by day and by role, not by person.",
+    "Hours are the published schedule for these days: Harri sends hours worked by day and by role, not by person.",
+    `The ${OVERTIME_WEEK_HOURS}-hour check looks at each person's whole week, Monday to Sunday, at every store.`,
     "A missed punch is one Harri flagged; it does not say when one is fixed.",
     all.length > rows.length ? `Showing ${rows.length} of ${all.length} people.` : "",
     unnamed > 0
@@ -231,12 +255,13 @@ export interface LaborClockView {
 }
 
 export function buildLaborClock(crew: LaborCrew): LaborClockView {
-  const by = new Map<string, { missedIn: number; missedOut: number; people: Set<number> }>()
-  for (const s of crew.stores) by.set(s.id, { missedIn: 0, missedOut: 0, people: new Set() })
+  const by = new Map<string, { any: boolean; missedIn: number; missedOut: number; people: Set<number> }>()
+  for (const s of crew.stores) by.set(s.id, { any: false, missedIn: 0, missedOut: 0, people: new Set() })
   for (const r of crew.alerts) {
-    if (!MISSED.has(r.alertCode)) continue
     const b = by.get(r.storeId)
     if (!b) continue
+    b.any = true
+    if (!MISSED.has(r.alertCode)) continue
     if (MISSED_IN.has(r.alertCode)) b.missedIn += 1
     else b.missedOut += 1
     b.people.add(r.userId)
@@ -254,9 +279,11 @@ export function buildLaborClock(crew: LaborCrew): LaborClockView {
     .map(({ s, b, n }) => ({
       key: s.id,
       name: s.name,
-      value: String(n),
-      detail:
-        n === 0
+      // A store Harri sent nothing for is not a store with a clean clock.
+      value: b.any ? String(n) : "no records",
+      detail: !b.any
+        ? "Harri sent no time records for these days"
+        : n === 0
           ? "none flagged"
           : [
               b.missedOut > 0 ? plural(b.missedOut, "missed clock-out", "missed clock-outs") : "",
@@ -269,9 +296,13 @@ export function buildLaborClock(crew: LaborCrew): LaborClockView {
     }))
 
   const worst = stores[0]
+  const silent = counted.filter((c) => !c.b.any)
   const sentence =
-    total === 0
-      ? "No missed punches were flagged on these days."
+    silent.length === counted.length
+      ? "Harri sent no time records for these days, so missed punches cannot be counted."
+      : total === 0
+        ? "No missed punches were flagged on these days." +
+          (silent.length > 0 ? ` ${silent.map((c) => c.s.name).join(" and ")} sent no time records.` : "")
       : stores.length > 1 && worst
         ? `${plural(total, "missed punch was", "missed punches were")} flagged on these days, most at ${worst.name} (${worst.value}).`
         : `${plural(total, "missed punch was", "missed punches were")} flagged on these days.`

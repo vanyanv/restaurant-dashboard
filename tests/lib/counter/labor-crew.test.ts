@@ -15,6 +15,12 @@ const crew: LaborCrew = {
     // Not in the crew list.
     { storeId: "v", userId: 3, minutes: 450, weekStart: "2026-11-09" },
   ],
+  weeks: [
+    { userId: 1, weekStart: "2026-11-09", minutes: 2520 },
+    { userId: 2, weekStart: "2026-11-09", minutes: 480 },
+    { userId: 2, weekStart: "2026-11-16", minutes: 480 },
+    { userId: 3, weekStart: "2026-11-09", minutes: 450 },
+  ],
   alerts: [
     { storeId: "v", userId: 2, alertCode: "MISSED_CLOCK_OUT_OT_NOW" },
     { storeId: "v", userId: 2, alertCode: "MISSED_CLOCK_IN" },
@@ -60,10 +66,33 @@ describe("buildLaborPeople", () => {
 
   it("says what it counted, in words", () => {
     expect(view.sentence).toBe(
-      "3 people are on the published schedule for 66 hours. 1 person is scheduled past 40 hours in one week. 2 people have a missed punch flagged.",
+      "3 people are on the published schedule for 66 hours. 1 person is scheduled past 40 hours in one week, counting every store. 2 people have a missed punch flagged.",
     )
     expect(view.note).toContain("2 people are not in the crew list yet")
     expect(view.note).toContain("not by person")
+  })
+
+  it("flags a long week the range only shows part of, from the whole week's hours", () => {
+    const part = buildLaborPeople({
+      ...crew,
+      // One day of the range: 7 h shown, but the whole week is 40 h 5 min across two stores.
+      shifts: [{ storeId: "h", userId: 1, minutes: 420, weekStart: "2026-11-09" }],
+      weeks: [{ userId: 1, weekStart: "2026-11-09", minutes: 2405 }],
+      alerts: [],
+    })!
+    expect(part.rows[0]).toMatchObject({ hours: "7 h", over: "40.1 h the week of Nov 9" })
+    expect(part.sentence).toContain("1 person is on the published schedule for 7 hours.")
+  })
+
+  it("keeps a name when the same person is in the crew list twice", () => {
+    const twice = buildLaborPeople({
+      ...crew,
+      names: [
+        { userId: 1, firstName: "Ana", lastName: "Garcia" },
+        { userId: 1, firstName: null, lastName: null },
+      ],
+    })!
+    expect(twice.rows[0].name).toBe("Ana G.")
   })
 
   it("is nothing when there is nobody", () => {
@@ -80,10 +109,19 @@ describe("buildLaborClock", () => {
     expect(c.sentence).toBe("3 missed punches were flagged on these days, most at Van Nuys (2).")
   })
 
-  it("names a store with none, and says so when there are none at all", () => {
+  it("says none flagged only for a store Harri sent records for", () => {
+    const c = buildLaborClock({ ...crew, alerts: [{ storeId: "h", userId: 1, alertCode: "EARLY_CLOCK_IN" }] })
+    expect(c.stores.map((s) => [s.name, s.value, s.detail])).toEqual([
+      ["Hollywood", "0", "none flagged"],
+      ["Van Nuys", "no records", "Harri sent no time records for these days"],
+    ])
+    expect(c.sentence).toBe("No missed punches were flagged on these days. Van Nuys sent no time records.")
+  })
+
+  it("does not call a silent clock clean", () => {
     const c = buildLaborClock({ ...crew, alerts: [] })
-    expect(c.stores.every((s) => s.detail === "none flagged" && s.fill === 0)).toBe(true)
-    expect(c.sentence).toBe("No missed punches were flagged on these days.")
+    expect(c.stores.every((s) => s.value === "no records" && s.fill === 0)).toBe(true)
+    expect(c.sentence).toBe("Harri sent no time records for these days, so missed punches cannot be counted.")
   })
 })
 

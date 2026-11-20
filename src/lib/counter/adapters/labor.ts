@@ -1771,7 +1771,7 @@ function peopleSection(
     const view = buildLaborPeople(crew)
     return view === null
       ? notComputed<LaborPeopleView>(
-          "Harri has no published shifts and no time records for these days, so there is nobody to list.",
+          "Harri has no published shifts, missed punches or late clock-ins for these days, so there is nobody to list.",
         )
       : ready(view)
   })

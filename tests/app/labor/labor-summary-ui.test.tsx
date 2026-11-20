@@ -96,6 +96,7 @@ const crew: LaborCrew = {
     ...Array.from({ length: 4 }, () => ({ storeId: "v", userId: 4, minutes: 360, weekStart: "2026-11-09" })),
     ...Array.from({ length: 3 }, () => ({ storeId: "g", userId: 5, minutes: 300, weekStart: "2026-11-09" })),
   ],
+  weeks: [{ userId: 1, weekStart: "2026-11-09", minutes: 2700 }],
   alerts: [
     { storeId: "v", userId: 3, alertCode: "MISSED_CLOCK_OUT_OT_NOW" },
     { storeId: "v", userId: 4, alertCode: "MISSED_CLOCK_OUT_OT_NOW" },
@@ -127,6 +128,7 @@ const leaks = {
   rows: [
     { key: "LATE_CLOCK_OUT", leak: "Clocked out late", kind: "leak", alerts: "14", hours: "6.2 h", cost: "$114", people: "8" },
     { key: "EARLY_CLOCK_IN", leak: "Clocked in early", kind: "leak", alerts: "9", hours: "2.1 h", cost: "$39", people: "5" },
+    { key: "LATE_CLOCK_IN", leak: "Clocked in late", kind: "short", alerts: "1", hours: "0.4 h", cost: "$7", people: "1" },
     { key: "MISSED_CLOCK_OUT_OT_NOW", leak: "Missed clock-out", kind: "uncostable", alerts: "2", hours: "—", cost: "—", people: "2" },
   ],
   total: { hours: "8.3 h", cost: "$153" },
@@ -202,6 +204,9 @@ describe("Labor detail views", () => {
     fireEvent.click(screen.getByRole("button", { name: "Time clock" }))
     expect(container.querySelectorAll(".cu-bar")).toHaveLength(3)
     expect(screen.getByText("Clocked out late")).toBeTruthy()
+    // Late in is not a cost and a missed punch has no duration: neither is in the paid-for table.
+    expect(screen.queryByText("Clocked in late")).toBeNull()
+    expect(screen.queryByText("Missed clock-out")).toBeNull()
     expect(screen.getByText(/Paid for outside the schedule: 8.3 h, \$153/)).toBeTruthy()
   })
 })
