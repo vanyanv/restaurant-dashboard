@@ -35,7 +35,7 @@ import { deskRoutes } from "../fidelity/routes"
  */
 const ROUTES = deskRoutes()
 
-test("no console errors across every route", async ({ page }) => {
+test("no console errors across every route", { tag: "@real-data" }, async ({ page }) => {
   test.setTimeout(600_000)
   const found: string[] = []
   /*

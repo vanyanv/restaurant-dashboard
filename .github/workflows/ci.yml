@@ -150,7 +150,16 @@ jobs:
       - name: Browser tests (desktop + mobile)
         # github for inline annotations, html so the upload below has a report.
         # crew = the signed-out store checks page (e2e/crew), incl. no-signal ticks and photos.
-        run: npx playwright test --project=desktop --project=mobile --project=crew --trace off --reporter=github,html
+        #
+        # @real-data tests are left out here. The route sweeps walk the fidelity
+        # manifest, whose detail pages are production record ids (a store, an
+        # order, a recipe...), and the walkthroughs assert on recipes and menu
+        # profit the demo seed does not have. Against this database they could
+        # only fail, every time, and each one walks ~50 pages on a dev server:
+        # with two retries apiece the job ran past its 30 minutes and was
+        # cancelled on every run from 2026-11-18. Run them against a database
+        # that has the data: `npx playwright test --grep @real-data`.
+        run: npx playwright test --project=desktop --project=mobile --project=crew --grep-invert @real-data --trace off --reporter=github,html
       - name: Keep the report when something fails
         if: failure()
         uses: actions/upload-artifact@v4

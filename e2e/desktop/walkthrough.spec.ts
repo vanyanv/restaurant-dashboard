@@ -41,7 +41,7 @@ import { test, expect } from "../fixtures/test"
  */
 
 test.describe("recipes", () => {
-  test("@smoke recipes page renders its figures and opens a recipe", async ({
+  test("@smoke recipes page renders its figures and opens a recipe", { tag: "@real-data" }, async ({
     page,
   }) => {
     await page.goto("/dashboard/recipes")
@@ -58,7 +58,7 @@ test.describe("recipes", () => {
     await expect(recipeLink).toBeVisible({ timeout: 20_000 })
   })
 
-  test("a costed item shows a live server-side cost walk", async ({ page }) => {
+  test("a costed item shows a live server-side cost walk", { tag: "@real-data" }, async ({ page }) => {
     /*
      * The catalog detail page walks the cost on the SERVER, so a real dollar
      * figure here proves invoice → canonical cost → recipe cost end to end.
@@ -80,7 +80,7 @@ test.describe("recipes", () => {
 })
 
 test.describe("menu profit", () => {
-  test("@smoke menu-profit renders the figures, the matrix and the coverage", async ({
+  test("@smoke menu-profit renders the figures, the matrix and the coverage", { tag: "@real-data" }, async ({
     page,
   }) => {
     await page.goto("/dashboard/menu-profit?range=d30")
@@ -107,7 +107,7 @@ test.describe("menu profit", () => {
     })
   })
 
-  test("the per-item ledger lives on the Items view and has rows", async ({
+  test("the per-item ledger lives on the Items view and has rows", { tag: "@real-data" }, async ({
     page,
   }) => {
     // The ledger this describe block used to assert in place. It moved with

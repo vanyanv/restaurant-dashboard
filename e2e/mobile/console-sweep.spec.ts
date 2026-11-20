@@ -35,7 +35,7 @@ import { phoneRoutes } from "../fidelity/routes"
  */
 const ROUTES = phoneRoutes()
 
-test("no console errors across every route (phone)", async ({ page }) => {
+test("no console errors across every route (phone)", { tag: "@real-data" }, async ({ page }) => {
   test.setTimeout(600_000)
   const found: string[] = []
   /*

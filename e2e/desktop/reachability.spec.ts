@@ -82,7 +82,7 @@ const shapeOf = (href: string): string =>
     .join("/")
     .replace(/\/$/, "")
 
-test("every gated desk page is linked from somewhere", async ({ page }) => {
+test("every gated desk page is linked from somewhere", { tag: "@real-data" }, async ({ page }) => {
   test.setTimeout(900_000)
 
   const linked = new Set<string>()

@@ -80,8 +80,14 @@ export function ModalDialog({
         // A browser may still close it on a repeated Escape with no tap in
         // between. If the app still wants it open, tell the app, or reopen it
         // when it has no way to close (an upload in progress).
+        //
+        // The event is queued, so it can land after the dialog was opened
+        // again: React's development double-mount closes it in the unmount
+        // pass and reopens it in the next. A dialog that is open when its
+        // close event arrives was not closed by the browser; acting on the
+        // stale event used to shut every sheet the moment it opened.
         const d = e.currentTarget
-        if (!wantOpen.current) return
+        if (!wantOpen.current || d.open) return
         if (closeRef.current) closeRef.current()
         else if (typeof d.showModal === "function" && d.isConnected) d.showModal()
       }}
