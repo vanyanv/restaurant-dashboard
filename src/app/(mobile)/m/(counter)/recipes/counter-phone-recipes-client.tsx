@@ -5,6 +5,8 @@ import { phoneHref } from "@/lib/phone-routes"
 import { MList, MStrip, Section, useCounterTransition } from "@/components/counter"
 import type { RecipesSections } from "@/lib/counter/adapters/recipes"
 import type { SectionSources } from "@/lib/counter/adapters/types"
+import { Fold } from "@/components/counter/ui"
+import { RecipesPlainView } from "@/app/dashboard/(counter)/recipes/recipes-plain-ui"
 
 /**
  * Recipes, on a phone — `P.recipes.phone()`
@@ -46,6 +48,11 @@ export function CounterPhoneRecipesClient({
         </Section>
       </div>
 
+      <Section bare title="Recipes in a sentence" data={sections.plain} pending={pending}>
+        {(p) => <RecipesPlainView p={p} />}
+      </Section>
+
+      <Fold summary="Every recipe, as before">
       <Section bare title="The figures" data={sections.headline} pending={pending}>
         {(h) => <MStrip cells={h.phoneCells} />}
       </Section>
@@ -61,6 +68,7 @@ export function CounterPhoneRecipesClient({
           </Link>
         )}
       </Section>
+      </Fold>
     </>
   )
 }

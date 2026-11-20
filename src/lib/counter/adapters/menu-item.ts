@@ -9,6 +9,7 @@ import {
   commissionRateFor,
 } from "@/lib/counter/channel-mix"
 import { channelById, type ChannelId } from "@/lib/counter/channels"
+import { buildItemPlain, type ItemPlain } from "@/lib/counter/menu-item-plain"
 import { loadOrderFeeGroups, totalCommission } from "@/lib/counter/commission"
 import {
   discountShare,
@@ -160,6 +161,8 @@ export interface ItemBehind {
 }
 
 export interface MenuItemSections {
+  /** One plate made plain (`menu-item-plain.ts`): what it keeps, by channel. */
+  plain: SectionData<ItemPlain>
   headline: SectionData<ItemHeadline>
   series: SectionData<ItemSeries>
   channels: SectionData<ItemChannels>
@@ -201,6 +204,8 @@ interface ItemData {
   plateCost: number | null
   margin: number | null
   mapped: boolean
+  /** The mapped recipe, for the plain answer's link. */
+  recipeId: string | null
   recipeLines: number | null
   /**
    * `commission` is the marketplace's cut at this store's contract rate, or
@@ -427,6 +432,7 @@ async function loadItem(input: MenuItemInput): Promise<ItemData | null> {
     // Over what was COLLECTED: on a BOGO the rung-up revenue is twice the money.
     margin: econ?.marginPct ?? null,
     mapped: mapping !== null,
+    recipeId: mapping?.recipeId ?? null,
     recipeLines: null,
     byChannel: [...byChannel.entries()]
       .map(([channel, v]) => ({ channel, ...v }))
@@ -644,6 +650,22 @@ function channelsOf(d: ItemData): ItemChannels {
   }
 }
 
+function plainOf(d: ItemData): ItemPlain {
+  return buildItemPlain({
+    name: d.name,
+    qty: d.qty,
+    plateCost: d.plateCost,
+    dealRunning: d.dealRunning,
+    mapped: d.mapped,
+    unmappedModifiers: d.modifiers.filter((m) => !m.mapped).length,
+    channels: d.byChannel.map((c) => {
+      const meta = channelById(c.channel)
+      return { channel: meta.name, tint: meta.markVar, qty: c.qty, revenue: c.revenue, discount: c.discount, commission: c.commission }
+    }),
+    recipeHref: d.recipeId ? `/dashboard/recipes/${d.recipeId}` : null,
+  })
+}
+
 function behindOf(d: ItemData): ItemBehind {
   const rows: ItemBehindRow[] = [
     {
@@ -699,6 +721,7 @@ export function getMenuItemSectionPromises(
   )
 
   return {
+    plain: guardSection(dataP.then((sd) => mapReady(sd, plainOf)), "retryMenuItem"),
     headline: guardSection(dataP.then((sd) => mapReady(sd, headlineOf)), "retryMenuItem"),
     series: guardSection(dataP.then((sd) => mapReady(sd, seriesOf)), "retryMenuItem"),
     channels: guardSection(dataP.then((sd) => mapReady(sd, channelsOf)), "retryMenuItem"),

@@ -7,6 +7,8 @@ import { readCounterParams } from "@/lib/counter/url-state"
 import { rangeLabel } from "@/lib/counter/date-range"
 import type { MenuProfitSections } from "@/lib/counter/adapters/menu-profit"
 import type { SectionSources } from "@/lib/counter/adapters/types"
+import { Fold } from "@/components/counter/ui"
+import { ProfitPlainView } from "@/app/dashboard/(counter)/menu-profit/profit-plain-ui"
 
 /**
  * Menu profit, on a phone — `P.menu.phone()`
@@ -55,6 +57,11 @@ export function CounterPhoneMenuProfitClient({
         <p className="msub">{windowLabel}</p>
       </div>
 
+      <Section bare title="Menu profit in a sentence" data={sections.plain} pending={pending}>
+        {(p) => <ProfitPlainView p={p} />}
+      </Section>
+
+      <Fold summary="Every figure, as before">
       <Section bare title="The figures" data={sections.headline} pending={pending}>
         {(h) => <MStrip cells={h.phoneCells} />}
       </Section>
@@ -76,6 +83,7 @@ export function CounterPhoneMenuProfitClient({
       >
         {(m) => <MList rows={m.phoneRows} />}
       </Section>
+      </Fold>
     </>
   )
 }

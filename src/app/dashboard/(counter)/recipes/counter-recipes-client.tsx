@@ -19,6 +19,8 @@ import { readCounterParams, writeCounterParams } from "@/lib/counter/url-state"
 import { createRecipe } from "@/lib/counter/actions/recipe"
 import type { SectionSources } from "@/lib/counter/adapters/types"
 import type { RecipesSections } from "@/lib/counter/adapters/recipes"
+import { Fold } from "@/components/counter/ui"
+import { RecipesPlainView } from "./recipes-plain-ui"
 
 /**
  * Recipes, composed from `P.recipes.desk()`
@@ -104,6 +106,11 @@ export function CounterRecipesClient({
         />
       </PageHead>
 
+      <Section bare title="Recipes in a sentence" data={sections.plain} pending={pending}>
+        {(p) => <RecipesPlainView p={p} add={<NewRecipe categories={p.categories} />} />}
+      </Section>
+
+      <Fold summary="Every recipe as a table, as before">
       <Section bare title="The figures" data={sections.headline} pending={pending}>
         {(h) => <Strip cells={h.cells} />}
       </Section>
@@ -118,7 +125,6 @@ export function CounterRecipesClient({
       >
         {(c) => (
           <>
-            <NewRecipe categories={c.categories} />
             <Table columns={CATALOGUE_COLUMNS} rows={c.rows} />
             {/* No `.sec__body` — a table section emits the table alone, so the
                 note carries the body's own inset via `<Note flush>`. */}
@@ -157,6 +163,7 @@ export function CounterRecipesClient({
           )}
         </Section>
       </div>
+      </Fold>
     </>
   )
 }
@@ -191,7 +198,7 @@ function NewRecipe({ categories }: { categories: string[] }) {
     start(async () => {
       const result = await createRecipe({ itemName: name, category })
       if (result.ok && result.recipeId) {
-        router.push(`/dashboard/recipes/${result.recipeId}`)
+        router.push(`/dashboard/recipes/${result.recipeId}?new=1`)
         return
       }
       setError(result.error ?? "Could not create that recipe.")

@@ -11,6 +11,8 @@ import {
 } from "@/components/counter"
 import type { SectionSources } from "@/lib/counter/adapters/types"
 import type { RecipeSections } from "@/lib/counter/adapters/recipe"
+import { Fold } from "@/components/counter/ui"
+import { RecipePlainView } from "@/app/dashboard/(counter)/recipes/[id]/recipe-plain-ui"
 
 /**
  * One recipe, on a phone — `P.recipe.phone()`
@@ -43,6 +45,11 @@ export function CounterPhoneRecipeClient({
         )}
       </Section>
 
+      <Section bare title="The recipe in a sentence" data={sections.plain} pending={pending}>
+        {(p) => <RecipePlainView p={p} editHref={`/m/recipes/${p.recipeId}/edit`} />}
+      </Section>
+
+      <Fold summary="Every line and figure, as before">
       <Section bare title="The figures" data={sections.head} pending={pending}>
         {(h) => <MStrip cells={h.phoneCells} />}
       </Section>
@@ -89,6 +96,7 @@ export function CounterPhoneRecipeClient({
           </Link>
         )}
       </Section>
+      </Fold>
     </>
   )
 }

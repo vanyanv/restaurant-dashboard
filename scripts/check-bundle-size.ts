@@ -88,7 +88,12 @@ const BUDGETS: BudgetRule[] = [
     // 8-week row, week numbers, phone arrows, range naming) is in the phone
     // shell on every route and added ~10 KB; /m/recipes/[id]/edit went 668 ->
     // 678. Pure UI and date arithmetic, no new dependency.
-    uncompressedBytes: 700_000,
+    // 700 -> 710 KB on 2026-11-19: main already had /m/recipes/[id]/edit at
+    // 682.7 KB, 0.9 KB under. The Menu and Recipes plain pages put the editor
+    // in a Fold (opened on this page) and add an `editing` branch, +1.5 KB to
+    // 684.2. The plain answer itself is loaded on its own and never on this
+    // page. Pure UI, no new dependency.
+    uncompressedBytes: 710_000,
   },
   {
     label: "dashboard chat (AI SDK)",
