@@ -113,8 +113,11 @@ function MTab({ tab, on, qs }: { tab: PhoneTab; on: boolean; qs: string }) {
   }
 
   return (
+    // `aria-current` is the only active marker: the plate, stroke and bold
+    // label in `counter-components.css` key on it, so what a reader sees and
+    // what a screen reader hears come from the same attribute.
     <Link
-      className={`mtab${on ? " on" : ""}`}
+      className="mtab"
       href={href}
       aria-current={on ? "page" : undefined}
     >
