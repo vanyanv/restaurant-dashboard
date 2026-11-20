@@ -27,23 +27,19 @@ function openPicker() {
 }
 
 describe("phone sheet keyboard behavior", () => {
-  it("moves focus inside, contains Tab in both directions, and makes the background inert", () => {
-    const { first, last } = openPicker()
-    expect(document.activeElement).toBe(first)
-    expect(screen.getByRole("button", { name: "Background action" }).inert).toBe(true)
-    fireEvent.keyDown(first, { key: "Tab", shiftKey: true })
-    expect(document.activeElement).toBe(last)
-    fireEvent.keyDown(last, { key: "Tab" })
+  it("opens as a native modal dialog and moves focus inside", () => {
+    // Tab containment and the inert page behind are the browser's, from showModal().
+    const { first, dialog } = openPicker()
+    expect(dialog.tagName).toBe("DIALOG")
+    expect((dialog as HTMLDialogElement).open).toBe(true)
     expect(document.activeElement).toBe(first)
   })
-  it("restores the trigger and background on Escape", () => {
+  it("closes and restores the trigger on Escape", () => {
     const { trigger, last, dialog } = openPicker()
     last.focus()
     fireEvent.keyDown(last, { key: "Escape" })
     expect(document.activeElement).toBe(trigger)
-    expect(dialog.getAttribute("aria-hidden")).toBe("true")
-    expect(dialog.hasAttribute("inert")).toBe(true)
-    expect(screen.getByRole("button", { name: "Background action" }).inert).toBeFalsy()
+    expect((dialog as HTMLDialogElement).open).toBe(false)
   })
   it("does not reset focus on a rerender, and returns focus after choosing", () => {
     const { trigger, first, last } = openPicker()

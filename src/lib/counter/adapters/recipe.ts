@@ -219,7 +219,25 @@ export interface RecipeTrend {
   note: string
 }
 
+/** One recipe made plain (owner's go, 2026-11-19; mock screen 8). */
+export interface RecipePlain {
+  name: string
+  confirmed: boolean
+  sentence: string
+  big: { label: string; value: string; sub: string }
+  vs: { change: string; tone: "up" | "down" | "flat"; against: string } | null
+  /** Costliest line first. */
+  lines: Array<{ key: string; label: string; value: string; missing: boolean }>
+  /** Lines past the ones shown, folded into one row. */
+  rest: { n: number; value: string } | null
+  total: string
+  statuses: Array<{ tone: "good" | "warn" | "bad"; text: string }>
+  recipeId: string
+}
+
 export interface RecipeSections {
+  /** The recipe made plain: what one costs, what it sells for, and its biggest line. */
+  plain: SectionData<RecipePlain>
   head: SectionData<RecipeHead>
   builder: SectionData<RecipeBuilder>
   cost: SectionData<RecipeCost>
@@ -1023,6 +1041,91 @@ export async function getRecipeName(
 
 /* -- assembly --------------------------------------------------------- */
 
+/** Lines the plain view names before it folds the rest into one. */
+const PLAIN_LINES = 4
+
+const qty = (n: number) => `${Number(n.toFixed(2))}`
+
+export function plainOf(d: Loaded): RecipePlain {
+  const zero = d.emptyWalk && Math.abs(d.totalCost) < 0.005
+  const margin = marginOf(d)
+  const missing = d.lines.filter((l) => l.missingCost)
+  // Lines are priced for the whole batch; a serving takes its share, so every
+  // figure here is per serving like the total beside it. Yield 1 is unchanged.
+  const per = d.servingSize > 1 ? 1 / d.servingSize : 1
+  const ranked = [...d.lines]
+    .map((l) => ({ ...l, quantity: l.quantity * per, lineCost: l.lineCost * per }))
+    .sort((a, b) => b.lineCost - a.lineCost)
+  const top = ranked.find((l) => !l.missingCost && l.lineCost > 0) ?? null
+
+  const parts: string[] = []
+  if (zero) {
+    parts.push(
+      d.hasLines
+        ? "One costs $0 today because no line on it has a price, so its food cost isn't counted."
+        : "One costs $0 today because it has no ingredient lines, so its food cost isn't counted.",
+    )
+  } else {
+    let s = `One costs ${missing.length > 0 && !d.overrideApplied ? "at least " : ""}${unitCost(d.totalCost)} today`
+    if (d.price !== null && margin !== null) {
+      s += `. Over ${d.rangeLabel} it sold for ${unitCost(d.price)} and kept ${pct(margin, { scaled: true })} after the food cost booked then` +
+        (d.bookedPlate != null ? ` (${unitCost(d.bookedPlate)} a plate).` : ".")
+    } else {
+      s += d.soldQty === 0 ? `. It did not sell over ${d.rangeLabel}.` : "."
+    }
+    parts.push(s)
+    if (top && d.lines.length > 1) parts.push(`${titleCase(top.name)} is ${unitCost(top.lineCost)} of it.`)
+    if (missing.length > 0 && d.hasLines) {
+      parts.push(`${count(missing.length)} ${missing.length === 1 ? "line has" : "lines have"} no price yet.`)
+    }
+  }
+
+  // The booked plate cost, first costed day against the last, over the trend's window.
+  const usable = d.trend.filter((t) => !t.partial && t.cost !== null)
+  let vs: RecipePlain["vs"] = null
+  if (usable.length >= 2) {
+    const first = usable[0]
+    const change = (usable[usable.length - 1].cost ?? 0) - (first.cost ?? 0)
+    const flat = Math.abs(change) < 0.005
+    vs = {
+      change: flat ? "flat" : `${change > 0 ? "▲" : "▼"} ${unitCost(Math.abs(change))}`,
+      // Cost going up is the bad direction.
+      tone: flat ? "flat" : change > 0 ? "down" : "up",
+      against: `booked plate vs ${D(first.date)}`,
+    }
+  }
+
+  const shown = ranked.slice(0, PLAIN_LINES)
+  const rest = ranked.slice(PLAIN_LINES)
+  const statuses: RecipePlain["statuses"] = []
+  if (zero) statuses.push({ tone: "bad", text: "Costs $0" })
+  else if (missing.length > 0) statuses.push({ tone: "bad", text: `${count(missing.length)} unpriced` })
+  else if (d.lines.length > 0) statuses.push({ tone: "good", text: "Every line priced" })
+  statuses.push(d.isConfirmed ? { tone: "good", text: "Confirmed" } : { tone: "warn", text: "Not confirmed" })
+
+  return {
+    name: d.name,
+    confirmed: d.isConfirmed,
+    sentence: parts.join(" "),
+    big: {
+      label: "Cost per serving, today",
+      value: zero ? "$0.00" : unitCost(d.totalCost),
+      sub: d.overrideApplied ? "a set figure stands in for unpriced lines" : `${count(d.lines.length)} ${d.lines.length === 1 ? "line" : "lines"}`,
+    },
+    vs,
+    lines: shown.map((l, i) => ({
+      key: `${l.refId}-${i}`,
+      label: `${titleCase(l.name)} · ${qty(l.quantity)} ${l.unit}`,
+      value: l.missingCost ? "no price" : unitCost(l.lineCost),
+      missing: l.missingCost,
+    })),
+    rest: rest.length > 0 ? { n: rest.length, value: unitCost(rest.reduce((t, l) => t + l.lineCost, 0)) } : null,
+    total: zero ? "$0.00" : unitCost(d.totalCost),
+    statuses,
+    recipeId: d.id,
+  }
+}
+
 export function getRecipeSectionPromises(input: RecipeInput): StreamedSections<RecipeSections> {
   const dataP = classify(() => loadRecipe(input), {
     retryAction: "retryRecipe",
@@ -1037,6 +1140,7 @@ export function getRecipeSectionPromises(input: RecipeInput): StreamedSections<R
     )
 
   return {
+    plain: s(plainOf),
     head: s(headOf),
     builder: s((d) => builderOf(d, input.today)),
     cost: s(costOf),

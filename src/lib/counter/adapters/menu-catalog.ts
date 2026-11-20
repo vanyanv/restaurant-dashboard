@@ -5,6 +5,7 @@ import { unitsSold } from "@/lib/inventory/usage-math"
 import { count, money, pct } from "@/lib/counter/format"
 import { toQueryBounds, type DateRange } from "@/lib/counter/date-range"
 import { getItemEconomics, type ItemEconomics } from "@/lib/counter/item-economics"
+import { buildCatalogPlain, type CatalogPlain } from "@/lib/counter/catalog-plain"
 import {
   awaitSections,
   classify,
@@ -184,6 +185,8 @@ export interface CatalogProposals {
 }
 
 export interface MenuCatalogSections {
+  /** The page made plain (`catalog-plain.ts`): what to link, one tap each. */
+  plain: SectionData<CatalogPlain>
   headline: SectionData<CatalogHeadline>
   list: SectionData<CatalogList>
   gaps: SectionData<CatalogGaps>
@@ -640,7 +643,19 @@ export function getMenuCatalogSectionPromises(
     emptyReason: "no_match",
   })
 
+  // One read of the proposal queue, shared by the review panel and the plain answer.
+  const proposalsRowsP = classify(() => listMappingProposals(), { retryAction: "retryMenuCatalog" })
+
   return {
+    plain: guardSection(
+      Promise.all([dataP, proposalsRowsP]).then(([sd, pd]) =>
+        mapReady(sd, (d) => {
+          const rows = dataOf(pd)
+          return buildCatalogPlain(listOf(d), rows ? proposalsOf(rows, listOf(d).unmappedItems) : null)
+        }),
+      ),
+      "retryMenuCatalog",
+    ),
     headline: guardSection(
       dataP.then((sd) => mapReady(sd, headlineOf)),
       "retryMenuCatalog",
@@ -664,10 +679,7 @@ export function getMenuCatalogSectionPromises(
      * its review panel, not its catalogue.
      */
     proposals: guardSection(
-      Promise.all([
-        classify(() => listMappingProposals(), { retryAction: "retryMenuCatalog" }),
-        dataP,
-      ]).then(([pd, sd]) =>
+      Promise.all([proposalsRowsP, dataP]).then(([pd, sd]) =>
         mapReady(pd, (rows) => proposalsOf(rows, unmappedItemCount(sd))),
       ),
       "retryMenuCatalog",

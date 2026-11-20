@@ -22,6 +22,8 @@ import {
   type SwitchableStore,
   SubNav,
 } from "@/components/counter"
+import { Fold } from "@/components/counter/ui"
+import { CatalogPlainView } from "./catalog-plain-ui"
 import { MENU_TABS } from "@/lib/counter/nav"
 import { useUrlParam, useUrlFlag } from "@/components/counter/keep/use-url-param"
 import { readCounterParams, writeCounterParams } from "@/lib/counter/url-state"
@@ -322,6 +324,14 @@ export function CounterCatalogClient({
           links to; `.seg` is not a fidelity landmark, so it changes no count. */}
       <SubNav items={MENU_TABS} label="Menu" />
 
+      {/* Made plain (owner's go, 2026-11-19; mock
+          https://claude.ai/artifact/YNwJ7EneNdAaC7vDp4HhBe): the links first,
+          one tap each. The page as it was is folded below, unchanged. */}
+      <Section bare title="The catalog in a sentence" data={sections.plain} pending={pending}>
+        {(p) => <CatalogPlainView p={p} />}
+      </Section>
+
+      <Fold summary="The whole catalog, proposals and categories, as before">
       <Section bare title="The figures" data={sections.headline} pending={pending}>
         {(h) => <Strip cells={h.cells} />}
       </Section>
@@ -394,6 +404,7 @@ export function CounterCatalogClient({
       >
         {(p) => <Proposals data={p} />}
       </Section>
+      </Fold>
     </>
   )
 }

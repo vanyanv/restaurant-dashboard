@@ -8,6 +8,8 @@ import { readCounterParams } from "@/lib/counter/url-state"
 import { rangeLabel } from "@/lib/counter/date-range"
 import type { MenuCatalogSections } from "@/lib/counter/adapters/menu-catalog"
 import type { SectionSources } from "@/lib/counter/adapters/types"
+import { Fold } from "@/components/counter/ui"
+import { CatalogPlainView } from "@/app/dashboard/(counter)/menu/catalog/catalog-plain-ui"
 
 /**
  * The menu catalog, on a phone — `P.catalog.phone()`
@@ -54,6 +56,11 @@ export function CounterPhoneCatalogClient({
         <p className="msub">{windowLabel}</p>
       </div>
 
+      <Section bare title="The catalog in a sentence" data={sections.plain} pending={pending}>
+        {(p) => <CatalogPlainView p={p} />}
+      </Section>
+
+      <Fold summary="Every figure, as before">
       <Section bare title="The figures" data={sections.headline} pending={pending}>
         {(h) => <MStrip cells={h.phoneCells} />}
       </Section>
@@ -81,6 +88,7 @@ export function CounterPhoneCatalogClient({
       <Link className="mbtn mbtn--primary" href="/m/recipes">
         Map the modifiers
       </Link>
+      </Fold>
     </>
   )
 }

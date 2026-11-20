@@ -10,6 +10,7 @@ import { MENU_PRESETS, type PresetId, type RangeId } from "@/lib/counter/date-ra
 import { NAV_ICONS } from "@/components/counter/shell/nav-icons"
 import { AskGlyph } from "@/components/counter/surface/ask-glyph"
 import { AskAnswerPane } from "@/components/counter/ask/ask-answer"
+import { ModalDialog } from "@/components/counter/modal-dialog"
 import { askQuestion, type AskState } from "@/lib/counter/ask-state"
 import type { SwitchableStore } from "@/components/counter/shell/store-switcher"
 
@@ -18,8 +19,8 @@ import type { SwitchableStore } from "@/components/counter/shell/store-switcher"
  * `docs/counter/counter-prototype.html`, emitted class-for-class:
  *
  * ```
- * .cmdkwrap[data-cmdk][hidden]
- *   .cmdk[role=dialog][aria-modal][aria-label="Ask, or jump to anything"]
+ * dialog.cmdkwrap[data-cmdk][aria-label="Ask, or jump to anything"]   (native modal, see ModalDialog)
+ *   .cmdk
  *     .cmdk__in    {ask glyph}<input data-cmdq>
  *     .cmdk__ctx   Asking about <b>{page}</b><span>{store} · {range}</span>
  *     .cmdk__mid
@@ -40,6 +41,11 @@ import type { SwitchableStore } from "@/components/counter/shell/store-switcher"
  * ---------------------------------------------------------------------------
  * WHY THIS PORTALS TO `document.body`, WITH THE MEASUREMENTS
  * ---------------------------------------------------------------------------
+ *
+ * UPDATE 2026-11-19: the wrap is now a native modal `<dialog>` (ModalDialog)
+ * and `position: fixed`. A modal dialog lives in the browser's top layer, whose
+ * containing block is always the viewport, so none of the containing-block
+ * hazards below can catch it any more. The history is kept for context.
  *
  * `.cmdkwrap` is `position: absolute; inset: 0` (counter-components.css:1231)
  * — NOT `fixed`. In the prototype it is a child of `.frame`, which is
@@ -591,21 +597,15 @@ export function AskSurface({
     }
   }, [close, openSurface])
 
-  // Escape, the arrows, Enter and the Tab trap — only wired while open, same
-  // pattern as DateControl's and StoreSwitcher's own popovers.
+  // The arrows and Enter, only wired while open. Escape, the Tab trap and the
+  // inert page behind are the native modal <dialog>'s (ModalDialog).
   useEffect(() => {
     if (!open) return
     function onKeyDown(e: KeyboardEvent) {
-      if (e.key === "Escape") {
-        e.preventDefault()
-        close()
-        return
-      }
       // `cmdkOpen`'s own guard: `if (!w.querySelector('[data-cmdans]').hidden)
       // return`. The list is hidden behind the pane, so there is no row to
       // mark and Enter would re-ask the question that is already answered.
-      // Tab keeps working — a modal that lets Tab walk out is not modal.
-      if (answering && e.key !== "Tab") return
+      if (answering) return
       if (e.key === "ArrowDown") {
         e.preventDefault()
         setActive((i) => i + 1)
@@ -624,32 +624,10 @@ export function AskSurface({
         wrapRef.current?.querySelector<HTMLElement>(".cmdk__row.on")?.click()
         return
       }
-      if (e.key === "Tab") {
-        // A modal that lets Tab walk out onto the page behind it is not modal.
-        const dialog = wrapRef.current?.querySelector<HTMLElement>(".cmdk")
-        if (!dialog) return
-        // `hidden` is how this palette filters, so a hidden row is out of the
-        // tab order too. Tested against the ATTRIBUTE rather than
-        // `offsetParent`, which jsdom reports null for on every element.
-        const focusable = Array.from(
-          dialog.querySelectorAll<HTMLElement>("input, button, a[href]"),
-        ).filter((el) => !el.hidden && el.closest("[hidden]") === null)
-        if (focusable.length === 0) return
-        const first = focusable[0]
-        const last = focusable[focusable.length - 1]
-        const current = document.activeElement
-        if (e.shiftKey && (current === first || !dialog.contains(current))) {
-          e.preventDefault()
-          last.focus()
-        } else if (!e.shiftKey && (current === last || !dialog.contains(current))) {
-          e.preventDefault()
-          first.focus()
-        }
-      }
     }
     document.addEventListener("keydown", onKeyDown)
     return () => document.removeEventListener("keydown", onKeyDown)
-  }, [open, close, answering])
+  }, [open, answering])
 
   useEffect(() => {
     if (open) inputRef.current?.focus()
@@ -669,16 +647,17 @@ export function AskSurface({
   /* ---------------------------------------------------------------- DOM */
 
   return createPortal(
-    <div
-      ref={wrapRef}
+    <ModalDialog
+      open={open}
+      onClose={close}
       className="ct-root cmdkwrap"
       data-cmdk
-      hidden={!open}
+      aria-label="Ask, or jump to anything"
       onClick={(e) => {
         if (e.target === e.currentTarget) close()
       }}
     >
-      <div className="cmdk" role="dialog" aria-modal="true" aria-label="Ask, or jump to anything">
+      <div ref={wrapRef} className="cmdk">
         <div className="cmdk__in">
           <AskGlyph />
           <input
@@ -790,7 +769,7 @@ export function AskSurface({
           <span style={{ marginLeft: "auto" }}>Reading {context.range}</span>
         </div>
       </div>
-    </div>,
+    </ModalDialog>,
     host,
   )
 }

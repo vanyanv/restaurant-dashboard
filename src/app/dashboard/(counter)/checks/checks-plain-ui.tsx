@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useState, type ReactNode, useEffectEvent } from "react"
+import { ModalDialog } from "@/components/counter/modal-dialog"
 import { reviewCheckPhoto } from "@/lib/counter/actions/checks"
 import type { CellView } from "@/lib/counter/adapters/checks"
 import { actMarks, Answer, BigNumber, useAct, type Vs } from "@/components/counter/ui"
@@ -534,26 +535,19 @@ export function PhoneView({ title, onBack, children }: { title: string; onBack: 
   // onBack changes identity on every render; an effect event reads the latest
   // one without reopening the view.
   const back = useEffectEvent(onBack)
+  // A native modal <dialog> (ModalDialog) keeps the page behind inert and
+  // still, so <body> is no longer locked. Escape asks it to close, which goes
+  // through history like the Back button does.
   useEffect(() => {
-    const prev = document.body.style.overflow
-    document.body.style.overflow = "hidden"
     // A history entry of its own, so the system back closes the view.
     window.history.pushState({ ckView: true }, "")
     const onPop = () => back()
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") window.history.back()
-    }
     window.addEventListener("popstate", onPop)
-    window.addEventListener("keydown", onKey)
-    return () => {
-      document.body.style.overflow = prev
-      window.removeEventListener("popstate", onPop)
-      window.removeEventListener("keydown", onKey)
-    }
+    return () => window.removeEventListener("popstate", onPop)
     // Opened once per view.
   }, [])
   return (
-    <div className="ckp-view" role="dialog" aria-modal="true" aria-label={title}>
+    <ModalDialog className="ckp-view" aria-label={title} onClose={() => window.history.back()}>
       <div className="ckp-view__bar">
         <button type="button" className="ckp-back" onClick={() => window.history.back()}>
           ‹ Back
@@ -561,6 +555,6 @@ export function PhoneView({ title, onBack, children }: { title: string; onBack: 
         <span className="ck-mono">{title}</span>
       </div>
       <div className="ckp-view__body">{children}</div>
-    </div>
+    </ModalDialog>
   )
 }

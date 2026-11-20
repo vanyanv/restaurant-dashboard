@@ -4,6 +4,7 @@ import { useCallback, useEffect, useEffectEvent, useRef, useState } from "react"
 import { deletePhoto, loadPhotos, savePhoto } from "./offline-photos"
 import type { ActiveCheck, CrewItem, CrewMarkState, CrewView } from "@/lib/checks/crew"
 import { shortStoreName } from "@/lib/checks/names"
+import { ModalDialog } from "@/components/counter/modal-dialog"
 
 /**
  * The crew flow, one job per screen: store page -> PIN -> shared checklist ->
@@ -1155,7 +1156,7 @@ function TaskMenu({
   onCancel: () => void
 }) {
   return (
-    <div className="ckc__sheet" role="dialog" aria-modal="true" aria-label={title} onClick={onCancel}>
+    <ModalDialog className="ckc__sheet" aria-label={title} onClose={onCancel} onClick={onCancel}>
       <div onClick={(e) => e.stopPropagation()}>
         <h2>{title}</h2>
         {photo && (
@@ -1173,7 +1174,7 @@ function TaskMenu({
           {t.cancel}
         </button>
       </div>
-    </div>
+    </ModalDialog>
   )
 }
 
@@ -1215,7 +1216,7 @@ function PhotoSheet({
 }) {
   const [busy, setBusy] = useState(false)
   return (
-    <div className="ckc__sheet" role="dialog" aria-modal="true" aria-label={t.photoTitle} onClick={busy ? undefined : onCancel}>
+    <ModalDialog className="ckc__sheet" aria-label={t.photoTitle} onClose={busy ? undefined : onCancel} onClick={busy ? undefined : onCancel}>
       <div onClick={(e) => e.stopPropagation()}>
         <span className="ck-mono">{t.photoTitle}</span>
         <h2>{title}</h2>
@@ -1239,7 +1240,7 @@ function PhotoSheet({
           {t.retake}
         </button>
       </div>
-    </div>
+    </ModalDialog>
   )
 }
 
@@ -1262,7 +1263,7 @@ function DoneSheet({
   onPhoto?: () => void
 }) {
   return (
-    <div className="ckc__sheet" role="dialog" aria-modal="true" aria-label={t.doneSheetTitle} onClick={onKeep}>
+    <ModalDialog className="ckc__sheet" aria-label={t.doneSheetTitle} onClose={onKeep} onClick={onKeep}>
       <div onClick={(e) => e.stopPropagation()}>
         <h2>{t.doneSheetTitle}</h2>
         <b>{title}</b>
@@ -1290,7 +1291,7 @@ function DoneSheet({
           {t.undoWarn}
         </p>
       </div>
-    </div>
+    </ModalDialog>
   )
 }
 
@@ -1309,7 +1310,7 @@ function FlagSheet({
 }) {
   const [note, setNote] = useState(current)
   return (
-    <div className="ckc__sheet" role="dialog" aria-modal="true" aria-label={t.flagTitle} onClick={onCancel}>
+    <ModalDialog className="ckc__sheet" aria-label={t.flagTitle} onClose={onCancel} onClick={onCancel}>
       <div onClick={(e) => e.stopPropagation()}>
         <h2>{t.flagTitle}</h2>
         <p className="ckc__dim" style={{ margin: 0, fontSize: 13 }}>
@@ -1336,7 +1337,7 @@ function FlagSheet({
           </button>
         )}
       </div>
-    </div>
+    </ModalDialog>
   )
 }
 

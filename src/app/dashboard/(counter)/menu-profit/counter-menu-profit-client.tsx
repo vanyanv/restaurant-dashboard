@@ -24,6 +24,8 @@ import { readCounterParams, writeCounterParams } from "@/lib/counter/url-state"
 import { rangeLabel } from "@/lib/counter/date-range"
 import type { SectionSources } from "@/lib/counter/adapters/types"
 import type { CoverageSection, MenuProfitSections } from "@/lib/counter/adapters/menu-profit"
+import { Fold } from "@/components/counter/ui"
+import { ProfitPlainView } from "./profit-plain-ui"
 
 /**
  * Menu profit, composed from `P.menu.desk()`
@@ -168,6 +170,11 @@ export function CounterMenuProfitClient({
           links to; `.seg` is not a fidelity landmark, so it changes no count. */}
       <SubNav items={MENU_TABS} label="Menu" />
 
+      <Section bare title="Menu profit in a sentence" data={sections.plain} pending={pending}>
+        {(p) => <ProfitPlainView p={p} />}
+      </Section>
+
+      <Fold summary="The chart, groups, coverage and item ledger, as before">
       <Section bare title="The figures" data={sections.headline} pending={pending}>
         {(h) => <Strip cells={h.cells} />}
       </Section>
@@ -237,6 +244,7 @@ export function CounterMenuProfitClient({
           </>
         )}
       </Section>
+      </Fold>
     </>
   )
 }

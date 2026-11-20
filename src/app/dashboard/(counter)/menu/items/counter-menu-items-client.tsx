@@ -21,7 +21,9 @@ import { rangeLabel } from "@/lib/counter/date-range"
 import { count, pct } from "@/lib/counter/format"
 import type { SectionSources } from "@/lib/counter/adapters/types"
 import type { ItemGlyph, MenuItemsData, MenuItemsSections } from "@/lib/counter/adapters/menu-items"
-import { Tile, Tiles } from "@/components/counter/ui"
+import { Fold, Tile, Tiles } from "@/components/counter/ui"
+import { buildItemsPlain } from "@/lib/counter/menu-items-plain"
+import { ItemsPlainView } from "./items-plain-ui"
 
 /**
  * Menu items: the owner's menu as dishes. Tiles, then what needs the owner
@@ -113,7 +115,17 @@ export function CounterMenuItemsClient({
       <SubNav items={MENU_TABS.map((t) => ({ ...t, href: surface(t.href) }))} label="Menu" />
 
       <Section bare title="Menu items" data={sections.items} pending={pending}>
-        {(d) => <Body data={d} />}
+        {(d) => (
+          <>
+            {/* Made plain (owner's go, 2026-11-19; mock
+                https://claude.ai/artifact/YNwJ7EneNdAaC7vDp4HhBe). The page as
+                it was is folded below, unchanged. */}
+            <ItemsPlainView p={buildItemsPlain(d)} />
+            <Fold summary="Every dish as a table, as before">
+              <Body data={d} />
+            </Fold>
+          </>
+        )}
       </Section>
     </>
   )

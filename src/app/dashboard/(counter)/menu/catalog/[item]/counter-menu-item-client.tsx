@@ -21,6 +21,8 @@ import {
 import { readCounterParams, writeCounterParams } from "@/lib/counter/url-state"
 import { dataOf } from "@/lib/counter/section-data"
 import type { SectionSources } from "@/lib/counter/adapters/types"
+import { Fold } from "@/components/counter/ui"
+import { ItemPlainView } from "./item-plain-ui"
 import { mapItemToRecipe } from "@/lib/counter/actions/menu-item"
 import type { ItemBehind, MenuItemSections } from "@/lib/counter/adapters/menu-item"
 
@@ -216,6 +218,14 @@ export function CounterMenuItemClient({
         />
       </PageHead>
 
+      {/* Made plain (owner's go, 2026-11-19; mock
+          https://claude.ai/artifact/YNwJ7EneNdAaC7vDp4HhBe): what one plate
+          keeps, by channel. The page as it was is folded below, unchanged. */}
+      <Section bare title="This item in a sentence" data={sections.plain} pending={pending}>
+        {(p) => <ItemPlainView p={p} />}
+      </Section>
+
+      <Fold summary="Every figure, units and channels, as before">
       <Section bare title="The figures" data={sections.headline} pending={pending}>
         {(h) => <Strip cells={h.cells} />}
       </Section>
@@ -283,6 +293,7 @@ export function CounterMenuItemClient({
           {(b) => <Behind b={b} />}
         </Section>
       </div>
+      </Fold>
     </>
   )
 }

@@ -45,6 +45,7 @@ export default async function MobileMenuPage({
       range: counterParams.range,
       storeId: counterParams.storeId,
       accountId: session.user.accountId,
+      comparisonId: counterParams.comparisonId,
     },
     rangeLabel(counterParams.range, counterParams.presetId),
   )

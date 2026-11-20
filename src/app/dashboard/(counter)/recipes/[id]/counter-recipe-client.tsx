@@ -33,6 +33,7 @@ import {
 } from "@/lib/counter/actions/recipe"
 import type { SectionSources } from "@/lib/counter/adapters/types"
 import { DishPhoto } from "./dish-photo"
+import { Fold } from "@/components/counter/ui/fold"
 import { ingredientPhoto } from "@/lib/counter/ingredient-photos"
 import { photoFrame } from "@/lib/counter/menu-photos"
 import type {
@@ -51,6 +52,15 @@ import { useLeaveGuard } from "@/components/counter/keep/use-leave-guard"
  * (`/m/recipes/[id]/edit`) inside the phone bundle budget.
  */
 const Chart = dynamic(() => import("@/components/counter/surface/chart").then((m) => m.Chart), {
+  loading: () => null,
+})
+
+/**
+ * The plain answer at the top. Loaded on its own so the phone edit page,
+ * which renders this client with `editing` and never shows it, stays inside
+ * the phone bundle budget. Server rendering stays on.
+ */
+const RecipePlainView = dynamic(() => import("./recipe-plain-ui").then((m) => m.RecipePlainView), {
   loading: () => null,
 })
 
@@ -186,12 +196,15 @@ export function CounterRecipeClient({
   today,
   title,
   sections,
+  editing = false,
 }: {
   params: string
   stores: SwitchableStore[]
   today: Date
   title: string
   sections: CounterRecipeSections
+  /** The phone's edit page: no plain answer, the editor open. */
+  editing?: boolean
 }) {
   const surface = useSurfaceHref()
   const router = useRouter()
@@ -328,6 +341,14 @@ export function CounterRecipeClient({
         />
       </PageHead>
 
+      {editing ? null : (
+        <Section bare title="The recipe in a sentence" data={sections.plain} pending={pending}>
+          {(p) => <RecipePlainView p={p} editFold="recipe-editor" />}
+        </Section>
+      )}
+
+      {/* A recipe just started opens on its editor: there is nothing to read yet. */}
+      <Fold id="recipe-editor" summary="Edit lines, batch, notes and photo" defaultOpen={editing || params.get("new") === "1"}>
       <DishPhoto name={title} justCreated={params.get("new") === "1"} warn={params.get("warn")} />
 
       <Section bare title="The figures" data={sections.head} pending={pending}>
@@ -538,6 +559,7 @@ export function CounterRecipeClient({
           </>
         )}
       </Section>
+      </Fold>
     </>
   )
 }

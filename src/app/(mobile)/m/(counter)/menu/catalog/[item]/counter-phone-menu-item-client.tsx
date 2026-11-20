@@ -2,6 +2,8 @@
 
 import Link from "next/link"
 import { MList, MStrip, Section, useCounterTransition } from "@/components/counter"
+import { Fold } from "@/components/counter/ui"
+import { ItemPlainView } from "@/app/dashboard/(counter)/menu/catalog/[item]/item-plain-ui"
 import { dataOf } from "@/lib/counter/section-data"
 import type { MenuItemSections } from "@/lib/counter/adapters/menu-item"
 
@@ -30,6 +32,11 @@ export function CounterPhoneMenuItemClient({
         <p className="msub">{head?.sub ?? ""}</p>
       </div>
 
+      <Section bare title="This item in a sentence" data={sections.plain} pending={pending}>
+        {(p) => <ItemPlainView p={p} />}
+      </Section>
+
+      <Fold summary="Every figure, as before">
       <Section bare title="The figures" data={sections.headline} pending={pending}>
         {(h) => <MStrip cells={h.phoneCells} />}
       </Section>
@@ -46,6 +53,7 @@ export function CounterPhoneMenuItemClient({
       <Link className="mbtn mbtn--primary" href="/m/recipes">
         Open the recipe
       </Link>
+      </Fold>
     </>
   )
 }
