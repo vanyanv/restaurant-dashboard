@@ -451,7 +451,11 @@ own motion, so a page built from them gets it with no page code:
   in place, with the card's old press as one button inside. `useDragReorder`
   + `Grip` drag a row to a new place: the others step aside with transforms
   and the list is reordered once, on the drop; arrow keys on the grip move
-  it one place. Do not install registry components for these: they bring
+  it one place. On a phone-width container a tab is 44px tall in body-size
+  words; a row with more tabs than fit scrolls with no scrollbar, fades at
+  the side that has more, and brings the picked tab to the middle; under
+  `.ct-phone` a `PageTabs` row is sticky, and a pick made while it is stuck
+  starts the new panel at its top. Do not install registry components for these: they bring
   `motion` and their own colours (rule 5 below, and `npm run tokens`).
 
 ### Motion rules (owner, 2026-11-19)

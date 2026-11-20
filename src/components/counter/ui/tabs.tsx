@@ -31,25 +31,47 @@ export function Tabs({
   label: string
 }) {
   const track = useRef<HTMLDivElement>(null)
+  const placed = useRef(false)
   useLayoutEffect(() => {
     const el = track.current
     if (!el) return
-    const place = () => {
+    // Which sides have tabs out of view, so the row can fade that edge: on a
+    // phone a long row scrolls sideways and nothing else says there is more.
+    const edges = () => {
+      const more = el.scrollWidth - el.clientWidth
+      const start = el.scrollLeft > 4
+      const end = el.scrollLeft < more - 4
+      if (start || end) el.dataset.more = start && end ? "both" : start ? "start" : "end"
+      else delete el.dataset.more
+    }
+    const place = (bring: "smooth" | "auto" | null) => {
       const on = el.querySelector<HTMLElement>('.cu-tab[aria-pressed="true"],.cu-tab[aria-current="page"]')
       if (!on) {
         delete el.dataset.pill
+        edges()
         return
       }
       el.style.setProperty("--cu-pill-x", `${on.offsetLeft}px`)
       el.style.setProperty("--cu-pill-w", `${on.offsetWidth}px`)
       el.dataset.pill = "on"
+      // Bring the picked tab to the middle of a row that scrolls, so a link
+      // that opens the last tab does not show a row with nothing picked.
+      if (bring && el.scrollWidth > el.clientWidth) {
+        const reduce = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches
+        el.scrollTo?.({ left: on.offsetLeft - (el.clientWidth - on.offsetWidth) / 2, behavior: reduce ? "auto" : bring })
+      }
+      edges()
     }
-    place()
+    place(placed.current ? "smooth" : "auto")
+    placed.current = true
+    el.addEventListener("scroll", edges, { passive: true })
     // The tabs change width with their container (they fill a phone's).
-    if (typeof ResizeObserver === "undefined") return
-    const ro = new ResizeObserver(place)
-    ro.observe(el)
-    return () => ro.disconnect()
+    const ro = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(() => place(null))
+    ro?.observe(el)
+    return () => {
+      el.removeEventListener("scroll", edges)
+      ro?.disconnect()
+    }
   }, [active, items])
   return (
     <div className="cu-tabs">

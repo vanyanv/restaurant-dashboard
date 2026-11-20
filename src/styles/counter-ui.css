@@ -195,7 +195,16 @@ a.cu-card:focus-visible,button.cu-card:focus-visible{outline:2px solid var(--acc
   transform:translateX(var(--cu-pill-x));transition:transform var(--ct-dur-rise) var(--ease);pointer-events:none}
 .cu-tabs__in[data-pill]>.cu-tabs__pill{display:block}
 .cu-tabs__in[data-pill]>.cu-tab[aria-pressed="true"],.cu-tabs__in[data-pill]>.cu-tab[aria-current="page"]{background:none;box-shadow:none}
-@container (max-width:520px){.cu-tabs__in{display:flex}.cu-tab{flex:1;text-align:center;padding:10px 12px}}
+/* On a phone-width container: a full 44px to press, body-size words, and no
+   scrollbar under a row that scrolls. A row with more tabs than fit fades at
+   the side that has more (data-more, set in tabs.tsx; a mask reads only
+   the alpha, so the ink token stands in for "opaque"). */
+.cu-tabs__in{scrollbar-width:none}
+.cu-tabs__in::-webkit-scrollbar{display:none}
+@container (max-width:520px){.cu-tabs__in{display:flex}.cu-tab{flex:1 0 auto;display:grid;place-items:center;min-height:44px;padding:0 10px;font-size:var(--t-body)}}
+.cu-tabs__in[data-more="end"]{mask-image:linear-gradient(to left,transparent,var(--ink) 36px)}
+.cu-tabs__in[data-more="start"]{mask-image:linear-gradient(to right,transparent,var(--ink) 36px)}
+.cu-tabs__in[data-more="both"]{mask-image:linear-gradient(to right,transparent,var(--ink) 36px,var(--ink) calc(100% - 36px),transparent)}
 /* PageTabs: a page split into tabs (DESIGN.md "Page layout"). The panel rises in on each switch. */
 .cu-pagetabs{display:grid;gap:16px;min-width:0}
 .cu-pagetabs__panel{display:grid;gap:16px;min-width:0;animation:ct-entry var(--ct-dur-rise) var(--ease) both}
@@ -206,6 +215,10 @@ a.cu-card:focus-visible,button.cu-card:focus-visible{outline:2px solid var(--acc
 @keyframes cu-from-right{from{opacity:0;transform:translateX(14px)}to{opacity:1;transform:none}}
 @keyframes cu-from-left{from{opacity:0;transform:translateX(-14px)}to{opacity:1;transform:none}}
 .cu-pagetabs{overflow-x:clip;overflow-clip-margin:3px}
+/* On the phone the tab row stays at the top while its panel scrolls under
+   it, so a long tab does not need scrolling back up to leave. The paper
+   behind it covers what passes underneath. */
+.ct-phone .cu-pagetabs>.cu-tabs{position:sticky;top:0;z-index:5;margin-block:-6px;padding-block:6px;background:var(--paper)}
 .cu-pagetabs__panel[data-dir="fwd"]{animation-name:cu-from-right}
 .cu-pagetabs__panel[data-dir="back"]{animation-name:cu-from-left}
 
