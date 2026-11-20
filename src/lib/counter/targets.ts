@@ -49,7 +49,7 @@ export interface StripTargets {
   ticket: Target
   /** `Store.targetCogsPct`, the one published reference in the schema. */
   foodCost: Target
-  /** No column. `Store.fixedMonthlyLabor` is a budget in dollars, not a percent of sales. */
+  /** `Store.targetLaborPct`, a percent of sales. `Store.fixedMonthlyLabor` is a budget in dollars and is not it. */
   labor: Target
   /** See the module note: prime's ceiling lives in `prime-cost.ts`, not here. */
   prime: Target
@@ -92,6 +92,9 @@ export async function loadStripTargets(
   const stores = await getScopedStores(accountId, storeId)
 
   const foodPlan = agreedTarget(stores.map((s) => s.targetCogsPct))
+  // Same rule as the food plan: one store answers for itself, and across
+  // stores there is a target only when the stores that have one agree.
+  const laborPlan = agreedTarget(stores.map((s) => s.targetLaborPct))
 
   return {
     orders: null,
@@ -100,7 +103,7 @@ export async function loadStripTargets(
     // the food-cost figure beside it is printed in. Lower is better.
     foodCost:
       foodPlan == null ? null : { kind: "target", value: foodPlan, better: "low" },
-    labor: null,
+    labor: laborPlan == null ? null : { kind: "target", value: laborPlan, better: "low" },
     prime: null,
     marketplaceFees: null,
   }

@@ -128,6 +128,8 @@ interface StoreRow {
   cleaning: number | null
   towels: number | null
   cogsTarget: number | null
+  /** `Store.targetLaborPct`, a percent. `null` = no target. */
+  laborTarget: number | null
   uber: number | null
   doordash: number | null
   uberPickup: number | null
@@ -206,6 +208,7 @@ const SELECT = {
   fixedMonthlyCleaning: true,
   fixedMonthlyTowels: true,
   targetCogsPct: true,
+  targetLaborPct: true,
   uberCommissionRate: true,
   doordashCommissionRate: true,
   uberPickupCommissionRate: true,
@@ -249,6 +252,7 @@ const shape = (s: {
   fixedMonthlyCleaning: number | null
   fixedMonthlyTowels: number | null
   targetCogsPct: number | null
+  targetLaborPct: number | null
   uberCommissionRate: number | null
   doordashCommissionRate: number | null
   uberPickupCommissionRate: number | null
@@ -268,6 +272,7 @@ const shape = (s: {
   cleaning: s.fixedMonthlyCleaning,
   towels: s.fixedMonthlyTowels,
   cogsTarget: s.targetCogsPct,
+  laborTarget: s.targetLaborPct,
   uber: s.uberCommissionRate,
   doordash: s.doordashCommissionRate,
   uberPickup: s.uberPickupCommissionRate,
@@ -608,6 +613,8 @@ export interface StoreFileEditable {
   stage: "pre_open" | "warming_up" | "ready"
   /** Stated, not offered: `updateStoreSchema` does not accept it. */
   cogsTarget: number | null
+  /** `Store.targetLaborPct`, a percent of sales. `null` = no target, nothing graded. */
+  laborTarget: number | null
   /**
    * Store checks paused for crew training: "Tue Nov 3, 2:15 pm", or null when
    * checks are running. Its own action (`setChecksPaused`), not part of Save.
@@ -800,6 +807,7 @@ export function getStoreFileSectionPromises(
       stage:
         store.stage === "warming_up" || store.stage === "ready" ? store.stage : "pre_open",
       cogsTarget: store.cogsTarget,
+      laborTarget: store.laborTarget,
       checksPausedSince: store.checksPausedAt
         ? `${dayLabel(todayLA(store.checksPausedAt))}, ${clockLabel(store.checksPausedAt)}`
         : null,
@@ -1096,6 +1104,7 @@ export function getStoreFileSectionPromises(
     targets: s((store) => ({
       rows: [
         pctRow("cogs", "COGS target", store.cogsTarget === null ? null : store.cogsTarget / 100),
+        pctRow("labor", "Labor target", store.laborTarget === null ? null : store.laborTarget / 100),
         {
           key: "prime",
           label: "Prime ceiling",

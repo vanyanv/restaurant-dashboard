@@ -54,8 +54,75 @@ describe("buildLaborSummary", () => {
     })
     expect(s.days[0]).toMatchObject({ dow: "Mon", date: "Nov 9", share: "32.0%", missing: false, detail: "$2,050 on $6,400 · 112 h" })
     expect(s.days[0].fill).toBeGreaterThan(s.dayMark as number)
-    expect(s.dayMarkLabel).toBe("28.0%")
+    expect(s.dayMarkLabel).toBe("the range, 28.0%")
     expect(s.dayNote).toContain("No labor target is on file")
+    expect(s.days[0]).toMatchObject({ graded: false, over: false })
+  })
+
+  it("grades whole, settled days against the labor target and leaves the rest ungraded", () => {
+    const s = buildLaborSummary({
+      days: [
+        day("2026-11-09", "Mon Nov 9", { laborPct: 32 }),
+        day("2026-11-10", "Tue Nov 10", { laborPct: 26 }),
+        day("2026-11-11", "Wed Nov 11", { laborPct: 28 }),
+        // Short of a store: its share is on part of the sales, so it is not graded.
+        day("2026-11-12", "Thu Nov 12", { laborPct: 40, costMissing: true, missingStoreDays: 1 }),
+        // Harri can still move it.
+        day("2026-11-13", "Fri Nov 13", { laborPct: 45 }),
+      ],
+      week: week({ laborPct: 30, provisionalDays: ["Fri Nov 13"] }),
+      roles: [],
+      storeShares: [],
+      target: 28,
+    })
+    expect(s.days.map((d) => [d.graded, d.over])).toEqual([
+      [true, true],
+      [true, false],
+      // Exactly on the target is not over it.
+      [true, false],
+      [false, false],
+      [false, false],
+    ])
+    expect(s.dayMarkLabel).toBe("the target, 28.0%")
+    expect(s.dayNote).toContain("The line on each bar is the labor target, 28.0%. 1 day was over it, of 3 settled days.")
+    expect(s.dayNote).not.toContain("No labor target")
+  })
+
+  it("holds each store to its own target, and never grades a store with incomplete labor", () => {
+    const s = buildLaborSummary({
+      days: [],
+      week: week(),
+      roles: [],
+      storeShares: [
+        { storeId: "h", name: "Hollywood", cost: 8000, ratedSales: 30000, laborPct: 26.7 },
+        { storeId: "v", name: "Van Nuys", cost: 7400, ratedSales: 24600, laborPct: 30.1 },
+        { storeId: "g", name: "Glendale", cost: 1000, ratedSales: 13000, laborPct: 7.7 },
+        { storeId: "x", name: "Fourth", cost: 3000, ratedSales: 10000, laborPct: 30 },
+      ],
+      incompleteStoreIds: ["g"],
+      target: null,
+      storeTargets: { h: 28, v: 28, g: 28, x: null },
+    })
+    expect(s.stores.map((c) => c.status.label)).toEqual([
+      "Within its 28.0% target",
+      "Over its 28.0% target",
+      "Labor looks incomplete",
+      "Labor on file",
+    ])
+    expect(s.stores[1].status.tone).toBe("warn")
+  })
+
+  it("says why the days are not graded when the stores have different targets", () => {
+    const s = buildLaborSummary({
+      days: [day("2026-11-09", "Mon Nov 9", { laborPct: 32 })],
+      week: week({ laborPct: 28 }),
+      roles: [],
+      storeShares: [],
+      target: null,
+      storeTargets: { h: 28, v: 30 },
+    })
+    expect(s.days[0].graded).toBe(false)
+    expect(s.dayNote).toContain("The stores do not share one labor target")
   })
 
   it("says missing for a day that sold with no labor, never 0%", () => {

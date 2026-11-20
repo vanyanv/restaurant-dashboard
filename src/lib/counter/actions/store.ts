@@ -1,7 +1,7 @@
 "use server"
 
 import { createStore, deleteStore, updateStore } from "@/app/actions/store-actions"
-import { setStoreTargetCogsPct } from "@/app/actions/cogs-actions"
+import { setStoreTargetCogsPct, setStoreTargetLaborPct } from "@/app/actions/cogs-actions"
 import {
   createStoreFixedExpense,
   deleteStoreFixedExpense,
@@ -205,6 +205,20 @@ export async function saveTargetCogsPct(
   targetCogsPct: number | null,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const result = await setStoreTargetCogsPct({ storeId, targetCogsPct })
+  if ("error" in result) return { ok: false, error: result.error }
+  return { ok: true }
+}
+
+/**
+ * The labor target: the percent of sales the Labor page grades each day and
+ * store against. Its own owner-gated action, like the food-cost target above.
+ * Null clears it, which means "no target", never "a target of zero".
+ */
+export async function saveTargetLaborPct(
+  storeId: string,
+  targetLaborPct: number | null,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const result = await setStoreTargetLaborPct({ storeId, targetLaborPct })
   if ("error" in result) return { ok: false, error: result.error }
   return { ok: true }
 }

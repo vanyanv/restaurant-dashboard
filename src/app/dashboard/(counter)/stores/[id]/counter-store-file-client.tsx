@@ -20,6 +20,7 @@ import {
   addFixedExpense,
   deactivateStore,
   saveTargetCogsPct,
+  saveTargetLaborPct,
   editFixedExpense,
   removeFixedExpense,
   saveStoreFile,
@@ -138,6 +139,10 @@ function StoreFileForm({
   const [target, setTarget] = useState(
     data.cogsTarget === null ? "" : String(data.cogsTarget),
   )
+  // The labor target, on the same footing: its own action, blank means none.
+  const [laborTarget, setLaborTarget] = useState(
+    data.laborTarget === null ? "" : String(data.laborTarget),
+  )
   const [saving, startSaving] = useTransition()
   // The outcome travels with the text — see the same note in Settings.
   const [said, setSaid] = useState<{ ok: boolean; text: string } | null>(null)
@@ -151,12 +156,14 @@ function StoreFileForm({
 
   useEffect(() => {
     setTarget(data.cogsTarget === null ? "" : String(data.cogsTarget))
-  }, [data.cogsTarget])
+    setLaborTarget(data.laborTarget === null ? "" : String(data.laborTarget))
+  }, [data.cogsTarget, data.laborTarget])
 
   // Ask before leaving with store settings typed but not saved.
   useLeaveGuard(
     JSON.stringify(form) !== JSON.stringify(formOf(data)) ||
-      target !== (data.cogsTarget === null ? "" : String(data.cogsTarget)),
+      target !== (data.cogsTarget === null ? "" : String(data.cogsTarget)) ||
+      laborTarget !== (data.laborTarget === null ? "" : String(data.laborTarget)),
   )
 
   function save() {
@@ -217,6 +224,20 @@ function StoreFileForm({
         const t = await saveTargetCogsPct(data.storeId, wanted)
         if (!t.ok) {
           setSaid({ ok: false, text: `Inputs saved, but the target did not: ${t.error}.` })
+          return
+        }
+      }
+      // The labor target, the same way: a third write on the one press.
+      const laborTrimmed = laborTarget.trim()
+      const laborWanted = laborTrimmed === "" ? null : Number(laborTrimmed)
+      if (laborWanted !== null && (!Number.isFinite(laborWanted) || laborWanted <= 0 || laborWanted > 100)) {
+        setSaid({ ok: false, text: "Inputs saved, but the labor target must be a percent above 0 and at most 100." })
+        return
+      }
+      if (laborWanted !== data.laborTarget) {
+        const t = await saveTargetLaborPct(data.storeId, laborWanted)
+        if (!t.ok) {
+          setSaid({ ok: false, text: `Inputs saved, but the labor target did not: ${t.error}.` })
           return
         }
       }
@@ -364,6 +385,24 @@ function StoreFileForm({
                 placeholder="No plan"
                 value={target}
                 onChange={(e) => setTarget(e.target.value)}
+              />
+            </div>
+            <div className="setrow">
+              <div className="tx">
+                <b>Labor target</b>
+                <span>Labor as a percent of sales. The Labor page grades each day and store against it. Blank means no target, not zero.</span>
+              </div>
+              <input
+                className="inp storefile__num"
+                type="number"
+                min="0"
+                max="100"
+                step="0.1"
+                inputMode="decimal"
+                aria-label="Labor target percent"
+                placeholder="No target"
+                value={laborTarget}
+                onChange={(e) => setLaborTarget(e.target.value)}
               />
             </div>
           </>

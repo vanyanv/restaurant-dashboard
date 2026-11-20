@@ -53,6 +53,10 @@ export interface LaborDayBar {
   missing: boolean
   /** Harri has not finalised this day yet. */
   provisional: boolean
+  /** A whole, settled day with a target to hold it against. */
+  graded: boolean
+  /** Graded, and its share is above the target. */
+  over: boolean
   /** "$2,050 on $6,400 · 112 h" */
   detail: string
   aria: string
@@ -76,9 +80,9 @@ export interface LaborRoleBar {
 
 export interface LaborSummary {
   days: LaborDayBar[]
-  /** Where the range's own share sits on the day track, 0..100; null with no share. */
+  /** Where the mark sits on the day track, 0..100: the labor target, or the range's own share with no target. */
   dayMark: number | null
-  /** "27.4%", the share the mark stands for. */
+  /** What the mark stands for, in words: "the target, 28.0%" or "the range, 27.4%". */
   dayMarkLabel: string | null
   dayNote: string
   /** Empty on one store's page. */
@@ -103,6 +107,14 @@ export function buildLaborSummary(input: {
   storeShares: LaborStoreShare[]
   /** Stores whose labor reads too low to be whole, by `incompleteLaborStores`: the adapter's call, not this file's. */
   incompleteStoreIds?: string[]
+  /**
+   * The labor target for what the page is looking at, a percent of sales
+   * (`loadStripTargets`): one store's own, or the one the stores agree on.
+   * `null` or absent = nothing to grade the days against.
+   */
+  target?: number | null
+  /** Each store's own target by store id, for the store cards. */
+  storeTargets?: Record<string, number | null>
 }): LaborSummary {
   const { week, roles, storeShares } = input
   const days = input.days.slice(-LABOR_DAYS_SHOWN)
@@ -110,7 +122,9 @@ export function buildLaborSummary(input: {
   const incompleteIds = new Set(input.incompleteStoreIds ?? [])
 
   const shares = days.map((d) => d.laborPct).filter((v): v is number => v !== null && Number.isFinite(v))
-  const top = Math.max(DAY_SCALE_FLOOR, ...shares, week.laborPct ?? 0) * 1.05
+  const target = input.target ?? null
+  const storeTargets = input.storeTargets ?? {}
+  const top = Math.max(DAY_SCALE_FLOOR, ...shares, week.laborPct ?? 0, target ?? 0) * 1.05
   const at = (v: number) => Math.max(0, Math.min(100, (v / top) * 100))
 
   const bars: LaborDayBar[] = days.map((d) => {
@@ -129,14 +143,20 @@ export function buildLaborSummary(input: {
       if (d.costMissing) parts.push(`${plural(d.missingStoreDays, "store")} missing`)
     }
     const detail = parts.join(" · ")
+    const isProvisional = provisional.has(d.label)
+    // Graded only when the day is whole and settled: a day short of a store,
+    // or one Harri can still move, is not called over or under.
+    const graded = target !== null && !isProvisional && !d.costMissing && d.laborPct !== null
     return {
+      over: graded && (d.laborPct as number) > target,
+      graded,
       key: d.key,
       dow: DOW.format(date),
       date: MONTH_DAY.format(date),
       share,
       fill: noLabor || d.laborPct === null ? 0 : at(d.laborPct),
       missing: d.costMissing,
-      provisional: provisional.has(d.label),
+      provisional: isProvisional,
       detail,
       aria: `${d.label}: labor ${share}, ${detail}`,
     }
@@ -144,8 +164,23 @@ export function buildLaborSummary(input: {
 
   const cut = input.days.length - days.length
   const notes: string[] = []
-  if (week.laborPct !== null) {
-    notes.push(`The line on each bar is this range's own share, ${pct(week.laborPct, { scaled: true })}. No labor target is on file, so no day is graded.`)
+  const gradedDays = bars.filter((b) => b.graded)
+  const anyStoreTarget = Object.values(storeTargets).some((v) => v != null)
+  if (target !== null) {
+    const over = gradedDays.filter((b) => b.over).length
+    notes.push(
+      `The line on each bar is the labor target, ${pct(target, { scaled: true })}.` +
+        (gradedDays.length > 0
+          ? ` ${over === 0 ? "No day was" : over === 1 ? "1 day was" : `${over} days were`} over it, of ${plural(gradedDays.length, "settled day")}.`
+          : " No day here is settled yet, so none is graded."),
+    )
+  } else if (week.laborPct !== null) {
+    notes.push(
+      `The line on each bar is this range's own share, ${pct(week.laborPct, { scaled: true })}. ` +
+        (anyStoreTarget
+          ? "The stores do not share one labor target, so the days of all stores together are not graded. Open a store to see its days against its own target."
+          : "No labor target is on file, so no day is graded. Set one on the store's settings page."),
+    )
   }
   if (cut > 0) notes.push(`Showing the last ${days.length} days of the range.`)
   if (bars.some((b) => b.provisional)) notes.push("Days marked so far can still move: Harri settles a day about two days later.")
@@ -157,6 +192,8 @@ export function buildLaborSummary(input: {
       : storeShares.map((s) => {
           const incomplete = incompleteIds.has(s.storeId)
           const none = s.laborPct === null || (s.cost === 0 && s.ratedSales === 0)
+          const own = storeTargets[s.storeId] ?? null
+          const ownText = own === null ? null : pct(own, { scaled: true })
           return {
             storeId: s.storeId,
             name: s.name,
@@ -164,7 +201,11 @@ export function buildLaborSummary(input: {
               ? { tone: "warn" as const, label: "No labor on file" }
               : incomplete
               ? { tone: "warn" as const, label: "Labor looks incomplete" }
-              : { tone: "good" as const, label: "Labor on file" },
+              : ownText === null
+              ? { tone: "good" as const, label: "Labor on file" }
+              : (s.laborPct as number) > (own as number)
+              ? { tone: "warn" as const, label: `Over its ${ownText} target` }
+              : { tone: "good" as const, label: `Within its ${ownText} target` },
             figures: [
               { label: incomplete ? "Share on file" : "Share of sales", value: none ? "missing" : pct(s.laborPct, { scaled: true }) },
               { label: "Labor cost", value: none ? "missing" : money(s.cost) },
@@ -195,8 +236,13 @@ export function buildLaborSummary(input: {
 
   return {
     days: bars,
-    dayMark: week.laborPct === null ? null : at(week.laborPct),
-    dayMarkLabel: week.laborPct === null ? null : pct(week.laborPct, { scaled: true }),
+    dayMark: target !== null ? at(target) : week.laborPct === null ? null : at(week.laborPct),
+    dayMarkLabel:
+      target !== null
+        ? `the target, ${pct(target, { scaled: true })}`
+        : week.laborPct === null
+          ? null
+          : `the range, ${pct(week.laborPct, { scaled: true })}`,
     dayNote: notes.join(" "),
     stores,
     roles: roleBars,
