@@ -467,6 +467,11 @@ const MOTION_ALLOWED = /[/\\]components[/\\]counter[/\\]motion[/\\]/
  * and `adapters/cogs.ts`; `logged-waste.ts` values logged stock adjustments
  * by reason class for `adapters/product-usage.ts` and `adapters/cogs.ts`.
  *
+ * `labor-crew-load.ts` was named on the same two tests on 2026-11-20: it reads
+ * the published shifts, timekeeping alerts and crew names at runtime, scoped
+ * by `accountId`, and is read only by `adapters/labor.ts` for the Labor
+ * page's People and Time clock tabs on the desk and the phone.
+ *
  * `commission.ts` was named on 2026-10-28: it runs the one grouped
  * `OtterOrder` read behind every marketplace-commission figure (recorded fees
  * plus the store-rate estimate) and is read by the P&L rollup,
@@ -490,7 +495,7 @@ const MOTION_ALLOWED = /[/\\]components[/\\]counter[/\\]motion[/\\]/
  * a fake Prisma import inside a hook is still caught.
  */
 const DATA_ALLOWED_TOP_LEVEL_FILES =
-  "channel-mix|cogs|commission|item-discounts|item-economics|labor-cost|labor-leaks|labor-week|logged-waste|price-move|purchases|run-out|service-profile|staffing-curve|statement|vendor-basket"
+  "channel-mix|cogs|commission|item-discounts|item-economics|labor-cost|labor-crew-load|labor-leaks|labor-week|logged-waste|price-move|purchases|run-out|service-profile|staffing-curve|statement|vendor-basket"
 const DATA_ALLOWED = new RegExp(
   String.raw`[/\\]lib[/\\]counter[/\\](?:adapters|actions)[/\\]` +
     "|" +

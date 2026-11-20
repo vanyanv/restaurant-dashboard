@@ -1,12 +1,13 @@
 "use client"
 
 import { useState, type ReactNode } from "react"
+import dynamic from "next/dynamic"
 import { Section } from "@/components/counter"
-import { Answer, BarRows, Card, ChartKey, Compare, SplitBars, StoreCard, StoreCardGrid, Tabs } from "@/components/counter/ui"
+import { BarRows, Card, ChartKey, StoreCard, StoreCardGrid, Tabs } from "@/components/counter/ui"
 import type { LaborSections } from "@/lib/counter/adapters/labor"
 import type { SectionSources } from "@/lib/counter/adapters/types"
-import { parseIsoDay, type DateRange } from "@/lib/counter/date-range"
-import { compareLaborWeeks, type LaborSummary, type LaborWeeksView } from "@/lib/counter/labor-summary"
+import type { DateRange } from "@/lib/counter/date-range"
+import type { LaborSummary } from "@/lib/counter/labor-summary"
 
 /**
  * The Labor page's detail, shared by the desk and the phone and by the group
@@ -86,93 +87,32 @@ export function LaborDetailView({
   )
 }
 
-/** The weeks as sales against labor (tap one to open it), and two of them side by side. */
-export function LaborWeeksBlock({ w, onWeek }: { w: LaborWeeksView; onWeek: (range: DateRange) => void }) {
-  const [picked, setPicked] = useState<{ a: string; b: string; under: string } | null>(null)
-  // The picks belong to the week that was open when they were made: tap
-  // another week and the comparison opens on that week and the one before.
-  const under = w.weeks.find((x) => x.selected)?.key ?? ""
-  const has = (k: string) => w.weeks.some((x) => x.key === k)
-  const pair = picked !== null && picked.under === under && has(picked.a) && has(picked.b) ? picked : w.compare
-  const a = pair ? w.weeks.find((x) => x.key === pair.a) : undefined
-  const b = pair ? w.weeks.find((x) => x.key === pair.b) : undefined
-  const optionLabel = (x: LaborWeeksView["weeks"][number]) => `${x.name}${x.partWord ? ` (${x.partWord})` : ""}`
+const LaborWeeksBlock = dynamic(() => import("./labor-weeks-ui").then((m) => m.LaborWeeksBlock), { loading: () => null })
+const LaborHoursBlock = dynamic(() => import("./labor-more-ui").then((m) => m.LaborHoursBlock), { loading: () => null })
+const LaborPeopleBlock = dynamic(() => import("./labor-more-ui").then((m) => m.LaborPeopleBlock), { loading: () => null })
+const LaborClockBlock = dynamic(() => import("./labor-more-ui").then((m) => m.LaborClockBlock), { loading: () => null })
+const LaborMinutesBlock = dynamic(() => import("./labor-more-ui").then((m) => m.LaborMinutesBlock), { loading: () => null })
 
-  return (
-    <div className="cu-stack">
-      <Card as="section" label="Sales against labor, week by week" caption="Sales against labor, week by week · tap a week">
-        <ChartKey
-          items={[
-            { kind: "base", label: "sales" },
-            { kind: "fill", label: "labor" },
-            ...(w.weeks.some((x) => x.missing) ? [{ kind: "hatched" as const, label: "labor missing" }] : []),
-          ]}
-        />
-        <SplitBars
-          bars={w.weeks.map((x) => ({
-            key: x.key,
-            label: x.label,
-            top: x.top,
-            value: x.salesFill,
-            inner: x.laborFill,
-            hatched: x.missing,
-            selected: x.selected,
-            ariaLabel: x.aria,
-          }))}
-          onPick={(key) => {
-            const x = w.weeks.find((v) => v.key === key)
-            const start = x ? parseIsoDay(x.key) : null
-            const end = x ? parseIsoDay(x.end) : null
-            if (start && end) onWeek({ start, end })
-          }}
-        />
-        <Answer>{w.sentence}</Answer>
-        <p className="cu-note">
-          The whole bar is what the week sold and the filled part is what labor cost; the number on top is labor as a
-          share of sales. To go further back, open an older week: it and the eleven weeks before it are drawn. The date
-          arrows at the top of the page step forward again.
-        </p>
-      </Card>
-
-      {a && b ? (
-        <Card as="section" label="Two weeks side by side" caption="Two weeks side by side">
-          <Compare
-            a={{ key: a.key, label: a.name }}
-            b={{ key: b.key, label: b.name }}
-            rows={compareLaborWeeks(a, b)}
-            labels={{ a: "Week", b: "Against" }}
-            options={[...w.weeks].reverse().map((x) => ({ key: x.key, label: optionLabel(x) }))}
-            onPick={(next) => setPicked({ ...next, under })}
-          />
-          {a.missing || b.missing || a.running || b.running ? (
-            <p className="cu-note">
-              {a.running || b.running ? "A week marked so far or part week has fewer than seven days. " : ""}
-              {a.missing || b.missing
-                ? "A week with labor missing shows less labor than was worked, and its share is on the days with labor."
-                : ""}
-            </p>
-          ) : null}
-        </Card>
-      ) : null}
-    </div>
-  )
-}
-
-type LaborTab = "summary" | "weeks" | "stores"
+type LaborTab = "summary" | "weeks" | "stores" | "hours" | "people" | "clock"
 
 /**
- * The Labor page as three short tabs, in one place so the four pages (desk
+ * The Labor page as six short tabs, in one place so the four pages (desk
  * and phone, group and store) cannot drift apart. The owner found the single
  * scroll too long (2026-11-20), so each tab is one question:
  *
  * - Summary: the sentence (the page's own `lead`) and each day;
  * - Compare weeks: sales against labor week by week, and two weeks side by side;
- * - Stores and roles: the stores side by side and the cost by role.
+ * - Stores and roles: the stores side by side and the cost by role;
+ * - Hours: the next day hour by hour, people scheduled against forecast orders;
+ * - People: each person's published hours and flagged time records;
+ * - Time clock: missed punches by store, and early and late minutes.
  *
  * The tab is local state: opening another week or store keeps the reader on
  * the tab they were on. A tab that is not open is not rendered, so its
  * section is not read until it is asked for, and its blocks rise in when it
- * opens (`cu-stack`).
+ * opens (`cu-stack`). Every tab but Summary is loaded when it is first
+ * opened (`labor-weeks-ui`, `labor-more-ui`), which keeps the page's first
+ * load inside its budget.
  */
 export function LaborDetail({
   lead,
@@ -183,7 +123,7 @@ export function LaborDetail({
 }: {
   /** The page's sentence card, drawn first on the Summary tab. */
   lead: ReactNode
-  sections: SectionSources<Pick<LaborSections, "summary" | "weeks">>
+  sections: SectionSources<Pick<LaborSections, "summary" | "weeks" | "hours" | "people" | "clock" | "leaks">>
   pending: boolean
   onWeek: (range: DateRange) => void
   /** Given on the all-stores page only; it is what makes the third tab "Stores and roles". */
@@ -200,6 +140,9 @@ export function LaborDetail({
           { key: "summary", label: "Summary" },
           { key: "weeks", label: "Compare weeks" },
           { key: "stores", label: onStore ? "Stores and roles" : "Roles" },
+          { key: "hours", label: "Hours" },
+          { key: "people", label: "People" },
+          { key: "clock", label: "Time clock" },
         ]}
       />
       {tab === "summary" ? (
@@ -219,6 +162,26 @@ export function LaborDetail({
         <Section bare title={onStore ? "The stores and the roles" : "The roles"} data={sections.summary} pending={pending}>
           {(d) => <LaborDetailView s={d} show="stores" onStore={onStore} />}
         </Section>
+      ) : null}
+      {tab === "hours" ? (
+        <Section bare title="Hours of the day" data={sections.hours} pending={pending}>
+          {(h) => <LaborHoursBlock h={h} />}
+        </Section>
+      ) : null}
+      {tab === "people" ? (
+        <Section bare title="People" data={sections.people} pending={pending}>
+          {(p) => <LaborPeopleBlock p={p} />}
+        </Section>
+      ) : null}
+      {tab === "clock" ? (
+        <>
+          <Section bare title="Missed punches" data={sections.clock} pending={pending}>
+            {(c) => <LaborClockBlock c={c} />}
+          </Section>
+          <Section bare title="Early and late minutes" data={sections.leaks} pending={pending}>
+            {(l) => <LaborMinutesBlock l={l} />}
+          </Section>
+        </>
       ) : null}
     </>
   )
