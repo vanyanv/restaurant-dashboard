@@ -517,11 +517,13 @@ export function buildOrdersPlainFrom(
 ): OrdersPlain {
   const priced = now.totals.thirdPartyWithFees + now.totals.thirdPartyEstimatedCount
   // A prior range with no orders is no baseline: say nothing rather than "level".
-  const vs = cmp.on && then !== null && then.totalCount > 0 ? comparisonPhrase(now.totalCount, cmp, then.totalCount) : null
+  // `totals.orders`, not `totalCount`: cancelled orders are rows in the list
+  // but not orders anyone paid for, and the net sales beside them leave them out.
+  const vs = cmp.on && then !== null && then.totals.orders > 0 ? comparisonPhrase(now.totals.orders, cmp, then.totals.orders) : null
   return buildOrdersPlain({
-    orders: now.totalCount,
+    orders: now.totals.orders,
     netSales: now.totals.netSales,
-    ticket: now.totalCount > 0 ? now.totals.netSales / now.totalCount : null,
+    ticket: now.totals.orders > 0 ? now.totals.netSales / now.totals.orders : null,
     fees: now.totals.commission,
     thirdPartyCount: now.totals.thirdPartyCount,
     thirdPartyNetSales: now.totals.thirdPartyNetSales,
@@ -538,11 +540,13 @@ export function buildOrdersStrip(
   then: OrderListResponse | null,
   cmp: ComparisonContext,
 ): StripCell[] {
-  const ticket = now.totalCount > 0 ? now.totals.netSales / now.totalCount : null
+  // Not-cancelled orders, the population `netSales` is summed over — see
+  // `OrderListTotals.orders`. `totalCount` is the list's row count.
+  const ticket = now.totals.orders > 0 ? now.totals.netSales / now.totals.orders : null
   const thenTicket =
-    then && then.totalCount > 0 ? then.totals.netSales / then.totalCount : null
+    then && then.totals.orders > 0 ? then.totals.netSales / then.totals.orders : null
 
-  const orders = comparisonPhrase(now.totalCount, cmp, then?.totalCount ?? null)
+  const orders = comparisonPhrase(now.totals.orders, cmp, then?.totals.orders ?? null)
   const net = comparisonPhrase(now.totals.netSales, cmp, then?.totals.netSales ?? null)
   const avg = comparisonPhrase(ticket ?? 0, cmp, thenTicket)
 
@@ -582,7 +586,7 @@ export function buildOrdersStrip(
             .join(" · ")
 
   return [
-    { label: "Orders", value: count(now.totalCount), delta: orders.text, deltaTone: orders.tone },
+    { label: "Orders", value: count(now.totals.orders), delta: orders.text, deltaTone: orders.tone },
     { label: "Net sales", value: money(now.totals.netSales), delta: net.text, deltaTone: net.tone },
     {
       label: "Avg ticket",
@@ -1395,6 +1399,7 @@ export async function loadComparisonOrders(
     totalCount: total((r) => r.totalCount),
     undrainedCount: total((r) => r.undrainedCount),
     totals: {
+      orders: total((r) => r.totals.orders),
       netSales: total((r) => r.totals.netSales),
       // Unknown in any window is unknown in the sum — never read as $0.
       commission: parts.some((r) => r.totals.commission === null)

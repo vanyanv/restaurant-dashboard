@@ -35,6 +35,7 @@ import { getOrdersList } from "@/app/actions/order-actions"
 const session = { user: { id: "u1", accountId: "acct-A" } }
 
 const ZERO = {
+  orders: 0,
   netSales: 0,
   commission: 0,
   commissionRecorded: 0,
@@ -56,6 +57,9 @@ type FigureTotal = {
   subtotal?: number
   discount?: number
   commission?: number
+  live_n?: number
+  live_subtotal?: number
+  live_discount?: number
   tp_n?: number
   tp_subtotal?: number
   tp_discount?: number
@@ -86,6 +90,10 @@ function figs(total: FigureTotal = {}, groups: FigureGroup[] = []) {
       subtotal: total.subtotal ?? null,
       discount: total.discount ?? null,
       commission: total.commission ?? null,
+      // Not-cancelled orders; a fixture that names none has none cancelled.
+      live_n: total.live_n ?? total.n ?? 0,
+      live_subtotal: total.live_subtotal ?? total.subtotal ?? null,
+      live_discount: total.live_discount ?? total.discount ?? null,
       tp_n: total.tp_n ?? 0,
       tp_subtotal: total.tp_subtotal ?? null,
       tp_discount: total.tp_discount ?? null,
@@ -103,6 +111,9 @@ function figs(total: FigureTotal = {}, groups: FigureGroup[] = []) {
       subtotal: g.subtotal,
       discount: g.discount,
       commission: g.commission,
+      live_n: 0,
+      live_subtotal: null,
+      live_discount: null,
       tp_n: 0,
       tp_subtotal: null,
       tp_discount: null,
@@ -306,6 +317,7 @@ describe("getOrdersList — totals is a range aggregate, not a page sum", () => 
 
     const result = await getOrdersList()
     expect(result.totals.netSales).toBe(48800)
+    expect(result.totals.orders).toBe(120)
     // Reported positive: it is a fee, not a negative number. Recorded where
     // there is one, the store's rate on the after-discount ticket where not.
     expect(result.totals.commissionRecorded).toBe(8000)
@@ -450,6 +462,7 @@ describe("getOrdersList — the grouped read matches the list's filters", () => 
     } as never)
     const r = await getOrdersList({ summaryOnly: true })
     expect(r.totalCount).toBe(5)
+    expect(r.totals.orders).toBe(5)
     expect(r.totals.netSales).toBe(90)
     expect(prisma.otterOrder.aggregate).toHaveBeenCalledTimes(1)
     expect(prisma.$queryRaw).not.toHaveBeenCalled()

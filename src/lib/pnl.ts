@@ -137,11 +137,18 @@ export const AFTER_LABOR_RENT_CODE = "AFTER_FIXED"
 /**
  * Build the list of period buckets covering [startDate, endDate] at the given granularity.
  * Boundaries are snapped to week / month edges; buckets at the range edges may be partial.
+ *
+ * `weekStartsOn` (0 = Sunday, 1 = Monday) only moves weekly buckets. It
+ * defaults to Sunday for the legacy callers (chat tools, the per-store P&L
+ * action); every Counter surface passes `COUNTER_WEEK_STARTS_ON` (Monday,
+ * `@/lib/counter/date-range`) so a chart's weeks are the same Monday weeks
+ * as the trailing-weeks table beside it.
  */
 export function buildPeriods(
   startDate: Date,
   endDate: Date,
-  granularity: Granularity
+  granularity: Granularity,
+  weekStartsOn: 0 | 1 = 0,
 ): Period[] {
   const periods: Period[] = []
   const rangeStart = startOfDay(startDate)
@@ -165,9 +172,9 @@ export function buildPeriods(
   }
 
   if (granularity === "weekly") {
-    let weekStart = startOfWeek(rangeStart, 0) // Sunday
+    let weekStart = startOfWeek(rangeStart, weekStartsOn)
     while (!isAfter(weekStart, rangeEnd)) {
-      const weekEnd = endOfWeek(weekStart, 0)
+      const weekEnd = endOfWeek(weekStart, weekStartsOn)
       const bucketStart = isBefore(weekStart, rangeStart) ? rangeStart : weekStart
       const bucketEnd = isAfter(weekEnd, rangeEnd) ? rangeEnd : weekEnd
       const days = differenceInCalendarDays(bucketEnd, bucketStart) + 1

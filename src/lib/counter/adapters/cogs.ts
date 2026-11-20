@@ -30,6 +30,7 @@ import {
 } from "@/lib/counter/cogs"
 import { count, delta, deltaSign, money, moneyCompact, pct, plural, points } from "@/lib/counter/format"
 import {
+  COUNTER_WEEK_STARTS_ON,
   dayCount,
   isoDay,
   rangeLabel,
@@ -831,7 +832,7 @@ function foldPlan(
   })
 
   const { startDate, endDate } = toQueryBounds(range)
-  const display = buildPeriods(startDate, endDate, granularity)
+  const display = buildPeriods(startDate, endDate, granularity, COUNTER_WEEK_STARTS_ON)
 
   if (granularity === "daily") {
     // One label per day, from the rollup's own labeller when it agrees with

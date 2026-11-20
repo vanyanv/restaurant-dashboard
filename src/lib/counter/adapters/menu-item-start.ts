@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma"
+import { PACKAGING_CATEGORY } from "@/lib/counter/food-cost-scope"
 import { getScopedStores } from "@/lib/account-stores"
 import { count, money } from "@/lib/counter/format"
 import { classify, guardSection, type StreamedSections } from "@/lib/counter/adapters/types"
@@ -90,7 +91,8 @@ export async function loadMenuItemStart(input: MenuItemStartInput): Promise<Menu
     }),
     storeIds.length
       ? prisma.dailyCogsItem.findMany({
-          where: { storeId: { in: storeIds }, date: { gte: since } },
+          // Packaging rows are never a dish to start a recipe for (see `food-cost-scope.ts`).
+          where: { storeId: { in: storeIds }, date: { gte: since }, category: { not: PACKAGING_CATEGORY } },
           select: { recipeId: true, itemName: true, category: true, qtySold: true, salesRevenue: true, status: true },
         })
       : Promise.resolve([]),

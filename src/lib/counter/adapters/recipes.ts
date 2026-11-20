@@ -144,7 +144,7 @@ export interface RecipeRow {
   soldQty: number
   /** Collected — after discounts. */
   revenue: number
-  /** Days in `DailyCogsItem` the cost walk flagged as an understatement. */
+  /** Days in the range on which the cost walk flagged this recipe as an understatement. */
   partialDays: number
 }
 
@@ -185,15 +185,19 @@ async function loadRecipes(input: RecipesInput): Promise<RecipeData> {
     prisma.recipe.count({ where: { accountId, createdAt: { gte: d30 } } }),
     // Sold, collected, booked cost and margin — the shared definition.
     getItemEconomics({ accountId, storeIds, startDate, endDate }),
-    // Not range-bound: "how long has this been wrong" is the question, and a
-    // day inside the reader's range does not answer it.
+    // Bound to the page's range (2026-11-20 audit): it read every row ever
+    // written, which grows without limit and printed an all-time count beside
+    // figures that are all "over the range". Distinct DATES, not rows — the
+    // sentence says "separate days", and one recipe can have several rows a
+    // day (one per store, one per POS name mapped to it).
     storeIds.length === 0
       ? Promise.resolve([] as Array<{ recipe_id: string; days: number }>)
       : prisma.$queryRaw<Array<{ recipe_id: string; days: number }>>`
-          SELECT "recipeId" AS recipe_id, COUNT(*)::int AS days
+          SELECT "recipeId" AS recipe_id, COUNT(DISTINCT "date")::int AS days
           FROM "DailyCogsItem"
           WHERE "recipeId" IS NOT NULL AND "partialCost"
             AND "storeId" = ANY(${storeIds})
+            AND "date" >= ${startDate} AND "date" <= ${endDate}
           GROUP BY 1`,
   ])
 
@@ -493,7 +497,7 @@ function workOf(d: RecipeData): RecipeWork {
           : "") +
         (worst.partialDays > 0
           ? `The cost walk has flagged it as an understatement on ${count(worst.partialDays)} ` +
-            `separate days and no rule has ever surfaced it.`
+            `separate days over ${d.rangeLabel} and no rule has ever surfaced it.`
           : "") +
         (zeroCost.length > 1
           ? ` ${count(zeroCost.length - 1)} more ${zeroCost.length === 2 ? "plate reports" : "plates report"} a cost nobody computed.`

@@ -1,13 +1,12 @@
 // menu-item mapping actions — the human-confirm write path for POS item →
 // recipe mappings. Pins auth/account scoping, the per-store upsert fan-out,
-// batch validation filtering, and the catalog's mapping precedence.
+// batch validation filtering.
 
 import { describe, it, expect, vi, beforeEach } from "vitest"
 
 vi.mock("@/lib/auth-scope", () => ({ getAuthScope: vi.fn() }))
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }))
 vi.mock("@/lib/otter-subitem-aggregation", () => ({ attachSubItemMappings: vi.fn() }))
-vi.mock("@/lib/menu-sell-price-aggregation", () => ({ mergeSellPrices: vi.fn() }))
 vi.mock("@/lib/prisma", () => ({
   prisma: {
     store: { findMany: vi.fn() },
@@ -21,7 +20,6 @@ vi.mock("@/lib/prisma", () => ({
 import { getAuthScope } from "@/lib/auth-scope"
 import { prisma } from "@/lib/prisma"
 import {
-  getMenuItemsForCatalog,
   mapOtterItemToRecipe,
   mapOtterItemsBatch,
 } from "@/app/actions/menu-item-actions"
@@ -109,91 +107,5 @@ describe("mapOtterItemsBatch", () => {
     ])
     expect(result).toEqual({ mapped: 0 })
     expect(prisma.$transaction).not.toHaveBeenCalled()
-  })
-})
-
-describe("getMenuItemsForCatalog", () => {
-  it("prefers the explicit OtterItemMapping over the case-insensitive recipe-name fallback", async () => {
-    const day = new Date("2026-07-10")
-    vi.mocked(prisma.otterMenuItem.groupBy).mockResolvedValue([
-      {
-        itemName: "Burger",
-        category: "Sliders",
-        _sum: { fpQuantitySold: 5, tpQuantitySold: 3 },
-        _min: { date: day },
-        _max: { date: day },
-      },
-      {
-        itemName: "Fries",
-        category: "Sides",
-        _sum: { fpQuantitySold: 2, tpQuantitySold: 0 },
-        _min: { date: day },
-        _max: { date: day },
-      },
-    ] as never)
-    vi.mocked(prisma.otterMenuItem.findMany).mockResolvedValue([
-      { storeId: "s1", itemName: "Burger", category: "Sliders" },
-      { storeId: "s1", itemName: "Fries", category: "Sides" },
-    ] as never)
-    vi.mocked(prisma.otterItemMapping.findMany).mockResolvedValue([
-      {
-        otterItemName: "Burger",
-        recipeId: "r-mapped",
-        recipe: { id: "r-mapped", itemName: "Mapped Burger Recipe" },
-      },
-    ] as never)
-    vi.mocked(prisma.recipe.findMany).mockResolvedValue([
-      { id: "r-by-name", itemName: "BURGER", category: "Sliders" },
-      { id: "r-fries", itemName: "fries", category: "Sides" },
-    ] as never)
-
-    const rows = await getMenuItemsForCatalog()
-
-    const burger = rows.find((r) => r.otterItemName === "Burger")!
-    const fries = rows.find((r) => r.otterItemName === "Fries")!
-    // Explicit mapping wins even though a recipe named "BURGER" exists.
-    expect(burger.mappedRecipeId).toBe("r-mapped")
-    expect(burger.totalQtySoldAllTime).toBe(8)
-    // No explicit mapping → case-insensitive name fallback.
-    expect(fries.mappedRecipeId).toBe("r-fries")
-    // Sorted by qty desc.
-    expect(rows[0].otterItemName).toBe("Burger")
-  })
-
-  it("resolves a name shared by two recipes using the POS row's own category", async () => {
-    const day = new Date("2026-07-10")
-    vi.mocked(prisma.otterMenuItem.groupBy).mockResolvedValue([
-      {
-        itemName: "Fries",
-        category: "Sides",
-        _sum: { fpQuantitySold: 5, tpQuantitySold: 0 },
-        _min: { date: day },
-        _max: { date: day },
-      },
-      {
-        itemName: "Fries",
-        category: "Modifiers",
-        _sum: { fpQuantitySold: 2, tpQuantitySold: 0 },
-        _min: { date: day },
-        _max: { date: day },
-      },
-    ] as never)
-    vi.mocked(prisma.otterMenuItem.findMany).mockResolvedValue([
-      { storeId: "s1", itemName: "Fries", category: "Sides" },
-      { storeId: "s1", itemName: "Fries", category: "Modifiers" },
-    ] as never)
-    vi.mocked(prisma.otterItemMapping.findMany).mockResolvedValue([] as never)
-    // Same name, two categories — ambiguous by name alone.
-    vi.mocked(prisma.recipe.findMany).mockResolvedValue([
-      { id: "r-fries-side", itemName: "Fries", category: "Sides" },
-      { id: "r-fries-modifier", itemName: "Fries", category: "Modifiers" },
-    ] as never)
-
-    const rows = await getMenuItemsForCatalog()
-
-    const sides = rows.find((r) => r.category === "Sides")!
-    const modifiers = rows.find((r) => r.category === "Modifiers")!
-    expect(sides.mappedRecipeId).toBe("r-fries-side")
-    expect(modifiers.mappedRecipeId).toBe("r-fries-modifier")
   })
 })

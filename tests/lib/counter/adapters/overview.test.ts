@@ -579,6 +579,31 @@ describe("getOverviewSections", () => {
     expect(food?.change).toContain("pts")
   })
 
+  it("drops the Food and Prime comparison rows when EITHER side has no food cost posted", async () => {
+    // A side with sales and no COGS reads a 0.0% food cost: against a real
+    // 29% the row printed a 29-point improvement nobody made.
+    for (const missing of ["then", "now"] as const) {
+      vi.mocked(getAllStoresPnL).mockImplementation(async (input) => {
+        const isThen = input.startDate.getTime() < primaryStart.getTime()
+        return (isThen === (missing === "then")
+          ? pnl({ combined: { ...pnl().combined, cogsValue: 0, cogsPct: 0 } })
+          : pnl()) as never
+      })
+      const s = await load({ comparisonId: "prev" })
+      if (!hasData(s.comparison)) throw new Error("comparison")
+      expect(s.comparison.data.map((r) => r.figure)).toEqual(["Net sales", "Labor"])
+    }
+  })
+
+  it("labels a partial food cost on the Food and Prime cells, in the plain page's words", async () => {
+    vi.mocked(getAllStoresPnL).mockResolvedValue(
+      pnl({ combined: { ...pnl().combined, cogsMissingDays: 1, uncostedSales: 7468 * 0.05 } }) as never,
+    )
+    const s = await load()
+    expect(cell(s, "Food cost")?.caption).toContain("partial · 1 day with no food cost · 5% of sales not fully costed")
+    expect(cell(s, "Prime cost")?.caption).toContain("partial · 1 day with no food cost")
+  })
+
   it("divides the weekday comparison's four occurrences before reading them against one period", async () => {
     // `comparisonWindows("weekday")` returns FOUR windows, each the length of
     // the range, and the loader sums them — so a fixture answering $7,468 per

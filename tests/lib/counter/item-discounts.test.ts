@@ -126,4 +126,24 @@ describe("getItemDiscounts", () => {
     expect(discountShare(slider.byStore!.get("holly"))).toBeCloseTo(0.5)
     expect(discountShare(slider.byStore!.get("gln"))).toBe(0)
   })
+  it("reads a half-open window of whole days, so the last second of the last day counts", async () => {
+    vi.mocked(prisma.$queryRaw).mockClear()
+    vi.mocked(prisma.$queryRaw).mockResolvedValueOnce([] as never).mockResolvedValueOnce([] as never)
+    await getItemDiscounts({
+      accountId: "acc-window",
+      storeIds: ["s1"],
+      startDate: new Date("2026-11-01T00:00:00Z"),
+      // `toQueryBounds`' inclusive end: BETWEEN on it dropped 23:59:59.001 onward.
+      endDate: new Date("2026-11-07T23:59:59.000Z"),
+    })
+    for (const call of vi.mocked(prisma.$queryRaw).mock.calls) {
+      const [strings, ...values] = call as unknown as [TemplateStringsArray, ...unknown[]]
+      const text = strings.join("?")
+      expect(text).not.toContain("BETWEEN")
+      expect(text).toContain('o."referenceTimeLocal" >= ?')
+      expect(text).toContain('o."referenceTimeLocal" < ?')
+      expect(values).toContainEqual(new Date("2026-11-01T00:00:00Z"))
+      expect(values).toContainEqual(new Date("2026-11-08T00:00:00Z"))
+    }
+  })
 })

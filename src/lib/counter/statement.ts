@@ -1,6 +1,6 @@
 import { getAllStoresPnL } from "@/app/actions/store/pnl-actions"
 import type { AllStoresPnLResult } from "@/app/actions/store/pnl-types"
-import type { Period, PnLRow } from "@/lib/pnl"
+import { buildPeriods, type Period, type PnLRow } from "@/lib/pnl"
 import { primeCost, type PrimeCost } from "@/lib/counter/prime-cost"
 import {
   addCommission,
@@ -9,6 +9,7 @@ import {
 } from "@/lib/counter/commission-core"
 import {
   bucketFor,
+  COUNTER_WEEK_STARTS_ON,
   comparisonWindows,
   dayCount,
   toQueryBounds,
@@ -328,7 +329,16 @@ export async function loadStatement(input: StatementInput): Promise<Statement> {
   const { range, storeId } = input
   const granularity = input.granularity ?? granularityFor(range)
 
-  const result = await getAllStoresPnL({ ...toQueryBounds(range), granularity })
+  const bounds = toQueryBounds(range)
+  // Weekly buckets are stated, Monday to Sunday, rather than left to
+  // `buildPeriods`' Sunday default — the same weeks `loadWeekStatements` and
+  // `trailingWeeks` use. Stated `periods` are part of the rollup's cache key,
+  // so these never share an entry with a Sunday bucketing of the same span.
+  const periods =
+    granularity === "weekly"
+      ? buildPeriods(bounds.startDate, bounds.endDate, "weekly", COUNTER_WEEK_STARTS_ON)
+      : undefined
+  const result = await getAllStoresPnL({ ...bounds, granularity, ...(periods ? { periods } : {}) })
   if ("error" in result) throw new Error(result.error)
 
   const days = dayCount(range)

@@ -985,4 +985,64 @@ describe("a range whose COGS has not been posted", () => {
     expect(cellOf(s, "Food")).toBeDefined()
     expect(cellOf(s, "Prime cost")).toBeDefined()
   })
+
+  it("gives the statement's Food and Prime lines a dash and a reason, never 0.0%", async () => {
+    noCogs()
+    const s = await load()
+    const food = lineOf(s, "food")
+    expect(food?.share).toBe("—")
+    expect(food?.sub).toBe("no food cost posted")
+    expect(food?.over).toBeUndefined()
+    const prime = lineOf(s, "prime")
+    expect(prime?.share).toBe("—")
+    expect(prime?.sub).toContain("no food cost posted")
+  })
+
+  it("withholds the week's food and prime, and the store's prime, the same way", async () => {
+    noCogs()
+    const s = await load()
+    const week = must(s.weeks, "weeks").rows[0]
+    expect(week.cogsPct).toBeNull()
+    expect(week.primePct).toBeNull()
+    // Labour is not missing, so the week keeps it.
+    expect(week.laborPct).not.toBeNull()
+    expect(must(s.byStore, "byStore").find((x) => x.id === "holly")?.primePct).toBeNull()
+  })
+})
+
+describe("a range whose food cost is partly missing", () => {
+  function partial(over: Record<string, number>) {
+    const lines = kpis(over)
+    vi.mocked(getAllStoresPnL).mockImplementation((async (arg: { periods?: unknown[] }) =>
+      rollupFor(arg, {
+        combined: lines,
+        perStore: [store("holly", "Hollywood", over)],
+        storeCount: 1,
+      })) as never)
+  }
+
+  it("keeps the food and prime figures and labels them partial, in the plain page's words", async () => {
+    partial({ cogsMissingDays: 3 })
+    const s = await load()
+    expect(cellOf(s, "Food")?.caption).toBe("Target 29.0% · partial · 3 days with no food cost")
+    expect(cellOf(s, "Prime cost")?.caption).toBe(
+      `Ceiling ${PRIME_CEILING_PCT.toFixed(1)}% · partial · 3 days with no food cost`,
+    )
+    expect(lineOf(s, "food")?.sub).toBe("target 29.0% · partial · 3 days with no food cost")
+    expect(must(s.headline, "headline").phoneCells.find((c) => c.label === "Prime cost")?.caption).toBe(
+      "partial · 3 days with no food cost",
+    )
+  })
+
+  it("names uncosted sales as a share of sales", async () => {
+    partial({ uncostedSales: GROSS * 0.12 })
+    const s = await load()
+    expect(cellOf(s, "Food")?.caption).toBe("Target 29.0% · partial · 12% of sales not fully costed")
+  })
+
+  it("leaves a whole food cost's captions exactly as they were", async () => {
+    const s = await load()
+    expect(cellOf(s, "Food")?.caption).toBe("Target 29.0%")
+    expect(cellOf(s, "Prime cost")?.caption).toBe(`Ceiling ${PRIME_CEILING_PCT.toFixed(1)}%`)
+  })
 })

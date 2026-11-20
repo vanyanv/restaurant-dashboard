@@ -66,7 +66,11 @@ function legacyTotals(rows: O[]) {
     _sum: { subtotal: sum(xs.map((o) => o.subtotal)), discount: sum(xs.map((o) => o.discount)), commission: sum(xs.map((o) => o.commission)) },
   })
   const overall = agg(rows)
-  const tp = agg(rows.filter((o) => !house(o)))
+  // Cancelled orders are rows in the list but not orders: since 2026-11-20 the
+  // count, net sales and the marketplace denominators leave them out, the way
+  // the fee groups always did.
+  const liveAgg = agg(rows.filter(live))
+  const tp = agg(rows.filter((o) => !house(o) && live(o)))
   const withFees = rows.filter((o) => !house(o) && live(o) && o.commission !== 0).length
   const groupBy = (xs: O[]) => {
     const m = new Map<string, O[]>()
@@ -93,7 +97,8 @@ function legacyTotals(rows: O[]) {
   return {
     totalCount: overall._count,
     totals: {
-      netSales: overall._sum.subtotal + overall._sum.discount,
+      orders: liveAgg._count,
+      netSales: liveAgg._sum.subtotal + liveAgg._sum.discount,
       commission: fees.amount,
       commissionRecorded: fees.recorded,
       commissionEstimated: fees.estimated,
@@ -108,7 +113,8 @@ function legacyTotals(rows: O[]) {
 
 /** What `rangeFigures` returns for `rows`: the SQL, done in JS. */
 function sqlRows(rows: O[]) {
-  const tpRows = rows.filter((o) => !house(o))
+  const liveRows = rows.filter(live)
+  const tpRows = rows.filter((o) => !house(o) && live(o))
   const groups = new Map<string, O[]>()
   for (const o of rows) {
     const k = [o.storeId, o.platform, o.mode, live(o), o.commission !== 0, !house(o)].join("|")
@@ -124,6 +130,9 @@ function sqlRows(rows: O[]) {
     {
       total_row: 1, storeId: null, platform: null, fulfillmentMode: null, live: null, recorded: null, tp: null,
       ...row(rows),
+      live_n: liveRows.length,
+      live_subtotal: liveRows.length ? sum(liveRows.map((o) => o.subtotal)) : null,
+      live_discount: liveRows.length ? sum(liveRows.map((o) => o.discount)) : null,
       tp_n: tpRows.length,
       tp_subtotal: tpRows.length ? sum(tpRows.map((o) => o.subtotal)) : null,
       tp_discount: tpRows.length ? sum(tpRows.map((o) => o.discount)) : null,
@@ -132,7 +141,7 @@ function sqlRows(rows: O[]) {
     ...[...groups.values()].map((g) => ({
       total_row: 0, storeId: g[0].storeId, platform: g[0].platform, fulfillmentMode: g[0].mode,
       live: live(g[0]), recorded: g[0].commission !== 0, tp: !house(g[0]),
-      ...row(g), tp_n: 0, tp_subtotal: null, tp_discount: null, tp_fee_n: 0,
+      ...row(g), live_n: 0, live_subtotal: null, live_discount: null, tp_n: 0, tp_subtotal: null, tp_discount: null, tp_fee_n: 0,
     })),
   ]
 }
@@ -161,4 +170,43 @@ describe("getOrdersList — the grouped read gives the totals the six queries di
       expect(got.totals).toEqual(want.totals)
     })
   }
+
+  it("leaves cancelled orders out of the order count, net sales and avg ticket's inputs", async () => {
+    vi.mocked(prisma.$queryRaw).mockResolvedValue(sqlRows(orders) as never)
+    const got = await getOrdersList()
+    // Ten rows in the list, two of them cancelled ($50 and $60).
+    expect(got.totalCount).toBe(10)
+    expect(got.totals.orders).toBe(8)
+    expect(got.totals.netSales).toBe(40 - 4 + 30 + 20 - 2 + 100 - 10 + 80 + 25 + 15 + 12 - 1)
+    // Marketplace orders: six live (the two cancelled DoorDash out), house out.
+    expect(got.totals.thirdPartyCount).toBe(6)
+  })
+
+  it("filters the comparison range's summary load to not-cancelled orders", async () => {
+    vi.mocked(prisma.otterOrder.aggregate).mockResolvedValue({
+      _count: 8,
+      _sum: { subtotal: 322, discount: -17, commission: -37 },
+    } as never)
+    const got = await getOrdersList({ summaryOnly: true, search: "abc" })
+    const arg = vi.mocked(prisma.otterOrder.aggregate).mock.calls[0][0] as { where: { AND: unknown[] } }
+    expect(arg.where.AND).toHaveLength(2)
+    // The search's own OR survives inside the first half of the AND.
+    expect((arg.where.AND[0] as { OR?: unknown[] }).OR).toHaveLength(3)
+    expect(arg.where.AND[1]).toEqual({
+      OR: [{ orderStatus: null }, { orderStatus: { not: "OFO_STATUS_CANCELED" } }],
+    })
+    expect(got.totals.orders).toBe(8)
+    expect(got.totals.netSales).toBe(305)
+  })
+
+  it("reads active stores only, like the P&L", async () => {
+    vi.mocked(prisma.store.findMany).mockResolvedValue([
+      ...stores,
+      { id: "s3", name: "Closed", isActive: false },
+    ] as never)
+    vi.mocked(prisma.$queryRaw).mockResolvedValue(sqlRows([]) as never)
+    await getOrdersList()
+    const where = vi.mocked(prisma.otterOrder.findMany).mock.calls[0][0] as { where: { storeId: { in: string[] } } }
+    expect(where.where.storeId.in).toEqual(["s1", "s2"])
+  })
 })

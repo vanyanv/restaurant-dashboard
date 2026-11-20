@@ -212,14 +212,15 @@ function chartOf(d: PriceData): PriceChart {
   const weekStart = (at: Date) => {
     const t = new Date(at)
     t.setUTCHours(0, 0, 0, 0)
-    t.setUTCDate(t.getUTCDate() - t.getUTCDay())
+    // Monday-start, like every other week Counter draws (`COUNTER_WEEK_STARTS_ON`).
+    t.setUTCDate(t.getUTCDate() - ((t.getUTCDay() + 6) % 7))
     return t.toISOString().slice(0, 10)
   }
 
   const weeks: string[] = []
   const cursor = new Date()
   cursor.setUTCHours(0, 0, 0, 0)
-  cursor.setUTCDate(cursor.getUTCDate() - cursor.getUTCDay())
+  cursor.setUTCDate(cursor.getUTCDate() - ((cursor.getUTCDay() + 6) % 7))
   for (let i = CHART_WEEKS - 1; i >= 0; i--) {
     const w = new Date(cursor)
     w.setUTCDate(w.getUTCDate() - i * 7)

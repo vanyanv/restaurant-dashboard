@@ -154,6 +154,26 @@ describe("loadStatement — the shape of the load", () => {
     })
   })
 
+  it("states Monday-to-Sunday periods for a weekly load, the weeks `loadWeekStatements` uses", async () => {
+    // 2026-01-01 (Thu) → 2026-02-28 (Sat): 59 days, so "weekly".
+    const wide = { start: new Date(2026, 0, 1), end: new Date(2026, 1, 28) }
+    await load({ range: wide })
+    const arg = mockPnL.mock.calls[0][0]
+    expect(arg.granularity).toBe("weekly")
+    const periods = arg.periods ?? []
+    expect(periods.length).toBeGreaterThan(2)
+    // The first bucket is clipped to the range; every later one starts on a
+    // Monday, and every one but the last ends on a Sunday.
+    expect(periods[0].startDate.getTime()).toBe(toQueryBounds(wide).startDate.getTime())
+    for (const p of periods.slice(1)) expect(p.startDate.getUTCDay()).toBe(1)
+    for (const p of periods.slice(0, -1)) expect(p.endDate.getUTCDay()).toBe(0)
+  })
+
+  it("leaves daily and monthly bucketing to the rollup", async () => {
+    await load()
+    expect(mockPnL.mock.calls[0][0].periods).toBeUndefined()
+  })
+
   it("takes an explicit granularity over the one its own range implies", async () => {
     // This is what keeps a comparison window on the SELECTED range's buckets.
     // A four-week `weekday` window derives "weekly" from itself, and a weekly

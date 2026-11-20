@@ -166,4 +166,18 @@ describe("loadMenuItemStart", () => {
     expect(asMock(prisma.recipe.findMany).mock.calls[0][0].where).toMatchObject({ accountId: "acc_1" })
     expect(getScopedStores).toHaveBeenCalledWith("acc_1", null)
   })
+
+  it("never offers a packaging row as a dish to start a recipe for", async () => {
+    await loadMenuItemStart({ accountId: "acc_1", now: NOW })
+    expect(asMock(prisma.dailyCogsItem.findMany).mock.calls[0][0].where.category).toEqual({ not: "Packaging" })
+  })
+})
+
+describe("packaging rows", () => {
+  it("are not read as dishes, so 'Packaging - 9x6' never lands under no recipe", async () => {
+    // The materializer writes one `category: "Packaging"` row per container
+    // group, with no recipe. Read with the dishes, each counted as unmapped.
+    await loadMenuItems({ range: RANGE, storeId: null, accountId: "acc_1", now: NOW })
+    expect(asMock(prisma.dailyCogsItem.findMany).mock.calls[0][0].where.category).toEqual({ not: "Packaging" })
+  })
 })

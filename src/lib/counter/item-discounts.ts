@@ -148,7 +148,8 @@ export async function getItemDiscounts(input: {
   // drops it. Twelve readers ask for it (menu, recipes, product mix, chat),
   // and on a cold database it was the slowest read on those pages.
   const rows = await cached(
-    `counter:itemdisc2:${stableKey({
+    // `itemdisc3:` since 2026-11-20: the window became half-open (see below).
+    `counter:itemdisc3:${stableKey({
       a: accountId,
       ids: [...storeIds].sort(),
       from: startDate,
@@ -160,6 +161,12 @@ export async function getItemDiscounts(input: {
     () => loadItemDiscountRows(db, { accountId, storeIds, startDate, endDate, itemName }),
   )
   return fromRows(rows)
+}
+
+const DAY_MS = 86_400_000
+
+function utcDayFloor(d: Date): Date {
+  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()))
 }
 
 /** One item's figures, flattened so the result can be cached as JSON. */
@@ -184,9 +191,14 @@ async function loadItemDiscountRows(
   db: Pick<PrismaClient, "$queryRaw">,
   input: { accountId: string; storeIds: string[]; startDate: Date; endDate: Date; itemName?: string },
 ): Promise<ItemDiscountRow[]> {
-  const { accountId, storeIds, startDate, endDate, itemName } = input
+  const { accountId, storeIds, itemName } = input
   const out = new Map<string, ItemDiscountEntry>()
   const only = itemName ?? null
+  // Half-open, by whole days — the same window `./commission` reads. A
+  // `BETWEEN start AND 23:59:59.000` bound dropped every order stamped in the
+  // last second of the range's final day.
+  const from = utcDayFloor(input.startDate)
+  const toExclusive = new Date(utcDayFloor(input.endDate).getTime() + DAY_MS)
 
   // Order lines are read through each order in the window (LATERAL with
   // OFFSET 0, so the planner cannot fold it back into a hash join). Joined
@@ -210,7 +222,8 @@ async function loadItemDiscountRows(
       ) i
       WHERE s."accountId" = ${accountId}
         AND o."storeId" = ANY(${storeIds})
-        AND o."referenceTimeLocal" BETWEEN ${startDate} AND ${endDate}
+        AND o."referenceTimeLocal" >= ${from}
+        AND o."referenceTimeLocal" < ${toExclusive}
         AND (${only}::text IS NULL OR i."name" = ${only})
       GROUP BY i."name", o."platform", o."storeId"`,
     // Every line of every discounted order — not only the named item's —
@@ -244,7 +257,8 @@ async function loadItemDiscountRows(
       ) i
       WHERE s."accountId" = ${accountId}
         AND o."storeId" = ANY(${storeIds})
-        AND o."referenceTimeLocal" BETWEEN ${startDate} AND ${endDate}
+        AND o."referenceTimeLocal" >= ${from}
+        AND o."referenceTimeLocal" < ${toExclusive}
         AND o."discount" < 0
         AND (${only}::text IS NULL OR EXISTS (
           SELECT 1 FROM "OtterOrderItem" x WHERE x."orderId" = o."id" AND x."name" = ${only}

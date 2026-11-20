@@ -7,13 +7,11 @@ import { prisma } from "@/lib/prisma"
 import { getAccountStoreRows } from "@/lib/account-stores"
 import { Prisma } from "@/generated/prisma/client"
 import { revalidatePath } from "next/cache"
-import type { MenuItemForCatalog } from "@/types/recipe"
 import type { OtterSubItemForCatalog as OtterSubItemForCatalogType } from "@/types/otter-subitem"
 import {
   attachSubItemMappings,
   type SubItemAggregateRow,
 } from "@/lib/otter-subitem-aggregation"
-import { mergeSellPrices } from "@/lib/menu-sell-price-aggregation"
 
 /**
  * A POS item mapped to (or off) a recipe moves the catalogue's mapped column
@@ -23,149 +21,6 @@ function revalidateMappingPages() {
   revalidatePath("/dashboard/menu/catalog")
   revalidatePath("/dashboard/ingredients")
   revalidatePath("/dashboard/recipes")
-}
-
-/**
- * All distinct Otter-sold items across the owner's stores, with:
- *   - aggregate units sold over the window (default last 90 days)
- *   - first/last seen
- *   - whether it's already mapped to a Recipe (via OtterItemMapping or name match)
- *
- * Defaults to a 90-day window because the catalog surface is "items worth
- * mapping right now" — items that haven't sold in 90 days aren't actionable
- * and their rollup rows dominate the scan. Pass `sinceDays: null` to opt
- * into the full-history behaviour (reporting/backfill workflows).
- *
- * Sorted by total qty sold DESC so the most-impactful items surface first.
- */
-export async function getMenuItemsForCatalog(
-  options?: { sinceDays?: number | null }
-): Promise<MenuItemForCatalog[]> {
-  const scope = await getAuthScope()
-  if (!scope) return []
-  const { accountId } = scope
-
-  // The one store query a request makes — `@/lib/account-stores`. This caller
-  // counts inactive stores too, which is why the shared query does not filter.
-  const stores = await getAccountStoreRows(accountId)
-  const storeIds = stores.map((s) => s.id)
-  if (storeIds.length === 0) return []
-
-  const sinceDays = options?.sinceDays === undefined ? 90 : options.sinceDays
-  let dateFloor: Date | null = null
-  if (sinceDays !== null) {
-    dateFloor = new Date()
-    dateFloor.setDate(dateFloor.getDate() - sinceDays)
-  }
-
-  const baseWhere = {
-    storeId: { in: storeIds },
-    isModifier: false,
-    category: { not: "Uncategorized" },
-    ...(dateFloor ? { date: { gte: dateFloor } } : {}),
-  } as const
-
-  const [aggRows, storeKeyRows] = await Promise.all([
-    prisma.otterMenuItem.groupBy({
-      by: ["itemName", "category"],
-      where: baseWhere,
-      _sum: { fpQuantitySold: true, tpQuantitySold: true },
-      _min: { date: true },
-      _max: { date: true },
-    }),
-    prisma.otterMenuItem.findMany({
-      where: baseWhere,
-      distinct: ["storeId", "itemName", "category"],
-      select: { storeId: true, itemName: true, category: true },
-    }),
-  ])
-
-  const storeIdsByKey = new Map<string, Set<string>>()
-  for (const r of storeKeyRows) {
-    const k = `${r.itemName}:::${r.category}`
-    let set = storeIdsByKey.get(k)
-    if (!set) {
-      set = new Set()
-      storeIdsByKey.set(k, set)
-    }
-    set.add(r.storeId)
-  }
-
-  const mappings = await prisma.otterItemMapping.findMany({
-    where: { storeId: { in: storeIds } },
-    include: { recipe: { select: { id: true, itemName: true } } },
-  })
-  const mappingByItemName = new Map<
-    string,
-    { recipeId: string; recipeName: string }
-  >()
-  for (const m of mappings) {
-    if (!mappingByItemName.has(m.otterItemName)) {
-      mappingByItemName.set(m.otterItemName, {
-        recipeId: m.recipeId,
-        recipeName: m.recipe.itemName,
-      })
-    }
-  }
-
-  const recipes = await prisma.recipe.findMany({
-    where: { accountId },
-    select: { id: true, itemName: true, category: true },
-  })
-  // Recipes are unique on (accountId, itemName, category), so a name alone
-  // can be ambiguous — a "Fries" side and a "Fries" modifier. Try the POS
-  // row's own category first (the exact tuple the recipe is unique on)
-  // before falling back to a name-only match, and never guess when a name
-  // is still ambiguous with category ignored. Same rule as the COGS
-  // materializer's fallback (`cogs-materializer.ts`) — this is the second
-  // place that resolves a POS item to a recipe by name and it must not
-  // disagree with the first.
-  const recipeByNameAndCategory = new Map(
-    recipes.map((r) => [`${r.itemName.toLowerCase()}:::${r.category.toLowerCase()}`, r])
-  )
-  const recipeByName = new Map<string, (typeof recipes)[number] | null>()
-  for (const r of recipes) {
-    const key = r.itemName.toLowerCase()
-    if (recipeByName.has(key)) {
-      if (recipeByName.get(key) !== null) recipeByName.set(key, null)
-      continue
-    }
-    recipeByName.set(key, r)
-  }
-
-  const rows: MenuItemForCatalog[] = []
-  for (const row of aggRows) {
-    const { itemName, category } = row
-    const totalQty =
-      (row._sum.fpQuantitySold ?? 0) + (row._sum.tpQuantitySold ?? 0)
-    const firstSeen = row._min.date
-    const lastSeen = row._max.date
-    if (!firstSeen || !lastSeen) continue
-    const explicitMapping = mappingByItemName.get(itemName)
-    const nameKey = itemName.toLowerCase()
-    const fallbackRecipe = explicitMapping
-      ? null
-      : (recipeByNameAndCategory.get(`${nameKey}:::${category.toLowerCase()}`) ??
-        recipeByName.get(nameKey) ??
-        null)
-    rows.push({
-      otterItemName: itemName,
-      category,
-      totalQtySoldAllTime: totalQty,
-      firstSeen,
-      lastSeen,
-      mappedRecipeId:
-        explicitMapping?.recipeId ?? fallbackRecipe?.id ?? null,
-      mappedRecipeName:
-        explicitMapping?.recipeName ?? fallbackRecipe?.itemName ?? null,
-      storeIds: Array.from(
-        storeIdsByKey.get(`${itemName}:::${category}`) ?? new Set<string>()
-      ),
-    })
-  }
-
-  rows.sort((a, b) => b.totalQtySoldAllTime - a.totalQtySoldAllTime)
-  return rows
 }
 
 export async function mapOtterItemToRecipe(input: {
@@ -458,75 +313,4 @@ export async function unmapOtterSubItem(skuId: string): Promise<void> {
   })
 
   revalidateMappingPages()
-}
-
-export type MenuItemSellPrice = {
-  /** Blended average sell price across platforms over the lookback window. */
-  avgPrice: number
-  /** Total units sold over the lookback window — how much trust to put in the avg. */
-  qtySold: number
-}
-
-/**
- * Per-Otter-item average selling price, aggregated from OtterMenuItem daily
- * rollups over the last N days (default 30). Lookup key is case-insensitive
- * item name.
- *
- * Falls back to the most recent OtterOrderItem.price for items that exist in
- * the order stream but don't have OtterMenuItem rollups (rare, but possible
- * for freshly added menu items).
- */
-export async function getMenuItemSellPrices(
-  lookbackDays: number = 30
-): Promise<Map<string, MenuItemSellPrice>> {
-  const scope = await getAuthScope()
-  if (!scope) return new Map()
-  const { accountId } = scope
-
-  const stores = await getAccountStoreRows(accountId)
-  const storeIds = stores.map((s) => s.id)
-  if (storeIds.length === 0) return new Map()
-
-  const cutoff = new Date()
-  cutoff.setUTCDate(cutoff.getUTCDate() - lookbackDays)
-
-  const [primaryRows, fallbackRows] = await Promise.all([
-    prisma.otterMenuItem.groupBy({
-      by: ["itemName"],
-      where: {
-        storeId: { in: storeIds },
-        isModifier: false,
-        date: { gte: cutoff },
-      },
-      _sum: {
-        fpQuantitySold: true,
-        tpQuantitySold: true,
-        fpTotalSales: true,
-        tpTotalSales: true,
-      },
-    }),
-    prisma.$queryRaw<
-      Array<{ name: string; price: number; quantity: number }>
-    >(Prisma.sql`
-      SELECT DISTINCT ON (LOWER(oi."name"))
-        oi."name", oi."price"::float AS "price", oi."quantity"::float AS "quantity"
-      FROM "OtterOrderItem" oi
-      JOIN "OtterOrder" oo ON oo."id" = oi."orderId"
-      WHERE oo."storeId" = ANY(${storeIds}::text[])
-        AND oo."referenceTimeLocal" >= ${cutoff}
-        AND oi."price" > 0
-      ORDER BY LOWER(oi."name"), oo."referenceTimeLocal" DESC
-    `),
-  ])
-
-  const merged = mergeSellPrices(
-    primaryRows.map((r) => ({
-      itemName: r.itemName,
-      totalQty: (r._sum.fpQuantitySold ?? 0) + (r._sum.tpQuantitySold ?? 0),
-      totalSales: (r._sum.fpTotalSales ?? 0) + (r._sum.tpTotalSales ?? 0),
-    })),
-    fallbackRows
-  )
-
-  return merged
 }
