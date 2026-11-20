@@ -160,9 +160,9 @@ export function BlocksCatalogue() {
         </Card>
       </Both>
 
-      <Both name="StoreCard" replaces=".stcard .pstore .prow .pl-store .iv-store .ck-store .cw-store" note="Side by side on the desk, stacked on the phone.">
+      <Both name="StoreCard" replaces=".stcard .pstore .prow .pl-store .iv-store .ck-store .cw-store" note="Side by side on the desk, stacked on the phone. With `more`, a card opens in place (Hollywood here).">
         <StoreCardGrid>
-          <StoreCard name="Hollywood" status={{ tone: "good", label: "On track" }} figures={[{ label: "Sales", value: "$21,940" }, { label: "Kept", value: "$3,180" }]} note="Up $820 on last week" />
+          <StoreCard name="Hollywood" status={{ tone: "good", label: "On track" }} figures={[{ label: "Sales", value: "$21,940" }, { label: "Kept", value: "$3,180" }]} note="Up $820 on last week" more={[{ label: "Food", value: "30¢ of each dollar" }, { label: "Labor", value: "27¢ of each dollar" }, { label: "App fees", value: "12¢ of each dollar" }]} moreAction="Show only Hollywood" href="#" />
           <StoreCard name="Van Nuys" status={{ tone: "warn", label: "Needs a look" }} figures={[{ label: "Sales", value: "$15,310" }, { label: "Kept", value: "$2,140" }]} note="Food cost 31.2%, above target" />
           <StoreCard name="Glendale" status={{ tone: "wait", label: "Waiting on data" }} figures={[{ label: "Sales", value: "$10,960" }, { label: "Kept", value: "≤ $1,100" }]} note="Labor missing Nov 12–13" />
         </StoreCardGrid>

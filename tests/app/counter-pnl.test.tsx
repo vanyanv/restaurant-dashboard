@@ -247,12 +247,16 @@ describe("Counter P&L", () => {
     expect(container.querySelector(".pl-detail")).toBeNull()
   })
 
-  it("presses a store card and scopes the page to it", () => {
+  it("opens a store card in place, and its button scopes the page to the store", () => {
     const { container } = render(<CounterPnlClient {...base} sections={sections} />)
-    const cards = container.querySelectorAll("button.cu-store")
+    const cards = container.querySelectorAll<HTMLDetailsElement>("details.cu-store")
     expect(cards).toHaveLength(2)
-    expect(cards[1].textContent).toContain("2 days of labor missing")
-    fireEvent.click(cards[0])
+    // The missing input stays on the resting card, not behind the fold.
+    expect(cards[1].querySelector("summary")!.textContent).toContain("2 days of labor missing")
+    expect(Array.from(cards[0].querySelectorAll("dt")).map((d) => d.textContent)).toEqual(["Food", "Labor", "App fees"])
+    expect(cards[0].open).toBe(false)
+    cards[0].open = true
+    fireEvent.click(within(cards[0]).getByText("Show only Hollywood"))
     expect(push).toHaveBeenCalledWith("/dashboard/pnl?store=hollywood", { scroll: false })
   })
 

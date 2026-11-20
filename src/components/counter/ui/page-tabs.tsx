@@ -1,6 +1,6 @@
 "use client"
 
-import type { ReactNode } from "react"
+import { useRef, useState, type ReactNode } from "react"
 import { usePathname, useSearchParams } from "next/navigation"
 import { Tabs } from "./tabs"
 
@@ -39,7 +39,24 @@ export function PageTabs({
   const fallback = tabs.find((t) => t.key === initial)?.key ?? tabs[0]?.key ?? ""
   const active = tabs.find((t) => t.key === asked)?.key ?? fallback
 
+  // Which way the last pick moved along the row, so the panel comes in from
+  // that side. Unset until a tab is picked: a page that opens does not slide.
+  const [dir, setDir] = useState<"fwd" | "back" | undefined>(undefined)
+
+  const root = useRef<HTMLDivElement>(null)
+
   const select = (key: string) => {
+    // On a phone the tab row stays at the top while the panel scrolls under
+    // it. Picked from there, the new panel starts at its top, not wherever
+    // the last one had been scrolled to.
+    const el = root.current
+    const row = el?.querySelector(":scope > .cu-tabs")
+    if (el && row && row.getBoundingClientRect().top > el.getBoundingClientRect().top + 1) {
+      requestAnimationFrame(() => el.scrollIntoView({ block: "start" }))
+    }
+    const from = tabs.findIndex((t) => t.key === active)
+    const to = tabs.findIndex((t) => t.key === key)
+    if (to !== from) setDir(to > from ? "fwd" : "back")
     const next = new URLSearchParams(search.toString())
     if (key === fallback) next.delete(param)
     else next.set(param, key)
@@ -53,7 +70,7 @@ export function PageTabs({
   // fold's content was: the sections stream in once, a switch is instant and
   // keeps any half-typed input, and find-in-page still reaches every figure.
   return (
-    <div className="cu-pagetabs">
+    <div className="cu-pagetabs" ref={root}>
       <Tabs
         label={label}
         active={active}
@@ -61,7 +78,13 @@ export function PageTabs({
         onSelect={select}
       />
       {tabs.map((t) => (
-        <div key={t.key} className="cu-pagetabs__panel" data-tab={t.key} hidden={t.key !== active}>
+        <div
+          key={t.key}
+          className="cu-pagetabs__panel"
+          data-tab={t.key}
+          data-dir={t.key === active ? dir : undefined}
+          hidden={t.key !== active}
+        >
           {t.content}
         </div>
       ))}

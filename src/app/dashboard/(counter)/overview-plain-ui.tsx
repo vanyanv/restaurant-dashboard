@@ -117,7 +117,13 @@ export function OverviewStatuses({ o }: { o: OverviewPlain }) {
   )
 }
 
-/** One card per store, all open: sales, the change, orders and labor. */
+const perDollar = (v: number | null) => (v === null ? "—" : `${Math.round(v * 100)}¢ of each dollar`)
+
+/**
+ * One card per store: sales, the change, orders and labor. A store that sold
+ * opens in place for what it kept and where the rest went, so two stores can
+ * be read side by side before the page is narrowed to one.
+ */
 export function OverviewStores({ o, onStore }: { o: OverviewPlain; onStore: (storeId: string) => void }) {
   if (o.stores.length === 0) return null
   return (
@@ -148,6 +154,21 @@ export function OverviewStores({ o, onStore }: { o: OverviewPlain; onStore: (sto
               value: s.laborMissingDays > 0 ? `${plural(s.laborMissingDays, "day")} missing` : `${pct(s.laborPct)} of sales`,
             },
           ]}
+          more={
+            s.sales > 0
+              ? [
+                  {
+                    label: "Kept",
+                    value:
+                      `${s.keptAtMost ? "≤ " : ""}${money(s.kept)}` +
+                      (s.keptPct === null ? "" : ` · ${pct(s.keptPct)} of sales`),
+                  },
+                  { label: "Food", value: perDollar(s.foodShare) },
+                  { label: "App fees", value: perDollar(s.feesShare) },
+                ]
+              : undefined
+          }
+          moreAction={`Show only ${s.name}`}
         />
       ))}
     </StoreCardGrid>

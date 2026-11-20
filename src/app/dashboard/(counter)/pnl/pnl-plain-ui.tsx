@@ -37,6 +37,7 @@ const STATUS_TONE: Record<PlainTone, StatusTone> = { ok: "good", warn: "warn", b
 
 /** "12¢" */
 const cents = (v: number | null) => (v === null ? "—" : `${Math.round(v * 100)}¢`)
+const perDollar = (v: number | null) => (v === null ? "—" : `${cents(v)} of each dollar`)
 
 const signed = (v: number) => `${v >= 0 ? "+" : "−"}${money(Math.abs(v))}`
 
@@ -344,7 +345,7 @@ function DayDetail({ d, showStores }: { d: PlainDay; showStores: boolean }) {
   )
 }
 
-/** One card per store; pressing one scopes the page to it. */
+/** One card per store. A store that sold opens in place for where each dollar went; the button inside scopes the page to it. */
 export function PlainStores({ p, onStore }: { p: PnlPlain; onStore: (storeId: string) => void }) {
   return (
     <StoreCardGrid>
@@ -366,6 +367,16 @@ export function PlainStores({ p, onStore }: { p: PnlPlain; onStore: (storeId: st
                 ]
               : []
           }
+          more={
+            s.sales > 0
+              ? [
+                  { label: "Food", value: perDollar(s.food) },
+                  { label: "Labor", value: perDollar(s.labor) },
+                  { label: "App fees", value: perDollar(s.fees) },
+                ]
+              : undefined
+          }
+          moreAction={`Show only ${s.name}`}
           note={
             s.sales > 0 ? (
               <>
@@ -379,8 +390,6 @@ export function PlainStores({ p, onStore }: { p: PnlPlain; onStore: (storeId: st
                     vs before
                   </>
                 ) : null}
-                <br />
-                food {cents(s.food)} · labor {cents(s.labor)} · fees {cents(s.fees)}
                 {s.flags.length > 0 ? (
                   <>
                     <br />

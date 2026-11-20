@@ -16,7 +16,7 @@ export const OVERVIEW_PLAIN: OverviewPlain = {
   ],
   statuses: [{ tone: "good", text: "Sales up on the week before" }, { tone: "good", text: "Every cost on file" }],
   stores: [
-    { storeId: "hollywood", name: "Hollywood", sales: 7468, salesChange: 298, salesChangePct: 0.0416, orders: 291, laborPct: 0.21, laborMissingDays: 0 },
+    { storeId: "hollywood", name: "Hollywood", sales: 7468, salesChange: 298, salesChangePct: 0.0416, orders: 291, laborPct: 0.21, laborMissingDays: 0, kept: 1120, keptPct: 0.15, keptAtMost: false, foodShare: 0.3, feesShare: 0.12 },
   ],
   needs: [
     { key: "alerts-MENU_ITEM", tone: "warn", what: "12 menu items sold far above or below normal", why: null, action: { label: "Review items", href: "/dashboard/alerts" } },
