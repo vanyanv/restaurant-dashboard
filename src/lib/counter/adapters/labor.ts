@@ -27,6 +27,16 @@ import { salesByDayOf, salesByStoreDayOf } from "@/lib/counter/labor-figures"
 import { loadScheduleGap, loadStaffingCurve, type StaffingCurve } from "@/lib/counter/staffing-curve"
 import { count, money, pct, plural, points } from "@/lib/counter/format"
 import { buildLaborPlain, listDays, type LaborPlain } from "@/lib/counter/labor-plain"
+import {
+  buildLaborClock,
+  buildLaborHours,
+  buildLaborPeople,
+  type LaborClockView,
+  type LaborCrew,
+  type LaborHoursView,
+  type LaborPeopleView,
+} from "@/lib/counter/labor-crew"
+import { loadLaborCrew } from "@/lib/counter/labor-crew-load"
 import { buildLaborSummary, buildLaborWeeks, type LaborSummary, type LaborWeeksView } from "@/lib/counter/labor-summary"
 import {
   dayCount,
@@ -340,6 +350,12 @@ export interface LaborSections {
   summary: SectionData<LaborSummary>
   /** The trend's weeks as sales against labor, the week picker and the two-week comparison. */
   weeks: SectionData<LaborWeeksView>
+  /** The day after the range, hour by hour: people scheduled against forecast orders. */
+  hours: SectionData<LaborHoursView>
+  /** Each person's published hours and flagged time records. */
+  people: SectionData<LaborPeopleView>
+  /** Missed punches by store. The early and late minutes are `leaks`. */
+  clock: SectionData<LaborClockView>
   headline: SectionData<LaborHeadline>
   week: SectionData<LaborWeekStrip>
   schedule: SectionData<ScheduleSection>
@@ -357,6 +373,12 @@ export interface StoreLaborSections {
   /** The same days and roles as the group page; no store cards, there is one store. */
   summary: SectionData<LaborSummary>
   weeks: SectionData<LaborWeeksView>
+  /** The day after the range, hour by hour: people scheduled against forecast orders. */
+  hours: SectionData<LaborHoursView>
+  /** Each person's published hours and flagged time records. */
+  people: SectionData<LaborPeopleView>
+  /** Missed punches by store. The early and late minutes are `leaks`. */
+  clock: SectionData<LaborClockView>
   headline: SectionData<LaborHeadline>
   schedule: SectionData<ScheduleSection>
   roles: SectionData<RolesSection>
@@ -1714,7 +1736,53 @@ function loadEverything(input: LaborSectionsInput) {
     }),
   ))
 
-  return { nextDay, scopeP, laborP, leaksP, curveLoadP, gapP, trendLoadP }
+  const crewP = lazy(() => classify(() => loadLaborCrew({ range, storeId, accountId }), {
+    retryAction: "retryLeaks",
+  }))
+
+  return { nextDay, scopeP, laborP, leaksP, curveLoadP, gapP, trendLoadP, crewP }
+}
+
+const dayLabel = (d: Date) =>
+  new Intl.DateTimeFormat("en-US", { weekday: "short", month: "short", day: "numeric" }).format(d)
+
+/** The Hours of the day tab, on either route. */
+function hoursSection(
+  scopeSd: SectionData<Statement>,
+  curveSd: SectionData<StaffingCurve | null>,
+  nextDay: Date,
+): SectionData<LaborHoursView> {
+  const label = dayLabel(nextDay)
+  return mapReadyTo(gate(scopeSd, curveSd), (curve) =>
+    curve === null
+      ? notComputed<LaborHoursView>(
+          `Nothing to show for ${label}: there are no published shifts and no sales forecast for that day.`,
+        )
+      : ready(buildLaborHours(curve, label)),
+  )
+}
+
+/** The People tab, on either route. */
+function peopleSection(
+  scopeSd: SectionData<Statement>,
+  crewSd: SectionData<LaborCrew>,
+): SectionData<LaborPeopleView> {
+  return mapReadyTo(gate(scopeSd, crewSd), (crew) => {
+    const view = buildLaborPeople(crew)
+    return view === null
+      ? notComputed<LaborPeopleView>(
+          "Harri has no published shifts and no time records for these days, so there is nobody to list.",
+        )
+      : ready(view)
+  })
+}
+
+/** The Time clock tab's missed punches, on either route. */
+function clockSection(
+  scopeSd: SectionData<Statement>,
+  crewSd: SectionData<LaborCrew>,
+): SectionData<LaborClockView> {
+  return mapReadyTo(gate(scopeSd, crewSd), (crew) => ready(buildLaborClock(crew)))
 }
 
 /** The labour data a section needs, or the reasoned refusal that replaces it. */
@@ -1872,7 +1940,7 @@ function trendSection(sd: SectionData<LaborTrendWeek[]>): SectionData<TrendSecti
  * `chooseSections(sections, PHONE_LABOR_SECTIONS)` to its client, so the loads only the
  * desk reads never run on a phone.
  */
-export const PHONE_LABOR_SECTIONS = ["plain", "summary", "weeks", "headline", "decision", "schedule", "roles"] as const satisfies ReadonlyArray<keyof LaborSections>
+export const PHONE_LABOR_SECTIONS = ["plain", "summary", "weeks", "hours", "people", "clock", "leaks", "headline", "decision", "schedule", "roles"] as const satisfies ReadonlyArray<keyof LaborSections>
 export type PhoneLaborSections = Pick<LaborSections, (typeof PHONE_LABOR_SECTIONS)[number]>
 
 /**
@@ -1887,7 +1955,7 @@ export function getLaborSectionPromises(
 ): StreamedSections<LaborSections> {
   const { range, today } = input
   const granularity = granularityFor(range)
-  const { nextDay, scopeP, laborP, leaksP, curveLoadP, gapP, trendLoadP } =
+  const { nextDay, scopeP, laborP, leaksP, curveLoadP, gapP, trendLoadP, crewP } =
     loadEverything(input)
 
   const curveLabel = new Intl.DateTimeFormat("en-US", {
@@ -1911,6 +1979,21 @@ export function getLaborSectionPromises(
         weeksSection(gate(scopeSd, trendSd), range, input.today),
       ),
       "retryTrend",
+    )),
+
+    hours: lazy(() => guardSection(
+      Promise.all([scopeP, curveLoadP]).then(([scopeSd, curveSd]) => hoursSection(scopeSd, curveSd, nextDay)),
+      "retryCurve",
+    )),
+
+    people: lazy(() => guardSection(
+      Promise.all([scopeP, crewP]).then(([scopeSd, crewSd]) => peopleSection(scopeSd, crewSd)),
+      "retryLeaks",
+    )),
+
+    clock: lazy(() => guardSection(
+      Promise.all([scopeP, crewP]).then(([scopeSd, crewSd]) => clockSection(scopeSd, crewSd)),
+      "retryLeaks",
     )),
 
     headline: lazy(() => guardSection(
@@ -1995,7 +2078,7 @@ export async function getLaborSections(input: LaborSectionsInput): Promise<Labor
  * `chooseSections(sections, PHONE_STORE_LABOR_SECTIONS)` to its client, so the loads only the
  * desk reads never run on a phone.
  */
-export const PHONE_STORE_LABOR_SECTIONS = ["plain", "summary", "weeks", "headline", "schedule", "roles"] as const satisfies ReadonlyArray<keyof StoreLaborSections>
+export const PHONE_STORE_LABOR_SECTIONS = ["plain", "summary", "weeks", "hours", "people", "clock", "leaks", "headline", "schedule", "roles"] as const satisfies ReadonlyArray<keyof StoreLaborSections>
 export type PhoneStoreLaborSections = Pick<StoreLaborSections, (typeof PHONE_STORE_LABOR_SECTIONS)[number]>
 
 /**
@@ -2012,7 +2095,7 @@ export function getStoreLaborSectionPromises(
 ): StreamedSections<StoreLaborSections> {
   const { range } = input
   const granularity = granularityFor(range)
-  const { laborP, leaksP, trendLoadP, scopeP } = loadEverything(input)
+  const { nextDay, laborP, leaksP, trendLoadP, scopeP, curveLoadP, crewP } = loadEverything(input)
 
   return {
     plain: lazy(() => guardSection(
@@ -2029,6 +2112,21 @@ export function getStoreLaborSectionPromises(
         weeksSection(gate(scopeSd, trendSd), range, input.today),
       ),
       "retryTrend",
+    )),
+
+    hours: lazy(() => guardSection(
+      Promise.all([scopeP, curveLoadP]).then(([scopeSd, curveSd]) => hoursSection(scopeSd, curveSd, nextDay)),
+      "retryCurve",
+    )),
+
+    people: lazy(() => guardSection(
+      Promise.all([scopeP, crewP]).then(([scopeSd, crewSd]) => peopleSection(scopeSd, crewSd)),
+      "retryLeaks",
+    )),
+
+    clock: lazy(() => guardSection(
+      Promise.all([scopeP, crewP]).then(([scopeSd, crewSd]) => clockSection(scopeSd, crewSd)),
+      "retryLeaks",
     )),
 
     headline: lazy(() => guardSection(

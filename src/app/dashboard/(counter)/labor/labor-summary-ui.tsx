@@ -2,8 +2,9 @@
 
 import { useState, type ReactNode } from "react"
 import { Section } from "@/components/counter"
-import { Answer, BarRows, Card, ChartKey, Compare, SplitBars, StoreCard, StoreCardGrid, Tabs } from "@/components/counter/ui"
-import type { LaborSections } from "@/lib/counter/adapters/labor"
+import { Answer, BarRows, Card, ChartKey, Compare, Rows, SplitBars, Status, StoreCard, StoreCardGrid, Tabs, type RowsColumn } from "@/components/counter/ui"
+import type { LaborSections, LeakRowView, LeaksSection } from "@/lib/counter/adapters/labor"
+import type { LaborClockView, LaborHoursView, LaborPeopleView, LaborPersonRow } from "@/lib/counter/labor-crew"
 import type { SectionSources } from "@/lib/counter/adapters/types"
 import { parseIsoDay, type DateRange } from "@/lib/counter/date-range"
 import { compareLaborWeeks, type LaborSummary, type LaborWeeksView } from "@/lib/counter/labor-summary"
@@ -158,16 +159,111 @@ export function LaborWeeksBlock({ w, onWeek }: { w: LaborWeeksView; onWeek: (ran
   )
 }
 
-type LaborTab = "summary" | "weeks" | "stores"
+/** The day after the range, hour by hour: people on the schedule against forecast orders. */
+export function LaborHoursBlock({ h }: { h: LaborHoursView }) {
+  return (
+    <div className="cu-stack">
+      <Card as="section" label="Hours of the day" caption={`Hours of the day · ${h.day}`}>
+        <Answer>{h.sentence}</Answer>
+        <ChartKey items={[{ kind: "fill", label: "people on the schedule" }]} />
+        <BarRows
+          rows={h.rows.map((r) => ({
+            key: r.key,
+            title: r.title,
+            value: r.value,
+            fill: r.fill,
+            detail: r.detail,
+            tag: r.tight ? "tightest hour" : undefined,
+          }))}
+        />
+        <p className="cu-note">{h.note}</p>
+      </Card>
+    </div>
+  )
+}
+
+const PERSON_COLUMNS: RowsColumn<LaborPersonRow>[] = [
+  { key: "name", label: "Person", slot: "title", render: (r) => r.name },
+  { key: "shifts", label: "Shifts", slot: "detail", render: (r) => (r.store ? `${r.shifts} · ${r.store}` : r.shifts) },
+  { key: "hours", label: "Scheduled", slot: "amount", align: "end", render: (r) => r.hours },
+  {
+    key: "records",
+    label: "To look at",
+    slot: "status",
+    render: (r) =>
+      r.over || r.records ? (
+        <Status plain tone={r.over ? "warn" : "wait"}>
+          {[r.over, r.records].filter(Boolean).join(" · ")}
+        </Status>
+      ) : null,
+  },
+]
+
+/** Each person's published hours, and who is past 40 hours or has a punch flagged. */
+export function LaborPeopleBlock({ p }: { p: LaborPeopleView }) {
+  return (
+    <div className="cu-stack">
+      <Card as="section" label="People" caption="People · published schedule">
+        <Answer>{p.sentence}</Answer>
+        <Rows columns={PERSON_COLUMNS} rows={p.rows} rowKey={(r) => r.key} />
+        <p className="cu-note">{p.note}</p>
+      </Card>
+    </div>
+  )
+}
+
+/** Missed punches, store by store. */
+export function LaborClockBlock({ c }: { c: LaborClockView }) {
+  return (
+    <div className="cu-stack">
+      <Card as="section" label="Missed punches" caption="Missed punches">
+        <Answer>{c.sentence}</Answer>
+        <BarRows rows={c.stores.map((s) => ({ key: s.key, title: s.name, value: s.value, fill: s.fill, detail: s.detail }))} />
+        <p className="cu-note">{c.note}</p>
+      </Card>
+    </div>
+  )
+}
+
+const LEAK_COLUMNS: RowsColumn<LeakRowView>[] = [
+  { key: "leak", label: "What happened", slot: "title", render: (r) => r.leak },
+  { key: "alerts", label: "Times", slot: "detail", render: (r) => `${r.alerts} times · ${r.people} people` },
+  { key: "hours", label: "Hours", slot: "status", align: "end", render: (r) => r.hours },
+  { key: "cost", label: "Cost", slot: "amount", align: "end", render: (r) => r.cost },
+]
 
 /**
- * The Labor page as three short tabs, in one place so the four pages (desk
+ * Early and late minutes, in hours and dollars: the leak ledger's own rows.
+ * The rows with no duration (missed and unscheduled punches) are left to the
+ * card above and to the ledger's note, which counts them.
+ */
+export function LaborMinutesBlock({ l }: { l: LeaksSection }) {
+  const rows = l.rows.filter((r) => r.kind !== "uncostable")
+  return (
+    <div className="cu-stack">
+      <Card as="section" label="Early and late minutes" caption="Early and late minutes">
+        {rows.length > 0 ? <Rows columns={LEAK_COLUMNS} rows={rows} rowKey={(r) => r.key} /> : null}
+        <p className="cu-note">
+          Paid for outside the schedule: {l.total.hours}, {l.total.cost}. {l.note}
+        </p>
+      </Card>
+    </div>
+  )
+}
+
+type LaborTab = "summary" | "weeks" | "stores" | "hours" | "people" | "clock"
+
+/**
+ * The Labor page as six short tabs, in one place so the four pages (desk
  * and phone, group and store) cannot drift apart. The owner found the single
  * scroll too long (2026-11-20), so each tab is one question:
  *
  * - Summary: the sentence (the page's own `lead`) and each day;
  * - Compare weeks: sales against labor week by week, and two weeks side by side;
- * - Stores and roles: the stores side by side and the cost by role.
+ * - Stores and roles: the stores side by side and the cost by role;
+ * - Hours: the next day hour by hour, people scheduled against forecast orders;
+ * - People: each person's published hours and flagged time records;
+ * - Time clock: missed punches by store, and early and late minutes.
  *
  * The tab is local state: opening another week or store keeps the reader on
  * the tab they were on. A tab that is not open is not rendered, so its
@@ -183,7 +279,7 @@ export function LaborDetail({
 }: {
   /** The page's sentence card, drawn first on the Summary tab. */
   lead: ReactNode
-  sections: SectionSources<Pick<LaborSections, "summary" | "weeks">>
+  sections: SectionSources<Pick<LaborSections, "summary" | "weeks" | "hours" | "people" | "clock" | "leaks">>
   pending: boolean
   onWeek: (range: DateRange) => void
   /** Given on the all-stores page only; it is what makes the third tab "Stores and roles". */
@@ -200,6 +296,9 @@ export function LaborDetail({
           { key: "summary", label: "Summary" },
           { key: "weeks", label: "Compare weeks" },
           { key: "stores", label: onStore ? "Stores and roles" : "Roles" },
+          { key: "hours", label: "Hours" },
+          { key: "people", label: "People" },
+          { key: "clock", label: "Time clock" },
         ]}
       />
       {tab === "summary" ? (
@@ -219,6 +318,26 @@ export function LaborDetail({
         <Section bare title={onStore ? "The stores and the roles" : "The roles"} data={sections.summary} pending={pending}>
           {(d) => <LaborDetailView s={d} show="stores" onStore={onStore} />}
         </Section>
+      ) : null}
+      {tab === "hours" ? (
+        <Section bare title="Hours of the day" data={sections.hours} pending={pending}>
+          {(h) => <LaborHoursBlock h={h} />}
+        </Section>
+      ) : null}
+      {tab === "people" ? (
+        <Section bare title="People" data={sections.people} pending={pending}>
+          {(p) => <LaborPeopleBlock p={p} />}
+        </Section>
+      ) : null}
+      {tab === "clock" ? (
+        <>
+          <Section bare title="Missed punches" data={sections.clock} pending={pending}>
+            {(c) => <LaborClockBlock c={c} />}
+          </Section>
+          <Section bare title="Early and late minutes" data={sections.leaks} pending={pending}>
+            {(l) => <LaborMinutesBlock l={l} />}
+          </Section>
+        </>
       ) : null}
     </>
   )
