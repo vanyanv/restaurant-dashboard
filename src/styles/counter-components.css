@@ -511,7 +511,6 @@ width:340px; height:718px; flex:none;
 .mtabs{display:grid;grid-template-columns:repeat(5,1fr);border-top:1px solid var(--line);background:var(--chrome);padding:8px 0 14px;align-items:end}
 .mtab{display:flex;flex-direction:column;align-items:center;gap:4px;font-family:var(--mono);font-size:8.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3);min-height:44px;justify-content:flex-end}
 .mtab svg{width:19px;height:19px}
-.mtab.on{color:var(--accent)}
 .mtab--ask .bub{width:46px;height:46px;border-radius:50%;background:var(--accent);color:var(--surface);display:grid;place-items:center;margin-top:-22px;box-shadow:0 8px 18px -8px oklch(52% 0.19 27 / .85);border:2px solid var(--chrome)}
 .mtab--ask .bub svg{width:20px;height:20px}
 .mtab--ask{color:var(--ink-3)}
@@ -2573,12 +2572,53 @@ button.wkd {
 /*
  * `.mtab` is an anchor here and a `<button>` in the prototype, so the two
  * declarations `:where(.pframe) button` made for it — no underline, inherited
- * colour — have to be made again for a link. `.mtab.on` and `.mtab--ask` set
- * their own colours after this, so `inherit` is the resting state only.
+ * colour — have to be made again for a link. `.mtab[aria-current]` (below) and `.mtab--ask` set
+ * their own colours, so `inherit` is the resting state only.
  */
 .mtabs .mtab {
   text-decoration: none;
   color: var(--ink-3);
+}
+
+/*
+ * WHERE YOU ARE. The owner could not tell Today from Invoices on the bar, and
+ * the reason was not faintness: the active rule never applied. `.mtab.on`
+ * sat near the top of this sheet with the same specificity as `.mtabs .mtab`
+ * above, so the later rule won and every tab drew in `--ink-3` (measured
+ * before this change: identical colour on all four). It is keyed on
+ * `aria-current` now — the attribute `MTabs` already sets for screen readers —
+ * so the look and the announcement cannot disagree, and it lives here, after
+ * the resting rule, so order cannot undo it again.
+ *
+ * Colour alone is not enough on a 19px stroked glyph over an 8.5px label, so
+ * the current tab says it three ways: a `--accent-wash` plate behind the icon
+ * (the desk rail's `.navbtn[aria-current]` wash, so desk and phone mark a
+ * place the same way), a heavier stroke, and an `--ink` label at 600. The
+ * plate's padding is on every icon, current or not, so moving between tabs
+ * never shifts a glyph and the bar keeps its 44px tab.
+ *
+ * The raised Ask disc stays an action and gets no plate; on Ask only its
+ * label darkens and bolds.
+ */
+.mtabs .mtab svg {
+  box-sizing: content-box;
+  padding: 4px 14px;
+  border-radius: var(--r);
+  transition: background-color .16s var(--ease);
+}
+.mtabs .mtab--ask .bub svg {
+  padding: 0;
+}
+.mtabs .mtab[aria-current="page"]:not(.mtab--ask) {
+  color: var(--accent-hi);
+}
+.mtabs .mtab[aria-current="page"]:not(.mtab--ask) svg {
+  background: var(--accent-wash);
+  stroke-width: 2;
+}
+.mtabs .mtab[aria-current="page"] > span:last-child {
+  color: var(--ink);
+  font-weight: 600;
 }
 
 /*
