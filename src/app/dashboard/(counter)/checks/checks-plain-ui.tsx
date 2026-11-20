@@ -2,7 +2,7 @@
 
 import { useEffect, useState, type ReactNode, useEffectEvent } from "react"
 import { ModalDialog } from "@/components/counter/modal-dialog"
-import { reviewCheckPhoto } from "@/lib/counter/actions/checks"
+import { reviewCheckPhoto, reviewCheckPhotos } from "@/lib/counter/actions/checks"
 import type { CellView } from "@/lib/counter/adapters/checks"
 import { actMarks, Answer, BigNumber, useAct, type Vs } from "@/components/counter/ui"
 import { Glyph, Lightbox, markPhotoSrc, OutcomeLine, photoSrc, type Outcome } from "./checks-ui"
@@ -432,17 +432,11 @@ export function PhotoViewer({ cell, caption }: { cell: CellView; caption: string
   if (!p) return null
   const allRest = () =>
     act("all", async () => {
+      // One save and one render for the lot, not one per photo.
       const todo = photos.filter((x) => x.review === null)
-      let failed: string | null = null
-      for (const x of todo) {
-        const r = await reviewCheckPhoto({ markId: x.id, verdict: "ok" })
-        if (!r.ok) {
-          failed = r.error
-          break
-        }
-      }
-      setOutcome(failed ? { ok: false, text: failed } : { ok: true, text: `${todo.length} marked as looking good.` })
-      return failed ? { ok: false as const, error: failed } : { ok: true as const }
+      const r = await reviewCheckPhotos({ markIds: todo.map((x) => x.id), verdict: "ok" })
+      setOutcome(r.ok ? { ok: true, text: r.message ?? `${todo.length} marked as looking good.` } : { ok: false, text: r.error })
+      return r
     })
 
   return (

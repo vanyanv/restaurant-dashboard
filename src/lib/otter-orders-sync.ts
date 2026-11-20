@@ -8,7 +8,7 @@ import {
   withConcurrency,
   type OrderDetailsPayload,
 } from "@/lib/otter"
-import { withJobRun } from "@/lib/monitoring/job-run"
+import { recentSuccessSkip, withJobRun, type RecentSuccessSkip } from "@/lib/monitoring/job-run"
 import { shouldSyncStore } from "@/lib/store-lifecycle"
 
 /**
@@ -161,21 +161,46 @@ async function fetchAndPersistDetails(
   return true
 }
 
+export type OrdersSyncOpts = {
+  // Same union runOrdersSyncForStore accepts. scripts/sync-otter-orders.ts
+  // has always passed "github-actions"; the narrower union here only ever
+  // meant the call didn't typecheck, and scripts/ wasn't typechecked.
+  triggeredBy?: "cron" | "manual" | "github-actions" | "internal"
+  metadata?: Record<string, unknown>
+}
+
+/**
+ * With `skipIfRecentSuccess`, a run that finds a SUCCESS from the same kind of
+ * caller in the last 20 minutes returns `{ skipped: "recent-success" }` and
+ * writes nothing — the workflow's backup schedule repeating a window the sync
+ * ticker already dispatched. Only the scheduled script passes it, and only on
+ * a run with no explicit `days` input.
+ */
+export function runOrdersSync(
+  days: number,
+  endDateOverride: Date | undefined,
+  opts: OrdersSyncOpts & { skipIfRecentSuccess: boolean },
+): Promise<OrdersSyncResult | RecentSuccessSkip>
+export function runOrdersSync(
+  days: number,
+  endDateOverride?: Date,
+  opts?: OrdersSyncOpts,
+): Promise<OrdersSyncResult>
 export async function runOrdersSync(
   days: number,
   endDateOverride?: Date,
-  opts?: {
-    // Same union runOrdersSyncForStore accepts. scripts/sync-otter-orders.ts
-    // has always passed "github-actions"; the narrower union here only ever
-    // meant the call didn't typecheck, and scripts/ wasn't typechecked.
-    triggeredBy?: "cron" | "manual" | "github-actions" | "internal"
-    metadata?: Record<string, unknown>
-  }
-): Promise<OrdersSyncResult> {
+  opts?: OrdersSyncOpts & { skipIfRecentSuccess?: boolean },
+): Promise<OrdersSyncResult | RecentSuccessSkip> {
   const triggeredBy = opts?.triggeredBy ?? "manual"
   return withJobRun(
     "otter.orders.sync",
-    { triggeredBy, metadata: { windowDays: days, ...(opts?.metadata ?? {}) } },
+    {
+      triggeredBy,
+      skipIf: opts?.skipIfRecentSuccess
+        ? recentSuccessSkip("otter.orders.sync", { triggeredBy })
+        : async () => null,
+      metadata: { windowDays: days, ...(opts?.metadata ?? {}) },
+    },
     async ({ addRows }) => {
       const result = await runOrdersSyncInner(days, endDateOverride)
       addRows(result.ordersCreated + result.ordersUpdated)

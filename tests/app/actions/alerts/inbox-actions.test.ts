@@ -44,6 +44,9 @@ import {
   closeAlerts,
 } from "@/app/actions/alerts/inbox-actions"
 import { ANOMALY_RELEVANCE_DAYS } from "@/lib/anomaly-window"
+import { revalidatePath } from "next/cache"
+import { bustTags } from "@/lib/cache/cached"
+import { alertsCacheTag } from "@/lib/alerts/cache-tag"
 
 const owner = { user: { id: "u1", accountId: "acct-A", role: "OWNER" } }
 
@@ -239,6 +242,35 @@ describe("acknowledgeAlert / dismissAlert", () => {
       where: { id: "a1" },
       data: { status: "DISMISSED", acknowledgedAt: expect.any(Date) },
     })
+  })
+  // Same after-write as the row and bulk closes: both inbox pages, and the
+  // rail's cached count. It used to be the desk page only.
+  it.each([
+    ["acknowledge", () => acknowledgeAlert({ alertId: "a1" })],
+    ["dismiss", () => dismissAlert({ alertId: "a1" })],
+  ])("%s revalidates both inbox pages and busts the account's alerts tag", async (_how, run) => {
+    vi.mocked(getServerSession).mockResolvedValue(owner as never)
+    vi.mocked(prisma.alert.findUnique).mockResolvedValue({
+      id: "a1",
+      store: { accountId: "acct-A" },
+    } as never)
+    vi.mocked(prisma.alert.update).mockResolvedValue({} as never)
+
+    expect(await run()).toEqual({ ok: true })
+    const paths = vi.mocked(revalidatePath).mock.calls.map((c) => c[0])
+    expect(paths).toEqual(expect.arrayContaining(["/dashboard/alerts", "/m/alerts"]))
+    expect(bustTags).toHaveBeenCalledWith([alertsCacheTag("acct-A")])
+  })
+
+  it("revalidates nothing when the alert is on another account", async () => {
+    vi.mocked(getServerSession).mockResolvedValue(owner as never)
+    vi.mocked(prisma.alert.findUnique).mockResolvedValue({
+      id: "a1",
+      store: { accountId: "acct-OTHER" },
+    } as never)
+    await dismissAlert({ alertId: "a1" })
+    expect(revalidatePath).not.toHaveBeenCalled()
+    expect(bustTags).not.toHaveBeenCalled()
   })
 })
 

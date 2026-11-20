@@ -1,7 +1,6 @@
 "use client"
 
 import { useRef, useState, useTransition } from "react"
-import { useRouter } from "next/navigation"
 
 import { finishStockCount, recordCountLine } from "@/lib/counter/actions/stock-count"
 import type {
@@ -51,7 +50,6 @@ export type SaveState = "saving" | "ok" | "failed"
  * count and does save.
  */
 export function useCountEntry(entry: CountSessionEntry) {
-  const router = useRouter()
   const [finishing, startFinishing] = useTransition()
   const [values, setValues] = useState<Record<string, string>>(() =>
     Object.fromEntries(
@@ -123,7 +121,7 @@ export function useCountEntry(entry: CountSessionEntry) {
           setFinishError("The count could not be closed. Please try again.")
           return
         }
-        router.refresh()
+        // No router.refresh(): finishStockCount revalidates the inventory pages, this one included.
       } catch {
         setFinishError("The count could not be closed. Please try again.")
       }

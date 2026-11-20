@@ -45,9 +45,15 @@ async function main() {
 
   try {
     const started = Date.now()
+    // --skip-if-recent: the workflow passes it on a run with no explicit
+    // `days` input, i.e. the ticker's dispatch or the backup schedule. If one
+    // of them already succeeded in the last 20 minutes this run prints
+    // `{"skipped":"recent-success",...}` and writes nothing. A backfill with
+    // an explicit window never passes it.
     const result = await runOrdersSync(days, undefined, {
       triggeredBy: "github-actions",
       metadata: { source: "scripts/sync-otter-orders.ts" },
+      skipIfRecentSuccess: process.argv.includes("--skip-if-recent"),
     })
     console.log(JSON.stringify(result, null, 2))
     console.log(`[otter.orders.sync] completed in ${((Date.now() - started) / 1000).toFixed(1)}s`)

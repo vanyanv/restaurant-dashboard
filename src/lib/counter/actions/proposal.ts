@@ -1,5 +1,6 @@
 "use server"
 
+import { revalidatePath } from "next/cache"
 import {
   acceptMappingProposal,
   generateMappingProposals,
@@ -58,6 +59,18 @@ export async function loadPendingProposals(): Promise<PendingProposal[]> {
   }))
 }
 
+/**
+ * The catalogue and its item pages, desk and phone: the "To link" list, the
+ * mapped column and every margin read the proposals and the mappings an
+ * accept writes. The underlying actions revalidate the desk catalogue page
+ * only (a reject not even that), so this covers both surfaces and the clients
+ * need no router.refresh().
+ */
+function revalidateCatalog() {
+  revalidatePath("/dashboard/menu/catalog", "layout")
+  revalidatePath("/m/menu/catalog", "layout")
+}
+
 export async function decideProposal(
   proposalId: string,
   outcome: "accept" | "reject",
@@ -65,6 +78,7 @@ export async function decideProposal(
   if (outcome === "accept") {
     const result = await acceptMappingProposal(proposalId)
     if (!result.ok) return { ok: false, error: result.error }
+    revalidateCatalog()
     return { ok: true }
   }
   /*
@@ -76,6 +90,7 @@ export async function decideProposal(
    */
   const result = await rejectMappingProposal(proposalId)
   if (!result.ok) return { ok: false, error: "already decided, or not yours" }
+  revalidateCatalog()
   return { ok: true }
 }
 
@@ -84,5 +99,7 @@ export async function proposeMatches(): Promise<
 > {
   const result = await generateMappingProposals({})
   if (!result.ok) return { ok: false, error: result.error }
+  // Nothing new means nothing on the page changed, so no render either.
+  if (result.created > 0) revalidateCatalog()
   return { ok: true, created: result.created, skipped: result.skippedExisting }
 }

@@ -1,5 +1,6 @@
 "use server"
 
+import { revalidatePath } from "next/cache"
 import { getSession } from "@/lib/auth-scope"
 import { chatPrisma } from "@/lib/chat/prisma-chat"
 import {
@@ -69,6 +70,12 @@ export async function renameAskThread(input: {
   } catch (err) {
     return { ok: false, error: describe(err) }
   }
+  // The rail and the thread's head read the row, desk and phone; the action's
+  // response carries the re-render, so the clients need no router.refresh().
+  // (Delete does not do this: deleting the open thread navigates away, and a
+  // re-render of the address it is leaving would draw a thread that is gone.)
+  revalidatePath("/dashboard/ask")
+  revalidatePath("/m/ask")
   return { ok: true, title }
 }
 

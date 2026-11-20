@@ -25,7 +25,7 @@ import { matchNewLineItems } from "@/lib/ingredient-matching"
 import { autoResolveUnmatchedLines } from "@/lib/ingredient-auto-match"
 import { resolveAutoMatchMode } from "@/lib/ingredient-auto-match-core"
 import { bustTags } from "@/lib/cache/cached"
-import { withJobRun } from "@/lib/monitoring/job-run"
+import { recentSuccessSkip, withJobRun } from "@/lib/monitoring/job-run"
 import { logger } from "@/lib/logger"
 
 const PRICE_ALERT_PCT_THRESHOLD = 5
@@ -1079,8 +1079,23 @@ export async function POST(request: NextRequest) {
   }
 
   // JSON path (cron or non-SSE)
+  //
+  // A scheduled call (the cron secret, no `?lookbackDays`) that finds a cron
+  // run succeeded in the last 20 minutes and left nothing deferred returns
+  // `{ skipped: "recent-success" }` and writes nothing: sync-ticker.yml
+  // dispatches 6 AM / noon / 6 PM on time and the workflow's backup schedule
+  // fires the same slot again later. A run that left emails deferred never
+  // stands in, so invoices-sync-drain.sh's follow-up passes always run, and a
+  // backfill (explicit lookback) or an owner's manual sync is never skipped.
+  const skipIf =
+    fromCron && lookbackDaysOverride === undefined
+      ? recentSuccessSkip("invoices.email.sync", {
+          triggeredBy: "cron",
+          accept: (run) => readDeferred(run.metadata) === 0,
+        })
+      : async () => null
   try {
-    const result = await withJobRun("invoices.email.sync", jobOpts, async ({ jobRunId, addRows }) => {
+    const result = await withJobRun("invoices.email.sync", { ...jobOpts, skipIf }, async ({ jobRunId, addRows }) => {
       const r = await runSync(() => {}, userId, accountId, lookbackDaysOverride)
       addRows(r.created)
       await recordDeferred(jobRunId, jobOpts.metadata, r)

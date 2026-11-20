@@ -6,9 +6,14 @@ on:
     - cron: '0 */4 * * *'
   workflow_dispatch:
     inputs:
+      # Blank is the normal 3-day run, and is skipped when a run succeeded in
+      # the last 20 minutes (the ticker's dispatch and the backup schedule
+      # often land on the same window). Any number is an explicit backfill
+      # and always runs.
       days:
-        description: 'Lookback window (1-14)'
-        default: '3'
+        description: 'Lookback window (1-14). Blank = normal 3-day run.'
+        required: false
+        default: ''
 
 concurrency:
   group: otter-orders-sync
@@ -37,11 +42,14 @@ jobs:
           OTTER_EMAIL: ${{ secrets.OTTER_EMAIL }}
           OTTER_PASSWORD: ${{ secrets.OTTER_PASSWORD }}
           DAYS: ${{ github.event.inputs.days || '3' }}
+          DAYS_INPUT: ${{ github.event.inputs.days || '' }}
           LOG_FILE: logs/otter-orders-sync.log
           CRON_RETRIES: "2"
         run: |
+          skip=""
+          if [ -z "$DAYS_INPUT" ]; then skip="--skip-if-recent"; fi
           bash .github/scripts/run-with-cron-logging.sh \
-            npx tsx scripts/sync-otter-orders.ts --days="$DAYS"
+            npx tsx scripts/sync-otter-orders.ts --days="$DAYS" $skip
       - name: Upload failure log
         if: failure()
         uses: actions/upload-artifact@v4

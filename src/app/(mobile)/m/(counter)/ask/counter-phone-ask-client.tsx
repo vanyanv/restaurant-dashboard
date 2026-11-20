@@ -346,7 +346,7 @@ export function CounterPhoneAskClient({
       onRename: async (id, title) => {
         const r = await renameAskThread({ id, title })
         if (!r.ok) return r.error
-        router.refresh()
+        // No router.refresh(): renameAskThread revalidates the Ask page, desk and phone.
         return null
       },
       onDelete: async (id) => {

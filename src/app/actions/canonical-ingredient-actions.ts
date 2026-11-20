@@ -24,6 +24,17 @@ import type {
   IngredientPricePoint,
 } from "@/types/invoice"
 
+/**
+ * Every desk page that reads a canonical ingredient or its cost: the
+ * ingredient list, every recipe that costs off it, and the catalogue's
+ * margins (left out when nothing that costs a plate changed).
+ */
+function revalidateIngredientPages({ catalog = true }: { catalog?: boolean } = {}) {
+  revalidatePath("/dashboard/ingredients")
+  revalidatePath("/dashboard/recipes")
+  if (catalog) revalidatePath("/dashboard/menu/catalog")
+}
+
 export async function listCanonicalIngredients(): Promise<
   CanonicalIngredientSummary[]
 > {
@@ -339,8 +350,8 @@ export async function createCanonicalIngredient(input: {
   // adjudicator's shortlist, which is drawn from it). Never throws.
   await syncCanonicalEmbedding(created.id)
 
-  revalidatePath("/dashboard/ingredients")
-  revalidatePath("/dashboard/recipes")
+  // A new ingredient has no cost yet, so no margin on the catalogue moves.
+  revalidateIngredientPages({ catalog: false })
   return created
 }
 
@@ -395,9 +406,7 @@ export async function updateCanonicalCost(input: {
     data,
   })
 
-  revalidatePath("/dashboard/ingredients")
-  revalidatePath("/dashboard/recipes")
-  revalidatePath("/dashboard/menu/catalog")
+  revalidateIngredientPages()
 }
 
 export async function runCanonicalIngredientSeed(): Promise<SeedResult> {
@@ -405,9 +414,7 @@ export async function runCanonicalIngredientSeed(): Promise<SeedResult> {
   if (!scope) throw new Error("Not authenticated")
   const result = await seedCanonicalIngredientsFromInvoices(scope.ownerId, scope.accountId)
   if (result.canonicalsCreated > 0 || result.aliasesCreated > 0) {
-    revalidatePath("/dashboard/ingredients")
-    revalidatePath("/dashboard/recipes")
-    revalidatePath("/dashboard/menu/catalog")
+    revalidateIngredientPages()
   }
   return result
 }
@@ -537,8 +544,6 @@ export async function mergeCanonicalIngredients(input: {
   // CanonicalIngredientEmbedding cascade.)
   await syncCanonicalEmbedding(input.targetId)
 
-  revalidatePath("/dashboard/ingredients")
-  revalidatePath("/dashboard/recipes")
-  revalidatePath("/dashboard/menu/catalog")
+  revalidateIngredientPages()
   return result
 }

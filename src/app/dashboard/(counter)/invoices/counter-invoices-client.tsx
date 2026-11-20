@@ -363,17 +363,18 @@ function Task({
               onDone: () => {
                 leaving.restore(item.key);
                 onNote({ tone: "good", text: `${label} is back in review.` });
-                router.refresh();
+                // No router.refresh(): resolveInvoiceReview revalidates /dashboard/invoices and /m/invoices.
               },
               onFailed: () => onNote({ tone: "bad", text: `${label} could not be put back in review. Open it to change it.` }),
             }),
         });
-        router.refresh();
+        // No router.refresh(): confirmInvoiceStore revalidates /dashboard/invoices and /m/invoices.
       },
       onFailed: (code) => {
         const known = SAVE_ERRORS[code];
         if (known) {
           onNote({ tone: "bad", text: `${label} ${known}` });
+          // Kept: a refused save revalidates nothing, and the row is stale (moved or decided elsewhere).
           router.refresh();
         } else {
           setError("That didn't save. Try again, or open the invoice.");

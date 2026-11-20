@@ -12,14 +12,15 @@ vi.mock("@/lib/prisma", () => ({
   prisma: {
     $transaction: vi.fn(),
     user: { findFirst: vi.fn(), count: vi.fn(), update: vi.fn() },
-    invite: { findFirst: vi.fn(), updateMany: vi.fn(), create: vi.fn() },
+    invite: { findFirst: vi.fn(), findMany: vi.fn(), updateMany: vi.fn(), create: vi.fn() },
   },
 }))
 
 import { getServerSession } from "next-auth"
 import { prisma } from "@/lib/prisma"
 import { sendEmail } from "@/lib/checks/email"
-import { invitePerson, removeAccess, restoreAccess, sendFreshLink, setPersonRole, cancelInvite } from "@/lib/counter/actions/people"
+import { invitePerson, removeAccess, restoreAccess, sendFreshLink, sendFreshLinks, setPersonRole, cancelInvite } from "@/lib/counter/actions/people"
+import { revalidatePath } from "next/cache"
 
 const asMock = (fn: unknown) => fn as ReturnType<typeof vi.fn>
 const DEV = { user: { id: "u_dev", role: "DEVELOPER", accountId: "acc_1", name: "Vardan", email: "v@x.com" } }
@@ -112,6 +113,64 @@ describe("sendFreshLink and cancelInvite", () => {
     asMock(prisma.invite.findFirst).mockResolvedValue({ email: "luis@x.com", name: "Luis" })
     expect((await cancelInvite({ inviteId: "inv_1" })).ok).toBe(true)
     expect(asMock(prisma.invite.updateMany).mock.calls[0][0].where).toMatchObject({ accountId: "acc_1", email: { equals: "luis@x.com", mode: "insensitive" } })
+  })
+})
+
+describe("sendFreshLinks", () => {
+  const luis = { id: "inv_1", email: "luis@x.com", name: "Luis Ortega", role: "OWNER", usedAt: null }
+  const mia = { id: "inv_2", email: "mia@x.com", name: "Mia", role: "DEVELOPER", usedAt: null }
+
+  it("refuses an owner before touching the database", async () => {
+    asMock(getServerSession).mockResolvedValue({ user: { ...DEV.user, role: "OWNER" } })
+    const r = await sendFreshLinks({ inviteIds: ["inv_1"] })
+    expect(r).toEqual({ ok: false, error: "Only a developer can change who has access" })
+    expect(prisma.invite.findMany).not.toHaveBeenCalled()
+  })
+
+  it("reads the invites inside the caller's account and refuses all if one isn't there", async () => {
+    asMock(prisma.invite.findMany).mockResolvedValue([luis])
+    const r = await sendFreshLinks({ inviteIds: ["inv_1", "inv_other"] })
+    expect(r.ok).toBe(false)
+    expect(asMock(prisma.invite.findMany).mock.calls[0][0].where).toEqual({ id: { in: ["inv_1", "inv_other"] }, accountId: "acc_1" })
+    expect(prisma.$transaction).not.toHaveBeenCalled()
+    expect(sendEmail).not.toHaveBeenCalled()
+  })
+
+  it("makes every link in one transaction, then emails them all and revalidates once", async () => {
+    asMock(prisma.invite.findMany).mockResolvedValue([luis, mia])
+    const r = await sendFreshLinks({ inviteIds: ["inv_1", "inv_2"] })
+    expect(r).toMatchObject({ ok: true, message: "Fresh links emailed to 2 people. The old ones no longer work" })
+    expect(prisma.$transaction).toHaveBeenCalledTimes(1)
+    // Revoke-then-create per person, all in the one batch.
+    expect(asMock(prisma.$transaction).mock.calls[0][0]).toHaveLength(4)
+    expect(asMock(prisma.invite.updateMany).mock.calls.map((c) => c[0].where.email.equals)).toEqual(["luis@x.com", "mia@x.com"])
+    expect(asMock(prisma.invite.create).mock.calls.map((c) => c[0].data)).toEqual([
+      expect.objectContaining({ accountId: "acc_1", email: "luis@x.com", role: "OWNER", createdByUserId: "u_dev" }),
+      expect.objectContaining({ accountId: "acc_1", email: "mia@x.com", role: "DEVELOPER", createdByUserId: "u_dev" }),
+    ])
+    expect(sendEmail).toHaveBeenCalledTimes(2)
+    expect(asMock(revalidatePath).mock.calls).toEqual([["/dashboard/admin/people"], ["/m/admin/people"]])
+    if (r.ok) expect(r.results.map((x) => [x.inviteId, x.sent])).toEqual([["inv_1", true], ["inv_2", true]])
+  })
+
+  it("reports a failed email the way the single version does, with that person's link", async () => {
+    asMock(prisma.invite.findMany).mockResolvedValue([luis, mia])
+    asMock(sendEmail).mockImplementation(async ({ to }: { to: string[] }) =>
+      to[0] === "mia@x.com" ? { ok: false, reason: "Email isn't set up" } : { ok: true },
+    )
+    const r = await sendFreshLinks({ inviteIds: ["inv_1", "inv_2"] })
+    expect(r.ok).toBe(true)
+    if (!r.ok) return
+    expect(r.message).toBe("Fresh links emailed to 1 person. Email isn't set up. Copy the link and text it to Mia")
+    expect(r.link).toMatch(/^https:\/\/dash\.example\.com\/signup\//)
+    expect(r.results.find((x) => x.inviteId === "inv_2")).toMatchObject({ sent: false, reason: "Email isn't set up", link: r.link })
+  })
+
+  it("leaves out someone who already signed up, and says so", async () => {
+    asMock(prisma.invite.findMany).mockResolvedValue([luis, { ...mia, usedAt: new Date() }])
+    const r = await sendFreshLinks({ inviteIds: ["inv_1", "inv_2"] })
+    expect(r).toMatchObject({ ok: true, message: "Fresh link emailed to Luis. The old one no longer works. Mia already signed up" })
+    expect(prisma.invite.create).toHaveBeenCalledTimes(1)
   })
 })
 

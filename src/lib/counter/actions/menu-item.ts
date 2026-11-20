@@ -39,6 +39,11 @@ export async function mapItemToRecipe(input: {
 }): Promise<{ ok: true } | { ok: false; error: string }> {
   try {
     await mapOtterItemToRecipe(input)
+    // The item's own page (its plate cost, margin and channel table read the
+    // mapping) sits under the catalogue; the underlying action revalidates the
+    // catalogue page only, so the layout is covered here, desk and phone.
+    revalidatePath("/dashboard/menu/catalog", "layout")
+    revalidatePath("/m/menu/catalog", "layout")
     return { ok: true }
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : "mapping failed" }

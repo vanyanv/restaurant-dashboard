@@ -6,9 +6,14 @@ on:
     - cron: '0 */4 * * *'
   workflow_dispatch:
     inputs:
+      # Blank is the normal 3-day run, and leaves out any store whose sync
+      # succeeded in the last 20 minutes (the ticker's dispatch and the backup
+      # schedule often land on the same window). Any number is an explicit
+      # backfill and always syncs every store.
       lookbackDays:
-        description: 'Days to backfill (default 3)'
-        default: '3'
+        description: 'Days to backfill. Blank = normal 3-day run.'
+        required: false
+        default: ''
 
 concurrency:
   group: otter-sync
@@ -33,9 +38,14 @@ jobs:
           LOG_FILE: logs/otter-sync-list-stores.log
           CRON_RETRIES: "2"
           CRON_MAX_TIME: "30"
+          LOOKBACK_INPUT: ${{ github.event.inputs.lookbackDays || '' }}
         run: |
           bash .github/scripts/run-with-cron-logging.sh bash -lc '
-            payload=$(.github/scripts/curl-cron-json.sh GET "$APP_URL/api/cron/otter/stores")
+            # A normal run leaves out stores synced in the last 20 minutes; an
+            # explicit lookback is a backfill and lists every store.
+            query=""
+            if [ -z "$LOOKBACK_INPUT" ]; then query="?skipRecent=1"; fi
+            payload=$(.github/scripts/curl-cron-json.sh GET "$APP_URL/api/cron/otter/stores$query")
             ids=$(echo "$payload" | jq -c "[.stores[].storeId]")
             echo "Found stores: $ids"
             echo "ids=$ids" >> "$GITHUB_OUTPUT"

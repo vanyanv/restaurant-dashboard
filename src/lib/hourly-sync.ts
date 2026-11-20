@@ -14,7 +14,7 @@ import { planChangedUpserts, type ChangedUpsertSpec } from "@/lib/upsert-changed
 import { queryMetrics, buildCustomerOrdersBody } from "@/lib/otter"
 import { todayInLA, startOfDayLA, endOfDayLA } from "@/lib/dashboard-utils"
 import { laDateMinusDays } from "@/lib/hourly-orders"
-import { withJobRun } from "@/lib/monitoring/job-run"
+import { recentSuccessSkip, withJobRun, type RecentSuccessSkip } from "@/lib/monitoring/job-run"
 import { computeOrderNetSales } from "@/lib/hourly-sync-helpers"
 import { shouldSyncStore } from "@/lib/store-lifecycle"
 
@@ -55,11 +55,7 @@ interface BucketValue {
   netSales: number
 }
 
-/**
- * Sync the rolling window of hourly aggregates for all configured Otter stores.
- * Default window: today + yesterday in LA. Idempotent.
- */
-export async function runHourlySync(opts?: {
+export type HourlySyncOpts = {
   windowDays?: number  // default 2 (today + yesterday)
   rowLimit?: number    // default 10000
   // Last LA date the window should cover ("YYYY-MM-DD"). Defaults to today in
@@ -68,12 +64,33 @@ export async function runHourlySync(opts?: {
   anchorDate?: string
   triggeredBy?: "cron" | "manual" | "github-actions"
   metadata?: Record<string, unknown>
-}): Promise<HourlySyncResult> {
+}
+
+/**
+ * Sync the rolling window of hourly aggregates for all configured Otter stores.
+ * Default window: today + yesterday in LA. Idempotent.
+ *
+ * With `skipIfRecentSuccess`, a run that finds a SUCCESS from the same kind of
+ * caller in the last 20 minutes returns `{ skipped: "recent-success" }` and
+ * writes nothing: the scheduled workflow's backup `schedule:` firing after the
+ * sync ticker already dispatched the same hour. Only the scheduled script
+ * passes it.
+ */
+export function runHourlySync(
+  opts: HourlySyncOpts & { skipIfRecentSuccess: boolean },
+): Promise<HourlySyncResult | RecentSuccessSkip>
+export function runHourlySync(opts?: HourlySyncOpts): Promise<HourlySyncResult>
+export async function runHourlySync(
+  opts?: HourlySyncOpts & { skipIfRecentSuccess?: boolean },
+): Promise<HourlySyncResult | RecentSuccessSkip> {
   const triggeredBy = opts?.triggeredBy ?? "manual"
   return withJobRun(
     "otter.hourly.sync",
     {
       triggeredBy,
+      skipIf: opts?.skipIfRecentSuccess
+        ? recentSuccessSkip("otter.hourly.sync", { triggeredBy })
+        : async () => null,
       metadata: {
         windowDays: opts?.windowDays ?? 2,
         rowLimit: opts?.rowLimit ?? 10000,
@@ -89,11 +106,7 @@ export async function runHourlySync(opts?: {
   )
 }
 
-async function runHourlySyncInner(opts?: {
-  windowDays?: number
-  rowLimit?: number
-  anchorDate?: string
-}): Promise<HourlySyncResult> {
+async function runHourlySyncInner(opts?: HourlySyncOpts): Promise<HourlySyncResult> {
   const windowDays = opts?.windowDays ?? 2
   const rowLimit = opts?.rowLimit ?? 10000
 

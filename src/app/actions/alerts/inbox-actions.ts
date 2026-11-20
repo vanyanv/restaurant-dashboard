@@ -257,7 +257,7 @@ async function resolveOwnedAlert(alertId: string) {
   if (alert.store.accountId !== session.user.accountId) {
     return { ok: false as const, error: "not_in_account" as const }
   }
-  return { ok: true as const }
+  return { ok: true as const, accountId: session.user.accountId }
 }
 
 /**
@@ -280,7 +280,8 @@ export async function acknowledgeAlert(input: {
       acknowledgedAt: new Date(),
     },
   })
-  revalidatePath("/dashboard/alerts")
+  // Both inbox pages and the rail's count, like the row and bulk closes.
+  await afterWrite(owned.accountId)
   return { ok: true }
 }
 
@@ -339,7 +340,7 @@ export async function dismissAlert(input: {
     where: { id: input.alertId },
     data: { status: "DISMISSED", acknowledgedAt: new Date() },
   })
-  revalidatePath("/dashboard/alerts")
+  await afterWrite(owned.accountId)
   return { ok: true }
 }
 

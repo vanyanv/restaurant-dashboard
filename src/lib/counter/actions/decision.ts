@@ -1,5 +1,6 @@
 "use server"
 
+import { revalidatePath } from "next/cache"
 import {
   commitDecision,
   dismissDecision,
@@ -57,5 +58,8 @@ export async function recordDecision(
       ? await commitDecision(ref)
       : await dismissDecision({ ...ref, reason })
   if (!result.ok) return { ok: false, error: result.error }
+  // The underlying actions revalidate the desk queue only; the phone's is here,
+  // so neither client needs a router.refresh() on top.
+  revalidatePath("/m/decisions")
   return { ok: true }
 }

@@ -57,6 +57,17 @@ function fail(err: unknown): ActionResult {
   return { ok: false, error: "That didn't save. Try again." }
 }
 
+/**
+ * The whole count section, desk and phone, on purpose. Checked per call
+ * (2026-11-20) for one that touches a single page, and none does: the count
+ * list feeds Walk, Setup, Shelf (and the section home) and the item page; the
+ * open count is read by Walk and Shelf; waste feeds Waste, Shelf and the
+ * on-hand every page draws; the draft switch moves Order, Shelf and the
+ * switcher. A one-line count save (`saveCountItem`) revalidates nothing — the
+ * walk keeps its own state — and `finishCount` makes the section re-read.
+ * Revalidating more paths costs no render: the action's response renders the
+ * current page once either way.
+ */
 function revalidateCount() {
   revalidatePath("/dashboard/count", "layout")
   revalidatePath("/m/count", "layout")

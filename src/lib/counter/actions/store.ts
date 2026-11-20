@@ -1,5 +1,6 @@
 "use server"
 
+import { revalidatePath } from "next/cache"
 import { createStore, deleteStore, updateStore } from "@/app/actions/store-actions"
 import { setStoreTargetCogsPct, setStoreTargetLaborPct } from "@/app/actions/cogs-actions"
 import {
@@ -42,6 +43,17 @@ export interface StoreFileEdit {
 }
 
 /** A blank clears the value; `updateStore` reads "" as null and absent as unchanged. */
+/**
+ * The store file lives at /dashboard/stores/[id] and /m/stores/[id]/edit, and
+ * the lists above both read what it saves. The underlying actions revalidate
+ * only desk paths (and fixed costs only the exact list path), so the Counter
+ * layer covers both surfaces here and the client needs no router.refresh().
+ */
+function revalidateStoreFile() {
+  revalidatePath("/dashboard/stores", "layout")
+  revalidatePath("/m/stores", "layout")
+}
+
 function put(form: FormData, key: string, value: number | string | null) {
   form.set(key, value === null ? "" : String(value))
 }
@@ -75,6 +87,7 @@ export async function saveStoreFile(
 
   const result = await updateStore(storeId, form)
   if ("error" in result && result.error) return { ok: false, error: result.error }
+  revalidateStoreFile()
   return { ok: true }
 }
 
@@ -129,6 +142,7 @@ export async function addFixedExpense(input: {
 }): Promise<{ ok: true } | { ok: false; error: string }> {
   const result = await createStoreFixedExpense(input)
   if ("error" in result) return { ok: false, error: result.error }
+  revalidateStoreFile()
   return { ok: true }
 }
 
@@ -140,6 +154,7 @@ export async function editFixedExpense(input: {
 }): Promise<{ ok: true } | { ok: false; error: string }> {
   const result = await updateStoreFixedExpense(input)
   if ("error" in result) return { ok: false, error: result.error }
+  revalidateStoreFile()
   return { ok: true }
 }
 
@@ -148,6 +163,7 @@ export async function removeFixedExpense(
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const result = await deleteStoreFixedExpense({ id })
   if ("error" in result) return { ok: false, error: result.error }
+  revalidateStoreFile()
   return { ok: true }
 }
 

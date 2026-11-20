@@ -1,7 +1,6 @@
 "use client"
 
 import { useEffect, useRef, useState, useTransition } from "react"
-import { useRouter } from "next/navigation"
 import { PageHead, Section, useCounterTransition, usePageChrome } from "@/components/counter"
 import {
   cancelInvite,
@@ -10,6 +9,7 @@ import {
   removeAccess,
   restoreAccess,
   sendFreshLink,
+  sendFreshLinks,
   setPersonRole,
   type PeopleResult,
 } from "@/lib/counter/actions/people"
@@ -82,7 +82,6 @@ function sentence(c: PeopleAccessData["counts"]): React.ReactNode {
 }
 
 function useRun(setFlash: (f: Flash) => void) {
-  const router = useRouter()
   const [busy, start] = useTransition()
   const run = (fn: () => Promise<PeopleResult>, opts?: { undo?: string; after?: () => void }) =>
     start(async () => {
@@ -100,7 +99,7 @@ function useRun(setFlash: (f: Flash) => void) {
         }
       }
       opts?.after?.()
-      router.refresh()
+      // No router.refresh(): every action here that changes something revalidates /dashboard/admin/people and /m/admin/people itself.
     })
   return { busy, run }
 }
@@ -185,15 +184,8 @@ function People({ data }: { data: PeopleAccessData }) {
               className="btn btn--primary"
               disabled={busy}
               onClick={() =>
-                run(async () => {
-                  let sent = 0
-                  for (const r of ranOut) {
-                    const res = await sendFreshLink({ inviteId: r.id })
-                    if (!res.ok) return res
-                    sent++
-                  }
-                  return { ok: true, message: `Fresh links sent to ${sent} ${sent === 1 ? "person" : "people"}` }
-                })
+                // One save for everyone; the result says whose email didn't go.
+                run(() => sendFreshLinks({ inviteIds: ranOut.map((r) => r.id) }))
               }
             >
               Send them all a fresh link

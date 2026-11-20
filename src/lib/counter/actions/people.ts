@@ -4,6 +4,7 @@ import { getSession } from "@/lib/auth-scope"
 import { revalidatePath } from "next/cache"
 import { z } from "zod"
 import { prisma } from "@/lib/prisma"
+import type { Prisma } from "@/generated/prisma/client"
 import { sendEmail } from "@/lib/checks/email"
 import {
   firstName,
@@ -98,37 +99,55 @@ type Tx = Parameters<Parameters<typeof prisma.$transaction>[0]>[0]
  * Any live link for the same email on this account is switched off first, so
  * only the newest link ever works.
  */
-async function issue(
-  me: { userId: string; accountId: string; name: string },
-  who: { email: string; name: string | null; role: PersonRole },
-  send: boolean,
-): Promise<{ link: string; sent: boolean; reason?: string }> {
+type Me = { userId: string; accountId: string; name: string }
+type Who = { email: string; name: string | null; role: PersonRole }
+type Issued = { link: string; expiresAt: Date }
+
+/**
+ * The writes behind a fresh link: any live link for the same email on this
+ * account is switched off, then the new one made, so only the newest link
+ * ever works. Returned unrun, so one person or many go in one transaction.
+ */
+function inviteWrites(me: Me, who: Who): { writes: Prisma.PrismaPromise<unknown>[]; issued: Issued } {
   const token = newInviteToken()
   const expiresAt = inviteExpiry()
-  await prisma.$transaction([
-    prisma.invite.updateMany({
-      where: liveInvitesFor(me.accountId, who.email),
-      data: { revokedAt: new Date() },
-    }),
-    prisma.invite.create({
-      data: {
-        token,
-        accountId: me.accountId,
-        createdByUserId: me.userId,
-        email: who.email,
-        name: who.name,
-        role: who.role,
-        expiresAt,
-      },
-    }),
-  ])
-  const link = linkFor(token)
-  if (!send) return { link, sent: false }
+  return {
+    writes: [
+      prisma.invite.updateMany({
+        where: liveInvitesFor(me.accountId, who.email),
+        data: { revokedAt: new Date() },
+      }),
+      prisma.invite.create({
+        data: {
+          token,
+          accountId: me.accountId,
+          createdByUserId: me.userId,
+          email: who.email,
+          name: who.name,
+          role: who.role,
+          expiresAt,
+        },
+      }),
+    ],
+    issued: { link: linkFor(token), expiresAt },
+  }
+}
+
+async function emailInvite(me: Me, who: Who, issued: Issued): Promise<{ link: string; sent: boolean; reason?: string }> {
+  const { link, expiresAt } = issued
   const r = await sendEmail({
     to: [who.email],
     ...inviteEmailContent({ to: who.email, name: who.name, inviterName: me.name, role: who.role, link, expiresAt }),
   })
   return r.ok ? { link, sent: true } : { link, sent: false, reason: r.reason }
+}
+
+/** Make a link for one person and, unless asked only for the link, email it. */
+async function issue(me: Me, who: Who, send: boolean): Promise<{ link: string; sent: boolean; reason?: string }> {
+  const { writes, issued } = inviteWrites(me, who)
+  await prisma.$transaction(writes)
+  if (!send) return { link: issued.link, sent: false }
+  return emailInvite(me, who, issued)
 }
 
 function sentMessage(name: string, r: { sent: boolean; reason?: string }, verb: string): string {
@@ -183,6 +202,89 @@ export async function sendFreshLink(input: { inviteId: string; send?: boolean })
     if (r.sent) return done(`Fresh link emailed to ${who}. The old one no longer works`)
     return done(sentMessage(who, r, "Fresh link"), r.link)
   })
+}
+
+export type FreshLinkOutcome = { inviteId: string; name: string; sent: boolean; link: string; reason?: string }
+export type FreshLinksResult =
+  | { ok: true; message: string; link?: string; results: FreshLinkOutcome[] }
+  | { ok: false; error: string }
+
+const EMAIL_CONCURRENCY = 4
+
+/**
+ * "Send them all a fresh link": `sendFreshLink` for several people, as one
+ * save. Every invite is checked against the caller's account first (one that
+ * isn't there refuses the lot), all the links are made in one transaction,
+ * the emails go out together once it has committed, and the page is
+ * revalidated once. Each person's outcome comes back, and a failed email is
+ * reported the way the single version reports it, with the link to copy.
+ */
+export async function sendFreshLinks(input: { inviteIds: string[] }): Promise<FreshLinksResult> {
+  try {
+    const me = await requireDeveloper()
+    const ids = [...new Set(input.inviteIds)].slice(0, 100)
+    if (ids.length === 0) return { ok: false, error: "Nobody to send to" }
+    const found = await prisma.invite.findMany({
+      where: { id: { in: ids }, accountId: me.accountId },
+      select: { id: true, email: true, name: true, role: true, usedAt: true },
+    })
+    if (found.length !== ids.length || found.some((f) => !f.email)) {
+      return { ok: false, error: "One of those invites is gone. Refresh and try again" }
+    }
+    const signedUp = found.filter((f) => f.usedAt)
+    // One link per person: two old invites for the same email would otherwise switch each other off.
+    const byEmail = new Map<string, (typeof found)[number] & { email: string }>()
+    for (const f of found) if (!f.usedAt && f.email && !byEmail.has(f.email.toLowerCase())) byEmail.set(f.email.toLowerCase(), { ...f, email: f.email })
+    const todo = [...byEmail.values()].map((f) => {
+      const who: Who = { email: f.email, name: f.name, role: f.role }
+      return { inviteId: f.id, who, ...inviteWrites(me, who) }
+    })
+    if (todo.length > 0) await prisma.$transaction(todo.flatMap((t) => t.writes))
+    // A few at a time: a burst of up to 100 sends trips the mail provider's
+    // rate limit, and every refused send leaves a link to copy by hand.
+    const results: FreshLinkOutcome[] = new Array(todo.length)
+    let next = 0
+    const sendNext = async () => {
+      while (next < todo.length) {
+        const i = next++
+        const t = todo[i]
+        const name = firstName(t.who.name, t.who.email)
+        try {
+          results[i] = { inviteId: t.inviteId, name, ...(await emailInvite(me, t.who, t.issued)) }
+        } catch {
+          // The link is made; a thrown send is a failed email, not a failed save.
+          results[i] = { inviteId: t.inviteId, name, link: t.issued.link, sent: false }
+        }
+      }
+    }
+    await Promise.all(Array.from({ length: Math.min(EMAIL_CONCURRENCY, todo.length) }, sendNext))
+
+    const sent = results.filter((r) => r.sent)
+    const failed = results.filter((r) => !r.sent)
+    const parts: string[] = []
+    if (failed.length === 0 && sent.length > 0) {
+      parts.push(
+        sent.length === 1
+          ? `Fresh link emailed to ${sent[0].name}. The old one no longer works`
+          : `Fresh links emailed to ${sent.length} people. The old ones no longer work`,
+      )
+    } else if (failed.length === 1) {
+      if (sent.length > 0) parts.push(`Fresh links emailed to ${sent.length} ${sent.length === 1 ? "person" : "people"}`)
+      parts.push(sentMessage(failed[0].name, failed[0], "Fresh link"))
+    } else if (failed.length > 1) {
+      if (sent.length > 0) parts.push(`Fresh links emailed to ${sent.length} ${sent.length === 1 ? "person" : "people"}`)
+      parts.push(`${failed[0].reason ?? "The email didn't go"} for ${failed.map((f) => f.name).join(", ")}. Use "Copy their link" on each and text it`)
+    }
+    if (signedUp.length > 0) parts.push(`${signedUp.map((f) => firstName(f.name, f.email ?? "them")).join(", ")} already signed up`)
+    const link = failed.length === 1 ? failed[0].link : undefined
+    if (todo.length === 0) return { ok: true, message: parts.join(". "), results }
+    const r = done(parts.join(". "), link)
+    return r.ok ? { ...r, results } : r
+  } catch (err) {
+    if (err instanceof Refused) return { ok: false, error: err.message }
+    console.error("[people] action failed", err)
+    return { ok: false, error: "That didn't save. Try again" }
+  }
 }
 
 export async function cancelInvite(input: { inviteId: string }): Promise<PeopleResult> {

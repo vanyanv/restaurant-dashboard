@@ -16,6 +16,16 @@ import {
 import { mergeSellPrices } from "@/lib/menu-sell-price-aggregation"
 
 /**
+ * A POS item mapped to (or off) a recipe moves the catalogue's mapped column
+ * and margins, the recipes' sold counts, and the ingredient usage behind them.
+ */
+function revalidateMappingPages() {
+  revalidatePath("/dashboard/menu/catalog")
+  revalidatePath("/dashboard/ingredients")
+  revalidatePath("/dashboard/recipes")
+}
+
+/**
  * All distinct Otter-sold items across the owner's stores, with:
  *   - aggregate units sold over the window (default last 90 days)
  *   - first/last seen
@@ -195,9 +205,7 @@ export async function mapOtterItemToRecipe(input: {
   )
 
   void stores
-  revalidatePath("/dashboard/menu/catalog")
-  revalidatePath("/dashboard/ingredients")
-  revalidatePath("/dashboard/recipes")
+  revalidateMappingPages()
 }
 
 /**
@@ -254,9 +262,7 @@ export async function mapOtterItemsBatch(
     )
   )
 
-  revalidatePath("/dashboard/menu/catalog")
-  revalidatePath("/dashboard/ingredients")
-  revalidatePath("/dashboard/recipes")
+  revalidateMappingPages()
   return { mapped: filtered.length }
 }
 
@@ -440,9 +446,7 @@ export async function mapOtterSubItemToRecipe(input: {
   )
 
   void stores
-  revalidatePath("/dashboard/menu/catalog")
-  revalidatePath("/dashboard/ingredients")
-  revalidatePath("/dashboard/recipes")
+  revalidateMappingPages()
 }
 
 export async function unmapOtterSubItem(skuId: string): Promise<void> {
@@ -462,9 +466,7 @@ export async function unmapOtterSubItem(skuId: string): Promise<void> {
   })
 
   void stores
-  revalidatePath("/dashboard/menu/catalog")
-  revalidatePath("/dashboard/ingredients")
-  revalidatePath("/dashboard/recipes")
+  revalidateMappingPages()
 }
 
 export type MenuItemSellPrice = {

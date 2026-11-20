@@ -19,7 +19,6 @@ import {
 import { PHONE_ALERT_TABS } from "@/lib/counter/nav"
 import { readCounterParams } from "@/lib/counter/url-state"
 import type { DecisionsSections, PhoneQueue } from "@/lib/counter/adapters/decisions"
-import { useRouter } from "next/navigation"
 import { recordDecision } from "@/lib/counter/actions/decision"
 import type { SectionSources } from "@/lib/counter/adapters/types"
 
@@ -114,7 +113,6 @@ import type { SectionSources } from "@/lib/counter/adapters/types"
  * waiting until they are back at a desk.
  */
 function PhoneCommitFirst({ first }: { first: NonNullable<PhoneQueue["first"]> }) {
-  const router = useRouter()
   const { act, stateOf } = useAct()
   const [said, setSaid] = useState<string | null>(null)
   const state = stateOf("commit")
@@ -136,7 +134,8 @@ function PhoneCommitFirst({ first }: { first: NonNullable<PhoneQueue["first"]> }
           },
           "commit",
         ),
-      { onDone: () => router.refresh(), onFailed: () => setSaid("That did not save.") },
+      // No router.refresh(): recordDecision revalidates /m/decisions (and the desk queue).
+      { onFailed: () => setSaid("That did not save.") },
     )
   }
 

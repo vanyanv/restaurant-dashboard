@@ -75,7 +75,8 @@ describe("Today", () => {
     await waitFor(() => expect(actions.markOrderReady).toHaveBeenCalledWith({ orderId: "o-bag" }))
     fireEvent.click(screen.getByRole("button", { name: "Picked up" }))
     await waitFor(() => expect(actions.markOrderPickedUp).toHaveBeenCalledWith({ orderId: "o-ctr" }))
-    await waitFor(() => expect(refresh).toHaveBeenCalled())
+    // The actions revalidate the shop layouts themselves; a refresh on top would render the page twice.
+    expect(refresh).not.toHaveBeenCalled()
   })
 
   it("Ship it opens the tracking form and sends carrier and number", async () => {

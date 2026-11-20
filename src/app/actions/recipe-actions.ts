@@ -20,6 +20,17 @@ import {
 } from "@/app/actions/menu-item-actions"
 import { resolveSellPriceForRecipe } from "@/lib/menu-sell-price"
 
+/**
+ * The desk pages a recipe save moves: the recipe list, the catalogue's plate
+ * costs and margins, and the ingredients' "used in" (left out when no line
+ * changed).
+ */
+function revalidateRecipePages({ ingredients = true }: { ingredients?: boolean } = {}) {
+  revalidatePath("/dashboard/recipes")
+  revalidatePath("/dashboard/menu/catalog")
+  if (ingredients) revalidatePath("/dashboard/ingredients")
+}
+
 export async function listRecipes(): Promise<RecipeSummary[]> {
   const scope = await getAuthScope()
   if (!scope) return []
@@ -169,9 +180,7 @@ export async function upsertRecipe(
     return { id: recipe.id }
   })
 
-  revalidatePath("/dashboard/recipes")
-  revalidatePath("/dashboard/menu/catalog")
-  revalidatePath("/dashboard/ingredients")
+  revalidateRecipePages()
 
   return { id }
 }
@@ -209,9 +218,7 @@ export async function deleteRecipe(recipeId: string): Promise<void> {
 
   await prisma.recipe.delete({ where: { id: recipeId } })
 
-  revalidatePath("/dashboard/recipes")
-  revalidatePath("/dashboard/menu/catalog")
-  revalidatePath("/dashboard/ingredients")
+  revalidateRecipePages()
 }
 
 /**
@@ -305,8 +312,8 @@ export async function confirmRecipe(
     select: { itemName: true },
   })
   void recipe
-  revalidatePath("/dashboard/recipes")
-  revalidatePath("/dashboard/menu/catalog")
+  // Confirming changes no line, so no ingredient's usage moves.
+  revalidateRecipePages({ ingredients: false })
 }
 
 export type RecipeCatalogSummary = {
