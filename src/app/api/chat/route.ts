@@ -45,6 +45,13 @@ import { logger } from "@/lib/logger"
 import { generateConversationTitle } from "@/lib/chat/auto-title"
 import { checkDailyBudget } from "@/lib/chat/spend-cap"
 import { answerFiledAndWritten } from "@/lib/chat/stop"
+import {
+  ownerErrorMessage,
+  recordUnfinishedTurn,
+  unfinishedKindOf,
+  type StepUsage,
+  type UnfinishedKind,
+} from "@/lib/chat/turn-record"
 
 /*
  * 60 was the old Vercel ceiling. It is now 300 on every plan, and 60 was
@@ -260,7 +267,7 @@ export async function POST(req: Request) {
   let activeTools = activeToolsForPage(body.askScope?.pageId ?? null)
   const classifyPromise =
     !activeTools && userMessageText && !budget.overBudget
-      ? classifyToolGroups(askedQuestion)
+      ? classifyToolGroups(askedQuestion, ownerId)
       : Promise.resolve(null)
 
   // Resolve or create the conversation. `getConversation` throws on
@@ -308,26 +315,52 @@ export async function POST(req: Request) {
       const status = code === "NOT_OWNED" ? 403 : 404
       return NextResponse.json({ error: code ?? "not found" }, { status })
     }
-  } else {
-    const created = await createConversation(chatPrisma, ownerId, accountId)
-    conversationId = created.id
   }
+
+  /*
+   * THE CONVERSATION AND THE QUESTION ARE WRITTEN ONLY FOR A TURN THAT RUNS.
+   *
+   * An over-budget turn may still be answered from the cache, but a miss is
+   * refused — and creating the thread and storing the question first left an
+   * empty "Untitled" conversation (or a question with no answer) behind every
+   * refusal. So both are deferred: a turn under budget starts them now, as
+   * before, to overlap the work below; an over-budget turn starts them only
+   * on a cache hit.
+   */
+  let conversationPromise: Promise<string> | null = null
+  const ensureConversation = (): Promise<string> =>
+    (conversationPromise ??= conversationId
+      ? Promise.resolve(conversationId)
+      : createConversation(chatPrisma, ownerId, accountId).then((c) => {
+          conversationId = c.id
+          return c.id
+        }))
 
   // Persist the user's latest turn before invoking the model so the
   // conversation reflects what the model saw.
   // ChatTurn truncates to 4KB on each side.
   const userMessageStored = userMessageText.slice(0, 4000)
-  const userPersistPromise =
-    lastMessage.role === "user" && userMessageText
-      ? appendMessage(chatPrisma, {
-          conversationId,
-          role: "user",
-          content: userMessageText,
-        }).catch((err) => {
-          logger.error("[chat] failed to persist user message", err)
-          return null
-        })
-      : Promise.resolve(null)
+  let userPersist: Promise<unknown> | null = null
+  const persistUserMessage = (): Promise<unknown> =>
+    (userPersist ??=
+      lastMessage.role === "user" && userMessageText
+        ? ensureConversation().then((id) =>
+            appendMessage(chatPrisma, {
+              conversationId: id,
+              role: "user",
+              content: userMessageText,
+            }).catch((err) => {
+              logger.error("[chat] failed to persist user message", err)
+              return null
+            }),
+          )
+        : Promise.resolve(null))
+  if (!budget.overBudget) {
+    // Started early so it overlaps the classifier and the cache lookup. A
+    // failure to create the conversation surfaces at the await below.
+    ensureConversation().catch(() => undefined)
+    persistUserMessage().catch(() => undefined)
+  }
 
   /*
    * How long each tool call's own work took, by call id, measured inside
@@ -479,6 +512,8 @@ export async function POST(req: Request) {
     const hit = await readCachedAnswer(cacheKey)
     if (hit) {
       const servedAt = Date.now()
+      conversationId = await ensureConversation()
+      const userPersistPromise = persistUserMessage()
       // The turn still becomes a row: a cached answer that never reached the
       // thread would vanish when the reader reopened it, and a thumb needs a
       // ChatTurn to write to.
@@ -566,7 +601,7 @@ export async function POST(req: Request) {
           `servedMs=${Date.now() - servedAt}`,
       )
       const cachedResponse = createUIMessageStreamResponse({ stream })
-      cachedResponse.headers.set("x-conversation-id", conversationId)
+      cachedResponse.headers.set("x-conversation-id", conversationId!)
       cachedResponse.headers.set("x-chat-turn-id", chatTurnId)
       return cachedResponse
     }
@@ -575,6 +610,9 @@ export async function POST(req: Request) {
   // The lookup missed, so answering from here costs money. This is where the
   // cap bites.
   if (budget.overBudget) return budgetRefusal()
+
+  conversationId = await ensureConversation()
+  const userPersistPromise = persistUserMessage()
 
   const requestStartMs = performance.now()
   /*
@@ -618,10 +656,57 @@ export async function POST(req: Request) {
     ...(await convertToModelMessages(body.messages, { tools: toolSet })),
   ]
 
-  let result: ReturnType<typeof streamText>
-  try {
-    result = streamText({
+  /*
+   * THE TEXT THE OWNER SAW, STEP BY STEP.
+   *
+   * `onFinish`'s `text` is the LAST step's text only. A turn that writes a
+   * line, calls a tool and then writes the answer showed the owner both, and
+   * the stored answer used to keep only the second. Every streamed delta is
+   * collected here — finished steps, plus the step in flight, so a turn that
+   * is stopped or fails keeps what had already reached the screen.
+   */
+  const shownSteps: string[] = []
+  let shownCurrent = ""
+  const shownText = () =>
+    [...shownSteps, shownCurrent]
+      .map((t) => t.trim())
+      .filter(Boolean)
+      .join("\n\n")
+  /** Each finished step's usage — what OpenAI has already billed. */
+  const stepUsages: StepUsage[] = []
+  /** One record per turn: whichever of finish / abort / error comes first. */
+  let turnRecorded = false
+
+  /** Stopped or failed: see `recordUnfinishedTurn` in `@/lib/chat/turn-record`. */
+  const recordUnfinished = async (
+    kind: UnfinishedKind,
+    usages: StepUsage[],
+    error: unknown,
+  ) => {
+    if (turnRecorded) return
+    turnRecorded = true
+    await recordUnfinishedTurn(prisma, chatPrisma, {
+      kind,
+      usages,
+      error,
+      shown: shownText(),
+      chatTurnId,
+      conversationId: conversationId!,
+      ownerId,
+      userMessage: userMessageStored,
+      model: CHAT_ROUTING_MODEL,
+      durationMs: Date.now() - turnStartMs,
+      toolCalls: capturedToolCalls,
+      toolErrors: capturedToolErrors,
+      userPersisted: userPersistPromise,
+    })
+  }
+
+  const result = streamText({
     model: openai(CHAT_ROUTING_MODEL),
+    // The reader's stop button and a closed tab both abort the request; the
+    // model call stops with it instead of running (and billing) to the end.
+    abortSignal: req.signal,
     system,
     messages: modelMessages,
     tools: toolSet,
@@ -662,12 +747,18 @@ export async function POST(req: Request) {
      */
     stopWhen: [answerFiledAndWritten, stepCountIs(15)],
     onChunk: ({ chunk }) => {
-      if (firstTokenMs === null && chunk.type === "text-delta") {
-        firstTokenMs = Math.round(performance.now() - streamStartMs)
+      if (chunk.type === "text-delta") {
+        if (firstTokenMs === null) {
+          firstTokenMs = Math.round(performance.now() - streamStartMs)
+        }
+        shownCurrent += chunk.text
       }
     },
-    onStepFinish: ({ toolResults, content }) => {
+    onStepFinish: ({ toolResults, content, usage }) => {
       stepEndMs.push(Math.round(performance.now() - streamStartMs))
+      stepUsages.push(usage as StepUsage)
+      if (shownCurrent.trim()) shownSteps.push(shownCurrent)
+      shownCurrent = ""
       for (const tr of toolResults) {
         if (tr.toolName === "fileReturn") {
           const v = (tr.output as { verdict?: unknown } | null)?.verdict
@@ -697,7 +788,11 @@ export async function POST(req: Request) {
      * table, was under-counting by the same factor. The footer already used
      * `totalUsage`, so the two figures now agree.
      */
-    onFinish: async ({ text, totalUsage: usage, finishReason }) => {
+    onFinish: async ({ totalUsage: usage, finishReason }) => {
+      if (turnRecorded) return
+      turnRecorded = true
+      // Every step's text, as the owner read it — not the last step alone.
+      const text = shownText()
       const totalMs = Math.round(performance.now() - requestStartMs)
       const toolMs = capturedToolCalls.map((c) => c.durationMs)
       // Cached input tokens live on `usage.inputTokenDetails.cacheReadTokens`
@@ -830,7 +925,7 @@ export async function POST(req: Request) {
           // the sentence the owner already read as the headline, so it is
           // the name they will scan for; the summary model is only asked
           // when no return was filed.
-          const title = verdictTitle(filedVerdict) ?? (await generateConversationTitle(firstUser, text))
+          const title = verdictTitle(filedVerdict) ?? (await generateConversationTitle(firstUser, text, ownerId))
           if (title) {
             await setConversationTitle(chatPrisma, conversationId!, title)
           }
@@ -839,28 +934,27 @@ export async function POST(req: Request) {
         logger.error("[chat] auto-title path failed (non-fatal)", err)
       }
     },
+    // Stopped: the steps that finished were billed and are recorded; what the
+    // owner had read is kept, marked as stopped.
+    onAbort: async ({ steps }) => {
+      const usages =
+        steps.length >= stepUsages.length ? steps.map((st) => st.usage as StepUsage) : stepUsages
+      await recordUnfinished("STOPPED", usages, null)
+    },
+    // Failed mid-stream. `streamText` does not throw: a model or stream error
+    // arrives here, never at a try/catch around the call.
+    onError: async ({ error }) => {
+      await recordUnfinished(unfinishedKindOf(error), stepUsages, error)
+    },
   })
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err)
-    const isRateLimit = /rate.?limit|429/i.test(message)
-    try {
-      await prisma.chatTurn.create({
-        data: {
-          id: chatTurnId,
-          conversationId: conversationId!,
-          userId: ownerId,
-          userMessage: userMessageStored,
-          assistantMessage: null,
-          toolsUsed: [],
-          status: isRateLimit ? "RATE_LIMITED" : "ERROR",
-          errorMessage: message.slice(0, 4000),
-        },
-      })
-    } catch (writeErr) {
-      logger.error("[chat] failed to write error ChatTurn", writeErr)
-    }
-    throw err
-  }
+  /*
+   * Run the turn to its end even if nobody reads the response, so `onFinish`
+   * (or `onAbort` / `onError`) always fires and the turn is recorded. Errors
+   * are recorded by `onError` above; this only keeps them from going unhandled.
+   */
+  void Promise.resolve(
+    result.consumeStream({ onError: () => undefined }),
+  ).catch(() => undefined)
 
   /*
    * WHAT THE TURN COST, ON THE TURN.
@@ -873,6 +967,8 @@ export async function POST(req: Request) {
    * One shape (`AskTurnMeta`), two sources, same numbers.
    */
   const response = result.toUIMessageStreamResponse({
+    // The SDK's default is "An error occurred." — a sentence nobody can act on.
+    onError: ownerErrorMessage,
     messageMetadata: ({ part }) => {
       if (part.type !== "finish") return undefined
       const usage = part.totalUsage as
@@ -904,7 +1000,7 @@ export async function POST(req: Request) {
     },
   })
   // Surface the conversation id so the client can pin it after first turn.
-  response.headers.set("x-conversation-id", conversationId)
+  response.headers.set("x-conversation-id", conversationId!)
   /*
    * AND THE TURN ID, BEFORE THE TURN CAN FAIL.
    *

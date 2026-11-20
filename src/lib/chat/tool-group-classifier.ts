@@ -1,6 +1,7 @@
 import { getChatOpenAIClient, CHAT_CLASSIFIER_MODEL } from "./openai-client"
 import { TOOL_GROUPS, GROUP_HINTS, type ToolGroupName } from "./tool-groups"
 import { logger } from "@/lib/logger"
+import { recordAiUsage } from "@/lib/monitoring/ai-usage"
 
 /**
  * Which departments a question is about, when the page did not say.
@@ -43,12 +44,15 @@ function isGroupName(v: string): v is ToolGroupName {
 
 export async function classifyToolGroups(
   question: string,
+  /** Who asked — the classifier call is billed to them in `AiUsageEvent`. */
+  userId?: string | null,
 ): Promise<ToolGroupName[] | null> {
   const key = question.trim().toLowerCase()
   if (!key) return null
   if (cache.has(key)) return cache.get(key) ?? null
 
   let groups: ToolGroupName[] | null = null
+  const startedAt = Date.now()
   try {
     const client = getChatOpenAIClient()
     const res = await client.chat.completions.create(
@@ -72,8 +76,22 @@ export async function classifyToolGroups(
           { role: "user", content: question },
         ],
       },
-      { timeout: TIMEOUT_MS },
+      // No retries: the shared client retries twice, so a 2.5 s timeout could
+      // hold the turn for three times that — and bill each attempt.
+      { timeout: TIMEOUT_MS, maxRetries: 0 },
     )
+
+    // Billed like every other call, so the daily cap sees it.
+    void recordAiUsage({
+      feature: "chat-classifier",
+      provider: "openai",
+      model: CHAT_CLASSIFIER_MODEL,
+      inputTokens: res.usage?.prompt_tokens ?? 0,
+      outputTokens: res.usage?.completion_tokens ?? 0,
+      cachedTokens: res.usage?.prompt_tokens_details?.cached_tokens ?? 0,
+      userId: userId ?? null,
+      durationMs: Date.now() - startedAt,
+    })
 
     const raw = res.choices[0]?.message?.content?.trim().toLowerCase() ?? ""
     const picked = raw
@@ -85,8 +103,11 @@ export async function classifyToolGroups(
     // that is the classifier hedging its way back to the full menu.
     groups = picked.length > 0 ? [...new Set(picked)].slice(0, 3) : null
   } catch (err) {
+    // Not cached: a timeout or a provider blip is about this moment, not about
+    // the question, and caching it pinned the question to the full menu for
+    // the life of the instance.
     logger.warn("[chat] tool-group classifier failed; using all tools", err)
-    groups = null
+    return null
   }
 
   if (cache.size >= CACHE_MAX) cache.clear()

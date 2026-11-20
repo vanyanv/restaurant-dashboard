@@ -27,9 +27,9 @@ export type RefundRow = {
   date?: string
   /** Present when groupBy === 'platform'. */
   platform?: string
-  /** Sum of `tpRefundsAdjustments` across the bucket; positive numbers in
-   *  the source data mean refund/adjustment dollars. Treated as a magnitude
-   *  for display (we don't flip sign here). */
+  /** Sum of `tpRefundsAdjustments` across the bucket, signed as Otter sends
+   *  it: refunds and adjustments arrive negative. Rows are ordered by size
+   *  (largest refund first); the sign is not flipped here. */
   refunds: number
 }
 
@@ -65,7 +65,9 @@ export const getRefunds: ChatTool<typeof params, RefundRow[]> = {
           refunds: r._sum.tpRefundsAdjustments ?? 0,
         }))
         .filter((r) => r.refunds !== 0)
-        .sort((a, b) => b.refunds - a.refunds)
+        // Refunds arrive NEGATIVE (see `rowSales` in `@/lib/pnl`), so a plain
+        // descending sort put the smallest refund first. Largest by size first.
+        .sort((a, b) => Math.abs(b.refunds) - Math.abs(a.refunds))
     }
 
     const grouped = await ctx.prisma.otterDailySummary.groupBy({

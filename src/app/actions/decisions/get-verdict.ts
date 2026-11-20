@@ -26,11 +26,13 @@ import {
 export async function getVerdictLine(input: {
   facts: VerdictFacts
   storeId: string | null
+  /** The reader's account — the tenancy boundary the cache key carries. */
+  accountId: string
   /** YYYY-MM-DD, the view's asOf. */
   asOf: string
   userId?: string | null
 }): Promise<{ line: string; model: string | null }> {
-  const { facts, storeId, asOf, userId } = input
+  const { facts, storeId, accountId, asOf, userId } = input
 
   /*
    * Nothing to narrate, so nothing is asked. See `isNarratable`: a week with
@@ -46,7 +48,13 @@ export async function getVerdictLine(input: {
 
   // The portfolio view has no store; see the migration note on why this is a
   // real column rather than a nullable storeId in the unique index.
-  const scopeKey = storeId ?? "ALL"
+  //
+  // PER ACCOUNT. The portfolio key was the bare "ALL", shared by every
+  // account, so one account's portfolio sentence — its figures — could be
+  // served to another's Decisions page on the same day. A store id is
+  // already unique to one account; the portfolio key now carries the
+  // account. Old "ALL" rows are simply never read again (one day's worth).
+  const scopeKey = verdictScopeKey(storeId, accountId)
   const asOfDate = new Date(`${asOf}T00:00:00Z`)
   /*
    * BOTH HALVES: the facts, and the words we asked for.
@@ -101,4 +109,9 @@ export async function getVerdictLine(input: {
   })
 
   return { line: composeVerdict(facts), model: null }
+}
+
+/** The cache key for a verdict: the store, or the account's portfolio view. */
+export function verdictScopeKey(storeId: string | null, accountId: string): string {
+  return storeId ?? `ALL:${accountId}`
 }

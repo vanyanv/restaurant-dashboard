@@ -752,6 +752,7 @@ export async function getDecisionsView(input: {
     : await getVerdictLine({
         facts: verdictFacts,
         storeId: storeIdOut,
+        accountId,
         asOf: todayKey,
         userId: session.user.id ?? null,
       })

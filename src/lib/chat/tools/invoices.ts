@@ -7,6 +7,7 @@ import {
   resolveStoreIds,
   storeIdsSchema,
   ymd,
+  isStoreScoped,
 } from "./_shared"
 import type { ChatTool } from "./types"
 
@@ -43,7 +44,7 @@ export const searchInvoices: ChatTool<typeof searchParams, InvoiceSearchRow[]> =
   parameters: searchParams,
   async execute(args, ctx) {
     const storeIds = await resolveStoreIds(ctx, args.storeIds)
-    const vec = await embed(args.query)
+    const vec = await embed(args.query, { feature: "chat-search", userId: ctx.ownerId })
     const lit = toVectorLiteral(vec)
     const limit = args.limit ?? 10
 
@@ -75,7 +76,7 @@ export const searchInvoices: ChatTool<typeof searchParams, InvoiceSearchRow[]> =
          JOIN "InvoiceLineItem" l ON l.id = e."invoiceLineId"
          JOIN "Invoice"         i ON i.id = e."invoiceId"
         WHERE e."accountId" = $2
-          AND (i."storeId" IS NULL OR i."storeId" = ANY($3::text[]))
+          AND (($7::boolean = false AND i."storeId" IS NULL) OR i."storeId" = ANY($3::text[]))
           AND ($4::date IS NULL OR i."invoiceDate" >= $4::date)
           AND ($5::date IS NULL OR i."invoiceDate" <= $5::date)
         ORDER BY e.embedding <=> $1::vector
@@ -86,6 +87,9 @@ export const searchInvoices: ChatTool<typeof searchParams, InvoiceSearchRow[]> =
       range ? range.from.toISOString().slice(0, 10) : null,
       range ? range.to.toISOString().slice(0, 10) : null,
       limit,
+      // A store-scoped question excludes invoices with no store; the
+      // every-store question keeps them.
+      isStoreScoped(args.storeIds),
     )
 
     return rows.map((r) => ({
@@ -131,10 +135,10 @@ export const getTopInvoices: ChatTool<typeof topInvoicesParams, TopInvoiceRow[]>
     const rows = await ctx.prisma.invoice.findMany({
       where: {
         accountId: ctx.accountId,
-        OR: [
-          { storeId: null },
-          { storeId: { in: storeIds } },
-        ],
+        // Unassigned invoices only in the every-store question.
+        OR: isStoreScoped(args.storeIds)
+          ? [{ storeId: { in: storeIds } }]
+          : [{ storeId: null }, { storeId: { in: storeIds } }],
         invoiceDate: { gte: from, lte: to },
       },
       select: {
@@ -187,10 +191,10 @@ export const getInvoiceSpend: ChatTool<typeof spendParams, InvoiceSpendResult> =
     const rows = await ctx.prisma.invoice.findMany({
       where: {
         accountId: ctx.accountId,
-        OR: [
-          { storeId: null },
-          { storeId: { in: storeIds } },
-        ],
+        // Unassigned invoices only in the every-store question.
+        OR: isStoreScoped(args.storeIds)
+          ? [{ storeId: { in: storeIds } }]
+          : [{ storeId: null }, { storeId: { in: storeIds } }],
         invoiceDate: { gte: from, lte: to },
       },
       select: {

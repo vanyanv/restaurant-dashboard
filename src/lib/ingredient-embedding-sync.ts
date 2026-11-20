@@ -57,19 +57,24 @@ export async function syncCanonicalEmbedding(
     )
     if (existing[0]?.contentSnapshot === hash) return "unchanged"
 
-    const vec = await embed(text)
-    await prisma.$executeRawUnsafe(
-      `DELETE FROM "CanonicalIngredientEmbedding" WHERE "canonicalIngredientId" = $1`,
-      canonicalId,
-    )
-    await prisma.$executeRawUnsafe(
-      `INSERT INTO "CanonicalIngredientEmbedding"
-         (id, "canonicalIngredientId", "ownerId", "accountId", "category", "name",
-          "contentSnapshot", embedding, "createdAt")
-       VALUES (gen_random_uuid()::text, $1, $2, $3, $4, $5, $6, $7::vector, NOW())`,
-      canonicalId, ci.ownerId, ci.accountId, ci.category, ci.name, hash,
-      toVectorLiteral(vec),
-    )
+    const vec = await embed(text, { feature: "ingredient-embedding-sync" })
+    // One transaction: a failed insert after the delete used to leave the
+    // ingredient with no embedding at all, invisible to vector search until
+    // its next edit.
+    await prisma.$transaction([
+      prisma.$executeRawUnsafe(
+        `DELETE FROM "CanonicalIngredientEmbedding" WHERE "canonicalIngredientId" = $1`,
+        canonicalId,
+      ),
+      prisma.$executeRawUnsafe(
+        `INSERT INTO "CanonicalIngredientEmbedding"
+           (id, "canonicalIngredientId", "ownerId", "accountId", "category", "name",
+            "contentSnapshot", embedding, "createdAt")
+         VALUES (gen_random_uuid()::text, $1, $2, $3, $4, $5, $6, $7::vector, NOW())`,
+        canonicalId, ci.ownerId, ci.accountId, ci.category, ci.name, hash,
+        toVectorLiteral(vec),
+      ),
+    ])
     return "written"
   } catch (e) {
     console.warn("[syncCanonicalEmbedding] failed:", e)

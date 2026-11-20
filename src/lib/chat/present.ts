@@ -555,7 +555,11 @@ const BUILDERS = {
 
   getChannelMix(_args, result) {
     if (!isRecord(result)) return null
-    const rows = Array.isArray(result.rows) ? result.rows.filter(isRecord) : []
+    // A platform whose fees could not be priced has no net rate; it is left
+    // off the chart rather than drawn as a 0% bar.
+    const rows = Array.isArray(result.rows)
+      ? result.rows.filter(isRecord).filter((r) => numOrNull(r.netRatePct) !== null)
+      : []
     // The net RATE, not the gross: gross by platform is already
     // `getPlatformBreakdown`, and the rate is the thing this tool knows that
     // that one does not.

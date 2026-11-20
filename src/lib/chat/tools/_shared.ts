@@ -46,5 +46,14 @@ export async function resolveStoreIds(
   return assertOwnerOwnsStores(ctx.accountId, requested ?? null)
 }
 
+/**
+ * Whether the model named stores. A question about Hollywood must not answer
+ * with account-wide rows (an "All stores" P&L snapshot, an invoice with no
+ * store) — those belong only to the unscoped, every-store question.
+ */
+export function isStoreScoped(requested: string[] | undefined): boolean {
+  return Array.isArray(requested) && requested.length > 0
+}
+
 /** Format a Date as `YYYY-MM-DD` in UTC — matches `@db.Date` semantics. */
 export { ymdUTC as ymd } from "@/lib/date-utils"

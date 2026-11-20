@@ -1,4 +1,5 @@
 import { CHAT_TITLE_MODEL, getChatOpenAIClient } from "./openai-client"
+import { recordAiUsage } from "@/lib/monitoring/ai-usage"
 
 /**
  * Generates a 3-6 word title from the first user/assistant turn of a
@@ -10,11 +11,14 @@ import { CHAT_TITLE_MODEL, getChatOpenAIClient } from "./openai-client"
 export async function generateConversationTitle(
   firstUser: string,
   firstAssistant: string,
+  /** Who the call is billed to in `AiUsageEvent`. */
+  userId?: string | null,
 ): Promise<string | null> {
   const userClipped = firstUser.slice(0, 600).trim()
   const assistantClipped = firstAssistant.slice(0, 600).trim()
   if (!userClipped) return null
 
+  const startedAt = Date.now()
   try {
     const client = getChatOpenAIClient()
     const completion = await client.chat.completions.create({
@@ -32,6 +36,17 @@ export async function generateConversationTitle(
           content: `First question: ${userClipped} — first answer: ${assistantClipped}. Title:`,
         },
       ],
+    })
+    // Billed like every other call, so the daily cap sees it.
+    await recordAiUsage({
+      feature: "chat-title",
+      provider: "openai",
+      model: CHAT_TITLE_MODEL,
+      inputTokens: completion.usage?.prompt_tokens ?? 0,
+      outputTokens: completion.usage?.completion_tokens ?? 0,
+      cachedTokens: completion.usage?.prompt_tokens_details?.cached_tokens ?? 0,
+      userId: userId ?? null,
+      durationMs: Date.now() - startedAt,
     })
     const raw = completion.choices[0]?.message?.content?.trim()
     if (!raw) return null

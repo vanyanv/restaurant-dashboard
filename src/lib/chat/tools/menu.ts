@@ -136,7 +136,7 @@ export const searchMenuItems: ChatTool<typeof searchMenuParams, MenuSearchRow[]>
   parameters: searchMenuParams,
   async execute(args, ctx) {
     const storeIds = await resolveStoreIds(ctx, args.storeIds)
-    const vec = await embed(args.query)
+    const vec = await embed(args.query, { feature: "chat-search", userId: ctx.ownerId })
     const lit = toVectorLiteral(vec)
 
     const rows = await ctx.prisma.$queryRawUnsafe<

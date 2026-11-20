@@ -14,7 +14,7 @@ import { describe, it, expect, vi, afterEach } from "vitest"
 // exercise a pure pricing function.
 vi.mock("@/lib/prisma", () => ({ prisma: {} }))
 
-import { computeCostUsd, PRICING_PER_MTOK } from "@/lib/monitoring/ai-usage"
+import { computeCostUsd, PRICING_PER_MTOK, UNKNOWN_MODEL_RATE } from "@/lib/monitoring/ai-usage"
 
 describe("computeCostUsd", () => {
   afterEach(() => {
@@ -45,14 +45,23 @@ describe("computeCostUsd", () => {
     expect(cost).toBeCloseTo(0.000789)
   })
 
-  it("still warns and records $0 for a genuinely unpriced model — the fallback itself still works", () => {
-    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {})
+  it("fails loudly for an unpriced model and books it at the dearest known rate, never $0", () => {
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {})
 
     const cost = computeCostUsd("some-unpriced-model", 1000, 500, 0)
 
-    expect(cost).toBe(0)
-    expect(warnSpy).toHaveBeenCalledWith(
+    // $0 hid the call from the daily cap; the ceiling rate makes the cap see it.
+    expect(cost).toBeCloseTo(
+      (1000 * UNKNOWN_MODEL_RATE.in + 500 * UNKNOWN_MODEL_RATE.out) / 1_000_000,
+    )
+    expect(cost).toBeGreaterThan(0)
+    for (const r of Object.values(PRICING_PER_MTOK)) {
+      expect(UNKNOWN_MODEL_RATE.in).toBeGreaterThanOrEqual(r.in)
+      expect(UNKNOWN_MODEL_RATE.out).toBeGreaterThanOrEqual(r.out)
+    }
+    expect(errorSpy).toHaveBeenCalledWith(
       expect.stringContaining('missing pricing for model "some-unpriced-model"')
     )
+    errorSpy.mockRestore()
   })
 })

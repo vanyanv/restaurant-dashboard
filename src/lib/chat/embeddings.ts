@@ -6,6 +6,41 @@ import {
 } from "./openai-client"
 
 /**
+ * Who an embedding call is billed to. Every call is recorded in
+ * `AiUsageEvent` — before 2026-11-20 none were, so vector searches were
+ * invisible to the daily spend cap. `userId` is what the cap sums by; a
+ * background sync has none and is recorded for the ledger only.
+ */
+export interface EmbedBilling {
+  feature?: string
+  userId?: string | null
+}
+
+function recordEmbedding(
+  billing: EmbedBilling | undefined,
+  usage: { prompt_tokens?: number } | undefined,
+  startedAt: number,
+): void {
+  // Imported on use, not at module load: `ai-usage` pulls in `@/lib/prisma`,
+  // which throws without DATABASE_URL, and this module is imported by every
+  // vector tool and by scripts that only want `snapshotHash`.
+  const durationMs = Date.now() - startedAt
+  void import("@/lib/monitoring/ai-usage")
+    .then(({ recordAiUsage }) =>
+      recordAiUsage({
+        feature: billing?.feature ?? "embedding",
+        provider: "openai",
+        model: CHAT_EMBEDDING_MODEL,
+        inputTokens: usage?.prompt_tokens ?? 0,
+        outputTokens: 0,
+        userId: billing?.userId ?? null,
+        durationMs,
+      }),
+    )
+    .catch((err) => console.error("[embeddings] usage record failed", err))
+}
+
+/**
  * Embedding helpers for the chat layer's vector tools. The two corpora are
  * invoice line items and Otter menu items — both tiny relative to the rest of
  * the data model, so we re-embed lazily when `contentSnapshot` changes and
@@ -28,12 +63,14 @@ export function snapshotHash(text: string): string {
 
 /** Embed a single string. Use `embedBatch` when embedding more than a few
  * rows — the batch endpoint is materially cheaper per token. */
-export async function embed(text: string): Promise<number[]> {
+export async function embed(text: string, billing?: EmbedBilling): Promise<number[]> {
   const client = getChatOpenAIClient()
+  const startedAt = Date.now()
   const res = await client.embeddings.create({
     model: CHAT_EMBEDDING_MODEL,
     input: text,
   })
+  recordEmbedding(billing, res.usage, startedAt)
   const vec = res.data[0]?.embedding
   if (!vec || vec.length !== CHAT_EMBEDDING_DIMS) {
     throw new Error(
@@ -45,17 +82,22 @@ export async function embed(text: string): Promise<number[]> {
 
 /** Batch-embed up to 100 strings per request. Returns embeddings in the same
  * order as `inputs`. Larger arrays are chunked and concatenated. */
-export async function embedBatch(inputs: string[]): Promise<number[][]> {
+export async function embedBatch(
+  inputs: string[],
+  billing?: EmbedBilling,
+): Promise<number[][]> {
   if (inputs.length === 0) return []
   const client = getChatOpenAIClient()
   const out: number[][] = []
   const chunkSize = 100
   for (let i = 0; i < inputs.length; i += chunkSize) {
     const chunk = inputs.slice(i, i + chunkSize)
+    const startedAt = Date.now()
     const res = await client.embeddings.create({
       model: CHAT_EMBEDDING_MODEL,
       input: chunk,
     })
+    recordEmbedding(billing, res.usage, startedAt)
     if (res.data.length !== chunk.length) {
       throw new Error(
         `Batch embedding length mismatch: ${chunk.length} in, ${res.data.length} out`,
