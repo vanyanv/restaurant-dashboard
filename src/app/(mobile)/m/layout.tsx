@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from "next"
+import { APPLE_STARTUP_IMAGES } from "@/lib/apple-startup-images"
 import { Suspense } from "react"
 import { MTabs } from "@/components/counter"
 import { WelcomeMarquee } from "@/components/dashboard/welcome-marquee"
@@ -17,6 +18,7 @@ export const metadata: Metadata = {
     capable: true,
     title: "Chris Neddy's",
     statusBarStyle: "default",
+    startupImage: APPLE_STARTUP_IMAGES,
   },
   manifest: "/manifest.webmanifest",
   icons: {
