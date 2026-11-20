@@ -6,7 +6,7 @@ generator client {
 
 datasource db {
   provider   = "postgresql"
-  extensions = [vector, pg_stat_statements]
+  extensions = [vector, pg_stat_statements, pg_trgm]
 }
 
 enum Role {
@@ -953,6 +953,13 @@ model OtterOrder {
   // Cold prod read of 30 days touched 3,613 table pages (585 ms after wake).
   // See prisma/manual-migrations/2026-11-17_order_fees_cover_index.sql.
   @@index([storeId, referenceTimeLocal, platform, fulfillmentMode, orderStatus, commission, subtotal, discount], map: "OtterOrder_store_time_fees_idx")
+  // Trigram indexes for the Orders search box, which is `ILIKE '%term%'` on
+  // these three columns (`getOrdersList` in src/app/actions/order-actions.ts).
+  // A btree cannot answer a leading wildcard. See
+  // prisma/manual-migrations/2026-11-20_order_search_trigram.sql.
+  @@index([externalDisplayId(ops: raw("gin_trgm_ops"))], type: Gin, map: "OtterOrder_externalDisplayId_trgm_idx")
+  @@index([customerName(ops: raw("gin_trgm_ops"))], type: Gin, map: "OtterOrder_customerName_trgm_idx")
+  @@index([otterOrderId(ops: raw("gin_trgm_ops"))], type: Gin, map: "OtterOrder_otterOrderId_trgm_idx")
 }
 
 model OtterOrderItem {
