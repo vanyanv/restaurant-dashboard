@@ -1,6 +1,6 @@
 "use client"
 
-import { Fold } from "@/components/counter/ui"
+import { PageTabs } from "@/components/counter/ui"
 import { AnalyticsPlainView } from "@/app/dashboard/(counter)/analytics/analytics-plain-ui"
 import { useMemo } from "react"
 import { Chart, MStrip, Section, useCounterTransition, SubNav } from "@/components/counter"
@@ -123,43 +123,69 @@ export function CounterPhoneAnalyticsClient({
       {/* Analytics made plain (owner's go, 2026-11-18; mock
           https://claude.ai/artifact/Sr98ngzuijqUUhPbJNJAv4). Every figure
           below is folded underneath, unchanged. */}
-      <Section bare title="Where sales came from" data={sections.plain} pending={pending}>
-        {(p) => <AnalyticsPlainView p={p} />}
-      </Section>
+      <PageTabs
+        label="Analytics views"
+        tabs={[
+          {
+            key: "summary",
+            label: "Summary",
+            content: (
+              <>
+                <Section bare title="Where sales came from" data={sections.plain} pending={pending}>
+                  {(p) => <AnalyticsPlainView p={p} />}
+                </Section>
+              </>
+            ),
+          },
+          {
+            key: "channels",
+            label: "Channels",
+            content: (
+              <>
 
-      <Fold summary="Every figure, as before">
+                {/* Four cells: Net sales, Marketplaces, Commission (in dollars, captioned
+                    with the percentage), Best day. `h.phoneCells`, never a slice of
+                    `h.cells` — see the file note above. */}
+                <Section bare title="The figures" data={sections.headline} pending={pending}>
+                  {(h) => <MStrip cells={h.phoneCells} />}
+                </Section>
 
-      {/* Four cells: Net sales, Marketplaces, Commission (in dollars, captioned
-          with the percentage), Best day. `h.phoneCells`, never a slice of
-          `h.cells` — see the file note above. */}
-      <Section bare title="The figures" data={sections.headline} pending={pending}>
-        {(h) => <MStrip cells={h.phoneCells} />}
-      </Section>
+                {/* The legend is ON and direct labels are OFF: at 340px a label written
+                    on a 20px band is a label nobody can read. That is the prototype's
+                    own choice (`m.phoneChart`), not a reshaping done here. */}
+                <Section title="Channel mix" meta={(m) => m.subtitle} data={sections.mix} pending={pending}>
+                  {(m) => (
+                    <>
+                      <Chart {...m.phoneChart} fmt={share} />
+                      <p className="mono">{m.sentence}</p>
+                    </>
+                  )}
+                </Section>
 
-      {/* The legend is ON and direct labels are OFF: at 340px a label written
-          on a 20px band is a label nobody can read. That is the prototype's
-          own choice (`m.phoneChart`), not a reshaping done here. */}
-      <Section title="Channel mix" meta={(m) => m.subtitle} data={sections.mix} pending={pending}>
-        {(m) => (
-          <>
-            <Chart {...m.phoneChart} fmt={share} />
-            <p className="mono">{m.sentence}</p>
-          </>
-        )}
-      </Section>
-
-      {/* Seven single-letter labels and a shorter plot (`w.phoneChart`). No
-          sentence here — `P.analytics.phone()`'s own composition stops at the
-          chart; there is no room left on this surface for the reading
-          paragraph the desk prints beside it. */}
-      <Section
-        title="By day of week"
-        meta={`${count(days)} ${days === 1 ? "day" : "days"}`}
-        data={sections.weekday} pending={pending}
-      >
-        {(w) => <Chart {...w.phoneChart} fmt={(v) => money(v)} />}
-      </Section>
-      </Fold>
+                {/* Seven single-letter labels and a shorter plot (`w.phoneChart`). No
+                    sentence here — `P.analytics.phone()`'s own composition stops at the
+                    chart; there is no room left on this surface for the reading
+                    paragraph the desk prints beside it. */}
+              </>
+            ),
+          },
+          {
+            key: "days",
+            label: "Days",
+            content: (
+              <>
+                <Section
+                  title="By day of week"
+                  meta={`${count(days)} ${days === 1 ? "day" : "days"}`}
+                  data={sections.weekday} pending={pending}
+                >
+                  {(w) => <Chart {...w.phoneChart} fmt={(v) => money(v)} />}
+                </Section>
+              </>
+            ),
+          },
+        ]}
+      />
     </>
   )
 }

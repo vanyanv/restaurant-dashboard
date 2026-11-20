@@ -127,15 +127,9 @@ export function checkSource(file: string, source: string): LayoutViolation[] {
  * Fix each with its area's rebuild, then DELETE its line. Never add one.
  */
 export const KNOWN: string[] = [
-  "src/app/(mobile)/m/(counter)/analytics/[storeId]/counter-phone-store-analytics-client.tsx",
-  "src/app/(mobile)/m/(counter)/analytics/counter-phone-analytics-client.tsx",
   "src/app/(mobile)/m/(counter)/labor/[storeId]/counter-phone-store-labor-client.tsx",
   "src/app/(mobile)/m/(counter)/labor/counter-phone-labor-client.tsx",
-  "src/app/(mobile)/m/(counter)/orders/[id]/counter-phone-order-client.tsx",
   "src/app/dashboard/(counter)/admin/monitoring/activity/counter-activity-client.tsx",
-  "src/app/dashboard/(counter)/alerts/counter-alerts-client.tsx",
-  "src/app/dashboard/(counter)/analytics/[storeId]/counter-store-analytics-client.tsx",
-  "src/app/dashboard/(counter)/analytics/counter-analytics-client.tsx",
   "src/app/dashboard/(counter)/ingredients/[id]/counter-ingredient-client.tsx",
   "src/app/dashboard/(counter)/ingredients/counter-ingredients-client.tsx",
   "src/app/dashboard/(counter)/invoices/[id]/counter-invoice-client.tsx",
@@ -143,9 +137,6 @@ export const KNOWN: string[] = [
   "src/app/dashboard/(counter)/labor/[storeId]/counter-store-labor-client.tsx",
   "src/app/dashboard/(counter)/labor/counter-labor-client.tsx",
   "src/app/dashboard/(counter)/operations/inventory/counter-inventory-client.tsx",
-  "src/app/dashboard/(counter)/orders/[id]/counter-order-client.tsx",
-  "src/app/dashboard/(counter)/orders/counter-orders-client.tsx",
-  "src/app/dashboard/(counter)/product-mix/counter-product-mix-client.tsx",
   "src/app/dashboard/(counter)/settings/counter-settings-client.tsx",
   "src/app/dashboard/(counter)/stores/[id]/counter-store-file-client.tsx",
 ]

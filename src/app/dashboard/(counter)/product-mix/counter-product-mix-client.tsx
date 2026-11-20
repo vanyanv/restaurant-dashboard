@@ -20,7 +20,7 @@ import { readCounterParams, writeCounterParams } from "@/lib/counter/url-state"
 import { rangeLabel } from "@/lib/counter/date-range"
 import type { SectionSources } from "@/lib/counter/adapters/types"
 import type { ProductMixSections } from "@/lib/counter/adapters/product-mix"
-import { Fold } from "@/components/counter/ui"
+import { PageTabs } from "@/components/counter/ui"
 import { MixPlainView } from "./mix-plain-ui"
 
 /**
@@ -114,57 +114,82 @@ export function CounterProductMixClient({
           regenerates its tree on every load. See
           `e2e/desktop/console-sweep.spec.ts`, which is what caught it. */}
 
-      <Section bare title="Product mix in a sentence" data={sections.plain} pending={pending}>
-        {(p) => <MixPlainView p={p} />}
-      </Section>
+      <PageTabs
+        label="Product mix views"
+        tabs={[
+          {
+            key: "summary",
+            label: "Summary",
+            content: (
+              <>
+                <Section bare title="Product mix in a sentence" data={sections.plain} pending={pending}>
+                  {(p) => <MixPlainView p={p} />}
+                </Section>
+              </>
+            ),
+          },
+          {
+            key: "units",
+            label: "Units",
+            content: (
+              <>
+                <Section bare title="The figures" data={sections.headline} pending={pending}>
+                  {(h) => <Strip cells={h.cells} />}
+                </Section>
 
-      <Fold summary="Every figure, as before">
-      <Section bare title="The figures" data={sections.headline} pending={pending}>
-        {(h) => <Strip cells={h.cells} />}
-      </Section>
+                {/* `sec(..., chart({...}), true)` — the fourth argument is ASK, and a
+                    chart body keeps its `.sec__body`. */}
+                <Section
+                  title="Units by item"
+                  meta={(u) => u.meta}
+                  data={sections.units}
+                  pending={pending}
+                  askAbout
+                >
+                  {(u) => <Chart {...u.chart} />}
+                </Section>
+              </>
+            ),
+          },
+          {
+            key: "mix",
+            label: "Mix",
+            content: (
+              <>
+                <div className="split">
+                  <Section
+                    title="Mix against last period"
+                    meta={(t) => t.meta}
+                    data={sections.table}
+                    pending={pending}
+                    // `tbl()` returns `raw()`, so a table section has no `.sec__body`.
+                    pad={false}
+                  >
+                    {(t) => <Table columns={MIX_COLUMNS} rows={t.rows} />}
+                  </Section>
 
-      {/* `sec(..., chart({...}), true)` — the fourth argument is ASK, and a
-          chart body keeps its `.sec__body`. */}
-      <Section
-        title="Units by item"
-        meta={(u) => u.meta}
-        data={sections.units}
-        pending={pending}
-        askAbout
-      >
-        {(u) => <Chart {...u.chart} />}
-      </Section>
-
-      <div className="split">
-        <Section
-          title="Mix against last period"
-          meta={(t) => t.meta}
-          data={sections.table}
-          pending={pending}
-          // `tbl()` returns `raw()`, so a table section has no `.sec__body`.
-          pad={false}
-        >
-          {(t) => <Table columns={MIX_COLUMNS} rows={t.rows} />}
-        </Section>
-
-        <Section
-          title="What the mix cost you"
-          meta={(b) => b.meta}
-          data={sections.bridge}
-          pending={pending}
-          askAbout="how much of the margin change was the mix"
-        >
-          {(b) => (
-            <>
-              <MathLines rows={b.rows} />
-              <Note>
-                {b.note}
-              </Note>
-            </>
-          )}
-        </Section>
-      </div>
-      </Fold>
+                  <Section
+                    title="What the mix cost you"
+                    meta={(b) => b.meta}
+                    data={sections.bridge}
+                    pending={pending}
+                    askAbout="how much of the margin change was the mix"
+                  >
+                    {(b) => (
+                      <>
+                        <MathLines rows={b.rows} />
+                        <Note>
+                          {b.note}
+                        </Note>
+                      </>
+                    )}
+                  </Section>
+                </div>
+              </>
+            ),
+          },
+        ]}
+      />
     </>
   )
 }

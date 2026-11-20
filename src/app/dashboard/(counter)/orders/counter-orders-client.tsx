@@ -1,6 +1,6 @@
 "use client"
 
-import { Fold } from "@/components/counter/ui"
+import { PageTabs } from "@/components/counter/ui"
 import { OrdersPlainView } from "./orders-plain-ui"
 import Link from "next/link"
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, useLayoutEffect } from "react"
@@ -385,67 +385,92 @@ export function CounterOrdersClient({
       {/* The page made plain (owner's go, 2026-11-18; mock
           https://claude.ai/artifact/Sr98ngzuijqUUhPbJNJAv4). The figures, the
           filters and every order are folded underneath, unchanged. */}
-      <Section bare title="Orders in a sentence" data={sections.plain} pending={pending}>
-        {(p) => <OrdersPlainView p={p} />}
-      </Section>
+      <PageTabs
+        label="Order views"
+        tabs={[
+          {
+            key: "summary",
+            label: "Summary",
+            content: (
+              <>
+                <Section bare title="Orders in a sentence" data={sections.plain} pending={pending}>
+                  {(p) => <OrdersPlainView p={p} />}
+                </Section>
+              </>
+            ),
+          },
+          {
+            key: "orders",
+            label: "Orders",
+            content: (
+              <>
+                {/* Page level, above the first `.sec`, exactly as `strip([...])` is
+                    written in `P.orders.desk()`. Ruling O-R2: no cell here is judged
+                    against anything, because nothing in this schema publishes a
+                    per-order target, a fee ceiling or a ticket floor. */}
+                <Section bare title="The figures" data={sections.strip} pending={pending}>
+                  {(cells) => <Strip cells={cells} />}
+                </Section>
 
-      <Fold summary="Every order, with the figures, filters and orders by hour">
-      {/* Page level, above the first `.sec`, exactly as `strip([...])` is
-          written in `P.orders.desk()`. Ruling O-R2: no cell here is judged
-          against anything, because nothing in this schema publishes a
-          per-order target, a fee ceiling or a ticket floor. */}
-      <Section bare title="The figures" data={sections.strip} pending={pending}>
-        {(cells) => <Strip cells={cells} />}
-      </Section>
-
-      {/* The prototype's own headless `.sec` — see the file note. */}
-      <div className="sec">
-        <Section bare title="Orders" data={sections.list} pending={pending}>
-          {(l) => <OrdersTable list={l} draft={draft} onSearch={setDraft} onToggle={onToggle} onClear={filtering ? onClear : undefined} />}
-        </Section>
-      </div>
-
-      <Section
-        title="Orders by hour"
-        pending={pending}
-        /*
-         * The baseline the band is drawn from, named by the ADAPTER: which
-         * weekday it is made of is a fact about the range, not a page
-         * decision, so `OrdersByHour` carries the string beside its chart.
-         *
-         * A FUNCTION, not `dataOf(sections.byHour)?.meta`. Since Task 3 this
-         * section is a PROMISE — there is no resolved value in this file to
-         * lift a string out of — so the qualifier is read inside `Section`,
-         * where the value has landed. Still not a status branch: `Section`
-         * gates `meta` on having data by itself, so the head is right in all
-         * six states without this file knowing which one it is in.
-         */
-        meta={(h) => h.meta}
-        data={sections.byHour}
-      >
-        {(h) => (
-          <>
-            {/* `fmt` and `bandFmt` are the CHART's props, not the spec's, and
-                `fmt` defaults to `money()`. Unpassed, an hour that took 22
-                orders would read "$22" and its band "$18–$27" — a wrong
-                figure, not a cosmetic slip. */}
-            <Chart {...h.chart} fmt={orderCount} bandFmt={bareCount} />
-            {/* The two pieces of page furniture the adapter does not carry,
-                because neither is a figure: the prototype's own closing
-                sentence and the way to the page it names (line 4874). */}
-            <Note>
-              This is the list. The shape of it &mdash; which channel, which hour, which way it is
-              moving &mdash; is one page over.
-            </Note>
-            <div className="btnrow" style={{ marginTop: "10px" }}>
-              <Link className="btn" href="/dashboard/analytics">
-                Open analytics
-              </Link>
-            </div>
-          </>
-        )}
-      </Section>
-      </Fold>
+                {/* The prototype's own headless `.sec` — see the file note. */}
+                <div className="sec">
+                  <Section bare title="Orders" data={sections.list} pending={pending}>
+                    {(l) => <OrdersTable list={l} draft={draft} onSearch={setDraft} onToggle={onToggle} onClear={filtering ? onClear : undefined} />}
+                  </Section>
+                </div>
+              </>
+            ),
+          },
+          {
+            key: "hours",
+            label: "By hour",
+            content: (
+              <>
+                <Section
+                  title="Orders by hour"
+                  pending={pending}
+                  /*
+                   * The baseline the band is drawn from, named by the ADAPTER: which
+                   * weekday it is made of is a fact about the range, not a page
+                   * decision, so `OrdersByHour` carries the string beside its chart.
+                   *
+                   * A FUNCTION, not `dataOf(sections.byHour)?.meta`. Since Task 3 this
+                   * section is a PROMISE — there is no resolved value in this file to
+                   * lift a string out of — so the qualifier is read inside `Section`,
+                   * where the value has landed. Still not a status branch: `Section`
+                   * gates `meta` on having data by itself, so the head is right in all
+                   * six states without this file knowing which one it is in.
+                   */
+                  meta={(h) => h.meta}
+                  data={sections.byHour}
+                >
+                  {(h) => (
+                    <>
+                      {/* `fmt` and `bandFmt` are the CHART's props, not the spec's, and
+                          `fmt` defaults to `money()`. Unpassed, an hour that took 22
+                          orders would read "$22" and its band "$18–$27" — a wrong
+                          figure, not a cosmetic slip. */}
+                      <Chart {...h.chart} fmt={orderCount} bandFmt={bareCount} />
+                      {/* The two pieces of page furniture the adapter does not carry,
+                          because neither is a figure: the prototype's own closing
+                          sentence and the way to the page it names (line 4874). */}
+                      <Note>
+                        This is the list. The shape of it &mdash; which channel, which hour, which way it is
+                        moving &mdash; is one page over.
+                      </Note>
+                      <div className="btnrow" style={{ marginTop: "10px" }}>
+                        <Link className="btn" href="/dashboard/analytics">
+                          Open analytics
+                        </Link>
+                      </div>
+                    </>
+                  )}
+                </Section>
+              </>
+            ),
+          },
+        ]}
+      />
     </>
   )
 }
