@@ -103,7 +103,11 @@ const BUDGETS: BudgetRule[] = [
   {
     label: "dashboard route",
     match: (r) => r.startsWith("/dashboard"),
-    uncompressedBytes: 750_000,
+    // 750 -> 760 KB on 2026-11-20: main had /dashboard/menu/catalog/[item]
+    // at 731.8 KB, 0.6 KB under. The page layout rules put every long page
+    // on the shared PageTabs block (tab row + panels, ?tab= in the URL),
+    // +2 KB to 733.8. Pure UI, no new dependency.
+    uncompressedBytes: 760_000,
   },
   {
     label: "default",
