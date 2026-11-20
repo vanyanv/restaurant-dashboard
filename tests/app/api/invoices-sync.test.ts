@@ -21,6 +21,7 @@ const graph = vi.hoisted(() => ({
   countEmailPdfAttachments: vi.fn(),
 }))
 const extract = vi.hoisted(() => vi.fn())
+const identities = vi.hoisted(() => ({ seen: new Set<string>() }))
 const matchNew = vi.hoisted(() => vi.fn())
 const session = vi.hoisted(() => vi.fn())
 const mailbox = vi.hoisted(() => vi.fn())
@@ -42,7 +43,7 @@ vi.mock("@/lib/rate-limit", () => ({
 vi.mock("@/lib/invoice-pack-prior-load", () => ({ loadPackShapePriors: vi.fn(async () => new Map()) }))
 vi.mock("@/lib/invoice-identity", () => ({
   invoiceIdentityKey: (inv: { invoiceNumber: string }) => inv.invoiceNumber || null,
-  loadInvoiceIdentities: vi.fn(async () => new Set<string>()),
+  loadInvoiceIdentities: vi.fn(async () => new Set(identities.seen)),
 }))
 vi.mock("@/lib/blob", () => ({ putInvoicePdf: vi.fn(async () => ({ pathname: "p", url: "u", size: 1, uploadedAt: new Date() })) }))
 vi.mock("@/lib/graph-mail", () => ({ sendGraphMail: vi.fn(async () => ({ sent: true })) }))
@@ -80,7 +81,8 @@ const post = () =>
 beforeEach(() => {
   vi.clearAllMocks()
   cron.isCron = false
-  mailbox.mockResolvedValue({ accountId: "acct_mail", userId: "u_owner" })
+  identities.seen = new Set()
+  mailbox.mockResolvedValue({ ok: true, accountId: "acct_mail", userId: "u_owner" })
   session.mockResolvedValue({ user: { id: "u_owner", role: "OWNER", accountId: "acct_mail" } })
   db.jobRun.findFirst.mockResolvedValue({ startedAt: new Date(), metadata: {} })
   db.store.findMany.mockResolvedValue([])
@@ -213,5 +215,108 @@ describe("POST /api/invoices/sync — account", () => {
     await post()
     expect(session).not.toHaveBeenCalled()
     expect(db.invoice.create.mock.calls[0][0].data).toMatchObject({ accountId: "acct_mail", ownerId: "u_owner" })
+  })
+})
+
+const metadataWritten = () => db.jobRun.update.mock.calls.at(-1)![0].data.metadata as Record<string, unknown>
+const storedRows = (rows: Array<{ emailMessageId: string; emailAttachmentIndex: number }>) =>
+  db.invoice.findMany.mockImplementation(async (args: { select?: Record<string, unknown> }) =>
+    args.select && "emailAttachmentIndex" in args.select ? rows : []
+  )
+const daysAgo = (n: number) => new Date(Date.now() - n * 24 * 60 * 60 * 1000).toISOString()
+
+describe("POST /api/invoices/sync — every PDF gets an outcome", () => {
+  it("stores a second copy of a bill set aside as a duplicate, so it is not re-read every run", async () => {
+    identities.seen = new Set(["A-1"])
+    graph.fetchInvoiceEmails.mockResolvedValue([msg("m1")])
+    graph.getEmailAttachments.mockResolvedValue([pdf("a.pdf")])
+    extract.mockResolvedValue({ extraction: bill("A-1"), model: "gpt" })
+    const body = await (await post()).json()
+    expect(body.created).toBe(0)
+    const row = db.invoice.create.mock.calls[0][0].data
+    expect(row.status).toBe("REJECTED")
+    expect(row.reviewReasons[0].kind).toBe("duplicate_bill")
+    expect(row.lineItems.create).toEqual([])
+    expect(matchNew).not.toHaveBeenCalled()
+  })
+
+  it("counts a failed read and tries again next run", async () => {
+    graph.fetchInvoiceEmails.mockResolvedValue([msg("m1")])
+    graph.getEmailAttachments.mockResolvedValue([pdf("a.pdf")])
+    extract.mockRejectedValue(new Error("503"))
+    await post()
+    expect(db.invoice.create).not.toHaveBeenCalled()
+    expect(metadataWritten().readFailures).toEqual({ "m1#0": 1 })
+  })
+
+  it("holds a PDF for review after its third failed read and stops counting it", async () => {
+    db.jobRun.findFirst.mockResolvedValue({ startedAt: new Date(), metadata: { readFailures: { "m1#0": 2 } } })
+    graph.fetchInvoiceEmails.mockResolvedValue([msg("m1")])
+    graph.getEmailAttachments.mockResolvedValue([pdf("a.pdf")])
+    extract.mockRejectedValue(new Error("503"))
+    await post()
+    const row = db.invoice.create.mock.calls[0][0].data
+    expect(row).toMatchObject({ status: "REVIEW", emailMessageId: "m1", emailAttachmentIndex: 0, totalAmount: 0 })
+    expect(row.reviewReasons[0].kind).toBe("unreadable_pdf")
+    expect(metadataWritten().readFailures).toEqual({})
+  })
+
+  it("keeps an email cut by the per-run PDF cap pending for the next run", async () => {
+    graph.fetchInvoiceEmails.mockResolvedValue([msg("m1")])
+    graph.getEmailAttachments.mockResolvedValue(Array.from({ length: 9 }, (_, i) => pdf(`p${i}.pdf`)))
+    extract.mockImplementation(async (_b: string, name: string) => ({ extraction: bill(`N-${name}`), model: "gpt" }))
+    const body = await (await post()).json()
+    expect(extract).toHaveBeenCalledTimes(8)
+    expect(body.deferred).toBe(1)
+    expect((metadataWritten().incomplete as Array<{ id: string }>).map((e) => e.id)).toEqual(["m1"])
+  })
+
+  it("finishes a half-stored email however old it is, widening the window to reach it", async () => {
+    const old = { ...msg("m_old"), receivedDateTime: daysAgo(20) }
+    db.jobRun.findFirst.mockResolvedValue({
+      startedAt: new Date(),
+      metadata: { incomplete: [{ id: "m_old", receivedAt: old.receivedDateTime }] },
+    })
+    graph.fetchInvoiceEmails.mockResolvedValue([old])
+    storedRows([{ emailMessageId: "m_old", emailAttachmentIndex: 0 }])
+    graph.getEmailAttachments.mockResolvedValue([pdf("a.pdf"), pdf("b.pdf")])
+    extract.mockResolvedValue({ extraction: bill("B-2"), model: "gpt" })
+    await post()
+    const since = graph.fetchInvoiceEmails.mock.calls[0][0] as Date
+    expect(since.getTime()).toBeLessThanOrEqual(Date.parse(old.receivedDateTime))
+    // Older than the 7-day re-check, read anyway because the last run left it open.
+    expect(graph.countEmailPdfAttachments).not.toHaveBeenCalled()
+    expect(extract).toHaveBeenCalledTimes(1)
+    expect(db.invoice.create.mock.calls[0][0].data.emailAttachmentIndex).toBe(1)
+    expect(metadataWritten().incomplete).toEqual([])
+  })
+
+  it("reads new mail before half-stored emails, which get their own small budget", async () => {
+    const fresh = Array.from({ length: 6 }, (_, i) => ({ ...msg(`new${i}`), receivedDateTime: daysAgo(1) }))
+    const partial = Array.from({ length: 3 }, (_, i) => ({ ...msg(`part${i}`), receivedDateTime: daysAgo(3) }))
+    db.jobRun.findFirst.mockResolvedValue({
+      startedAt: new Date(),
+      metadata: { incomplete: partial.map((m) => ({ id: m.id, receivedAt: m.receivedDateTime })) },
+    })
+    graph.fetchInvoiceEmails.mockResolvedValue([...partial, ...fresh])
+    storedRows(partial.map((m) => ({ emailMessageId: m.id, emailAttachmentIndex: 0 })))
+    graph.getEmailAttachments.mockImplementation(async (id: string) =>
+      id.startsWith("part") ? [pdf("a.pdf"), pdf(`${id}-b.pdf`)] : [pdf(`${id}.pdf`)]
+    )
+    extract.mockImplementation(async (_b: string, name: string) => ({ extraction: bill(`N-${name}`), model: "gpt" }))
+    await post()
+    const fetched = graph.getEmailAttachments.mock.calls.map(([id]) => id)
+    // All six new emails, then only two of the three older ones.
+    expect(fetched.filter((id) => id.startsWith("new"))).toHaveLength(6)
+    expect(fetched.filter((id) => id.startsWith("part"))).toEqual(["part0", "part1"])
+    // The third stays pending for the next run.
+    expect((metadataWritten().incomplete as Array<{ id: string }>).map((e) => e.id)).toEqual(["part2"])
+  })
+
+  it("does not download an email with no PDF again once it is known to have none", async () => {
+    db.jobRun.findFirst.mockResolvedValue({ startedAt: new Date(), metadata: { noPdf: ["m1"] } })
+    graph.fetchInvoiceEmails.mockResolvedValue([msg("m1")])
+    await post()
+    expect(graph.getEmailAttachments).not.toHaveBeenCalled()
   })
 })

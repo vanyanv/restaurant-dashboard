@@ -107,8 +107,25 @@ describe("extractInvoiceData", () => {
     expect(openaiCtor).toHaveBeenCalledWith(expect.objectContaining({ maxRetries: 0 }))
     const opts = openaiCreate.mock.calls[0][1] as { maxRetries: number; timeout: number; signal: AbortSignal }
     expect(opts.maxRetries).toBe(0)
-    expect(opts.timeout).toBeLessThanOrEqual(28_000)
+    // Most of the budget goes to the primary read (40s), so a long
+    // multi-page bill that read in under 60s before still reads.
+    expect(opts.timeout).toBe(40_000)
     expect(opts.signal).toBeInstanceOf(AbortSignal)
+  })
+
+  it("gives the fallback nearly the whole budget after a fast primary failure", async () => {
+    openaiCreate.mockRejectedValue(new Error("429 rate limit"))
+    geminiGenerate.mockResolvedValue({ text: JSON.stringify(good) })
+    await extractInvoiceData("pdf", "a.pdf")
+    const signal = geminiGenerate.mock.calls[0][0].config.abortSignal as AbortSignal
+    expect(signal.aborted).toBe(false)
+  })
+
+  it("does not start a fallback that could not finish in the time left", async () => {
+    openaiCreate.mockRejectedValue(new Error("503 Service Unavailable"))
+    // 9s left after the primary: under the 10s floor.
+    await expect(extractInvoiceData("pdf", "a.pdf", { budgetMs: 9_000 })).rejects.toThrow(/503/)
+    expect(geminiGenerate).not.toHaveBeenCalled()
   })
 
   it("falls back to Gemini when the OpenAI answer was cut off at the token limit", async () => {
@@ -154,15 +171,21 @@ describe("extractInvoiceData", () => {
   })
 
   it("aborts a slow Gemini read at its budget", async () => {
-    openaiCreate.mockRejectedValue(new Error("503 Service Unavailable"))
-    geminiGenerate.mockImplementation(
-      ({ config }: { config: { abortSignal: AbortSignal } }) =>
-        new Promise((_, reject) => config.abortSignal.addEventListener("abort", () => reject(config.abortSignal.reason)))
-    )
-    const started = Date.now()
-    await expect(extractInvoiceData("pdf", "a.pdf", { budgetMs: 5_100 })).rejects.toThrow(/timed out/)
-    expect(Date.now() - started).toBeLessThan(6_000)
-  }, 10_000)
+    vi.useFakeTimers()
+    try {
+      openaiCreate.mockRejectedValue(new Error("503 Service Unavailable"))
+      geminiGenerate.mockImplementation(
+        ({ config }: { config: { abortSignal: AbortSignal } }) =>
+          new Promise((_, reject) => config.abortSignal.addEventListener("abort", () => reject(config.abortSignal.reason)))
+      )
+      const read = extractInvoiceData("pdf", "a.pdf", { budgetMs: 20_000 })
+      const check = expect(read).rejects.toThrow(/timed out/)
+      await vi.advanceTimersByTimeAsync(20_001)
+      await check
+    } finally {
+      vi.useRealTimers()
+    }
+  })
 })
 
 describe("shouldFallBackToGemini", () => {

@@ -28,6 +28,16 @@ import { bustTags } from "@/lib/cache/cached"
 import { recentSuccessSkip, withJobRun } from "@/lib/monitoring/job-run"
 import { logger } from "@/lib/logger"
 import { resolveInvoiceMailbox } from "@/lib/invoice-mailbox"
+import {
+  MAX_READ_TRIES,
+  attachmentsKey,
+  emptySyncState,
+  incompleteLookbackDays,
+  pdfKey,
+  readSyncState,
+  serializeSyncState,
+  type SyncState,
+} from "@/lib/invoice-sync-state"
 
 const PRICE_ALERT_PCT_THRESHOLD = 5
 const PRICE_ALERT_MIN_UNIT_PRICE = 0.5
@@ -57,6 +67,14 @@ const MAX_MESSAGES_PER_RUN = 6
  */
 const MAX_PDFS_PER_RUN = 8
 /**
+ * Emails already partly stored (a PDF cut by the cap above, or one whose read
+ * failed) get their own small budget, after the new mail: a PDF that keeps
+ * failing must not hold a slot new bills need (oldest-first would otherwise
+ * put it at the front every run).
+ */
+const MAX_RETRY_MESSAGES_PER_RUN = 2
+const MAX_RETRY_PDFS_PER_RUN = 2
+/**
  * An email that already has a row is asked (attachment names only, no
  * download) whether it carries a PDF not stored yet, when it arrived in the
  * last week. At most this many per run.
@@ -66,8 +84,12 @@ const MAX_STORED_RECHECKS = 60
 /** Ingredient matching retry: recent invoices whose matching never finished. */
 const MATCH_RETRY_DAYS = 30
 const MATCH_RETRY_TAKE = 20
-/** Time the first read (primary model + fallback) may take, inside the 60s task timeout. */
-const FIRST_READ_BUDGET_MS = 50_000
+/**
+ * Time the first read (primary model + fallback) may take, inside the 60s task
+ * timeout; the last 8s are for the PDF upload. See gemini-invoice.ts for how
+ * it splits between the two models.
+ */
+const FIRST_READ_BUDGET_MS = 52_000
 const EXTRACTION_BUDGET_MS = 30_000
 /**
  * A second read is attempted only when the first took less than this, so
@@ -190,6 +212,8 @@ interface SyncResult {
   deferred: number
   /** Days back this run searched; carried forward while `deferred > 0`. */
   lookbackDays: number
+  /** Per-PDF bookkeeping for the next run (see invoice-sync-state.ts). */
+  state?: SyncState
 }
 
 /**
@@ -333,6 +357,66 @@ async function detectAndAlertPriceHikes(invoiceIds: string[], userId: string, ac
 }
 
 /**
+ * Store a PDF that failed to read `tries` times as an invoice held for review:
+ * no lines, $0, the PDF attached, the email's sender as the vendor. Returns
+ * false if even that row cannot be written (the next run tries again).
+ */
+async function holdUnreadablePdf(
+  unit: {
+    msg: { id: string; subject: string | null; receivedDateTime: string; from: { emailAddress: { name: string; address: string } } | null }
+    pdf: GraphAttachment
+    index: number
+  },
+  tries: number,
+  userId: string,
+  accountId: string,
+): Promise<boolean> {
+  const { msg, pdf, index } = unit
+  let upload: InvoicePdfUpload | null = null
+  try {
+    upload = await putInvoicePdf(msg.id, Buffer.from(pdf.contentBytes, "base64"))
+  } catch (err) {
+    logger.error(`[invoice-sync] could not upload unreadable PDF "${pdf.name}":`, err)
+  }
+  const sender = msg.from?.emailAddress?.name?.trim() || msg.from?.emailAddress?.address?.trim() || "Unknown sender"
+  try {
+    await prisma.invoice.create({
+      data: {
+        ownerId: userId,
+        accountId,
+        emailMessageId: msg.id,
+        emailAttachmentIndex: index,
+        emailSubject: msg.subject,
+        emailReceivedAt: msg.receivedDateTime ? new Date(msg.receivedDateTime) : null,
+        attachmentName: pdf.name,
+        vendorName: sender,
+        invoiceNumber: "",
+        totalAmount: 0,
+        status: "REVIEW",
+        reviewReasons: [
+          {
+            kind: "unreadable_pdf",
+            message:
+              `This PDF could not be read after ${tries} tries, so nothing from it was counted. ` +
+              "Open the PDF and enter the bill by hand if it is one.",
+          },
+        ] as unknown as Prisma.InputJsonValue,
+        pdfBlobPathname: upload?.pathname ?? null,
+        pdfBlobUrl: upload?.url ?? null,
+        pdfSize: upload?.size ?? null,
+        pdfUploadedAt: upload?.uploadedAt ?? null,
+      },
+    })
+    logger.warn(`[invoice-sync] held "${pdf.name}" from "${msg.subject}" for review after ${tries} failed reads`)
+    return true
+  } catch (err) {
+    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") return true
+    logger.error(`[invoice-sync] could not hold unreadable PDF "${pdf.name}":`, err)
+    return false
+  }
+}
+
+/**
  * Recent invoices whose ingredient matching never finished: the sync threw or
  * timed out after the rows were written, and nothing ran it again, so those
  * lines sat in "Needs review" though a learned SKU would have matched them.
@@ -472,14 +556,18 @@ async function runSync(
   // treating them as backlog would hold the window open and re-send them to
   // the model every hour.
   const backlogPending = readDeferred(lastSync?.metadata) > 0
+  // Emails left half stored stay in the window, however old, until each of
+  // their PDFs has a row (a backfill's older email whose second PDF was cut).
+  const prevState = readSyncState(lastSync?.metadata)
+  const incompleteDays = incompleteLookbackDays(prevState)
   // While a backlog remains the window never narrows: an explicit shorter
   // override mid-backfill would otherwise drop the emails the backfill found.
-  const carried = backlogPending ? readLookback(lastSync?.metadata) : 0
+  const carried = Math.max(backlogPending ? readLookback(lastSync?.metadata) : 0, incompleteDays)
   const lookbackDays =
     lookbackDaysOverride != null
       ? Math.max(lookbackDaysOverride, carried)
       : lastSync && !backlogPending
-        ? 7
+        ? Math.max(7, incompleteDays)
         : Math.max(30, carried)
   const sinceDate = new Date()
   sinceDate.setDate(sinceDate.getDate() - lookbackDays)
@@ -517,7 +605,7 @@ async function runSync(
       detail: "No emails with attachments found", counts,
     })
     if (retried > 0) await bustTags(["invoices", `account:${accountId}`])
-    return { message: `Sync complete`, ...counts, lookbackDays }
+    return { message: `Sync complete`, ...counts, lookbackDays, state: emptySyncState() }
   }
 
   // ─── Dedup: skip already-processed PDFs ───
@@ -557,7 +645,9 @@ async function runSync(
   }
   const hasUnstoredPdf = (m: { id: string }): boolean => {
     const stored = storedByMessage.get(m.id)
-    if (!stored) return true
+    if (!stored) return !prevState.noPdf.has(m.id)
+    // Left half stored by an earlier run: pending until every PDF has a row.
+    if (prevState.incomplete.has(m.id)) return true
     const n = pdfCounts.get(m.id) ?? 0
     for (let i = 0; i < n; i++) if (!stored.has(i)) return true
     return false
@@ -568,8 +658,26 @@ async function runSync(
     // window shrinks toward steady state instead of re-reading the newest few.
     .sort((a, b) => a.receivedDateTime.localeCompare(b.receivedDateTime))
   counts.skipped = messages.length - pending.length
-  const newMessages = pending.slice(0, MAX_MESSAGES_PER_RUN)
-  counts.deferred = pending.length - newMessages.length
+  // New mail first, with the main budget; partly stored emails after it,
+  // with their own small one.
+  const freshPending = pending.filter((m) => !storedByMessage.has(m.id))
+  const retryPending = pending.filter((m) => storedByMessage.has(m.id))
+  const freshMessages = freshPending.slice(0, MAX_MESSAGES_PER_RUN)
+  const retryMessages = retryPending.slice(0, MAX_RETRY_MESSAGES_PER_RUN)
+  const newMessages = [...freshMessages, ...retryMessages]
+  counts.deferred = freshPending.length - freshMessages.length
+
+  // Next run's bookkeeping, built as this run learns. Emails not reached this
+  // run carry their entries forward; an email no longer in the window drops.
+  const inWindow = new Set(messages.map((m) => m.id))
+  const nextState: SyncState = emptySyncState()
+  for (const id of prevState.noPdf) if (inWindow.has(id)) nextState.noPdf.add(id)
+  for (const [k, v] of prevState.readFailures) {
+    if (inWindow.has(k.slice(0, k.lastIndexOf("#")))) nextState.readFailures.set(k, v)
+  }
+  for (const m of retryPending.slice(MAX_RETRY_MESSAGES_PER_RUN)) {
+    nextState.incomplete.set(m.id, m.receivedDateTime)
+  }
 
   emit({
     phase: "extracting", status: "processing",
@@ -584,7 +692,7 @@ async function runSync(
       detail: `All ${counts.skipped} emails already synced`, counts,
     })
     if (retried > 0) await bustTags(["invoices", `account:${accountId}`])
-    return { message: `Sync complete`, ...counts, lookbackDays }
+    return { message: `Sync complete`, ...counts, lookbackDays, state: nextState }
   }
 
   // ─── Phase 2: Extract data from PDFs via OpenAI ───
@@ -624,15 +732,48 @@ async function runSync(
     30_000,
   )
   type PdfUnit = { msg: (typeof newMessages)[number]; pdf: GraphAttachment; index: number }
-  const allUnits: PdfUnit[] = []
+  const freshUnits: PdfUnit[] = []
+  const retryUnits: PdfUnit[] = []
+  /** Every PDF position each fetched email has, to know when it is complete. */
+  const pdfTotal = new Map<string, number>()
   newMessages.forEach((msg, i) => {
+    const list = attachmentLists[i]
+    if (list == null) {
+      // The download failed. Try again next run; after MAX_READ_TRIES give
+      // up on the email rather than re-trying it for as long as it is in view.
+      const key = attachmentsKey(msg.id)
+      const tries = (nextState.readFailures.get(key) ?? 0) + 1
+      if (tries >= MAX_READ_TRIES) {
+        logger.error(`[invoice-sync] giving up on "${msg.subject}": its attachments failed to download ${tries} times`)
+        nextState.readFailures.delete(key)
+        nextState.noPdf.add(msg.id)
+      } else {
+        nextState.readFailures.set(key, tries)
+        if (storedByMessage.has(msg.id)) nextState.incomplete.set(msg.id, msg.receivedDateTime)
+      }
+      return
+    }
+    nextState.readFailures.delete(attachmentsKey(msg.id))
+    if (list.length === 0) {
+      nextState.noPdf.add(msg.id)
+      return
+    }
+    pdfTotal.set(msg.id, list.length)
     const stored = storedByMessage.get(msg.id)
-    ;(attachmentLists[i] ?? []).forEach((pdf, index) => {
-      if (!stored?.has(index)) allUnits.push({ msg, pdf, index })
+    const target = stored ? retryUnits : freshUnits
+    list.forEach((pdf, index) => {
+      if (!stored?.has(index)) target.push({ msg, pdf, index })
     })
   })
-  const units = allUnits.slice(0, MAX_PDFS_PER_RUN)
-  counts.deferred += allUnits.length - units.length
+  const units = [
+    ...freshUnits.slice(0, MAX_PDFS_PER_RUN),
+    ...retryUnits.slice(0, MAX_RETRY_PDFS_PER_RUN),
+  ]
+  counts.deferred += freshUnits.length - Math.min(freshUnits.length, MAX_PDFS_PER_RUN)
+  /** PDF keys that got a row this run (stored, set aside, duplicate, or held). */
+  const doneKeys = new Set<string>()
+  /** PDF keys whose read or save failed this run. */
+  const failedUnits = new Map<string, PdfUnit>()
 
   const extractionTasks = units.map(({ msg, pdf, index }) => async (signal: AbortSignal) => {
     const label = index > 0 ? `"${msg.subject}" (PDF ${index + 1})` : `"${msg.subject}"`
@@ -731,6 +872,11 @@ async function runSync(
     Date.now() + EXTRACTION_BUDGET_MS,
   )
   counts.deferred += unstarted
+  // A null is a failed read (an error, or the task timed out); a hole is a
+  // task never started, which is not a failure, only deferred.
+  units.forEach((u, i) => {
+    if (i in extracted && extracted[i] == null) failedUnits.set(pdfKey(u.msg.id, u.index), u)
+  })
 
   // Holes (never-started tasks) are skipped by filter, nulls are failures.
   const validExtractions = extracted.filter((e): e is ExtractedInvoice => e != null)
@@ -1005,9 +1151,9 @@ async function runSync(
   // receipt) has a new message id, so the message dedup above lets it
   // through. Before this check four bills were stored twice, $3,353 of spend
   // counted double. See `invoiceIdentityKey` for what counts as the same.
-  // A skipped email stores no row, so it is re-read on each run until it
-  // leaves the lookback window (7 days in steady state); that is the price of
-  // not adding a table for "emails we chose not to keep".
+  // Since 2026-11-20 the copy is stored set aside (REJECTED, no lines, a
+  // "duplicate_bill" reason) instead of not at all: with no row for that PDF
+  // it was downloaded and re-read on every run while it stayed in view.
   const seenIdentities = await loadInvoiceIdentities(
     accountId,
     invoicesToCreate.map((inv) => inv.invoiceNumber)
@@ -1017,13 +1163,23 @@ async function runSync(
     const identity = invoiceIdentityKey(
       inv.dateFromEmail ? { ...inv, invoiceDate: null } : inv
     )
-    if (identity && seenIdentities.has(identity)) {
+    const unitKey = pdfKey(inv.emailMessageId, inv.emailAttachmentIndex)
+    const duplicate = Boolean(identity && seenIdentities.has(identity))
+    if (duplicate) {
       logger.warn(
-        `[invoice-sync] skipping ${inv.vendorName} #${inv.invoiceNumber} ` +
+        `[invoice-sync] setting aside ${inv.vendorName} #${inv.invoiceNumber} ` +
         `($${inv.totalAmount}) from "${inv.emailSubject ?? ""}": already stored from another email`
       )
-      counts.skipped++
-      continue
+      inv.status = "REJECTED"
+      inv.reviewReasons = [
+        {
+          kind: "duplicate_bill",
+          message:
+            "A copy of a bill already stored from another email. Set aside so its spend is not counted twice.",
+        },
+      ]
+      // The original carries the lines; a copy's would only be counted again.
+      inv.lineItems = []
     }
     try {
       const created = await prisma.invoice.create({
@@ -1085,18 +1241,26 @@ async function runSync(
           },
         },
       })
-      // A bill set aside as not a supply delivery is kept to look at, but its
-      // lines must not reach ingredient matching, costs or price alerts.
-      if (inv.status !== "REJECTED") createdInvoiceIds.push(created.id)
-      if (identity) seenIdentities.add(identity)
-      const dateless = invoiceIdentityKey({ ...inv, invoiceDate: null })
-      if (dateless) seenIdentities.add(dateless)
-      counts.created++
+      doneKeys.add(unitKey)
+      if (duplicate) {
+        counts.skipped++
+      } else {
+        // A bill set aside as not a supply delivery is kept to look at, but its
+        // lines must not reach ingredient matching, costs or price alerts.
+        if (inv.status !== "REJECTED") createdInvoiceIds.push(created.id)
+        if (identity) seenIdentities.add(identity)
+        const dateless = invoiceIdentityKey({ ...inv, invoiceDate: null })
+        if (dateless) seenIdentities.add(dateless)
+        counts.created++
+      }
     } catch (err) {
       // Unique constraint violation (P2002) = already processed (race condition safety)
       if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
+        doneKeys.add(unitKey)
         counts.skipped++
       } else {
+        const unit = units.find((u) => pdfKey(u.msg.id, u.index) === unitKey)
+        if (unit) failedUnits.set(unitKey, unit)
         // Prisma prints the whole create before naming the bad field, and the
         // log line is cut off long before that, so lead with the tail.
         const detail = err instanceof Error ? err.message.slice(-800) : String(err)
@@ -1111,6 +1275,37 @@ async function runSync(
       totalProgress: computeProgress(100, 100, 100, pct),
       detail: `Saving invoices (${i + 1}/${invoicesToCreate.length})...`, counts,
     })
+  }
+
+  // ─── Phase 4b: PDFs that will not read ───
+  // Counted across runs; at MAX_READ_TRIES the PDF is held for review as a
+  // row of its own (no lines, $0, the PDF attached) so the owner sees it and
+  // the sync stops re-reading it.
+  for (const [key, unit] of failedUnits) {
+    const tries = (nextState.readFailures.get(key) ?? 0) + 1
+    if (tries < MAX_READ_TRIES) {
+      nextState.readFailures.set(key, tries)
+      continue
+    }
+    if (await holdUnreadablePdf(unit, tries, userId, accountId)) {
+      doneKeys.add(key)
+    } else {
+      nextState.readFailures.set(key, tries)
+    }
+  }
+
+  // Which emails still have a PDF with no row, for the next run.
+  for (const msg of newMessages) {
+    const n = pdfTotal.get(msg.id)
+    if (n == null) continue
+    const stored = storedByMessage.get(msg.id)
+    let open = false
+    for (let i = 0; i < n; i++) {
+      const key = pdfKey(msg.id, i)
+      if (stored?.has(i) || doneKeys.has(key)) nextState.readFailures.delete(key)
+      else open = true
+    }
+    if (open) nextState.incomplete.set(msg.id, msg.receivedDateTime)
   }
 
   // ─── Phase 5: match line items to canonical ingredients ───
@@ -1140,7 +1335,7 @@ async function runSync(
     await bustTags(["invoices", `account:${accountId}`])
   }
 
-  return { message, ...counts, lookbackDays }
+  return { message, ...counts, lookbackDays, state: nextState }
 }
 
 /**
@@ -1152,7 +1347,7 @@ async function runSync(
 async function recordDeferred(
   jobRunId: string,
   base: Record<string, unknown> | undefined,
-  result: Pick<SyncResult, "deferred" | "errors" | "lookbackDays">,
+  result: Pick<SyncResult, "deferred" | "errors" | "lookbackDays" | "state">,
 ): Promise<void> {
   try {
     await prisma.jobRun.update({
@@ -1163,6 +1358,7 @@ async function recordDeferred(
           deferred: result.deferred,
           failed: result.errors,
           lookbackDays: result.lookbackDays,
+          ...(result.state ? serializeSyncState(result.state) : {}),
         } as Prisma.InputJsonValue,
       },
     })
@@ -1181,7 +1377,10 @@ export async function POST(request: NextRequest) {
 
   // One mailbox, one account: see resolveInvoiceMailbox.
   const mailbox = await resolveInvoiceMailbox()
-  if (!mailbox) return NextResponse.json({ error: "No owner user found for the invoice mailbox" }, { status: 500 })
+  if (!mailbox.ok) {
+    logger.error(`[invoice-sync] ${mailbox.error}`)
+    return NextResponse.json({ error: mailbox.error }, { status: 500 })
+  }
 
   if (fromCron) {
     userId = mailbox.userId

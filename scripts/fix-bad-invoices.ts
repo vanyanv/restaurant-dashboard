@@ -59,9 +59,16 @@ async function getGraphToken(): Promise<string> {
   return access_token as string
 }
 
+/**
+ * The PDF this invoice row was read from: the one at its
+ * `emailAttachmentIndex` among the email's PDFs, filtered exactly as the live
+ * sync filters them. Since 2026-11-20 one email can carry several bills, and
+ * re-reading the first PDF would overwrite a later row with another bill.
+ */
 async function getPdfAttachment(
   token: string,
-  messageId: string
+  messageId: string,
+  attachmentIndex: number
 ): Promise<{ name: string; base64: string } | null> {
   const userId = process.env.MICROSOFT_MAIL_USER_ID!
   const res = await fetch(
@@ -74,18 +81,18 @@ async function getPdfAttachment(
   }
   const data = await res.json()
   const atts = (data.value ?? []) as Array<Record<string, unknown>>
-  for (const a of atts) {
-    const name = a.name as string
-    const type = a.contentType as string
-    if (
+  const pdfs = atts.filter((a) => {
+    const name = a.name
+    return (
       a["@odata.type"] === "#microsoft.graph.fileAttachment" &&
-      (type === "application/pdf" ||
-        (typeof name === "string" && name.toLowerCase().endsWith(".pdf")))
-    ) {
-      return { name, base64: a.contentBytes as string }
-    }
-  }
-  return null
+      (a.contentType === "application/pdf" ||
+        (typeof name === "string" && name.toLowerCase().endsWith(".pdf"))) &&
+      typeof a.size === "number" &&
+      a.size < 20 * 1024 * 1024
+    )
+  })
+  const a = pdfs[attachmentIndex]
+  return a ? { name: a.name as string, base64: a.contentBytes as string } : null
 }
 
 function fmtDateOnly(d: Date | null | undefined): string {
@@ -122,6 +129,7 @@ async function main() {
       invoiceDate: true,
       deliveryAddress: true,
       emailMessageId: true,
+      emailAttachmentIndex: true,
       emailReceivedAt: true,
       status: true,
       rawExtractionJson: true,
@@ -168,7 +176,7 @@ async function main() {
       continue
     }
 
-    const pdf = await getPdfAttachment(token, inv.emailMessageId)
+    const pdf = await getPdfAttachment(token, inv.emailMessageId, inv.emailAttachmentIndex)
     if (!pdf) {
       console.log(`  ✗ original email no longer has PDF attachment — skipping\n`)
       skipped++

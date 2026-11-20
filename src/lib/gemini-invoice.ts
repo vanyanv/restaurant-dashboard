@@ -435,16 +435,28 @@ Return valid JSON matching this schema EXACTLY (every field must be present):
 
 /**
  * Per-call time limits. The sync gives one PDF 60s in all (withConcurrency's
- * task timeout) and asks extraction to finish inside `DEFAULT_BUDGET_MS`, so
- * a slow primary read still leaves room for the fallback read. Before
- * 2026-11-20 the OpenAI client waited 60s and retried twice on its own, so a
- * slow read used the whole task and the Gemini fallback never got to run.
+ * task timeout, which maxDuration = 120 and the workflow's 115s curl leave no
+ * room to raise) and asks extraction to finish inside its budget (the route
+ * passes 52s; `DEFAULT_BUDGET_MS` otherwise), leaving the rest for the PDF
+ * upload. Before 2026-11-20 the OpenAI client waited 60s and retried twice
+ * on its own, so a slow read used the whole task and the fallback never ran.
+ *
+ * The numbers: the only read times recorded in this repo are the route's
+ * notes that reads run 10–25s and that 12 emails took 104–116s end to end
+ * with extraction inside a 45s budget (2026-09-11). Every read's real time is
+ * logged per call to AiUsageEvent.durationMs (feature "invoice-ocr"); check
+ * it before tightening these. So the primary read gets 40s, well past the
+ * longest read seen, so a long multi-page bill that used to succeed still
+ * does. The fallback gets whatever is left, capped at 45s: after a fast
+ * failure (429, 5xx, a cut-off answer — the outages the fallback exists for)
+ * that is nearly the whole budget; after a primary that ran its full 40s it
+ * is about 12s, and below `MIN_FALLBACK_MS` it is not started at all.
  */
-export const PRIMARY_TIMEOUT_MS = 28_000
-export const FALLBACK_TIMEOUT_MS = 22_000
-export const DEFAULT_BUDGET_MS = 50_000
+export const PRIMARY_TIMEOUT_MS = 40_000
+export const FALLBACK_TIMEOUT_MS = 45_000
+export const DEFAULT_BUDGET_MS = 52_000
 /** Below this much time left, a fallback read is not started: it could not finish. */
-const MIN_FALLBACK_MS = 5_000
+const MIN_FALLBACK_MS = 10_000
 
 /**
  * The model's answer could not be used as an extraction: cut off at the
