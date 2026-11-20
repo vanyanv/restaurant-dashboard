@@ -21,7 +21,7 @@ import {
 import {
   AskSheet,
 } from "@/components/counter/ask"
-import { Fold } from "@/components/counter/ui"
+import { PageTabs } from "@/components/counter/ui"
 import { readCounterParams, writeCounterParams } from "@/lib/counter/url-state"
 import {
   OverviewHero,
@@ -264,30 +264,144 @@ return (
       {/* The Overview made plain, stacked: the same blocks the desk renders,
           in the same order (mock https://claude.ai/artifact/8ZrnRsGAYWc2WV6tg6wb5D).
           What the phone said before is folded underneath, unchanged. */}
-      <Section bare title="How the period went" data={sections.plain} pending={pending}>
-        {(o) => (
-          <div className="cu-stack">
-            <OverviewHero o={o} range={range} onWeek={(r) => push({ range: r })} />
-            <OverviewStatuses o={o} />
-            <OverviewStores o={o} onStore={(id) => push({ storeId: id })} />
-          </div>
-        )}
-      </Section>
+      <PageTabs
+        label="Overview views"
+        tabs={[
+          {
+            key: "summary",
+            label: "Summary",
+            content: (
+              <>
+                <Section bare title="How the period went" data={sections.plain} pending={pending}>
+                  {(o) => (
+                    <div className="cu-stack">
+                      <OverviewHero o={o} range={range} onWeek={(r) => push({ range: r })} />
+                      <OverviewStatuses o={o} />
+                      <OverviewStores o={o} onStore={(id) => push({ storeId: id })} />
+                    </div>
+                  )}
+                </Section>
 
-      <Section bare title="Where sales came from" data={sections.channels} pending={pending}>
-        {(mix) => (
-          <ChannelRows
-            caption={`Where sales came from · ${windowLabel}`}
-            rows={mix.map((c) => ({ id: c.channel, net: c.net, orders: c.orders, commission: c.commission, ticket: c.ticket }))}
-            footer={mix.length === 0 ? "No channel readings for this range." : undefined}
-          />
-        )}
-      </Section>
+                <Section bare title="Where sales came from" data={sections.channels} pending={pending}>
+                  {(mix) => (
+                    <ChannelRows
+                      caption={`Where sales came from · ${windowLabel}`}
+                      rows={mix.map((c) => ({ id: c.channel, net: c.net, orders: c.orders, commission: c.commission, ticket: c.ticket }))}
+                      footer={mix.length === 0 ? "No channel readings for this range." : undefined}
+                    />
+                  )}
+                </Section>
 
-      <Section bare title="Needs you" data={sections.plain} pending={pending}>
-        {(o) => <OverviewNeeds o={o} />}
-      </Section>
+                <Section bare title="Needs you" data={sections.plain} pending={pending}>
+                  {(o) => <OverviewNeeds o={o} />}
+                </Section>
+              </>
+            ),
+          },
+          {
+            key: "trends",
+            label: "Trends",
+            content: (
+              <>
+                {/* The whole head block, as one figure and one sentence. Two sections
+                    that fail independently: the figure is the sales rollup, the sentence
+                    is the verdict derived across every figure on the page. */}
+                <Section bare title="Net sales" data={sections.sales} pending={pending}>
+                  {(d) => (
+                    <MHead
+                      label={days === 1 ? "Net sales" : `Net sales · ${count(days)} days`}
+                      // Counts up to the rollup's number, as the desk's head figure does
+                      // — one system at two sizes.
+                      value={<CountUp value={d.grossSales} format={(v) => money(v)} />}
+                      // Only when a comparison is on: with it off the string is "no
+                      // comparison set", which is what `.msub` above already says.
+                      //
+                      // The tone is the adapter's, and it is the reason `.mhead .d`
+                      // needed correcting at all — the sheet paints it `var(--good)`
+                      // unclassed, so before this a fall printed its ▼ in the colour of
+                      // a rise on this surface exactly as it did on the desk.
+                      delta={comparing ? d.comparison : undefined}
+                      deltaTone={comparing ? d.comparisonTone : undefined}
+                      note={
+                        <Section bare title="The verdict" data={sections.verdict} pending={pending}>
+                          {(v) => (
+                            <p>
+                              <b>{v.headline}</b> {v.body}
+                            </p>
+                          )}
+                        </Section>
+                      }
+                    />
+                  )}
+                </Section>
 
+                <Section bare title="The figures" data={sections.strip} pending={pending}>
+                  {(cells) => <MStrip cells={cells} />}
+                </Section>
+
+                {/* ONE cell. See the module note. */}
+                <Section bare title="Still moving" data={sections.moving} pending={pending}>
+                  {(cells) => <Moving cells={cells.slice(0, 1)} />}
+                </Section>
+
+                {/* `h` and `ticks` are the prototype's own phone values (108 and 104,
+                    both tickless): the axis row is what a 316px chart cannot afford, and
+                    the reading is on the tooltip either way. */}
+                <Section title="Net sales" meta={windowLabel} data={sections.salesChart} pending={pending} askAbout="net sales over this range">
+                  {(spec) => <Chart {...spec} h={108} ticks={false} fmt={(v) => money(v)} />}
+                </Section>
+
+                <Section
+                  title="Sales per labor hour"
+                  pending={pending}
+                  meta={windowLabel}
+                  data={sections.splhChart}
+                  askAbout="sales per labor hour"
+                >
+                  {(spec) => (
+                    <Chart {...spec} h={104} ticks={false} fmt={(v) => money(v, { cents: true })} />
+                  )}
+                </Section>
+              </>
+            ),
+          },
+          {
+            key: "stores",
+            label: "Stores",
+            content: (
+              <>
+                <Section title="Per store" meta="tap for where the money came from" data={sections.stores} pending={pending}>
+                  {(cards) => (
+                    <StoreRows
+                      stores={cards.map(toRow)}
+                      /* The selected store's row, or the first trading one — "tap for
+                         where the money came from" is what this section is for, and a
+                         page of shut drawers answers nothing. */
+                      defaultOpenId={counterParams.storeId ?? cards.find((c) => c.kind === "trading")?.id}
+                    />
+                  )}
+                </Section>
+              </>
+            ),
+          },
+          {
+            key: "checks",
+            label: "Alerts",
+            content: (
+              <>
+                <Section
+                  title="What needs you"
+                  meta={(items) => String(items.length)}
+                  data={sections.needsYou}
+                  pending={pending}
+                >
+                  {(items) => <MList rows={items.map(toListRow)} />}
+                </Section>
+              </>
+            ),
+          },
+        ]}
+      />
       {/*
         No state: a store that is not trading is still a store you can ask
         about. It points at Ask with the store and the window carried.
@@ -298,89 +412,6 @@ return (
         suggestions={askSuggestions}
       />
 
-      <Fold summary="Every figure, as before">
-      {/* The whole head block, as one figure and one sentence. Two sections
-          that fail independently: the figure is the sales rollup, the sentence
-          is the verdict derived across every figure on the page. */}
-      <Section bare title="Net sales" data={sections.sales} pending={pending}>
-        {(d) => (
-          <MHead
-            label={days === 1 ? "Net sales" : `Net sales · ${count(days)} days`}
-            // Counts up to the rollup's number, as the desk's head figure does
-            // — one system at two sizes.
-            value={<CountUp value={d.grossSales} format={(v) => money(v)} />}
-            // Only when a comparison is on: with it off the string is "no
-            // comparison set", which is what `.msub` above already says.
-            //
-            // The tone is the adapter's, and it is the reason `.mhead .d`
-            // needed correcting at all — the sheet paints it `var(--good)`
-            // unclassed, so before this a fall printed its ▼ in the colour of
-            // a rise on this surface exactly as it did on the desk.
-            delta={comparing ? d.comparison : undefined}
-            deltaTone={comparing ? d.comparisonTone : undefined}
-            note={
-              <Section bare title="The verdict" data={sections.verdict} pending={pending}>
-                {(v) => (
-                  <p>
-                    <b>{v.headline}</b> {v.body}
-                  </p>
-                )}
-              </Section>
-            }
-          />
-        )}
-      </Section>
-
-      <Section bare title="The figures" data={sections.strip} pending={pending}>
-        {(cells) => <MStrip cells={cells} />}
-      </Section>
-
-      {/* ONE cell. See the module note. */}
-      <Section bare title="Still moving" data={sections.moving} pending={pending}>
-        {(cells) => <Moving cells={cells.slice(0, 1)} />}
-      </Section>
-
-      {/* `h` and `ticks` are the prototype's own phone values (108 and 104,
-          both tickless): the axis row is what a 316px chart cannot afford, and
-          the reading is on the tooltip either way. */}
-      <Section title="Net sales" meta={windowLabel} data={sections.salesChart} pending={pending} askAbout="net sales over this range">
-        {(spec) => <Chart {...spec} h={108} ticks={false} fmt={(v) => money(v)} />}
-      </Section>
-
-      <Section
-        title="Sales per labor hour"
-        pending={pending}
-        meta={windowLabel}
-        data={sections.splhChart}
-        askAbout="sales per labor hour"
-      >
-        {(spec) => (
-          <Chart {...spec} h={104} ticks={false} fmt={(v) => money(v, { cents: true })} />
-        )}
-      </Section>
-
-      <Section title="Per store" meta="tap for where the money came from" data={sections.stores} pending={pending}>
-        {(cards) => (
-          <StoreRows
-            stores={cards.map(toRow)}
-            /* The selected store's row, or the first trading one — "tap for
-               where the money came from" is what this section is for, and a
-               page of shut drawers answers nothing. */
-            defaultOpenId={counterParams.storeId ?? cards.find((c) => c.kind === "trading")?.id}
-          />
-        )}
-      </Section>
-
-      <Section
-        fold="closed"
-        title="What needs you"
-        meta={(items) => String(items.length)}
-        data={sections.needsYou}
-        pending={pending}
-      >
-        {(items) => <MList rows={items.map(toListRow)} />}
-      </Section>
-      </Fold>
     </>
   )
 }

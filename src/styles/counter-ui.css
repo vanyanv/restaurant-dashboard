@@ -170,6 +170,9 @@ a.cu-card:focus-visible,button.cu-card:focus-visible{outline:2px solid var(--acc
 .cu-tab[aria-pressed="true"],.cu-tab[aria-current="page"]{background:var(--surface);color:var(--ink);box-shadow:0 0 0 1px var(--line-strong)}
 .cu-tab:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
 @container (max-width:520px){.cu-tabs__in{display:flex}.cu-tab{flex:1;text-align:center;padding:10px 12px}}
+/* PageTabs: a page split into tabs (DESIGN.md "Page layout"). The panel rises in on each switch. */
+.cu-pagetabs{display:grid;gap:16px;min-width:0}
+.cu-pagetabs__panel{display:grid;gap:16px;min-width:0;animation:ct-entry var(--ct-dur-rise) var(--ease) both}
 
 /* ---- Fold ---- */
 .cu-fold{border-top:1px solid var(--line)}

@@ -49,7 +49,7 @@ export interface LayoutViolation {
 const BLOCK = /<(Section|Card)\b/g
 const FOLD_OPEN = /<Fold\b/
 const FOLD_CLOSE = /<\/Fold>/
-const TABS = /<Tabs\b/
+const TABS = /<(Page)?Tabs\b/
 const SKIP_FILE = /[/\\](page|layout|loading|error|not-found)\.tsx$/
 
 /** Same contract as counter-lint's: comments become spaces, newlines stay. */
@@ -130,8 +130,6 @@ export const KNOWN: string[] = [
   "src/app/(mobile)/m/(counter)/analytics/[storeId]/counter-phone-store-analytics-client.tsx",
   "src/app/(mobile)/m/(counter)/analytics/counter-phone-analytics-client.tsx",
   "src/app/(mobile)/m/(counter)/cogs/counter-phone-cogs-client.tsx",
-  "src/app/(mobile)/m/(counter)/counter-phone-overview-client.tsx",
-  "src/app/(mobile)/m/(counter)/decisions/counter-phone-decisions-client.tsx",
   "src/app/(mobile)/m/(counter)/labor/[storeId]/counter-phone-store-labor-client.tsx",
   "src/app/(mobile)/m/(counter)/labor/counter-phone-labor-client.tsx",
   "src/app/(mobile)/m/(counter)/menu-profit/counter-phone-menu-profit-client.tsx",
@@ -146,8 +144,6 @@ export const KNOWN: string[] = [
   "src/app/dashboard/(counter)/analytics/counter-analytics-client.tsx",
   "src/app/dashboard/(counter)/cogs/[storeId]/counter-store-cogs-client.tsx",
   "src/app/dashboard/(counter)/cogs/counter-cogs-client.tsx",
-  "src/app/dashboard/(counter)/counter-overview-client.tsx",
-  "src/app/dashboard/(counter)/decisions/counter-decisions-client.tsx",
   "src/app/dashboard/(counter)/ingredients/[id]/counter-ingredient-client.tsx",
   "src/app/dashboard/(counter)/ingredients/counter-ingredients-client.tsx",
   "src/app/dashboard/(counter)/invoices/[id]/counter-invoice-client.tsx",

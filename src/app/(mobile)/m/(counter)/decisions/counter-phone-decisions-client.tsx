@@ -2,7 +2,7 @@
 
 import { useAct } from "@/components/counter/ui"
 import type { PhoneDecisionsSections } from "@/lib/counter/adapters/decisions"
-import { Fold } from "@/components/counter/ui"
+import { PageTabs } from "@/components/counter/ui"
 import { WeekPlanView } from "@/app/dashboard/(counter)/decisions/week-plan-ui"
 import { weekParam } from "@/lib/counter/week-plan"
 
@@ -205,64 +205,98 @@ export function CounterPhoneDecisionsClient({
       {/* The week as a plan (owner's go, 2026-11-20; mock
           https://claude.ai/artifact/9X3YWGHNAKdimeJh6ToQNF): this week and
           next, each day, each store's hours, the to-dos. Desk and phone draw
-          the same block. Everything the page said before is folded below. */}
-      <Section bare title="The week ahead" data={sections.plan} pending={pending}>
-        {(p) => <WeekPlanView plan={p} initialWeek={weekParam(params)} initialDay={params.get("day")} />}
-      </Section>
+          the same block. Everything the page said before sits in named tabs
+          (DESIGN.md "Page layout"): Forecast, Stock, and the track record. */}
+      <PageTabs
+        label="Week ahead views"
+        tabs={[
+          {
+            key: "plan",
+            label: "Plan",
+            content: (
+              <>
+                <Section bare title="The week ahead" data={sections.plan} pending={pending}>
+                  {(p) => <WeekPlanView plan={p} initialWeek={weekParam(params)} initialDay={params.get("day")} />}
+                </Section>
+              </>
+            ),
+          },
+          {
+            key: "forecast",
+            label: "Forecast",
+            content: (
+              <>
+                {/* TWO cells, built in the adapter rather than sliced off the desk's
+                    four: a slice picks by POSITION out of a list whose length depends
+                    on the data. Both are the same figures the desk prints. */}
+                <Section bare title="The figures" data={sections.head} pending={pending}>
+                  {(h) => <MStrip cells={h.phoneCells} />}
+                </Section>
 
-      <Fold summary="Every figure, as before">
-      {/* TWO cells, built in the adapter rather than sliced off the desk's
-          four: a slice picks by POSITION out of a list whose length depends
-          on the data. Both are the same figures the desk prints. */}
-      <Section bare title="The figures" data={sections.head} pending={pending}>
-        {(h) => <MStrip cells={h.phoneCells} />}
-      </Section>
+                <Section title="The call this week" meta="forecast" data={sections.week} pending={pending}>
+                  {(days) => (
+                    <Chart
+                      type="bars"
+                      h={116}
+                      zero
+                      labels={days.map(initial)}
+                      // `var(--ink)` is the prototype's own, and a token reference is
+                      // the only colour a Counter file may name.
+                      series={[{ name: "Forecast", color: "var(--ink)", data: days.map((d) => d.forecast) }]}
+                      alt="Forecast revenue for each day of the week"
+                    />
+                  )}
+                </Section>
+              </>
+            ),
+          },
+          {
+            key: "stock",
+            label: "Stock",
+            content: (
+              <>
+                {/* NOT in the prototype's phone, and it belongs here more than most of
+                    what is: the one thing an owner standing in the walk-in can act on
+                    immediately is what is about to run out. Only rows with an order to
+                    place — see `buildPhoneRunOut` — with the FORECAST-shaped cover as the figure,
+                    because the flat one is the number this section exists to replace.
+                    `metaHot` is the phone's single tier-1 loop. */}
+                <Section
+                  title="Running out"
+                  meta={(r) => r.meta}
+                  metaHot={(r) => r.hot > 0}
+                  data={sections.phoneRunOut}
+                  pending={pending}
+                  quietWhenEmpty
+                >
+                  {(r) => <MList rows={r.items} />}
+                </Section>
 
-      <Section title="The call this week" meta="forecast" data={sections.week} pending={pending}>
-        {(days) => (
-          <Chart
-            type="bars"
-            h={116}
-            zero
-            labels={days.map(initial)}
-            // `var(--ink)` is the prototype's own, and a token reference is
-            // the only colour a Counter file may name.
-            series={[{ name: "Forecast", color: "var(--ink)", data: days.map((d) => d.forecast) }]}
-            alt="Forecast revenue for each day of the week"
-          />
-        )}
-      </Section>
+                {/* `mlist` of three — the adapter's `phoneQueue`, which is the desk's
+                    own three items in `.mli` shape. The meta is that section's own
+                    "3 of 5" claim, said the same way the desk says it. */}
+              </>
+            ),
+          },
+          {
+            key: "record",
+            label: "To do",
+            content: (
+              <>
+                <Section title="What to do" meta={(q) => q.meta} data={sections.phoneQueue} pending={pending}>
+                  {(q) => <MList rows={q.items} />}
+                </Section>
 
-      {/* NOT in the prototype's phone, and it belongs here more than most of
-          what is: the one thing an owner standing in the walk-in can act on
-          immediately is what is about to run out. Only rows with an order to
-          place — see `buildPhoneRunOut` — with the FORECAST-shaped cover as the figure,
-          because the flat one is the number this section exists to replace.
-          `metaHot` is the phone's single tier-1 loop. */}
-      <Section
-        title="Running out"
-        meta={(r) => r.meta}
-        metaHot={(r) => r.hot > 0}
-        data={sections.phoneRunOut}
-        pending={pending}
-        quietWhenEmpty
-      >
-        {(r) => <MList rows={r.items} />}
-      </Section>
-
-      {/* `mlist` of three — the adapter's `phoneQueue`, which is the desk's
-          own three items in `.mli` shape. The meta is that section's own
-          "3 of 5" claim, said the same way the desk says it. */}
-      <Section title="What to do" meta={(q) => q.meta} data={sections.phoneQueue} pending={pending}>
-        {(q) => <MList rows={q.items} />}
-      </Section>
-
-      {/* Page level, below the last `.sec`, exactly where the prototype puts
-          it — and pointed at somewhere real. See the file note. */}
-      <Section bare title="Commit the first one" data={sections.phoneQueue} pending={pending}>
-        {(q) => (q.first === null ? null : <PhoneCommitFirst first={q.first} />)}
-      </Section>
-      </Fold>
+                {/* Page level, below the last `.sec`, exactly where the prototype puts
+                    it — and pointed at somewhere real. See the file note. */}
+                <Section bare title="Commit the first one" data={sections.phoneQueue} pending={pending}>
+                  {(q) => (q.first === null ? null : <PhoneCommitFirst first={q.first} />)}
+                </Section>
+              </>
+            ),
+          },
+        ]}
+      />
     </>
   )
 }
