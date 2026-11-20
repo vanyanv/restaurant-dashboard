@@ -15,6 +15,9 @@ vi.mock("@/app/actions/forecasts/menu-engineering-actions", () => ({
 vi.mock("@/lib/account-stores", () => ({
   getScopedStores: vi.fn(async (_a: string, id: string | null) => [{ id: id ?? "holly" }]),
 }))
+vi.mock("@/app/actions/store/pnl-actions", () => ({
+  getSalesAndCogsRow: vi.fn(async () => ({ totalSales: 0, cogsRow: [] })),
+}))
 vi.mock("@/lib/counter/statement", () => ({
   loadStatement: vi.fn(async () => ({ rows: [], grossSales: 0 })),
   rowValues: vi.fn(() => []),
