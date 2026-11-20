@@ -63,6 +63,13 @@ export async function loadStoreInventoryContext(input: {
   accountId: string
   asOf?: Date
   lookbackDays?: number
+  /**
+   * Read sales day by day from no later than this. For a caller that swaps
+   * in counts older than the store's last ones (draft orders' "Skip this
+   * week's count"): their starts can fall before the cutoff this function
+   * would pick, and the readers below refuse a start before the cutoff.
+   */
+  earliestStart?: Date
 }): Promise<StoreInventoryContext> {
   const asOf = input.asOf ?? new Date()
   const lookbackDays = input.lookbackDays ?? DEFAULT_LOOKBACK_DAYS
@@ -94,7 +101,7 @@ export async function loadStoreInventoryContext(input: {
     const lookbackStart = new Date(asOf.getTime() - lookbackDays * MS_PER_DAY)
     // The oldest LAST count: lines arrive newest first, so the first line per
     // ingredient is its last count (as `lastCountByIngredient` takes it).
-    let cutoff = lookbackStart
+    let cutoff = input.earliestStart && input.earliestStart < lookbackStart ? input.earliestStart : lookbackStart
     const seen = new Set<string>()
     for (const line of lines) {
       if (!line.canonicalIngredientId || seen.has(line.canonicalIngredientId)) continue

@@ -48,3 +48,11 @@ describe("loadStoreInventoryContext sales cutoff", () => {
     expect(ctx.salesCutoff).toEqual(new Date(asOf.getTime() - 14 * 86_400_000))
   })
 })
+
+describe("loadStoreInventoryContext earliestStart", () => {
+  it("reads sales from no later than the caller's earliest start (draft orders' skip)", async () => {
+    vi.mocked(prisma.stockCountLine.findMany).mockResolvedValue([countLine("beef", "2026-11-18")] as never)
+    const ctx = await loadStoreInventoryContext({ storeId: "s1", accountId: "a1", asOf, earliestStart: new Date(0) })
+    expect(ctx.salesCutoff).toEqual(new Date(0))
+  })
+})

@@ -247,7 +247,9 @@ const loadDraftInputs = cache(async (accountId: string, storeId: string): Promis
       where: { accountId },
       select: { vendorNameNormalized: true, medianLeadDays: true },
     }),
-    loadStoreInventoryContext({ storeId, accountId, asOf }),
+    // Skipping swaps in counts older than the store's last ones, so the
+    // sales must reach back past them: read them all, as before.
+    loadStoreInventoryContext({ storeId, accountId, asOf, earliestStart: countsBefore ? new Date(0) : undefined }),
     prisma.invoiceLineItem.findMany({
       where: { canonicalIngredientId: { not: null }, invoice: { storeId, store: { accountId } } },
       orderBy: { invoice: { invoiceDate: "desc" } },

@@ -15,6 +15,11 @@ import { prisma } from "@/lib/prisma"
  * Skip a sweep only when no COGS source moved since the last sweep that
  * actually materialized this store's window began.
  */
+/** A change stamped this long before a sweep started may not have been committed when it read. */
+export const SETTLE_MS = 10 * 60 * 1000
+/** A window is recomputed at least this often, so a delete is picked up within a day. */
+export const MAX_SKIP_AGE_MS = 24 * 60 * 60 * 1000
+
 export async function shouldSkipCogsSweep(input: {
   storeId: string
   accountId: string
@@ -41,7 +46,17 @@ export async function shouldSkipCogsSweep(input: {
     }
   }
 
-  if (!sourceChangedAt || sourceChangedAt <= lastSuccessfulSweepAt) {
+  // Two margins, because the timestamps cannot see everything:
+  //  - A write stamps its rows when its statement is built, and commits a
+  //    moment later; a sweep that started in between read the old rows. So a
+  //    change counts if it is within SETTLE_MS before the last sweep started.
+  //  - A delete (a recipe, a mapping, a merged ingredient) moves no
+  //    timestamp at all. So a window is recomputed at least once a day
+  //    whatever the timestamps say.
+  const now = Date.now()
+  const sweepIsFresh = now - lastSuccessfulSweepAt.getTime() < MAX_SKIP_AGE_MS
+  const settledBaseline = new Date(lastSuccessfulSweepAt.getTime() - SETTLE_MS)
+  if (sweepIsFresh && (!sourceChangedAt || sourceChangedAt <= settledBaseline)) {
     return {
       shouldSkip: true,
       reason: "no source changes since last successful sweep",

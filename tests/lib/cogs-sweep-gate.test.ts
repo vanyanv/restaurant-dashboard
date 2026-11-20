@@ -4,7 +4,7 @@
 // never a skipped run (a skip is recorded as SUCCESS too, and would otherwise
 // become the new baseline).
 
-import { describe, it, expect, vi, beforeEach } from "vitest"
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
 
 vi.mock("@/lib/prisma", () => ({ prisma: { $queryRaw: vi.fn() } }))
 
@@ -24,6 +24,12 @@ const input = {
 
 beforeEach(() => {
   queryRaw.mockReset()
+  vi.useFakeTimers({ toFake: ["Date"] })
+  vi.setSystemTime(new Date("2026-11-20T09:00:00Z"))
+})
+
+afterEach(() => {
+  vi.useRealTimers()
 })
 
 /** First $queryRaw = source change, second = last sweep (Promise.all order). */
@@ -65,6 +71,16 @@ describe("shouldSkipCogsSweep", () => {
   it("skips when no source has any timestamp at all", async () => {
     readings(null, new Date("2026-11-20T08:00:00Z"))
     expect((await shouldSkipCogsSweep(input)).shouldSkip).toBe(true)
+  })
+
+  it("runs when a change was stamped just before the last sweep started (it may not have been committed yet)", async () => {
+    readings(new Date("2026-11-20T07:55:00Z"), new Date("2026-11-20T08:00:00Z"))
+    expect((await shouldSkipCogsSweep(input)).shouldSkip).toBe(false)
+  })
+
+  it("runs at least once a day whatever the timestamps say (a delete moves none)", async () => {
+    readings(new Date("2026-11-18T01:00:00Z"), new Date("2026-11-19T08:30:00Z"))
+    expect((await shouldSkipCogsSweep(input)).shouldSkip).toBe(false)
   })
 
   it("runs when a source row changed after the last materialization started — even if before it finished", async () => {

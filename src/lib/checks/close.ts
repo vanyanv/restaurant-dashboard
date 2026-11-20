@@ -17,10 +17,10 @@ import { dayToDb, lateMinutes, windowBounds, type CheckKindName, type CheckWindo
  * It runs inside `loadCheckGrid`, so the owners' screens that read checks
  * (Today, History, Needs you, the chat) and the checks cron (every 30
  * minutes) close a finished window the first time they look. The public crew
- * page does not: its phones refresh every few seconds and that read path
- * stays read-only (`loadCrewView` passes `autoClose: false`), so a window
- * that ends while only crew are looking closes at the next cron run or owner
- * view, and the phones pick the record up on their next refresh. The record's unique key (store, check, day) means a crew submit
+ * page closes one on its render and on the first refresh after the window
+ * ends (a window ending changes the crew view's version, see `version.ts`);
+ * its unchanged refreshes in between read one row and write nothing. The
+ * record's unique key (store, check, day) means a crew submit
  * and an auto-close, or two loaders at once, can never both write one.
  */
 

@@ -72,7 +72,9 @@ export const JOB_DATA_OWNERSHIP: Record<string, JobDataOwnership> = {
   // 16h, not 8h: since 2026-11-17 the sync rewrites only orders that are new
   // or changed, so `syncedAt` sits still from the last late-night order until
   // the first sync after opening (stores close 1-3am; the 4-hourly cron can
-  // fire hours late). OtterDailySummary's 8h check still catches a dead feed.
+  // fire hours late). A day every store is closed (Thanksgiving) will read
+  // stale here and on the two summaries above: one known false alert a year,
+  // kept rather than waiting 40h to notice a feed that died on a trading day.
   "otter.orders.sync": {
     kind: "timestamp",
     table: "OtterOrder",

@@ -794,7 +794,9 @@ export function getChecksCrewSectionPromises(opts: { accountId: string; storeId?
           // syncedAt says when the roster last changed; the job log says when
           // it was last checked.
           prisma.jobRun.findFirst({
-            where: { jobName: "harri-employee-sync", storeId: store.id, status: "SUCCESS" },
+            // A run where every Harri fetch failed still ends SUCCESS with
+            // nothing read; only a run that read people counts as a sync.
+            where: { jobName: "harri-employee-sync", storeId: store.id, status: "SUCCESS", rowsWritten: { gt: 0 } },
             orderBy: { startedAt: "desc" },
             select: { completedAt: true, startedAt: true },
           }),
