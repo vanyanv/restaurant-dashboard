@@ -1,13 +1,13 @@
 "use client"
 
 import { useState, type ReactNode } from "react"
+import dynamic from "next/dynamic"
 import { Section } from "@/components/counter"
-import { Answer, BarRows, Card, ChartKey, Compare, Rows, SplitBars, Status, StoreCard, StoreCardGrid, Tabs, type RowsColumn } from "@/components/counter/ui"
-import type { LaborSections, LeakRowView, LeaksSection } from "@/lib/counter/adapters/labor"
-import type { LaborClockView, LaborHoursView, LaborPeopleView, LaborPersonRow } from "@/lib/counter/labor-crew"
+import { BarRows, Card, ChartKey, StoreCard, StoreCardGrid, Tabs } from "@/components/counter/ui"
+import type { LaborSections } from "@/lib/counter/adapters/labor"
 import type { SectionSources } from "@/lib/counter/adapters/types"
-import { parseIsoDay, type DateRange } from "@/lib/counter/date-range"
-import { compareLaborWeeks, type LaborSummary, type LaborWeeksView } from "@/lib/counter/labor-summary"
+import type { DateRange } from "@/lib/counter/date-range"
+import type { LaborSummary } from "@/lib/counter/labor-summary"
 
 /**
  * The Labor page's detail, shared by the desk and the phone and by the group
@@ -87,171 +87,11 @@ export function LaborDetailView({
   )
 }
 
-/** The weeks as sales against labor (tap one to open it), and two of them side by side. */
-export function LaborWeeksBlock({ w, onWeek }: { w: LaborWeeksView; onWeek: (range: DateRange) => void }) {
-  const [picked, setPicked] = useState<{ a: string; b: string; under: string } | null>(null)
-  // The picks belong to the week that was open when they were made: tap
-  // another week and the comparison opens on that week and the one before.
-  const under = w.weeks.find((x) => x.selected)?.key ?? ""
-  const has = (k: string) => w.weeks.some((x) => x.key === k)
-  const pair = picked !== null && picked.under === under && has(picked.a) && has(picked.b) ? picked : w.compare
-  const a = pair ? w.weeks.find((x) => x.key === pair.a) : undefined
-  const b = pair ? w.weeks.find((x) => x.key === pair.b) : undefined
-  const optionLabel = (x: LaborWeeksView["weeks"][number]) => `${x.name}${x.partWord ? ` (${x.partWord})` : ""}`
-
-  return (
-    <div className="cu-stack">
-      <Card as="section" label="Sales against labor, week by week" caption="Sales against labor, week by week · tap a week">
-        <ChartKey
-          items={[
-            { kind: "base", label: "sales" },
-            { kind: "fill", label: "labor" },
-            ...(w.weeks.some((x) => x.missing) ? [{ kind: "hatched" as const, label: "labor missing" }] : []),
-          ]}
-        />
-        <SplitBars
-          bars={w.weeks.map((x) => ({
-            key: x.key,
-            label: x.label,
-            top: x.top,
-            value: x.salesFill,
-            inner: x.laborFill,
-            hatched: x.missing,
-            selected: x.selected,
-            ariaLabel: x.aria,
-          }))}
-          onPick={(key) => {
-            const x = w.weeks.find((v) => v.key === key)
-            const start = x ? parseIsoDay(x.key) : null
-            const end = x ? parseIsoDay(x.end) : null
-            if (start && end) onWeek({ start, end })
-          }}
-        />
-        <Answer>{w.sentence}</Answer>
-        <p className="cu-note">
-          The whole bar is what the week sold and the filled part is what labor cost; the number on top is labor as a
-          share of sales. To go further back, open an older week: it and the eleven weeks before it are drawn. The date
-          arrows at the top of the page step forward again.
-        </p>
-      </Card>
-
-      {a && b ? (
-        <Card as="section" label="Two weeks side by side" caption="Two weeks side by side">
-          <Compare
-            a={{ key: a.key, label: a.name }}
-            b={{ key: b.key, label: b.name }}
-            rows={compareLaborWeeks(a, b)}
-            labels={{ a: "Week", b: "Against" }}
-            options={[...w.weeks].reverse().map((x) => ({ key: x.key, label: optionLabel(x) }))}
-            onPick={(next) => setPicked({ ...next, under })}
-          />
-          {a.missing || b.missing || a.running || b.running ? (
-            <p className="cu-note">
-              {a.running || b.running ? "A week marked so far or part week has fewer than seven days. " : ""}
-              {a.missing || b.missing
-                ? "A week with labor missing shows less labor than was worked, and its share is on the days with labor."
-                : ""}
-            </p>
-          ) : null}
-        </Card>
-      ) : null}
-    </div>
-  )
-}
-
-/** The day after the range, hour by hour: people on the schedule against forecast orders. */
-export function LaborHoursBlock({ h }: { h: LaborHoursView }) {
-  return (
-    <div className="cu-stack">
-      <Card as="section" label="Hours of the day" caption={`Hours of the day · ${h.day}`}>
-        <Answer>{h.sentence}</Answer>
-        <ChartKey items={[{ kind: "fill", label: "people on the schedule" }]} />
-        <BarRows
-          rows={h.rows.map((r) => ({
-            key: r.key,
-            title: r.title,
-            value: r.value,
-            fill: r.fill,
-            detail: r.detail,
-            tag: r.tight ? "tightest hour" : undefined,
-          }))}
-        />
-        <p className="cu-note">{h.note}</p>
-      </Card>
-    </div>
-  )
-}
-
-const PERSON_COLUMNS: RowsColumn<LaborPersonRow>[] = [
-  { key: "name", label: "Person", slot: "title", render: (r) => r.name },
-  { key: "shifts", label: "Shifts", slot: "detail", render: (r) => (r.store ? `${r.shifts} · ${r.store}` : r.shifts) },
-  { key: "hours", label: "Scheduled", slot: "amount", align: "end", render: (r) => r.hours },
-  {
-    key: "records",
-    label: "To look at",
-    slot: "status",
-    render: (r) =>
-      r.over || r.records ? (
-        <Status plain tone={r.over ? "warn" : "wait"}>
-          {[r.over, r.records].filter(Boolean).join(" · ")}
-        </Status>
-      ) : null,
-  },
-]
-
-/** Each person's published hours, and who is past 40 hours or has a punch flagged. */
-export function LaborPeopleBlock({ p }: { p: LaborPeopleView }) {
-  return (
-    <div className="cu-stack">
-      <Card as="section" label="People" caption="People · published schedule">
-        <Answer>{p.sentence}</Answer>
-        <Rows columns={PERSON_COLUMNS} rows={p.rows} rowKey={(r) => r.key} />
-        <p className="cu-note">{p.note}</p>
-      </Card>
-    </div>
-  )
-}
-
-/** Missed punches, store by store. */
-export function LaborClockBlock({ c }: { c: LaborClockView }) {
-  return (
-    <div className="cu-stack">
-      <Card as="section" label="Missed punches" caption="Missed punches">
-        <Answer>{c.sentence}</Answer>
-        <BarRows rows={c.stores.map((s) => ({ key: s.key, title: s.name, value: s.value, fill: s.fill, detail: s.detail }))} />
-        <p className="cu-note">{c.note}</p>
-      </Card>
-    </div>
-  )
-}
-
-const LEAK_COLUMNS: RowsColumn<LeakRowView>[] = [
-  { key: "leak", label: "What happened", slot: "title", render: (r) => r.leak },
-  { key: "alerts", label: "Times", slot: "detail", render: (r) => `${r.alerts} ${r.alerts === "1" ? "time" : "times"} · ${r.people} ${r.people === "1" ? "person" : "people"}` },
-  { key: "hours", label: "Hours", slot: "status", align: "end", render: (r) => r.hours },
-  { key: "cost", label: "Cost", slot: "amount", align: "end", render: (r) => r.cost },
-]
-
-/**
- * Early and late minutes, in hours and dollars: the leak ledger's own rows.
- * Only the rows the crew was paid for outside the schedule: clocking in late
- * and leaving early ran the other way and are not a cost, and the rows with
- * no duration are missed punches, in the card above. The ledger's note
- * accounts for both.
- */
-export function LaborMinutesBlock({ l }: { l: LeaksSection }) {
-  const rows = l.rows.filter((r) => r.kind === "leak")
-  return (
-    <div className="cu-stack">
-      <Card as="section" label="Early and late minutes" caption="Early and late minutes">
-        {rows.length > 0 ? <Rows columns={LEAK_COLUMNS} rows={rows} rowKey={(r) => r.key} /> : null}
-        <p className="cu-note">
-          Paid for outside the schedule: {l.total.hours}, {l.total.cost}. {l.note}
-        </p>
-      </Card>
-    </div>
-  )
-}
+const LaborWeeksBlock = dynamic(() => import("./labor-weeks-ui").then((m) => m.LaborWeeksBlock), { loading: () => null })
+const LaborHoursBlock = dynamic(() => import("./labor-more-ui").then((m) => m.LaborHoursBlock), { loading: () => null })
+const LaborPeopleBlock = dynamic(() => import("./labor-more-ui").then((m) => m.LaborPeopleBlock), { loading: () => null })
+const LaborClockBlock = dynamic(() => import("./labor-more-ui").then((m) => m.LaborClockBlock), { loading: () => null })
+const LaborMinutesBlock = dynamic(() => import("./labor-more-ui").then((m) => m.LaborMinutesBlock), { loading: () => null })
 
 type LaborTab = "summary" | "weeks" | "stores" | "hours" | "people" | "clock"
 
@@ -270,7 +110,9 @@ type LaborTab = "summary" | "weeks" | "stores" | "hours" | "people" | "clock"
  * The tab is local state: opening another week or store keeps the reader on
  * the tab they were on. A tab that is not open is not rendered, so its
  * section is not read until it is asked for, and its blocks rise in when it
- * opens (`cu-stack`).
+ * opens (`cu-stack`). Every tab but Summary is loaded when it is first
+ * opened (`labor-weeks-ui`, `labor-more-ui`), which keeps the page's first
+ * load inside its budget.
  */
 export function LaborDetail({
   lead,

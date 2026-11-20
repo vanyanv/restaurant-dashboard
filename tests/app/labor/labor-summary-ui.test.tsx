@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 import { describe, expect, it, vi } from "vitest"
 import { fireEvent, render, screen } from "@testing-library/react"
-import { LaborDetail, LaborDetailView, LaborWeeksBlock } from "@/app/dashboard/(counter)/labor/labor-summary-ui"
+import { LaborDetail, LaborDetailView } from "@/app/dashboard/(counter)/labor/labor-summary-ui"
+import { LaborWeeksBlock } from "@/app/dashboard/(counter)/labor/labor-weeks-ui"
 import { buildLaborSummary, buildLaborWeeks } from "@/lib/counter/labor-summary"
 import { buildLaborClock, buildLaborHours, buildLaborPeople, type LaborCrew } from "@/lib/counter/labor-crew"
 import type { LaborDay, LaborTrendWeek, LaborWeek } from "@/lib/counter/labor-week"
@@ -168,7 +169,7 @@ describe("Labor detail views", () => {
 
   })
 
-  it("splits the page into short tabs and draws only the open one", () => {
+  it("splits the page into short tabs and draws only the open one", async () => {
     const ready = <T,>(data: T) => ({ status: "ready" as const, data })
     const { container } = render(
       <LaborDetail
@@ -185,6 +186,8 @@ describe("Labor detail views", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Compare weeks" }))
     expect(screen.queryByText("the sentence")).toBeNull()
+    // Every tab but Summary is loaded when it is opened.
+    await screen.findByText(/tap a week/)
     expect(container.querySelectorAll(".cu-split__b")).toHaveLength(12)
 
     fireEvent.click(screen.getByRole("button", { name: "Stores and roles" }))
@@ -192,18 +195,18 @@ describe("Labor detail views", () => {
     expect(container.querySelector(".cu-split")).toBeNull()
 
     fireEvent.click(screen.getByRole("button", { name: "Hours" }))
+    expect(await screen.findByText("tightest hour")).toBeTruthy()
     expect(container.querySelectorAll(".cu-bar")).toHaveLength(12)
-    expect(screen.getByText("tightest hour")).toBeTruthy()
 
     fireEvent.click(screen.getByRole("button", { name: "People" }))
+    expect(await screen.findByText("Sample O.")).toBeTruthy()
     expect(container.querySelectorAll(".cu-rows tbody tr")).toHaveLength(5)
-    expect(screen.getByText("Sample O.")).toBeTruthy()
     expect(screen.getByText("45 h the week of Nov 9")).toBeTruthy()
     expect(screen.queryByText("Sample One")).toBeNull()
 
     fireEvent.click(screen.getByRole("button", { name: "Time clock" }))
+    expect(await screen.findByText("Clocked out late")).toBeTruthy()
     expect(container.querySelectorAll(".cu-bar")).toHaveLength(3)
-    expect(screen.getByText("Clocked out late")).toBeTruthy()
     // Late in is not a cost and a missed punch has no duration: neither is in the paid-for table.
     expect(screen.queryByText("Clocked in late")).toBeNull()
     expect(screen.queryByText("Missed clock-out")).toBeNull()
