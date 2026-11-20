@@ -2,8 +2,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 
 /**
  * Crew PIN pacing (2026-11-20). Only wrong PINs are charged; malformed
- * requests are refused before any budget is touched; one address is held to
- * 5 wrong PINs per 10 minutes; a store past 50 wrong PINs in a day raises one
+ * requests are refused before any budget is touched; one phone is held to
+ * 5 wrong PINs per 10 minutes and one address to 30; a store past 50 wrong PINs in a day raises one
  * alert and slows every address, but a crew member with the right PIN still
  * gets in.
  *
@@ -31,15 +31,21 @@ const GOOD_PIN = "4829"
 let storeN = 0
 let store = { id: "s0", name: "Van Nuys", accountId: "acc1" }
 
-function req(pin: unknown, ip: string, raw?: string) {
+let phoneN = 0
+/** A fresh phone id (the `crew_dev` cookie the route hands out). */
+const phone = () => `00000000-0000-4000-8000-${String(++phoneN).padStart(12, "0")}`
+
+function req(pin: unknown, ip: string, dev?: string, raw?: string) {
+  const headers: Record<string, string> = { "content-type": "application/json", "x-forwarded-for": ip }
+  if (dev) headers.cookie = `crew_dev=${dev}`
   return new NextRequest("https://x.test/api/checks/van-nuys/pin", {
     method: "POST",
-    headers: { "content-type": "application/json", "x-forwarded-for": ip },
+    headers,
     body: raw ?? JSON.stringify({ pin }),
   })
 }
-const call = (pin: unknown, ip: string, raw?: string) =>
-  POST(req(pin, ip, raw), { params: Promise.resolve({ code: "van-nuys" }) })
+const call = (pin: unknown, ip: string, dev?: string, raw?: string) =>
+  POST(req(pin, ip, dev, raw), { params: Promise.resolve({ code: "van-nuys" }) })
 
 beforeEach(() => {
   vi.clearAllMocks()
@@ -58,58 +64,90 @@ beforeEach(() => {
 describe("POST /api/checks/[code]/pin", () => {
   it("refuses a malformed PIN without charging anything", async () => {
     const ip = `10.0.${storeN}.1`
+    const dev = phone()
     for (let i = 0; i < 9; i++) {
-      expect((await call("12", ip)).status).toBe(400)
-      expect((await call(null, ip, "not json")).status).toBe(400)
+      expect((await call("12", ip, dev)).status).toBe(400)
+      expect((await call(null, ip, dev, "not json")).status).toBe(400)
     }
-    // Nine rounds of junk later (18 requests, under the 20-a-minute ceiling), a right PIN from the same address works.
-    expect((await call(GOOD_PIN, ip)).status).toBe(200)
+    // Nine rounds of junk later (18 requests, under the 20-a-minute ceiling), a right PIN from the same phone works.
+    expect((await call(GOOD_PIN, ip, dev)).status).toBe(200)
     expect(db.crewMember.findFirst).toHaveBeenCalledTimes(1)
   })
 
   it("lets a right PIN in and never charges it", async () => {
     const ip = `10.1.${storeN}.1`
-    for (let i = 0; i < 8; i++) expect((await call(GOOD_PIN, ip)).status).toBe(200)
+    const dev = phone()
+    for (let i = 0; i < 8; i++) expect((await call(GOOD_PIN, ip, dev)).status).toBe(200)
   })
 
-  it("holds one address to 5 wrong PINs per 10 minutes, even with the right PIN after", async () => {
+  it("hands a phone without one its own id", async () => {
+    const res = await call(GOOD_PIN, `10.1.${storeN}.9`)
+    expect(res.cookies.get("crew_dev")?.value).toMatch(/^[0-9a-f-]{36}$/)
+    const again = await call(GOOD_PIN, `10.1.${storeN}.9`, phone())
+    expect(again.cookies.get("crew_dev")).toBeUndefined()
+  })
+
+  it("one phone's typos never block a coworker on the same store Wi-Fi", async () => {
     const ip = `10.2.${storeN}.1`
-    for (let i = 0; i < 5; i++) expect((await call("0000", ip)).status).toBe(401)
-    expect((await call("0001", ip)).status).toBe(429)
-    expect((await call(GOOD_PIN, ip)).status).toBe(429)
-    // Another address at the same store is untouched.
-    expect((await call(GOOD_PIN, `10.2.${storeN}.2`)).status).toBe(200)
+    const mine = phone()
+    for (let i = 0; i < 5; i++) expect((await call("0000", ip, mine)).status).toBe(401)
+    expect((await call("0001", ip, mine)).status).toBe(429)
+    expect((await call(GOOD_PIN, ip, mine)).status).toBe(429)
+    // A coworker on the same Wi-Fi signs straight in.
+    expect((await call(GOOD_PIN, ip, phone())).status).toBe(200)
+  })
+
+  it("holds one address to 30 wrong PINs per 10 minutes, however many phone ids it uses", async () => {
+    // A minute between phones keeps each batch under the 20-a-minute ceiling,
+    // and six minutes in total stays inside the 10-minute window.
+    vi.useFakeTimers({ toFake: ["Date"] })
+    try {
+      const ip = `10.5.${storeN}.1`
+      for (let p = 0; p < 6; p++) {
+        const dev = phone()
+        for (let i = 0; i < 5; i++) expect((await call("0000", ip, dev)).status).toBe(401)
+        vi.setSystemTime(Date.now() + 61_000)
+      }
+      expect((await call("0000", ip, phone())).status).toBe(429)
+      expect((await call("0000", ip)).status).toBe(429)
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it("past 50 wrong PINs a day at a store: one alert, slower guessing, crew still get in", async () => {
     // 50 wrong PINs from 10 addresses, 5 each: nobody hits their own limit.
     for (let a = 0; a < 10; a++) {
-      for (let i = 0; i < 5; i++) expect((await call("0000", `10.3.${storeN}.${a}`)).status).toBe(401)
+      const dev = phone()
+      for (let i = 0; i < 5; i++) expect((await call("0000", `10.3.${storeN}.${a}`, dev)).status).toBe(401)
     }
     expect(db.alert.createMany).not.toHaveBeenCalled()
 
     // The 51st goes past the budget and raises the alert.
-    expect((await call("0000", `10.3.${storeN}.100`)).status).toBe(401)
+    expect((await call("0000", `10.3.${storeN}.100`, phone())).status).toBe(401)
     expect(db.alert.createMany).toHaveBeenCalledTimes(1)
     const alert = db.alert.createMany.mock.calls[0][0].data[0]
     expect(alert).toMatchObject({ storeId: store.id, source: "STORE_CHECK", severity: "WATCH" })
     expect(alert.dedupeKey).toMatch(new RegExp(`^STORE_CHECK_PIN:${store.id}:`))
     expect(db.errorEvent.create).toHaveBeenCalledTimes(1)
 
-    // Now every address gets 1 wrong PIN per 10 minutes, not 5.
-    const fresh = `10.3.${storeN}.200`
-    expect((await call("0000", fresh)).status).toBe(401)
-    expect((await call("0000", fresh)).status).toBe(429)
+    // Now every phone gets 2 wrong PINs per 10 minutes, not 5.
+    const fresh = phone()
+    const freshIp = `10.3.${storeN}.200`
+    expect((await call("0000", freshIp, fresh)).status).toBe(401)
+    expect((await call("0000", freshIp, fresh)).status).toBe(401)
+    expect((await call("0000", freshIp, fresh)).status).toBe(429)
 
-    // The store is not locked: a crew member on a clean address signs in.
-    expect((await call(GOOD_PIN, `10.3.${storeN}.201`)).status).toBe(200)
+    // The store is not locked: a crew member on another phone signs in.
+    expect((await call(GOOD_PIN, freshIp, phone())).status).toBe(200)
   })
 
   it("an alert write that fails does not turn a wrong PIN into a 500", async () => {
     db.alert.createMany.mockRejectedValue(new Error("db down"))
     for (let a = 0; a < 11; a++) {
-      for (let i = 0; i < 5; i++) await call("0000", `10.4.${storeN}.${a}`)
+      const dev = phone()
+      for (let i = 0; i < 5; i++) await call("0000", `10.4.${storeN}.${a}`, dev)
     }
-    expect((await call("0000", `10.4.${storeN}.99`)).status).toBe(401)
+    expect((await call("0000", `10.4.${storeN}.99`, phone())).status).toBe(401)
   })
 })

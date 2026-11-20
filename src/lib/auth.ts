@@ -3,7 +3,7 @@ import CredentialsProvider from "next-auth/providers/credentials"
 import { prisma } from "@/lib/prisma"
 import bcrypt from "bcryptjs"
 import { Role } from "@/generated/prisma/client"
-import { recordLoginEvent } from "@/lib/monitoring/login-audit"
+import { extractIp, recordLoginEvent } from "@/lib/monitoring/login-audit"
 import { extractFirstName, markSignIn, markSignOut } from "@/lib/welcome"
 import { logger } from "@/lib/logger"
 import { cache } from "react"
@@ -37,10 +37,19 @@ export const AUTH_THROTTLED = "auth_throttled"
 /** Longest email worth keying or storing (RFC 5321's 254-character path limit). */
 const MAX_EMAIL = 254
 
-/** The per-email failure counter's key. Hashed so keys stay short whatever is typed. */
-export function signInEmailKey(email: string): string {
+/**
+ * The failure counter's key: one email from one address. Hashed so keys stay
+ * short whatever is typed.
+ *
+ * Per (email, address), not per email alone: a per-email budget lets anyone
+ * who knows the owner's email keep the owner locked out by sending wrong
+ * passwords from rotating addresses. Keyed with the address, a stranger only
+ * ever spends their own budget; the owner signing in from the store or home
+ * is untouched. The route's per-IP tier still caps each address overall.
+ */
+export function signInEmailKey(email: string, ip: string | null = null): string {
   const normalized = email.trim().toLowerCase().slice(0, MAX_EMAIL)
-  return `auth-email:${createHash("sha256").update(normalized).digest("hex")}`
+  return `auth-email:${createHash("sha256").update(`${normalized}|${ip ?? "unknown"}`).digest("hex")}`
 }
 
 
@@ -94,12 +103,12 @@ export const authOptions: NextAuthOptions = {
             return null
           }
 
-          // Per-email failure budget, on top of the route's per-IP one. Checked
-          // before the user lookup and charged for unknown emails too, so the
-          // refusal never tells a stranger whether an address has an account.
-          // Past the budget even the right password waits: otherwise guessing
-          // would simply continue until it hit.
-          const emailKey = signInEmailKey(credentials.email)
+          // Per-(email, address) failure budget, on top of the route's per-IP
+          // one. Checked before the user lookup and charged for unknown emails
+          // too, so the refusal never tells a stranger whether an address has
+          // an account. Past the budget even the right password waits from
+          // that address: otherwise guessing would simply continue until it hit.
+          const emailKey = signInEmailKey(credentials.email, headers ? extractIp(headers) : null)
           if (await isOverLimitKey(emailKey, RATE_LIMIT_TIERS.authEmail)) {
             await recordLoginEvent({ emailTried: email, kind: "SIGN_IN_FAILED", headers })
             throw new Error(AUTH_THROTTLED)

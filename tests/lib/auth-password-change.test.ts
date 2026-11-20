@@ -88,7 +88,7 @@ describe("password change ends older sessions", () => {
   })
 })
 
-describe("sign-in is throttled per email", () => {
+describe("sign-in is throttled per email and address", () => {
   const user = { id: "u9", email: "owner@x.com", name: "O", role: "OWNER", accountId: "a1", password: "right-password", removedAt: null }
 
   it("after 10 wrong passwords for one email, refuses even the right one, whatever the casing", async () => {
@@ -97,6 +97,10 @@ describe("sign-in is throttled per email", () => {
       expect(await authorize({ email: "owner@x.com", password: `wrong-${i}` }, { headers: {} })).toBeNull()
     }
     await expect(authorize({ email: "  OWNER@x.com ", password: "right-password" }, { headers: {} })).rejects.toThrow(AUTH_THROTTLED)
+    // The real owner on another address is untouched: a stranger cannot lock them out.
+    expect(
+      await authorize({ email: "owner@x.com", password: "right-password" }, { headers: { "x-forwarded-for": "203.0.113.7" } }),
+    ).toMatchObject({ id: "u9" })
     // Another email is untouched.
     mocked(prisma.user.findFirst).mockResolvedValue({ ...user, id: "u10", email: "other@x.com", password: "pw-other" })
     expect(await authorize({ email: "other@x.com", password: "pw-other" }, { headers: {} })).toMatchObject({ id: "u10" })

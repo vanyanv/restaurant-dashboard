@@ -21,6 +21,29 @@ set -euo pipefail
 # is the direct endpoint. Rewritten in memory only, never printed.
 DATABASE_URL="${DATABASE_URL/-pooler./.}"
 
+# The secret is written for Prisma and node-postgres, which accept query
+# parameters libpq refuses outright (pgbouncer=true, connection_limit=...,
+# pool_timeout=..., schema=...). Keep only the parameters libpq knows that a
+# Neon URL uses, and always require TLS. In memory only, never printed.
+if [[ "$DATABASE_URL" == *\?* ]]; then
+  base="${DATABASE_URL%%\?*}"
+  query="${DATABASE_URL#*\?}"
+  kept=()
+  IFS='&' read -r -a params <<<"$query"
+  for p in "${params[@]}"; do
+    case "${p%%=*}" in
+      sslmode|channel_binding|options|application_name|connect_timeout) kept+=("$p") ;;
+    esac
+  done
+  DATABASE_URL="$base"
+  if [[ ${#kept[@]} -gt 0 ]]; then
+    DATABASE_URL="${base}?$(IFS='&'; echo "${kept[*]}")"
+  fi
+fi
+if [[ "$DATABASE_URL" != *sslmode=* ]]; then
+  if [[ "$DATABASE_URL" == *\?* ]]; then DATABASE_URL="${DATABASE_URL}&sslmode=require"; else DATABASE_URL="${DATABASE_URL}?sslmode=require"; fi
+fi
+
 PREFIX="backups/db/"
 KEEP="${BACKUP_KEEP:-30}"
 endpoint="${R2_ENDPOINT:-}"

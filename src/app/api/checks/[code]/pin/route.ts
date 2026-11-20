@@ -29,7 +29,40 @@ import { dayToDb } from "@/lib/checks/time"
  */
 const PIN_LIMIT = { limit: 20, windowMs: 60_000, identifyBy: "ip" as const }
 
-export async function POST(request: NextRequest, { params }: { params: Promise<{ code: string }> }) {
+/**
+ * A random id per phone, so wrong-PIN budgets are per phone, not per store
+ * Wi-Fi (`pin-guard.ts`). Not a sign-in and carries nothing: a phone that
+ * drops it just gets a new one, and the per-address ceiling still holds.
+ */
+const DEVICE_COOKIE = "crew_dev"
+const DEVICE_ID = /^[0-9a-f-]{36}$/
+
+function readDevice(request: NextRequest): { id: string; isNew: boolean } {
+  const v = request.cookies.get(DEVICE_COOKIE)?.value
+  if (v && DEVICE_ID.test(v)) return { id: v, isNew: false }
+  return { id: crypto.randomUUID(), isNew: true }
+}
+
+export async function POST(request: NextRequest, ctx: { params: Promise<{ code: string }> }) {
+  const device = readDevice(request)
+  const res = await handle(request, ctx, device.id)
+  if (device.isNew) {
+    res.cookies.set(DEVICE_COOKIE, device.id, {
+      httpOnly: true,
+      sameSite: "lax",
+      secure: process.env.NODE_ENV === "production",
+      path: "/api/checks",
+      maxAge: 400 * 24 * 60 * 60,
+    })
+  }
+  return res
+}
+
+async function handle(
+  request: NextRequest,
+  { params }: { params: Promise<{ code: string }> },
+  device: string,
+): Promise<NextResponse> {
   const limited = await rateLimit(request, PIN_LIMIT)
   if (limited) return limited
 
@@ -42,9 +75,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   if (!isValidPin(pin)) return NextResponse.json({ error: "Enter all 4 digits." }, { status: 400 })
 
   const ip = clientIp(request)
-  if (!(await pinTryAllowed(store, ip))) {
+  if (!(await pinTryAllowed(store, ip, device))) {
     return NextResponse.json(
-      { error: "Too many wrong PINs from this phone's network. Wait 10 minutes and try again." },
+      { error: "Too many wrong PINs. Wait 10 minutes and try again." },
       { status: 429, headers: { "Retry-After": "600" } },
     )
   }
@@ -60,7 +93,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     select: { id: true, firstName: true, lastName: true },
   })
   if (!crew) {
-    await chargeWrongPin(store, ip, now)
+    await chargeWrongPin(store, ip, device, now)
     return NextResponse.json({ error: `That PIN isn't set up for ${store.name}.` }, { status: 401 })
   }
 
