@@ -13,6 +13,7 @@ import {
   useCounterTransition,
   type MoneyLine,
 } from "@/components/counter"
+import { PageTabs } from "@/components/counter/ui"
 import { storeViewTabs } from "@/lib/counter/nav"
 import { readCounterParams, writeCounterParams } from "@/lib/counter/url-state"
 import { dayCount, rangeLabel } from "@/lib/counter/date-range"
@@ -156,99 +157,141 @@ export function CounterPhonePnlClient({
         </p>
       </div>
 
-      {/* The page "made plain", the same blocks and words as the desk
-          (`pnl-plain-ui.tsx`); the phone layout is `counter-pnl.css`. A week
-          bar or a store card navigates to the same `?from=…&to=…` / `?store=`
-          the date sheet and the store picker write. */}
-      <Section bare title="What you kept" data={sections.plain} pending={pending}>
-        {(p) => (
-          <>
-            <PlainHero p={p} range={range} onWeek={(next) => go({ range: next })} />
-            <PlainStatuses p={p} />
-          </>
-        )}
-      </Section>
+      <PageTabs
+        label="P&L views"
+        tabs={[
+          {
+            key: "summary",
+            label: "Summary",
+            content: (
+              <>
+                {/* The page "made plain", the same blocks and words as the desk
+                    (`pnl-plain-ui.tsx`); the phone layout is `counter-pnl.css`. A week
+                    bar or a store card navigates to the same `?from=…&to=…` / `?store=`
+                    the date sheet and the store picker write. */}
+                <Section bare title="What you kept" data={sections.plain} pending={pending}>
+                  {(p) => (
+                    <>
+                      <PlainHero p={p} range={range} onWeek={(next) => go({ range: next })} />
+                      <PlainStatuses p={p} />
+                    </>
+                  )}
+                </Section>
 
-      <Section
-        title="Needs you"
-        fold="closed"
-        meta={(p) => (p.todos.length > 0 ? `${p.todos.length} ${p.todos.length === 1 ? "thing" : "things"}` : "nothing waiting")}
-        data={sections.plain}
-        pending={pending}
-        pad={false}
-      >
-        {(p) => <PlainTodos p={p} />}
-      </Section>
+                <Section
+                  title="Needs you"
+                  fold="closed"
+                  meta={(p) => (p.todos.length > 0 ? `${p.todos.length} ${p.todos.length === 1 ? "thing" : "things"}` : "nothing waiting")}
+                  data={sections.plain}
+                  pending={pending}
+                  pad={false}
+                >
+                  {(p) => <PlainTodos p={p} />}
+                </Section>
+              </>
+            ),
+          },
+          {
+            key: "costs",
+            label: "Costs",
+            content: (
+              <>
+                <Section title="Where each dollar went" meta={windowLabel} data={sections.plain} pending={pending}>
+                  {(p) => <PlainDollar p={p} />}
+                </Section>
+              </>
+            ),
+          },
+          {
+            key: "days",
+            label: "Days",
+            content: (
+              <>
+                <Section
+                  title="Day by day"
+                  meta={(p) => (p.days ? "tap a day" : "pick a week")}
+                  data={sections.plain}
+                  pending={pending}
+                  pad={false}
+                >
+                  {(p) =>
+                    p.days ? (
+                      <PlainDays days={p.days} showStores={counterParams.storeId === null} />
+                    ) : (
+                      <p className="pl-nodays">This range is longer than a month. Pick a week above to see its days.</p>
+                    )
+                  }
+                </Section>
+              </>
+            ),
+          },
+          {
+            key: "stores",
+            label: "Stores",
+            content: (
+              <>
+                {counterParams.storeId === null ? (
+                  <Section title="By store" meta="tap one" data={sections.plain} pending={pending}>
+                    {(p) => <PlainStores p={p} onStore={(id) => go({ storeId: id })} />}
+                  </Section>
+                ) : null}
 
-      <Section title="Where each dollar went" meta={windowLabel} data={sections.plain} pending={pending}>
-        {(p) => <PlainDollar p={p} />}
-      </Section>
+                {/* `P.pnlstore`'s fixed-cost section, rendered only with a store
+                    selected — the desk's own condition, in the desk's own position,
+                    from the same `getStoreFixedSectionPromises`. `f.phoneRows` and not a
+                    slice of `f.rows`: the four-column table is a table on 1440px and a
+                    scroll on 316, so the adapter folds each line into one `MList` row.
+                    The prototype's `pnlstore` is a whole page; ours is this section on
+                    the P&L, which is the call `pnl-store.ts` made before this and the
+                    reason `/m/pnl/<id>` is now a shim onto `?store=`. */}
+                {storeSections ? (
+                  <Section
+                    title="What this store carries"
+                    meta={(f) => f.meta}
+                    data={storeSections.fixed}
+                    pending={pending}
+                  >
+                    {(f) => (
+                      <>
+                        <MList rows={f.phoneRows} />
+                        <MoneyLines rows={f.money} />
+                        <Note>{f.note}</Note>
+                      </>
+                    )}
+                  </Section>
+                ) : null}
+              </>
+            ),
+          },
+          {
+            key: "statement",
+            label: "Statement",
+            content: (
+              <>
+                <Section title="Full statement" meta={windowLabel} data={sections.statement} pending={pending}>
+                  {(s) => (
+                    <>
+                      <MoneyLines rows={statementRows(s)} />
+                      {/*
+                        Inside the section rather than the prototype's sibling
+                        position, because it prints a figure OFF this section's data:
+                        a note naming a number that failed to load is worse than no
+                        note. The desk's statement footnote sits in the same place for
+                        the same reason.
+                      */}
+                      <Note>
+                        Rent and the other monthly lines are charged at {s.fixedInRange} for these {days}{" "}
+                        {days === 1 ? "day" : "days"}, not a whole month.
+                      </Note>
+                    </>
+                  )}
+                </Section>
+              </>
+            ),
+          },
+        ]}
+      />
 
-      <Section
-        title="Day by day"
-        meta={(p) => (p.days ? "tap a day" : "pick a week")}
-        data={sections.plain}
-        pending={pending}
-        pad={false}
-      >
-        {(p) =>
-          p.days ? (
-            <PlainDays days={p.days} showStores={counterParams.storeId === null} />
-          ) : (
-            <p className="pl-nodays">This range is longer than a month. Pick a week above to see its days.</p>
-          )
-        }
-      </Section>
-
-      {counterParams.storeId === null ? (
-        <Section title="By store" meta="tap one" data={sections.plain} pending={pending}>
-          {(p) => <PlainStores p={p} onStore={(id) => go({ storeId: id })} />}
-        </Section>
-      ) : null}
-
-      <Section title="Full statement" fold="closed" meta={windowLabel} data={sections.statement} pending={pending}>
-        {(s) => (
-          <>
-            <MoneyLines rows={statementRows(s)} />
-            {/*
-              Inside the section rather than the prototype's sibling
-              position, because it prints a figure OFF this section's data:
-              a note naming a number that failed to load is worse than no
-              note. The desk's statement footnote sits in the same place for
-              the same reason.
-            */}
-            <Note>
-              Rent and the other monthly lines are charged at {s.fixedInRange} for these {days}{" "}
-              {days === 1 ? "day" : "days"}, not a whole month.
-            </Note>
-          </>
-        )}
-      </Section>
-
-      {/* `P.pnlstore`'s fixed-cost section, rendered only with a store
-          selected — the desk's own condition, in the desk's own position,
-          from the same `getStoreFixedSectionPromises`. `f.phoneRows` and not a
-          slice of `f.rows`: the four-column table is a table on 1440px and a
-          scroll on 316, so the adapter folds each line into one `MList` row.
-          The prototype's `pnlstore` is a whole page; ours is this section on
-          the P&L, which is the call `pnl-store.ts` made before this and the
-          reason `/m/pnl/<id>` is now a shim onto `?store=`. */}
-      {storeSections ? (
-        <Section
-          title="What this store carries"
-          meta={(f) => f.meta}
-          data={storeSections.fixed}
-          pending={pending}
-        >
-          {(f) => (
-            <>
-              <MList rows={f.phoneRows} />
-              <MoneyLines rows={f.money} />
-              <Note>{f.note}</Note>
-            </>
-          )}
-        </Section>
-      ) : null}
     </>
   )
 }

@@ -16,6 +16,7 @@ import {
   type Row,
   type SwitchableStore,
 } from "@/components/counter"
+import { PageTabs } from "@/components/counter/ui"
 import { storeViewTabs } from "@/lib/counter/nav"
 import { readCounterParams, writeCounterParams } from "@/lib/counter/url-state"
 import {
@@ -258,137 +259,177 @@ export function CounterPnlClient({
           store is picked. */}
       <SubNav items={storeViewTabs("/dashboard/pnl", counterParams.storeId, paramsString)} label="P&L" />
 
-      {/* The page "made plain" (`pnl-plain.ts`, owner-approved 2026-11-03):
-          the kept figure and how it moved, the eight weeks as the picker,
-          each input's status in words, the gaps folded under Needs you, where
-          each dollar went, and every day of the range. One section of data
-          drawn as five blocks, so none can show a figure the others lack. */}
-      <Section bare title="What you kept" data={sections.plain} pending={pending}>
-        {(p) => (
-          <>
-            <PlainHero p={p} range={range} onWeek={(next) => push({ range: next })} />
-            <PlainStatuses p={p} />
-          </>
-        )}
-      </Section>
+      <PageTabs
+        label="P&L views"
+        tabs={[
+          {
+            key: "summary",
+            label: "Summary",
+            content: (
+              <>
+                {/* The page "made plain" (`pnl-plain.ts`, owner-approved 2026-11-03):
+                    the kept figure and how it moved, the eight weeks as the picker,
+                    each input's status in words, the gaps folded under Needs you, where
+                    each dollar went, and every day of the range. One section of data
+                    drawn as five blocks, so none can show a figure the others lack. */}
+                <Section bare title="What you kept" data={sections.plain} pending={pending}>
+                  {(p) => (
+                    <>
+                      <PlainHero p={p} range={range} onWeek={(next) => push({ range: next })} />
+                      <PlainStatuses p={p} />
+                    </>
+                  )}
+                </Section>
 
-      <Section
-        title="Needs you"
-        fold="closed"
-        meta={(p) => (p.todos.length > 0 ? plural(p.todos.length, "thing") : "nothing waiting")}
-        data={sections.plain}
-        pending={pending}
-        pad={false}
-      >
-        {(p) => <PlainTodos p={p} />}
-      </Section>
+                <Section
+                  title="Needs you"
+                  fold="closed"
+                  meta={(p) => (p.todos.length > 0 ? plural(p.todos.length, "thing") : "nothing waiting")}
+                  data={sections.plain}
+                  pending={pending}
+                  pad={false}
+                >
+                  {(p) => <PlainTodos p={p} />}
+                </Section>
+              </>
+            ),
+          },
+          {
+            key: "costs",
+            label: "Costs",
+            content: (
+              <>
+                <Section
+                  title="Where each dollar went"
+                  meta={(p) => (p.sales > 0 ? `out of ${money(p.sales)} in sales · change vs the period before` : windowLabel)}
+                  data={sections.plain}
+                  pending={pending}
+                >
+                  {(p) => <PlainDollar p={p} />}
+                </Section>
+              </>
+            ),
+          },
+          {
+            key: "days",
+            label: "Days",
+            content: (
+              <>
+                <Section
+                  title="Day by day"
+                  meta={(p) => (p.days ? "tap a day to see every line" : "pick a week to see its days")}
+                  data={sections.plain}
+                  pending={pending}
+                  pad={false}
+                >
+                  {(p) =>
+                    p.days ? (
+                      <PlainDays days={p.days} showStores={counterParams.storeId === null} />
+                    ) : (
+                      <p className="pl-nodays">
+                        This range is longer than a month. Pick one of the weeks above to see it day by day.
+                      </p>
+                    )
+                  }
+                </Section>
+              </>
+            ),
+          },
+          {
+            key: "stores",
+            label: "Stores",
+            content: (
+              <>
+                {counterParams.storeId === null ? (
+                  <Section
+                    title="By store"
+                    meta="tap one to read only that store"
+                    data={sections.plain}
+                    pending={pending}
+                    askAbout="how the stores compare"
+                  >
+                    {(p) => <PlainStores p={p} onStore={(id) => push({ storeId: id })} />}
+                  </Section>
+                ) : null}
 
-      <Section
-        title="Where each dollar went"
-        meta={(p) => (p.sales > 0 ? `out of ${money(p.sales)} in sales · change vs the period before` : windowLabel)}
-        data={sections.plain}
-        pending={pending}
-      >
-        {(p) => <PlainDollar p={p} />}
-      </Section>
-
-      <Section
-        title="Day by day"
-        meta={(p) => (p.days ? "tap a day to see every line" : "pick a week to see its days")}
-        data={sections.plain}
-        pending={pending}
-        pad={false}
-      >
-        {(p) =>
-          p.days ? (
-            <PlainDays days={p.days} showStores={counterParams.storeId === null} />
-          ) : (
-            <p className="pl-nodays">
-              This range is longer than a month. Pick one of the weeks above to see it day by day.
-            </p>
-          )
-        }
-      </Section>
-
-      {counterParams.storeId === null ? (
-        <Section
-          title="By store"
-          meta="tap one to read only that store"
-          data={sections.plain}
-          pending={pending}
-          askAbout="how the stores compare"
-        >
-          {(p) => <PlainStores p={p} onStore={(id) => push({ storeId: id })} />}
-        </Section>
-      ) : null}
-
-      <Section
-        title="Full statement"
-        fold="closed"
-        pending={pending}
-        meta={
-          comparing
-            ? `against ${cmpName} · same ${plural(days, "day")}, so the change column is readable`
-            : `${windowLabel} · no comparison set, so there is no change column to read`
-        }
-        data={sections.statement}
-      >
-        {(s) => (
-          <>
-            <Table
-              columns={[
-                { key: "line", label: "Line" },
-                { key: "amount", label: "This range", numeric: true },
-                { key: "share", label: "% of sales", numeric: true },
-                // The prototype's own header: the comparison's name, or the
-                // absence of one said out loud rather than left blank.
-                { key: "comparison", label: s.comparisonLabel ?? "no comparison", numeric: true },
-                { key: "change", label: "Change", numeric: true },
-                { key: "worth", label: "Worth", numeric: true },
-              ]}
-              rows={statementRows(s)}
-            />
-            {/* The prototype states its own emphasis rule under the table, and
-                it has to: three of these nine numbers are painted and nothing
-                else on the page says why. */}
-            <Note>
-              Change is in points of sales, and <b>Worth</b> is what that many points is in dollars
-              at this range&rsquo;s volume. A line is called out when it moves more than the trade
-              acts on: one point on food, two on labor, three on prime.
-            </Note>
-          </>
-        )}
-      </Section>
-
-      {/* `P.pnlstore`'s fixed-cost table. Rendered only with a store selected,
-          because that is what it is about — see the page's own note on why
-          this is a section here rather than a route of its own. */}
-      {storeSections ? (
-        <Section
-          title="What this store carries"
-          meta={(f) => f.meta}
-          data={storeSections.fixed}
-          pending={pending}
-          pad={false}
-        >
-          {(f) => (
-            <>
-              <div className="sec__body">
-                <p className="ans__lead" style={{ margin: 0 }}>
-                  {f.lead}
-                </p>
-              </div>
-              <Table columns={FIXED_COLUMNS} rows={f.rows} />
-              <div className="sec__body">
-                <MoneyLines rows={f.money} />
-                <Note>
-                  {f.note}
-                </Note>
-              </div>
-            </>
-          )}
-        </Section>
-      ) : null}
+                {/* `P.pnlstore`'s fixed-cost table. Rendered only with a store selected,
+                    because that is what it is about — see the page's own note on why
+                    this is a section here rather than a route of its own. */}
+                {storeSections ? (
+                  <Section
+                    title="What this store carries"
+                    meta={(f) => f.meta}
+                    data={storeSections.fixed}
+                    pending={pending}
+                    pad={false}
+                  >
+                    {(f) => (
+                      <>
+                        <div className="sec__body">
+                          <p className="ans__lead" style={{ margin: 0 }}>
+                            {f.lead}
+                          </p>
+                        </div>
+                        <Table columns={FIXED_COLUMNS} rows={f.rows} />
+                        <div className="sec__body">
+                          <MoneyLines rows={f.money} />
+                          <Note>
+                            {f.note}
+                          </Note>
+                        </div>
+                      </>
+                    )}
+                  </Section>
+                ) : null}
+              </>
+            ),
+          },
+          {
+            key: "statement",
+            label: "Statement",
+            content: (
+              <>
+                <Section
+                  title="Full statement"
+                  pending={pending}
+                  meta={
+                    comparing
+                      ? `against ${cmpName} · same ${plural(days, "day")}, so the change column is readable`
+                      : `${windowLabel} · no comparison set, so there is no change column to read`
+                  }
+                  data={sections.statement}
+                >
+                  {(s) => (
+                    <>
+                      <Table
+                        columns={[
+                          { key: "line", label: "Line" },
+                          { key: "amount", label: "This range", numeric: true },
+                          { key: "share", label: "% of sales", numeric: true },
+                          // The prototype's own header: the comparison's name, or the
+                          // absence of one said out loud rather than left blank.
+                          { key: "comparison", label: s.comparisonLabel ?? "no comparison", numeric: true },
+                          { key: "change", label: "Change", numeric: true },
+                          { key: "worth", label: "Worth", numeric: true },
+                        ]}
+                        rows={statementRows(s)}
+                      />
+                      {/* The prototype states its own emphasis rule under the table, and
+                          it has to: three of these nine numbers are painted and nothing
+                          else on the page says why. */}
+                      <Note>
+                        Change is in points of sales, and <b>Worth</b> is what that many points is in dollars
+                        at this range&rsquo;s volume. A line is called out when it moves more than the trade
+                        acts on: one point on food, two on labor, three on prime.
+                      </Note>
+                    </>
+                  )}
+                </Section>
+              </>
+            ),
+          },
+        ]}
+      />
 
     </>
   )
