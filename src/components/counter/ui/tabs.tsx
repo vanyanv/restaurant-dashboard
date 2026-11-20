@@ -31,7 +31,7 @@ export function Tabs({
   label: string
 }) {
   const track = useRef<HTMLDivElement>(null)
-  const placed = useRef(false)
+  const shown = useRef<string | null>(null)
   useLayoutEffect(() => {
     const el = track.current
     if (!el) return
@@ -62,11 +62,22 @@ export function Tabs({
       }
       edges()
     }
-    place(placed.current ? "smooth" : "auto")
-    placed.current = true
+    // Recentre only when the pick moved. A re-render with the same pick (the
+    // page passes a new `items` array each time) leaves the row where the
+    // owner panned it.
+    place(shown.current === null ? "auto" : shown.current !== active ? "smooth" : null)
+    shown.current = active
     el.addEventListener("scroll", edges, { passive: true })
     // The tabs change width with their container (they fill a phone's).
-    const ro = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(() => place(null))
+    // A row that got narrower may have pushed the picked tab out of view: bring it back, but leave a visible one where it is.
+    const ro =
+      typeof ResizeObserver === "undefined"
+        ? null
+        : new ResizeObserver(() => {
+            const on = el.querySelector<HTMLElement>('.cu-tab[aria-pressed="true"],.cu-tab[aria-current="page"]')
+            const hidden = !!on && (on.offsetLeft < el.scrollLeft || on.offsetLeft + on.offsetWidth > el.scrollLeft + el.clientWidth)
+            place(hidden ? "auto" : null)
+          })
     ro?.observe(el)
     return () => {
       el.removeEventListener("scroll", edges)

@@ -254,6 +254,8 @@ describe("Counter P&L", () => {
     // The missing input stays on the resting card, not behind the fold.
     expect(cards[1].querySelector("summary")!.textContent).toContain("2 days of labor missing")
     expect(Array.from(cards[0].querySelectorAll("dt")).map((d) => d.textContent)).toEqual(["Food", "Labor", "App fees"])
+    expect(cards[0].open).toBe(false)
+    cards[0].open = true
     fireEvent.click(within(cards[0]).getByText("Show only Hollywood"))
     expect(push).toHaveBeenCalledWith("/dashboard/pnl?store=hollywood", { scroll: false })
   })
