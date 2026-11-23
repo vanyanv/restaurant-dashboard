@@ -56,9 +56,9 @@ describe("getSyncs", () => {
   })
 
   it("maps a raw row onto its SyncRow and computes overdue from cadence * 1.5", async () => {
-    // otter.metrics.sync cadence is 4h -> overdue past 6h. 7h-old run is
+    // otter.metrics.sync cadence is 8h -> overdue past 12h. 13h-old run is
     // overdue; a 1h-old cogs.sweep run is not.
-    const staleStart = new Date(NOW.getTime() - 7 * 3_600_000)
+    const staleStart = new Date(NOW.getTime() - 13 * 3_600_000)
     const freshStart = new Date(NOW.getTime() - 1 * 3_600_000)
     vi.mocked(prisma.$queryRaw).mockResolvedValue([
       { jobName: "otter.metrics.sync", startedAt: staleStart, status: "SUCCESS", rowsWritten: 1200, durationMs: 30_000 },
@@ -74,7 +74,7 @@ describe("getSyncs", () => {
       rowsWritten: 1200,
       durationMs: 30_000,
       overdue: true,
-      cadenceLabel: "every 4h",
+      cadenceLabel: "4 times a day",
     })
     const sweep = rows.find((r) => r.jobName === "cogs.sweep")
     expect(sweep).toMatchObject({

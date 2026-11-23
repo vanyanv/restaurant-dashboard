@@ -8,21 +8,24 @@ export type JobSchedule = {
 }
 
 export const JOB_SCHEDULES: Record<string, JobSchedule> = {
-  "otter.metrics.sync":     { cadenceMinutes: 60 * 4,  description: "every 4h" },
-  "otter.orders.sync":      { cadenceMinutes: 60 * 4,  description: "every 4h" },
+  // Four times a day since 2026-11-23 (10 AM, 2 PM, 6 PM, 2 AM LA via
+  // sync-ticker.yml); the longest gap is the closed 8h from 2 AM to 10 AM.
+  "otter.metrics.sync":     { cadenceMinutes: 60 * 8,  description: "4 times a day" },
+  "otter.orders.sync":      { cadenceMinutes: 60 * 8,  description: "4 times a day" },
   "otter.orders.drain":     { cadenceMinutes: 60 * 24 * 7,  description: "weekly" },
-  // Hourly, but only while Hollywood is trading (UTC 17:00–10:59 covers
-  // 10:00–02:00 local year-round), so the longest legitimate gap is the 7h
-  // closed window between the 10:00 and 17:00 UTC runs — not 1h.
-  "otter.hourly.sync":      { cadenceMinutes: 60 * 7,  description: "hourly during service hours" },
-  // Matrix fan-out for otter-sync (every 4h) and otter-drain (weekly). It was
-  // declared daily, which made isOverdue() permanently false for it.
-  "otter.stores":           { cadenceMinutes: 60 * 4,  description: "every 4h" },
+  // Every other hour while Hollywood is trading (even UTC hours 18:00–10:00),
+  // since 2026-11-23; the longest legitimate gap is the 8h closed window
+  // between the 10:00 and 18:00 UTC runs.
+  "otter.hourly.sync":      { cadenceMinutes: 60 * 8,  description: "every 2h during service hours" },
+  // Matrix fan-out for otter-sync (4 times a day) and otter-drain (weekly). It
+  // was declared daily, which made isOverdue() permanently false for it.
+  "otter.stores":           { cadenceMinutes: 60 * 8,  description: "4 times a day" },
   // 6 AM, noon, 6 PM LA; the longest gap is overnight, 12h (overdue at 18h).
   "invoices.email.sync":    { cadenceMinutes: 60 * 12, description: "3 times a day" },
-  "cogs.sweep":             { cadenceMinutes: 60 * 4,  description: "every 4h" },
-  // Same shape: driven by cogs-sweep (every 4h) and cogs-refresh (daily).
-  "cogs.stores":            { cadenceMinutes: 60 * 4,  description: "every 4h" },
+  // Twice a day since 2026-11-23 (3 PM and 3 AM LA).
+  "cogs.sweep":             { cadenceMinutes: 60 * 12, description: "twice a day" },
+  // Same shape: driven by cogs-sweep (twice a day) and cogs-refresh (weekly).
+  "cogs.stores":            { cadenceMinutes: 60 * 12, description: "twice a day" },
   "monitoring.db-snapshot": { cadenceMinutes: 60 * 24, description: "daily" },
   "monitoring.r2-snapshot": { cadenceMinutes: 60 * 24, description: "daily" },
   // The real backup (db-backup.yml: pg_dump to R2), not a size reading.

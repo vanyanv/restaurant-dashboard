@@ -41,9 +41,9 @@ describe("detectStaleness — cadence", () => {
     expect(detectStaleness([reading()], NOW).ok).toBe(true)
   })
 
-  it("flags a job that stopped running — the 24h outage", () => {
-    // otter.metrics.sync is every 4h; overdue at 1.5x = 6h.
-    const v = detectStaleness([reading({ lastRunAt: minsAgo(60 * 24), dataAt: minsAgo(60 * 24) })], NOW)
+  it("flags a job that stopped running — a 30h outage", () => {
+    // otter.metrics.sync's longest gap is 8h; an incident past 3x = 24h.
+    const v = detectStaleness([reading({ lastRunAt: minsAgo(60 * 30), dataAt: minsAgo(60 * 30) })], NOW)
     expect(v.ok).toBe(false)
     expect(v.problems.map((p) => p.reason)).toContain("overdue")
   })

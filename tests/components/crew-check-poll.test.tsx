@@ -50,14 +50,14 @@ const setHidden = async (h: boolean) => {
 }
 
 describe("crew page refresh", () => {
-  it("polls every 20 s on the store screen, sending the view's version", async () => {
+  it("polls every 60 s on the store screen, sending the view's version", async () => {
     render(<CrewCheckClient code="van-nuys-abc123" initial={view("v1")} />)
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(6_000)
+      await vi.advanceTimersByTimeAsync(20_000)
     })
     expect(stateCalls()).toHaveLength(0)
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(14_000)
+      await vi.advanceTimersByTimeAsync(40_000)
     })
     expect(stateCalls()).toEqual(["/api/checks/van-nuys-abc123/state?v=v1"])
   })
@@ -66,10 +66,10 @@ describe("crew page refresh", () => {
     fetchMock.mockImplementationOnce(async () => new Response(JSON.stringify({ view: view("v2") }), { status: 200 }))
     render(<CrewCheckClient code="van-nuys-abc123" initial={view("v1")} />)
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(20_000)
+      await vi.advanceTimersByTimeAsync(60_000)
     })
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(20_000)
+      await vi.advanceTimersByTimeAsync(60_000)
     })
     expect(stateCalls()).toEqual(["/api/checks/van-nuys-abc123/state?v=v1", "/api/checks/van-nuys-abc123/state?v=v2"])
   })
@@ -78,13 +78,13 @@ describe("crew page refresh", () => {
     render(<CrewCheckClient code="van-nuys-abc123" initial={view("v1")} />)
     await setHidden(true)
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(120_000)
+      await vi.advanceTimersByTimeAsync(300_000)
     })
     expect(stateCalls()).toHaveLength(0)
     await setHidden(false)
     expect(stateCalls()).toHaveLength(1)
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(20_000)
+      await vi.advanceTimersByTimeAsync(60_000)
     })
     expect(stateCalls()).toHaveLength(2)
   })

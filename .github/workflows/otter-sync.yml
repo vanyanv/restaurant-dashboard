@@ -1,9 +1,10 @@
 name: Otter Daily Sync (per-store matrix)
 on:
   schedule:
-    # Every 4 hours. Keeps same-day daily/menu totals fresh enough for
-    # operations while cutting repeated sync compute versus the old 2h cadence.
-    - cron: '0 */4 * * *'
+    # Backup only: sync-ticker.yml dispatches this four times a day. The old
+    # every-4-hours backup fired hours late and doubled the runs, so since
+    # 2026-11-23 the backup is once a day, after close (2 AM LA).
+    - cron: '15 10 * * *'
   workflow_dispatch:
     inputs:
       # Blank is the normal 3-day run, and leaves out any store whose sync

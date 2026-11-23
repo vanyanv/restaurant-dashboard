@@ -1,10 +1,11 @@
 name: COGS Sweep (4-hour, 3 days)
 on:
   schedule:
-    # Every 4 hours at :30 — staggered so the :00 Otter orders sync has
-    # settled before we recompute COGS off it. Window is the last 3 days;
-    # daily 30-day refresh still catches slower corrections overnight.
-    - cron: '30 */4 * * *'
+    # Twice a day (3 PM and 3 AM LA), an hour after the 2 PM and 2 AM Otter
+    # syncs. sync-ticker.yml dispatches these on time; this is the backup.
+    # Was every 4 hours until 2026-11-23 (cut for Vercel active CPU). Window
+    # is the last 3 days; the weekly 30-day refresh catches older corrections.
+    - cron: '30 23,11 * * *'
   workflow_dispatch:
     inputs:
       lookbackDays:
