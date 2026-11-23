@@ -70,6 +70,27 @@ describe("createRevealChain", () => {
   })
 })
 
+describe("flight-style thenables", () => {
+  it("chains a thenable whose then returns undefined and calls back synchronously", async () => {
+    // The shape React's flight client hands a client component: not a
+    // Promise, `then` returns nothing.
+    const callbacks: Array<(v: string) => void> = []
+    let settled: string | undefined
+    const flight = {
+      then(onOk: (v: string) => void) {
+        if (settled !== undefined) onOk(settled)
+        else callbacks.push(onOk)
+      },
+    } as unknown as Promise<string>
+    const chain = createRevealChain()
+    expect(() => chain.gate(flight)).not.toThrow()
+    const below = chain.gate(Promise.resolve("next"))
+    settled = "top"
+    callbacks.forEach((cb) => cb("top"))
+    await expect(below).resolves.toBe("next")
+  })
+})
+
 describe("revealKeyFor", () => {
   it("ignores the open tab and the order of the query", () => {
     expect(revealKeyFor("/dashboard", new URLSearchParams("store=a&tab=trends&range=7d"))).toBe(

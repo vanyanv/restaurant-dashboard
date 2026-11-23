@@ -62,7 +62,10 @@ export function createRevealChain(): RevealChain {
         // Already settled; it holds nothing below back.
         tail = null
       } else {
-        const next: Tracked<unknown> = out.then(
+        // `Promise.resolve` first: the flight client's thenables are not real
+        // promises. Their `then` returns undefined and calls back
+        // synchronously once settled, so `out.then(...)` cannot be chained.
+        const next: Tracked<unknown> = Promise.resolve(out).then(
           () => {
             next.status = "fulfilled"
           },
