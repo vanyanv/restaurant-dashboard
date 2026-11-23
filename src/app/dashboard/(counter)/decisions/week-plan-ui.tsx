@@ -229,6 +229,7 @@ export function WeekPlanView({
         ))}
       </StoreCardGrid>
 
+      <div className="wa-two">
       <Card caption="The shelf against the forecast">
         {plan.shelfNote ? <p className="wa-note">{plan.shelfNote}</p> : null}
         {plan.shelf.length > 0 ? (
@@ -248,6 +249,24 @@ export function WeekPlanView({
           <Status tone={plan.accuracy.tone}>{plan.accuracy.text}</Status>
         </Statuses>
       </Card>
+
+      <Card caption={`What will sell, forecast${week.sellers.span ? ` · ${week.sellers.span}` : ""}`}>
+        {week.sellers.note ? <p className="wa-note">{week.sellers.note}</p> : null}
+        {week.sellers.rows.length > 0 ? (
+          <ul className="wa-sell" aria-label={`Menu items forecast to sell most, ${week.name.toLowerCase()}`}>
+            {week.sellers.rows.map((r) => (
+              <li key={r.item}>
+                <span>{r.item}</span>
+                <span className="wa-sell__track" aria-hidden="true">
+                  <i style={{ "--w": r.share } as CSSProperties} />
+                </span>
+                <b>{r.qtyText}</b>
+              </li>
+            ))}
+          </ul>
+        ) : null}
+      </Card>
+      </div>
 
       {week.todos.length > 0 ? (
         <Fold

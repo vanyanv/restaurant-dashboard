@@ -104,9 +104,34 @@ export interface WeekPlanInput {
   runOutNote: string | null
   calls: PlanCallInput[]
   accuracy: { inside: number | null; sample: number }
+  /**
+   * The menu item forecast for the scope, newest generation per store, item
+   * and day, today onward. Null when the read failed.
+   */
+  menu?: PlanMenuInput[] | null
   /** Desk path of this page; hrefs are built on it. */
   basePath: string
 }
+
+/** One store's forecast for one menu item on one day. */
+export interface PlanMenuInput {
+  /** YYYY-MM-DD */
+  key: string
+  item: string
+  qty: number
+}
+
+/** "What will sell": the week's top menu items by forecast quantity. */
+export interface PlanSellers {
+  /** "Today to Sunday" or "Monday to Sunday". */
+  span: string
+  rows: Array<{ item: string; qty: number; qtyText: string; share: number }>
+  /** Said in place of rows when there are none to show. */
+  note: string | null
+}
+
+/** Rows "What will sell" lists. */
+export const SELLERS_SHOWN = 5
 
 export interface PlanTodo {
   key: string
@@ -194,6 +219,7 @@ export interface PlanWeek {
   days: PlanDay[]
   todos: PlanTodo[]
   stores: PlanStoreCard[]
+  sellers: PlanSellers
   /** The day the detail opens on. */
   defaultDay: string | null
 }
@@ -309,6 +335,34 @@ function partOfDay(hour: number): string {
 
 /** Hours 0 and 1 close the trading day that opened the morning before. */
 const clockOrder = (hour: number) => (hour <= 1 ? hour + 24 : hour)
+
+/**
+ * The week's top menu items by forecast quantity, from today onward: a day
+ * already sold is not forecast any more, so this week reads "today to
+ * Sunday". Quantities add across stores (same item name, same thing sold).
+ */
+export function buildSellers(menu: PlanMenuInput[] | null | undefined, keys: string[], asOf: string): PlanSellers {
+  const ahead = keys.filter((k) => k >= asOf)
+  const span = ahead.length === 0 ? "" : ahead.length === keys.length ? "Monday to Sunday" : `${weekdayOf(ahead[0])} to Sunday`
+  if (menu === null || menu === undefined) {
+    return { span, rows: [], note: menu === null ? "The menu forecast did not load" : "No menu forecast yet" }
+  }
+  if (ahead.length === 0) return { span, rows: [], note: "This week is sold" }
+  const inWeek = new Set(ahead)
+  const byItem = new Map<string, number>()
+  for (const r of menu) {
+    if (!inWeek.has(r.key) || !(r.qty > 0)) continue
+    byItem.set(r.item, (byItem.get(r.item) ?? 0) + r.qty)
+  }
+  const ranked = [...byItem.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).slice(0, SELLERS_SHOWN)
+  if (ranked.length === 0) return { span, rows: [], note: "No menu forecast for these days yet" }
+  const top = ranked[0][1]
+  return {
+    span,
+    rows: ranked.map(([item, qty]) => ({ item, qty, qtyText: count(Math.round(qty)), share: qty / top })),
+    note: null,
+  }
+}
 
 export function buildWeekPlan(input: WeekPlanInput): WeekPlan {
   const asOfDate = parseDayKey(input.asOf)
@@ -828,7 +882,7 @@ export function buildWeekPlan(input: WeekPlanInput): WeekPlan {
     const defaultDay =
       key === "this" ? (keys.includes(input.asOf) ? input.asOf : (keys[keys.length - 1] ?? null)) : (keys[0] ?? null)
 
-    return { key, name, label, sentence, sales, hours: hoursFig, todo, days, todos, stores, defaultDay }
+    return { key, name, label, sentence, sales, hours: hoursFig, todo, days, todos, stores, sellers: buildSellers(input.menu, keys, input.asOf), defaultDay }
   }
 
   const shelf = shelfRows.map((r) => {
