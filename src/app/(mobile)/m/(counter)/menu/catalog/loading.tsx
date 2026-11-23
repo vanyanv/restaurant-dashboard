@@ -3,19 +3,11 @@
 import { Section } from "@/components/counter"
 import { loading } from "@/lib/counter/section-data"
 
-/** The catalog's phone loading boundary — the three entries the client renders. */
+/** Mirrors the real page's first tab: same sections, order and bare flags. */
 export default function MobileCatalogLoading() {
   return (
-    <>
-      <Section bare title="The figures" data={loading()}>
-        {() => null}
-      </Section>
-      <Section title="Unmapped" data={loading()}>
-        {() => null}
-      </Section>
-      <Section title="Top sellers" data={loading()}>
-        {() => null}
-      </Section>
-    </>
+    <Section bare title="The catalog in a sentence" data={loading()}>
+      {() => null}
+    </Section>
   )
 }

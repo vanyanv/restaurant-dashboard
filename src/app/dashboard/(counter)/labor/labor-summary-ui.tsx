@@ -2,6 +2,9 @@
 
 import { useState, type ReactNode } from "react"
 import dynamic from "next/dynamic"
+// A block still downloading holds a skeleton's height, not nothing, so the
+// page under it does not jump when it lands (2026-11-23).
+import { LoadingBlock } from "@/components/counter/surface/loading-block"
 import { Section } from "@/components/counter"
 import { BarRows, Card, ChartKey, StoreCard, StoreCardGrid, Tabs } from "@/components/counter/ui"
 import type { LaborSections } from "@/lib/counter/adapters/labor"
@@ -87,11 +90,11 @@ export function LaborDetailView({
   )
 }
 
-const LaborWeeksBlock = dynamic(() => import("./labor-weeks-ui").then((m) => m.LaborWeeksBlock), { loading: () => null })
-const LaborHoursBlock = dynamic(() => import("./labor-more-ui").then((m) => m.LaborHoursBlock), { loading: () => null })
-const LaborPeopleBlock = dynamic(() => import("./labor-more-ui").then((m) => m.LaborPeopleBlock), { loading: () => null })
-const LaborClockBlock = dynamic(() => import("./labor-more-ui").then((m) => m.LaborClockBlock), { loading: () => null })
-const LaborMinutesBlock = dynamic(() => import("./labor-more-ui").then((m) => m.LaborMinutesBlock), { loading: () => null })
+const LaborWeeksBlock = dynamic(() => import("./labor-weeks-ui").then((m) => m.LaborWeeksBlock), { loading: () => <LoadingBlock /> })
+const LaborHoursBlock = dynamic(() => import("./labor-more-ui").then((m) => m.LaborHoursBlock), { loading: () => <LoadingBlock /> })
+const LaborPeopleBlock = dynamic(() => import("./labor-more-ui").then((m) => m.LaborPeopleBlock), { loading: () => <LoadingBlock /> })
+const LaborClockBlock = dynamic(() => import("./labor-more-ui").then((m) => m.LaborClockBlock), { loading: () => <LoadingBlock /> })
+const LaborMinutesBlock = dynamic(() => import("./labor-more-ui").then((m) => m.LaborMinutesBlock), { loading: () => <LoadingBlock /> })
 
 type LaborTab = "summary" | "weeks" | "stores" | "hours" | "people" | "clock"
 

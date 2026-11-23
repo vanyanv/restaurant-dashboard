@@ -3,20 +3,14 @@
 import { Section } from "@/components/counter"
 import { loading } from "@/lib/counter/section-data"
 
-/** The phone's recipes loading boundary — the four entries the client renders. */
+/** Mirrors the real page's first tab: same sections, order and bare flags. */
 export default function MobileRecipesLoading() {
   return (
     <>
       <Section bare title="Recipes" data={loading()}>
         {() => null}
       </Section>
-      <Section bare title="The figures" data={loading()}>
-        {() => null}
-      </Section>
-      <Section title="Worst first" data={loading()}>
-        {() => null}
-      </Section>
-      <Section bare title="Needs confirming" data={loading()}>
+      <Section bare title="Recipes in a sentence" data={loading()}>
         {() => null}
       </Section>
     </>

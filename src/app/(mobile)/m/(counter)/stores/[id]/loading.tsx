@@ -3,10 +3,13 @@
 import { Section } from "@/components/counter"
 import { loading } from "@/lib/counter/section-data"
 
-/** The phone store-file loading boundary. */
+/** Mirrors the top of the real page: same sections, order and bare flags. */
 export default function Loading() {
   return (
     <>
+      <Section bare title="Store file" data={loading()}>
+        {() => null}
+      </Section>
       <Section bare title="The figures" data={loading()}>
         {() => null}
       </Section>
@@ -14,6 +17,9 @@ export default function Loading() {
         {() => null}
       </Section>
       <Section title="Fixed expenses" data={loading()}>
+        {() => null}
+      </Section>
+      <Section bare title="Edit" data={loading()}>
         {() => null}
       </Section>
     </>

@@ -553,6 +553,32 @@ const COLOUR_ALLOWED = /counter\.css$|counter-components\.css$/
 const SHELL_ALLOWED =
   /[/\\]layout\.tsx$|[/\\]components[/\\]counter[/\\]|[/\\]lib[/\\]counter[/\\]|[/\\]styles[/\\]/
 
+/**
+ * `no-raw-suspense` (2026-11-23, owner: "certain things load before others
+ * and it makes it feel like things shift"). Every streamed block goes through
+ * `Section`, which owns the Suspense boundary AND the top-to-bottom reveal
+ * (`surface/reveal-order.tsx`): a section shows only once its own data and
+ * every streamed section above it have landed, so nothing already on screen
+ * gets pushed down. A page or page client opening its own `<Suspense>`
+ * skips that order and usually ships a `fallback={null}` that collapses and
+ * then pops in. Layouts and the component library may; pages may not.
+ *
+ * `SUSPENSE_ALLOWED` names the one page file that keeps one: the phone
+ * Orders sub-line under the title, which is a single line of text read from
+ * the strip, not a section, and whose fallback reserves that line's height.
+ */
+const RAW_SUSPENSE = /<Suspense\b/
+const SUSPENSE_ALLOWED =
+  /[/\\]layout\.tsx$|[/\\]components[/\\]counter[/\\]|[/\\]lib[/\\]counter[/\\]|[/\\]m[/\\]\(counter\)[/\\]orders[/\\]counter-phone-orders-client\.tsx$/
+
+/**
+ * `no-empty-dynamic-loading` (same day). A `next/dynamic` block with
+ * `loading: () => null` draws nothing while its code downloads on a client
+ * navigation, then lands and pushes the page below it down. Hold the space:
+ * `loading: () => <LoadingBlock />` (`@/components/counter`).
+ */
+const EMPTY_DYNAMIC_LOADING = /loading:\s*\(\)\s*=>\s*null\b/
+
 const RULES: Array<{
   name: string
   pattern: RegExp
@@ -584,6 +610,8 @@ const RULES: Array<{
   },
   { name: "no-direct-motion-import", pattern: DIRECT_MOTION_IMPORT, allowed: MOTION_ALLOWED, extensions: [".tsx", ".ts"] },
   { name: "no-shell-in-page", pattern: SHELL_IN_PAGE, allowed: SHELL_ALLOWED, extensions: [".tsx"] },
+  { name: "no-raw-suspense", pattern: RAW_SUSPENSE, allowed: SUSPENSE_ALLOWED, extensions: [".tsx"] },
+  { name: "no-empty-dynamic-loading", pattern: EMPTY_DYNAMIC_LOADING, extensions: [".tsx", ".ts"] },
 ]
 
 /**

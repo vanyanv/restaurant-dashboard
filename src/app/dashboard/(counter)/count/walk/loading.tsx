@@ -1,15 +1,15 @@
 "use client"
 
 import { Section } from "@/components/counter"
-import { loading } from "@/lib/counter/section-data"
 import { CountHead } from "../count-ui"
+import { loading } from "@/lib/counter/section-data"
 
-/** The count's loading boundary: the tabs stay put while the walk loads. */
+/** Mirrors the top of the real page: same sections, order and bare flags. */
 export default function Loading() {
   return (
     <>
       <CountHead sub="Loading" />
-      <Section title="Weekly count" data={loading()}>
+      <Section title="Count" data={loading()}>
         {() => null}
       </Section>
     </>

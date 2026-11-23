@@ -1,21 +1,27 @@
 "use client"
 
 import { Section } from "@/components/counter"
-import { loading } from "@/lib/counter/section-data"
 import { InvoicesHead } from "@/app/dashboard/(counter)/invoices/invoices-ui"
+import { loading } from "@/lib/counter/section-data"
 
-/** Needs you's loading boundary: the tabs stay put while the queue loads. */
+/** Mirrors the top of the real page: same sections, order and bare flags. */
 export default function InvoicesLoading() {
   return (
     <>
       <InvoicesHead sub="Loading" />
-      <Section bare title="The figures" data={loading()}>
+      <Section bare title="This week" data={loading()}>
         {() => null}
       </Section>
-      <Section title="To review" data={loading()} pad={false}>
+      <Section title="Needs you" data={loading()}>
         {() => null}
       </Section>
-      <Section title="Prices that moved" data={loading()} pad={false}>
+      <Section title="What came in" data={loading()}>
+        {() => null}
+      </Section>
+      <Section title="Prices that changed" data={loading()}>
+        {() => null}
+      </Section>
+      <Section title="Who you paid" data={loading()}>
         {() => null}
       </Section>
     </>

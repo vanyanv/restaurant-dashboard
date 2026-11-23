@@ -1,15 +1,15 @@
 "use client"
 
 import { Section } from "@/components/counter"
-import { loading } from "@/lib/counter/section-data"
 import { CountHead } from "@/app/dashboard/(counter)/count/count-ui"
+import { loading } from "@/lib/counter/section-data"
 
-/** The phone waste log's loading boundary. */
+/** Mirrors the top of the real page: same sections, order and bare flags. */
 export default function Loading() {
   return (
     <>
       <CountHead sub="Loading" />
-      <Section title="Log waste" data={loading()}>
+      <Section bare title="Waste" data={loading()}>
         {() => null}
       </Section>
     </>

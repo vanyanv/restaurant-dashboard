@@ -796,6 +796,24 @@ plain line plus a "How this is worked out" fold.
 `Tile`, `Rows`, `Status`, `WeekBars`, `Freshness`) rather than a page-local
 copy, and use `useAct`/`useLeaving` for presses (see Motion).
 
+**9. Load top to bottom, nothing jumps.** Every streamed block is a
+`Section` fed a promise. `Section` shows a block only once its own figures
+AND every streamed block above it have arrived (`surface/reveal-order.tsx`,
+2026-11-23), so nothing already on screen is ever pushed down. The owner
+reported the old behaviour, where a quick block painted under a slow one and
+was shoved down when the slow one landed, as the app "feeling like things
+shift". To keep it:
+- Never open your own `<Suspense>` or `use()` a section promise outside
+  `Section` in a page or page client (`no-raw-suspense` fails the build).
+- Never give a `next/dynamic` block `loading: () => null`: use
+  `loading: () => <LoadingBlock />` from `@/components/counter` (`no-empty-dynamic-loading`).
+- Keep the route's `loading.tsx` matching the page's first tab: same
+  sections, same order, same `bare`. A skeleton for a different page is a
+  jump the moment the real page lands. (Not lint-checked: review it.)
+- A line that fills in late (a sub-line, a count) keeps its height while
+  empty (`&nbsp;`), not `null`.
+- Images get a fixed size or `aspect-ratio` in CSS.
+
 **Before opening a PR for a page**, state in the PR body: the tabs and what
 each holds, the blocks on the first tab, and the phone height of the
 longest tab if it was measured (or that it was not). The repo skill

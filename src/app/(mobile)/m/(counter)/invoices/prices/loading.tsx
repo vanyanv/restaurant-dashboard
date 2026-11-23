@@ -1,10 +1,10 @@
 "use client"
 
 import { Section } from "@/components/counter"
-import { loading } from "@/lib/counter/section-data"
 import { InvoicesHead } from "@/app/dashboard/(counter)/invoices/invoices-ui"
+import { loading } from "@/lib/counter/section-data"
 
-/** Prices' loading boundary. */
+/** Mirrors the top of the real page: same sections, order and bare flags. */
 export default function InvoicePricesLoading() {
   return (
     <>
@@ -12,7 +12,10 @@ export default function InvoicePricesLoading() {
       <Section bare title="The figures" data={loading()}>
         {() => null}
       </Section>
-      <Section title="What moved" data={loading()} pad={false}>
+      <Section title="Ranked by what it costs you" data={loading()}>
+        {() => null}
+      </Section>
+      <Section title="The three biggest moves in dollars, by week" data={loading()}>
         {() => null}
       </Section>
     </>
