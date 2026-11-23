@@ -1,13 +1,18 @@
 import { NextRequest, NextResponse } from "next/server"
 import { hashToken, tokenFromHeader } from "@/lib/screens/core"
 import { contentFor } from "@/lib/screens/data"
-import { rateLimitKey } from "@/lib/rate-limit"
+import { rateLimit, rateLimitKey } from "@/lib/rate-limit"
 
 /**
  * What a TV should show. The TV calls this every 30 seconds with its token.
  * Before it is paired the answer is its code; after, its playlist.
  */
 export async function GET(request: NextRequest) {
+  // Per address too: a client sending a new token each time would otherwise make codes without limit.
+  // Generous, because every TV in a store shares one address.
+  const perIp = await rateLimit(request, { limit: 120, windowMs: 60_000, identifyBy: "ip" })
+  if (perIp) return perIp
+
   const token = tokenFromHeader(request.headers.get("authorization"))
   if (!token) return NextResponse.json({ error: "Missing token" }, { status: 401 })
   const tokenHash = hashToken(token)

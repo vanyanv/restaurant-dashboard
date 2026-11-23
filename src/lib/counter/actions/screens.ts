@@ -1,12 +1,13 @@
 "use server"
 
 import { revalidatePath } from "next/cache"
+import { headers } from "next/headers"
 import { z } from "zod"
 import { prisma } from "@/lib/prisma"
 import { hasOwnerAccess } from "@/lib/auth"
 import { getSession } from "@/lib/auth-scope"
 import { deleteScreenMedia } from "@/lib/blob"
-import { isOverLimitKey, rateLimitKey } from "@/lib/rate-limit"
+import { rateLimitKey } from "@/lib/rate-limit"
 import { clampSeconds, isPairCode, normalizeCode } from "@/lib/screens/core"
 import { logger } from "@/lib/logger"
 
@@ -70,7 +71,9 @@ const ClaimInput = z.object({
   playlistId: id.nullable(),
 })
 
-const CLAIM_LIMIT = { limit: 10, windowMs: 10 * 60_000 }
+/** Every try counts, right or wrong, and is counted before the code is looked up. */
+const CLAIM_LIMIT = { limit: 20, windowMs: 10 * 60_000 }
+const CLAIM_LIMIT_IP = { limit: 30, windowMs: 10 * 60_000 }
 
 /** Pair the TV showing `code`: it becomes a screen in `storeId`, playing `playlistId`. */
 export async function claimScreen(raw: z.input<typeof ClaimInput>): Promise<ScreensResult> {
@@ -80,25 +83,36 @@ export async function claimScreen(raw: z.input<typeof ClaimInput>): Promise<Scre
     const code = normalizeCode(input.code)
     if (!isPairCode(code)) return { ok: false, error: "The code on the TV is 6 digits" }
 
-    // Wrong codes are charged; right ones are free. Ten wrong in ten minutes waits.
-    const key = `screens-claim:${accountId}`
-    if (await isOverLimitKey(key, CLAIM_LIMIT)) {
-      return { ok: false, error: "Too many wrong codes. Wait ten minutes and try again." }
-    }
+    // Counted up front, per account and per address, so a burst of guesses can't all slip past the check.
+    const ip = ((await headers()).get("x-forwarded-for") ?? "").split(",")[0].trim() || "unknown"
+    const tooMany =
+      (await rateLimitKey(`screens-claim:${accountId}`, CLAIM_LIMIT)) ??
+      (await rateLimitKey(`screens-claim-ip:${ip}`, CLAIM_LIMIT_IP))
+    if (tooMany) return { ok: false, error: "Too many tries. Wait ten minutes and try again." }
 
     await ownStore(accountId, input.storeId)
     const playlistId = await usablePlaylist(accountId, input.storeId, input.playlistId)
 
     const pairing = await prisma.screenPairing.findUnique({ where: { code } })
     if (!pairing || pairing.expiresAt < new Date()) {
-      await rateLimitKey(key, CLAIM_LIMIT)
       return { ok: false, error: "No TV is showing that code. Check the digits, or wait for the TV to show a new one." }
     }
 
     const screen = await prisma.$transaction(async (tx) => {
-      const made = await tx.screen.upsert({
-        where: { tokenHash: pairing.tokenHash },
-        create: {
+      await tx.screenPairing.delete({ where: { code } })
+      const existing = await tx.screen.findUnique({ where: { tokenHash: pairing.tokenHash }, select: { id: true, accountId: true } })
+      // A TV already paired to another account is never moved by a code: that account unpairs it first.
+      if (existing && existing.accountId !== accountId) throw new Refused("That TV is already paired to another account")
+      if (existing) {
+        // Re-pairing a TV of this account (a reset, a move) is a fresh start on the same row.
+        return tx.screen.update({
+          where: { id: existing.id },
+          data: { storeId: input.storeId, name: input.name, playlistId, pairedAt: new Date(), lastSeenAt: null },
+          select: { id: true },
+        })
+      }
+      return tx.screen.create({
+        data: {
           accountId,
           storeId: input.storeId,
           name: input.name,
@@ -106,12 +120,8 @@ export async function claimScreen(raw: z.input<typeof ClaimInput>): Promise<Scre
           tokenHash: pairing.tokenHash,
           device: pairing.device,
         },
-        // A TV paired again (a reset, a move) keeps its token; re-pairing is a fresh start.
-        update: { accountId, storeId: input.storeId, name: input.name, playlistId, pairedAt: new Date(), lastSeenAt: null },
         select: { id: true },
       })
-      await tx.screenPairing.delete({ where: { code } })
-      return made
     })
 
     refresh()

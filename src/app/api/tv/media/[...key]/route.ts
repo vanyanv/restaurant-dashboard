@@ -7,11 +7,16 @@ import { logger } from "@/lib/logger"
  * A screen image, for the TV and for the dashboard's thumbnails. No sign-in:
  * a TV cannot send one with an <img>. The key holds a random uuid, it must
  * match a row, and an image is never changed in place (a new upload is a new
- * key), so it can be cached for a year.
+ * key), so the TV and the browser keep it for a year; shared caches don't.
  */
 export async function GET(_request: NextRequest, { params }: { params: Promise<{ key: string[] }> }) {
   const { key } = await params
-  const blobKey = key.map(decodeURIComponent).join("/")
+  let blobKey: string
+  try {
+    blobKey = key.map(decodeURIComponent).join("/")
+  } catch {
+    return NextResponse.json({ error: "Not found" }, { status: 404 })
+  }
   if (!/^screens\/[A-Za-z0-9._-]+\/[0-9a-f-]{36}\.(jpg|png|webp)$/.test(blobKey)) {
     return NextResponse.json({ error: "Not found" }, { status: 404 })
   }
@@ -31,7 +36,8 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
   return new Response(result.stream, {
     headers: {
       "Content-Type": result.contentType ?? media.contentType,
-      "Cache-Control": "public, max-age=31536000, immutable",
+      // private: a deleted image must not live on in a shared cache.
+      "Cache-Control": "private, max-age=31536000, immutable",
       "X-Content-Type-Options": "nosniff",
     },
   })

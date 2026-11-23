@@ -44,6 +44,9 @@ export async function pairingFor(tokenHash: string, device: string | null): Prom
       return { code, expiresAt }
     } catch (err) {
       if ((err as { code?: string }).code !== "P2002") throw err
+      // Two polls from one TV at once: the other one made the code. Show that one, don't replace it.
+      const other = await prisma.screenPairing.findUnique({ where: { tokenHash } })
+      if (other && other.expiresAt > new Date()) return { code: other.code, expiresAt: other.expiresAt }
     }
   }
   throw new Error("Could not make a pairing code")
@@ -78,11 +81,15 @@ export async function contentFor(tokenHash: string, device: string | null): Prom
 
   const now = new Date()
   if (!screen.lastSeenAt || now.getTime() - screen.lastSeenAt.getTime() >= SEEN_WRITE_EVERY_MS || (device && device !== screen.device)) {
-    await prisma.screen.update({
-      where: { id: screen.id },
-      data: { lastSeenAt: now, ...(device ? { device } : {}) },
-      select: { id: true },
-    })
+    await prisma.$transaction([
+      prisma.screen.update({
+        where: { id: screen.id },
+        data: { lastSeenAt: now, ...(device ? { device } : {}) },
+        select: { id: true },
+      }),
+      // A code made for this TV while it was being paired is no use any more.
+      prisma.screenPairing.deleteMany({ where: { tokenHash } }),
+    ])
   }
 
   const pl = screen.playlist
