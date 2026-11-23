@@ -18,8 +18,8 @@ describe("createRevealChain", () => {
     const chain = createRevealChain()
     const slow = deferred<string>()
     const quick = deferred<string>()
-    const top = chain.gate(slow.promise)
-    const below = chain.gate(quick.promise)
+    const top = chain.gate(slow.promise, "s1")
+    const below = chain.gate(quick.promise, "s2")
 
     let shown = ""
     below.then((v) => (shown = v))
@@ -35,25 +35,25 @@ describe("createRevealChain", () => {
   it("hands back the source itself when nothing above is waiting", () => {
     const chain = createRevealChain()
     const first = Promise.resolve(1)
-    expect(chain.gate(first)).toBe(first)
+    expect(chain.gate(first, "s3")).toBe(first)
   })
 
   it("returns the same promise for the same source on a re-render", () => {
     const chain = createRevealChain()
     const a = deferred<number>()
     const b = deferred<number>()
-    chain.gate(a.promise)
-    const once = chain.gate(b.promise)
-    expect(chain.gate(b.promise)).toBe(once)
+    chain.gate(a.promise, "s4")
+    const once = chain.gate(b.promise, "s5")
+    expect(chain.gate(b.promise, "s5")).toBe(once)
   })
 
   it("does not let a failed section above hold the rest back", async () => {
     const chain = createRevealChain()
     const bad = deferred<number>()
     const good = deferred<number>()
-    const top = chain.gate(bad.promise)
+    const top = chain.gate(bad.promise, "s7")
     top.catch(() => {})
-    const below = chain.gate(good.promise)
+    const below = chain.gate(good.promise, "s8")
     bad.reject(new Error("down"))
     good.resolve(2)
     await expect(below).resolves.toBe(2)
@@ -64,9 +64,29 @@ describe("createRevealChain", () => {
     const done = Promise.resolve(1) as Promise<number> & { status?: string; value?: number }
     done.status = "fulfilled"
     done.value = 1
-    chain.gate(done)
+    chain.gate(done, "s9")
     const next = Promise.resolve(2)
-    expect(chain.gate(next)).toBe(next)
+    expect(chain.gate(next, "s10")).toBe(next)
+  })
+})
+
+describe("one source feeding two sections", () => {
+  it("still holds the lower one for a slow section between them", async () => {
+    const chain = createRevealChain()
+    const plain = Promise.resolve("plain") as Promise<string> & { status?: string; value?: string }
+    plain.status = "fulfilled"
+    plain.value = "plain"
+    const channels = deferred<string>()
+    chain.gate(plain, "hero")
+    chain.gate(channels.promise, "channels")
+    const needs = chain.gate(plain, "needs")
+    expect(needs).not.toBe(plain)
+    let shown = false
+    needs.then(() => (shown = true))
+    await tick()
+    expect(shown).toBe(false)
+    channels.resolve("c")
+    await expect(needs).resolves.toBe("plain")
   })
 })
 
@@ -83,8 +103,8 @@ describe("flight-style thenables", () => {
       },
     } as unknown as Promise<string>
     const chain = createRevealChain()
-    expect(() => chain.gate(flight)).not.toThrow()
-    const below = chain.gate(Promise.resolve("next"))
+    expect(() => chain.gate(flight, "s11")).not.toThrow()
+    const below = chain.gate(Promise.resolve("next"), "s12")
     settled = "top"
     callbacks.forEach((cb) => cb("top"))
     await expect(below).resolves.toBe("next")

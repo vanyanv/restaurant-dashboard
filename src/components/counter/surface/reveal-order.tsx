@@ -29,25 +29,28 @@ import { createContext, useState, type ReactNode } from "react"
 type Tracked<T> = Promise<T> & { status?: "pending" | "fulfilled" | "rejected"; value?: T }
 
 export type RevealChain = {
-  gate<T>(source: Promise<T>): Promise<T>
+  gate<T>(source: Promise<T>, occurrence: string): Promise<T>
 }
 
 /**
  * One chain per page (or per tab panel). Holds no React state: the gated
- * promise for a source is memoised in a WeakMap, so a re-render, a Strict
- * Mode double render or a tab switch hands `use()` the same promise again and
- * nothing re-suspends.
+ * promise is memoised per Section OCCURRENCE (its `useId()`), so a re-render,
+ * a Strict Mode double render or a tab switch hands `use()` the same promise
+ * again and nothing re-suspends. Keyed by occurrence, not by source, because
+ * one promise can feed two sections with another between them (Overview's
+ * hero and Needs you both read `plain`, with channels in between); the lower
+ * one must still wait for the middle one.
  */
 export function createRevealChain(): RevealChain {
-  const gated = new WeakMap<object, Promise<unknown>>()
+  const gated = new Map<string, { source: object; out: Promise<unknown> }>()
   // The last section handed out, settled either way. `null` or settled means
   // nothing above is still waiting.
   let tail: Tracked<unknown> | null = null
 
   return {
-    gate<T>(source: Promise<T>): Promise<T> {
-      const hit = gated.get(source)
-      if (hit) return hit as Promise<T>
+    gate<T>(source: Promise<T>, occurrence: string): Promise<T> {
+      const hit = gated.get(occurrence)
+      if (hit && hit.source === source) return hit.out as Promise<T>
 
       const above = tail
       const aboveDone = above === null || above.status === "fulfilled"
@@ -55,7 +58,7 @@ export function createRevealChain(): RevealChain {
       // reading the status the flight client already tagged on it and an
       // arrived figure renders without a suspend.
       const out: Promise<T> = aboveDone ? source : (above as Promise<unknown>).then(() => source)
-      gated.set(source, out)
+      gated.set(occurrence, { source, out })
 
       const s = out as Tracked<T>
       if (s.status === "fulfilled" || s.status === "rejected") {

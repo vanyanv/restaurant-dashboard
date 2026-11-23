@@ -165,8 +165,9 @@ function PendingSection<T>({
   // section never paints under a slow one and then gets pushed down. See
   // `reveal-order.tsx`. No chain (a section outside both shells) reads the
   // source directly, as before.
+  const occurrence = useId()
   const chain = use(RevealOrderContext)
-  return <SectionBody<T> {...chrome} data={use(chain ? chain.gate(source) : source)} />
+  return <SectionBody<T> {...chrome} data={use(chain ? chain.gate(source, occurrence) : source)} />
 }
 
 type SectionProps<T> = {

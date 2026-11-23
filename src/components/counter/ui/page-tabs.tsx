@@ -3,7 +3,7 @@
 import { useRef, useState, type ReactNode } from "react"
 import { usePathname, useSearchParams } from "next/navigation"
 import { Tabs } from "./tabs"
-import { RevealOrder } from "@/components/counter/surface/reveal-order"
+import { RevealOrder, revealKeyFor } from "@/components/counter/surface/reveal-order"
 
 export type PageTab = {
   key: string
@@ -36,6 +36,9 @@ export function PageTabs({
 }) {
   const search = useSearchParams()
   const pathname = usePathname()
+  // Same view key as the shells: a new store or range starts each panel's
+  // chain afresh, a tab switch (excluded from the key) does not.
+  const viewKey = revealKeyFor(pathname, search)
   const asked = search.get(param)
   const fallback = tabs.find((t) => t.key === initial)?.key ?? tabs[0]?.key ?? ""
   const active = tabs.find((t) => t.key === asked)?.key ?? fallback
@@ -88,7 +91,7 @@ export function PageTabs({
         >
           {/* Each panel reveals top to bottom on its own, so a closed tab
               never holds back the open one (see reveal-order.tsx). */}
-          <RevealOrder>{t.content}</RevealOrder>
+          <RevealOrder resetKey={viewKey}>{t.content}</RevealOrder>
         </div>
       ))}
     </div>
