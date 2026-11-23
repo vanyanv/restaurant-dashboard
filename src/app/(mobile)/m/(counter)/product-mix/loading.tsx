@@ -3,16 +3,11 @@
 import { Section } from "@/components/counter"
 import { loading } from "@/lib/counter/section-data"
 
-/** Product mix's phone loading boundary — the two entries the client renders. */
+/** Mirrors the real page's first tab: same sections, order and bare flags. */
 export default function MobileProductMixLoading() {
   return (
-    <>
-      <Section bare title="The figures" data={loading()}>
-        {() => null}
-      </Section>
-      <Section title="Units by item" data={loading()}>
-        {() => null}
-      </Section>
-    </>
+    <Section bare title="Product mix in a sentence" data={loading()}>
+      {() => null}
+    </Section>
   )
 }

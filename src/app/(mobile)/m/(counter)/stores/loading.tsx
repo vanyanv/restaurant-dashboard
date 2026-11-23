@@ -3,7 +3,7 @@
 import { Section } from "@/components/counter"
 import { loading } from "@/lib/counter/section-data"
 
-/** The phone's stores loading boundary — the two entries the client renders. */
+/** Mirrors the top of the real page: same sections, order and bare flags. */
 export default function MobileStoresLoading() {
   return (
     <>
@@ -11,6 +11,9 @@ export default function MobileStoresLoading() {
         {() => null}
       </Section>
       <Section title="Locations" data={loading()}>
+        {() => null}
+      </Section>
+      <Section bare title="Open a store file" data={loading()}>
         {() => null}
       </Section>
     </>

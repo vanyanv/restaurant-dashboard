@@ -1,6 +1,7 @@
 "use client"
 
 import dynamic from "next/dynamic"
+import { LoadingBlock } from "@/components/counter/surface/loading-block"
 import type { ShownPresentation } from "@/lib/chat/return"
 
 /**
@@ -24,7 +25,9 @@ import type { ShownPresentation } from "@/lib/chat/return"
  */
 const AskShowBody = dynamic(
   () => import("./ask-show-body").then((m) => m.AskShowBody),
-  { loading: () => null },
+  // Holds a skeleton while the chunk downloads so the answer does not jump
+  // when the chart lands (`no-empty-dynamic-loading`).
+  { loading: () => <LoadingBlock /> },
 )
 
 export function AskShow({ shown }: { shown: readonly ShownPresentation[] }) {

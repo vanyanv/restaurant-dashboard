@@ -1,5 +1,6 @@
 "use client"
 
+import { RevealOrder, revealKeyFor } from "@/components/counter/surface/reveal-order"
 import { useCallback, useMemo, useState, useTransition, type ReactNode } from "react"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { Rail, type RailUser } from "./rail"
@@ -130,6 +131,7 @@ export function AppShell({
   const pathname = usePathname()
   useKeepPlace(false)
   const searchParams = useSearchParams()
+  const revealKey = revealKeyFor(pathname, searchParams)
   const router = useRouter()
   // The ONE transition for this surface — see `counter-transition.tsx`. Both
   // this shell's own `push` (the store switcher) and every page's `push`
@@ -297,7 +299,9 @@ export function AppShell({
              */}
             <main id="ct-main" className="screen" aria-labelledby={PAGE_TITLE_ID}>
               <CounterTransitionContext.Provider value={transition}>
-                <PageChromeContext.Provider value={setPage}>{children}</PageChromeContext.Provider>
+                <PageChromeContext.Provider value={setPage}>
+                  <RevealOrder resetKey={revealKey}>{children}</RevealOrder>
+                </PageChromeContext.Provider>
               </CounterTransitionContext.Provider>
             </main>
           </div>

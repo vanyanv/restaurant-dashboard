@@ -1,15 +1,15 @@
 "use client"
 
 import { Section } from "@/components/counter"
-import { loading } from "@/lib/counter/section-data"
 import { ShopHead } from "@/app/dashboard/(counter)/shop/shop-ui"
+import { loading } from "@/lib/counter/section-data"
 
-/** Shop's loading boundary: the tabs stay put while the panel loads. */
+/** Mirrors the top of the real page: same sections, order and bare flags. */
 export default function Loading() {
   return (
     <>
       <ShopHead sub="Loading" />
-      <Section title="Products" data={loading()}>
+      <Section bare title="Products" data={loading()}>
         {() => null}
       </Section>
     </>

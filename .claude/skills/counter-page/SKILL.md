@@ -42,6 +42,10 @@ building. The owner reviews mocks before builds.
 - Lists capped with "Show all N".
 - No model/table names, build notes or mono paragraphs in the UI.
 - Shared blocks, `useAct`/`useLeaving` for presses (DESIGN.md Motion).
+- Loading (DESIGN.md "Page layout" rule 9): every streamed block is a
+  `Section`, never your own `<Suspense>`; `next/dynamic` loading is
+  `<LoadingBlock />`, never `null`; the route's `loading.tsx` lists the first
+  tab's sections in the same order; a late line keeps its height empty.
 
 ## Check
 
@@ -49,6 +53,8 @@ building. The owner reviews mocks before builds.
   Never add a file to `KNOWN` in `scripts/page-layout-lint.ts` to get
   green. If you fixed a listed page, delete its line (the check tells you
   with `page-layout-known-stale`).
+- `no-raw-suspense` and `no-empty-dynamic-loading` fail the build if a
+  page can pop in or jump while it loads.
 - The linter can't see lists without a cap, a page that hides its length in
   child components, or a phone tab that is 5 screens long. Check those by
   eye at 390 px and 1440 px.

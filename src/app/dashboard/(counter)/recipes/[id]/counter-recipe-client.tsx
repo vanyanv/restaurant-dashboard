@@ -2,6 +2,9 @@
 
 import { useCallback, useEffect, useMemo, useState, useTransition } from "react"
 import dynamic from "next/dynamic"
+// A block still downloading holds a skeleton's height, not nothing, so the
+// page under it does not jump when it lands (2026-11-23).
+import { LoadingBlock } from "@/components/counter/surface/loading-block"
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
 import {
@@ -53,7 +56,7 @@ import { useLeaveGuard } from "@/components/counter/keep/use-leave-guard"
  * (`/m/recipes/[id]/edit`) inside the phone bundle budget.
  */
 const Chart = dynamic(() => import("@/components/counter/surface/chart").then((m) => m.Chart), {
-  loading: () => null,
+  loading: () => <LoadingBlock />,
 })
 
 /**
@@ -62,7 +65,7 @@ const Chart = dynamic(() => import("@/components/counter/surface/chart").then((m
  * the phone bundle budget. Server rendering stays on.
  */
 const RecipePlainView = dynamic(() => import("./recipe-plain-ui").then((m) => m.RecipePlainView), {
-  loading: () => null,
+  loading: () => <LoadingBlock />,
 })
 
 /**

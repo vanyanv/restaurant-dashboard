@@ -403,11 +403,14 @@ describe("Counter Orders — the phone", () => {
   it("keeps the list when the STRIP fails, and says nothing it cannot count", () => {
     // The sub is the strip's own two figures. With the strip down there is no
     // count and no net — and a sub reading " orders · " is worse than none.
+    // The line itself stays, empty, so the page under it does not jump up
+    // (2026-11-23): no figures, no words, same height.
     const { container } = renderPhone("", {
       strip: failed("the totals are down", "retryOrders"),
     })
     expect(container.querySelector(".mtitle")?.textContent).toBe("Orders")
-    expect(container.querySelector(".msub")).toBeNull()
+    expect(container.querySelector(".msub")?.textContent?.trim()).toBe("")
+    expect(container.querySelector(".msub")?.textContent).not.toContain("orders")
     expect(rows(container)).toHaveLength(6)
   })
 })

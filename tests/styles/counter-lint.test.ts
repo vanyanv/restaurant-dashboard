@@ -40,6 +40,18 @@ describe("counter lint", () => {
     expect(rules).toContain("no-direct-motion-import")
   })
 
+  it("catches a page opening its own Suspense boundary", () => {
+    expect(violations).toContainEqual(
+      expect.objectContaining({ rule: "no-raw-suspense", line: 11 }),
+    )
+  })
+
+  it("catches a dynamic block that draws nothing while it loads", () => {
+    expect(violations).toContainEqual(
+      expect.objectContaining({ rule: "no-empty-dynamic-loading", line: 7 }),
+    )
+  })
+
   it("reports nothing for the compliant fixture", () => {
     expect(violations.filter((v) => v.file.endsWith("good.tsx"))).toEqual([])
   })

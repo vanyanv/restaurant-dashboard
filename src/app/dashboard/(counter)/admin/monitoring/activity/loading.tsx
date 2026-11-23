@@ -3,10 +3,13 @@
 import { Section } from "@/components/counter"
 import { loading } from "@/lib/counter/section-data"
 
-/** Activity's loading boundary. */
+/** Mirrors the real page's first tab: same sections, order and bare flags. */
 export default function Loading() {
   return (
     <>
+      <Section bare title="Verdict" data={loading()}>
+        {() => null}
+      </Section>
       <Section bare title="The figures" data={loading()}>
         {() => null}
       </Section>
@@ -14,12 +17,6 @@ export default function Loading() {
         {() => null}
       </Section>
       <Section title="Recent errors" data={loading()}>
-        {() => null}
-      </Section>
-      <Section title="Stores reporting" data={loading()} pad={false}>
-        {() => null}
-      </Section>
-      <Section title="What happened" data={loading()}>
         {() => null}
       </Section>
     </>

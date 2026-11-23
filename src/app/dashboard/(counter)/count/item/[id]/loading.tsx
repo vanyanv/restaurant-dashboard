@@ -1,15 +1,15 @@
 "use client"
 
 import { Section } from "@/components/counter"
-import { loading } from "@/lib/counter/section-data"
 import { CountHead } from "../../count-ui"
+import { loading } from "@/lib/counter/section-data"
 
-/** The one-item page's loading boundary: the tabs stay put while the item loads. */
+/** Mirrors the top of the real page: same sections, order and bare flags. */
 export default function Loading() {
   return (
     <>
       <CountHead sub="Loading" />
-      <Section title="Item" data={loading()}>
+      <Section bare title="Item" data={loading()}>
         {() => null}
       </Section>
     </>

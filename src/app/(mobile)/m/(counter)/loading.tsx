@@ -19,28 +19,17 @@ import { loading } from "@/lib/counter/section-data"
 export default function MobileOverviewLoading() {
   return (
     <>
-      <Section bare title="Net sales" data={loading()}>
+      {/* The Summary tab, in its order: the plain block (sentence, sales,
+          statuses, store cards), where sales came from, then Needs you. This
+          listed the pre-2026-11-18 page (net sales, verdict, strip...), so
+          the skeleton a reader saw was replaced by a different shape. */}
+      <Section bare title="How the period went" data={loading()}>
         {() => null}
       </Section>
-      <Section bare title="The verdict" data={loading()}>
+      <Section bare title="Where sales came from" data={loading()}>
         {() => null}
       </Section>
-      <Section bare title="The figures" data={loading()}>
-        {() => null}
-      </Section>
-      <Section bare title="Still moving" data={loading()}>
-        {() => null}
-      </Section>
-      <Section title="Net sales" data={loading()}>
-        {() => null}
-      </Section>
-      <Section title="Sales per labor hour" data={loading()}>
-        {() => null}
-      </Section>
-      <Section title="Per store" data={loading()}>
-        {() => null}
-      </Section>
-      <Section title="What needs you" data={loading()}>
+      <Section bare title="Needs you" data={loading()}>
         {() => null}
       </Section>
     </>

@@ -2,7 +2,7 @@
 
 import { PageTabs } from "@/components/counter/ui"
 import { OrdersPlainView } from "@/app/dashboard/(counter)/orders/orders-plain-ui"
-import { Suspense, use } from "react"
+import { Suspense, use, type ReactNode } from "react"
 import { MList, MStrip, Section, useCounterTransition, type MListRow } from "@/components/counter"
 import { dataOf, isPendingSource, type SectionSource } from "@/lib/counter/section-data"
 import type { OrdersRow, OrdersSections, StripCell } from "@/lib/counter/adapters/orders"
@@ -99,7 +99,9 @@ export function CounterPhoneOrdersClient({
           up, along with the store. */}
       <div>
         <h2 className="mtitle">Orders</h2>
-        <Suspense fallback={null}>
+        {/* The sub-line's height is held while its figures load and when
+            there are none, so the page under it never jumps (2026-11-23). */}
+        <Suspense fallback={<OrdersSubLine />}>
           <OrdersSub strip={sections.strip} />
         </Suspense>
       </div>
@@ -169,12 +171,13 @@ function OrdersSub({ strip }: { strip: SectionSource<StripCell[]> }) {
   const figures = dataOf(isPendingSource(strip) ? use(strip) : strip)
   const orders = cellValue(figures, "Orders")
   const netSales = cellValue(figures, "Net sales")
-  if (!orders || !netSales) return null
-  return (
-    <p className="msub">
-      {orders} orders &middot; {netSales}
-    </p>
-  )
+  if (!orders || !netSales) return <OrdersSubLine />
+  return <OrdersSubLine>{orders} orders &middot; {netSales}</OrdersSubLine>
+}
+
+/** One `.msub` line; empty, it still holds the line's height. */
+function OrdersSubLine({ children }: { children?: ReactNode }) {
+  return <p className="msub">{children ?? <>&nbsp;</>}</p>
 }
 
 /**

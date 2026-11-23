@@ -1,15 +1,15 @@
 "use client"
 
 import { Section } from "@/components/counter"
-import { loading } from "@/lib/counter/section-data"
 import { CountHead } from "../count-ui"
+import { loading } from "@/lib/counter/section-data"
 
-/** Count & waste's loading boundary: the tabs stay put while the panel loads. */
+/** Mirrors the top of the real page: same sections, order and bare flags. */
 export default function Loading() {
   return (
     <>
       <CountHead sub="Loading" />
-      <Section title="Report" data={loading()}>
+      <Section bare title="Report" data={loading()}>
         {() => null}
       </Section>
     </>

@@ -8,6 +8,8 @@
  * exists to prevent. `tests/components/counter/boundary.test.ts` enforces it.
  */
 export { Section } from "./surface/section"
+export { RevealOrder, RevealOrderContext, createRevealChain, revealKeyFor, type RevealChain } from "./surface/reveal-order"
+export { LoadingBlock } from "./surface/loading-block"
 export { Strip } from "./surface/strip"
 export { Chart, type ChartProps, type ChartSeries } from "./surface/chart"
 export { Figure, type FigureProps, type DeltaTone } from "./surface/figure"
