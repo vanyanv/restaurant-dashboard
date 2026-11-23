@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useEffectEvent, useRef, useState } from "react"
 import { deletePhoto, loadPhotos, savePhoto } from "./offline-photos"
+import { nextPollDelay } from "./poll-delay"
 import type { ActiveCheck, CrewItem, CrewMarkState, CrewView } from "@/lib/checks/crew"
 import { shortStoreName } from "@/lib/checks/names"
 import { ModalDialog } from "@/components/counter/modal-dialog"
@@ -38,14 +39,6 @@ type Receipt = {
 }
 type Screen = "home" | "pin" | "list" | "done"
 
-/**
- * Refresh while someone is working the list: others' ticks show within
- * seconds. Every refresh is a server call billed as Vercel active CPU, so
- * since 2026-11-23 it is 15 s (was 6 s); your own ticks still show at once.
- */
-const POLL_MS = 15_000
-/** Refresh on the store and PIN screens, which only need to see a check open, lock or get sent (was 20 s). */
-const IDLE_POLL_MS = 60_000
 
 const T = {
   en: {
@@ -317,21 +310,30 @@ export function CrewCheckClient({ code, initial }: { code: string; initial: Crew
     },
     [code],
   )
+  // The server's clock, as of the first load: window times are server times.
+  const clockOffset = useRef(0)
+  useEffect(() => {
+    clockOffset.current = initial.serverNow - Date.now()
+  }, [initial.serverNow])
   // The version of the view on screen when the timer fires, not when it started.
   const poll = useEffectEvent(() => void refresh(view.version))
-  const pollMs = screen === "list" ? POLL_MS : IDLE_POLL_MS
+  // Waits are worked out from the view on screen each time: see poll-delay.ts.
+  const delay = useEffectEvent(() => nextPollDelay(view, screen === "list", Date.now() + clockOffset.current))
   useEffect(() => {
     if (screen === "done") return
     // Nothing while the phone is locked or the tab is in the background; one
     // check straight away when it comes back, then the timer again.
     let id: number | undefined
     const stop = () => {
-      if (id !== undefined) window.clearInterval(id)
+      if (id !== undefined) window.clearTimeout(id)
       id = undefined
     }
     const start = () => {
       stop()
-      id = window.setInterval(() => poll(), pollMs)
+      id = window.setTimeout(() => {
+        poll()
+        start()
+      }, delay())
     }
     const onVisibility = () => {
       if (document.hidden) return stop()
@@ -344,7 +346,8 @@ export function CrewCheckClient({ code, initial }: { code: string; initial: Crew
       stop()
       document.removeEventListener("visibilitychange", onVisibility)
     }
-  }, [screen, pollMs])
+    // A new view (a window opened, a list changed) re-plans the wait from it.
+  }, [screen, view.version])
 
   const signOut = useCallback(() => {
     setWho(null)
