@@ -77,14 +77,24 @@ jobs:
               # dropped, the next run of each covers its window. The half-hour
               # check queued just above stays.
               pending=" checks-cron.yml"
-              # Same hours as otter-hourly-sync.yml's cron (trading hours, LA).
-              if [ "$h" -ge 17 ] || [ "$h" -le 10 ]; then
+              # Every other hour while trading (LA 10 AM-2 AM = UTC 18-10).
+              # Was every hour; halved 2026-11-23 to cut Vercel active CPU.
+              if { [ "$h" -ge 18 ] || [ "$h" -le 10 ]; } && [ $((h % 2)) -eq 0 ]; then
                 pending="$pending otter-hourly-sync.yml"
               fi
-              # Same cadence as otter-sync.yml and otter-orders-sync.yml.
-              if [ $((h % 4)) -eq 0 ]; then
-                pending="$pending otter-sync.yml otter-orders-sync.yml"
-              fi
+              # Four times a day (UTC 18, 22, 2, 10 = 10 AM, 2 PM, 6 PM, 2 AM
+              # in LA, the last one after close). Was every 4 hours around the
+              # clock; cut 2026-11-23 to save Vercel active CPU. The hourly
+              # sync above keeps today's figures moving between these.
+              case "$h" in 18|22|2|10)
+                pending="$pending otter-sync.yml otter-orders-sync.yml" ;;
+              esac
+              # The 3-day food-cost recompute, after the 2 PM and 2 AM syncs
+              # land (dispatched the next hour). Was its own every-4-hours
+              # schedule, which GitHub fired at random times.
+              case "$h" in 23|11)
+                pending="$pending cogs-sweep.yml" ;;
+              esac
               # Same hours as invoices-sync.yml's cron: 6 AM, noon, 6 PM (PST).
               if [ "$h" -eq 14 ] || [ "$h" -eq 20 ] || [ "$h" -eq 2 ]; then
                 pending="$pending invoices-sync.yml"

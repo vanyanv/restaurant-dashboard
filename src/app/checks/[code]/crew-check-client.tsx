@@ -38,10 +38,14 @@ type Receipt = {
 }
 type Screen = "home" | "pin" | "list" | "done"
 
-/** Refresh while someone is working the list: others' ticks show within seconds. */
-const POLL_MS = 6_000
-/** Refresh on the store and PIN screens, which only need to see a check open, lock or get sent. */
-const IDLE_POLL_MS = 20_000
+/**
+ * Refresh while someone is working the list: others' ticks show within
+ * seconds. Every refresh is a server call billed as Vercel active CPU, so
+ * since 2026-11-23 it is 15 s (was 6 s); your own ticks still show at once.
+ */
+const POLL_MS = 15_000
+/** Refresh on the store and PIN screens, which only need to see a check open, lock or get sent (was 20 s). */
+const IDLE_POLL_MS = 60_000
 
 const T = {
   en: {
