@@ -115,6 +115,7 @@ export interface WeekPlanInput {
 
 /** One store's forecast for one menu item on one day. */
 export interface PlanMenuInput {
+  storeId: string
   /** YYYY-MM-DD */
   key: string
   item: string
@@ -341,7 +342,13 @@ const clockOrder = (hour: number) => (hour <= 1 ? hour + 24 : hour)
  * already sold is not forecast any more, so this week reads "today to
  * Sunday". Quantities add across stores (same item name, same thing sold).
  */
-export function buildSellers(menu: PlanMenuInput[] | null | undefined, keys: string[], asOf: string): PlanSellers {
+export function buildSellers(
+  menu: PlanMenuInput[] | null | undefined,
+  keys: string[],
+  asOf: string,
+  /** The stores in scope. One with no forecast rows is named, never summed as zero. */
+  stores: ReadonlyArray<{ id: string; name: string }> = [],
+): PlanSellers {
   const ahead = keys.filter((k) => k >= asOf)
   const span = ahead.length === 0 ? "" : ahead.length === keys.length ? "Monday to Sunday" : `${weekdayOf(ahead[0])} to Sunday`
   if (menu === null || menu === undefined) {
@@ -350,17 +357,24 @@ export function buildSellers(menu: PlanMenuInput[] | null | undefined, keys: str
   if (ahead.length === 0) return { span, rows: [], note: "This week is sold" }
   const inWeek = new Set(ahead)
   const byItem = new Map<string, number>()
+  const covered = new Set<string>()
   for (const r of menu) {
     if (!inWeek.has(r.key) || !(r.qty > 0)) continue
+    covered.add(r.storeId)
     byItem.set(r.item, (byItem.get(r.item) ?? 0) + r.qty)
   }
+  const left = stores.filter((s) => !covered.has(s.id)).map((s) => s.name)
+  const leftNote =
+    left.length === 0 || covered.size === 0
+      ? null
+      : `${left.join(" and ")} ${left.length === 1 ? "has" : "have"} no menu forecast for these days, so ${left.length === 1 ? "it is" : "they are"} not counted`
   const ranked = [...byItem.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).slice(0, SELLERS_SHOWN)
   if (ranked.length === 0) return { span, rows: [], note: "No menu forecast for these days yet" }
   const top = ranked[0][1]
   return {
     span,
-    rows: ranked.map(([item, qty]) => ({ item, qty, qtyText: count(Math.round(qty)), share: qty / top })),
-    note: null,
+    rows: ranked.map(([item, qty]) => ({ item, qty, qtyText: qty < 0.5 ? "under 1" : count(Math.round(qty)), share: qty / top })),
+    note: leftNote,
   }
 }
 
@@ -882,7 +896,7 @@ export function buildWeekPlan(input: WeekPlanInput): WeekPlan {
     const defaultDay =
       key === "this" ? (keys.includes(input.asOf) ? input.asOf : (keys[keys.length - 1] ?? null)) : (keys[0] ?? null)
 
-    return { key, name, label, sentence, sales, hours: hoursFig, todo, days, todos, stores, sellers: buildSellers(input.menu, keys, input.asOf), defaultDay }
+    return { key, name, label, sentence, sales, hours: hoursFig, todo, days, todos, stores, sellers: buildSellers(input.menu, keys, input.asOf, scoped), defaultDay }
   }
 
   const shelf = shelfRows.map((r) => {

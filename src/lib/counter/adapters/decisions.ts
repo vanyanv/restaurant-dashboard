@@ -1866,7 +1866,7 @@ export async function loadPlanMenu(
       const held = best.get(k)
       if (held === undefined || r.generatedAt.getTime() >= held.generatedAt.getTime()) best.set(k, r)
     }
-    return [...best.values()].map((r) => ({ key: ymdUTC(r.forecastDate), item: r.otterItemSkuId, qty: r.predictedQty }))
+    return [...best.values()].map((r) => ({ storeId: r.storeId, key: ymdUTC(r.forecastDate), item: r.otterItemSkuId, qty: r.predictedQty }))
   } catch {
     return null
   }

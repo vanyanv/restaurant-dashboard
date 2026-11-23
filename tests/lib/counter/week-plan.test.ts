@@ -280,12 +280,12 @@ describe("week plan", () => {
 
 describe("what will sell", () => {
   const menu = [
-    { key: "2026-11-18", item: "Fries", qty: 999 }, // sold day, left out
-    { key: "2026-11-19", item: "Fries", qty: 40 },
-    { key: "2026-11-20", item: "Fries", qty: 60 },
-    { key: "2026-11-20", item: "Shake", qty: 30 },
-    { key: "2026-11-21", item: "Slider", qty: 120 },
-    { key: "2026-11-23", item: "Shake", qty: 500 },
+    { storeId: "hw", key: "2026-11-18", item: "Fries", qty: 999 }, // sold day, left out
+    { storeId: "hw", key: "2026-11-19", item: "Fries", qty: 40 },
+    { storeId: "vn", key: "2026-11-20", item: "Fries", qty: 60 },
+    { storeId: "hw", key: "2026-11-20", item: "Shake", qty: 30 },
+    { storeId: "hw", key: "2026-11-21", item: "Slider", qty: 120 },
+    { storeId: "hw", key: "2026-11-23", item: "Shake", qty: 500 },
   ]
   it("ranks this week's items from today to Sunday, and next week Monday to Sunday", () => {
     const sellers = buildSellers(menu, THIS, ASOF)
@@ -295,6 +295,13 @@ describe("what will sell", () => {
     const next = buildSellers(menu, NEXT, ASOF)
     expect(next.span).toBe("Monday to Sunday")
     expect(next.rows).toEqual([{ item: "Shake", qty: 500, qtyText: "500", share: 1 }])
+  })
+  it("names a store in scope with no menu forecast instead of summing it as zero", () => {
+    const stores = [{ id: "hw", name: "Hollywood" }, { id: "vn", name: "Van Nuys" }, { id: "gl", name: "Glendale" }]
+    expect(buildSellers(menu, NEXT, ASOF, stores).note).toBe(
+      "Van Nuys and Glendale have no menu forecast for these days, so they are not counted",
+    )
+    expect(buildSellers(menu, THIS, ASOF, stores.slice(0, 2)).note).toBeNull()
   })
   it("says a failed read failed and a missing forecast is missing", () => {
     expect(buildSellers(null, NEXT, ASOF).note).toBe("The menu forecast did not load")
