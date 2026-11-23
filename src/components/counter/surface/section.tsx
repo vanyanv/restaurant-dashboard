@@ -13,6 +13,7 @@ import { Empty } from "@/components/counter/state/empty"
 import { StaleBanner } from "@/components/counter/state/stale"
 import { Owed } from "@/components/counter/state/owed"
 import { AskGlyph } from "./ask-glyph"
+import { RevealOrderContext } from "./reveal-order"
 
 /**
  * The keystone. Prototype note 22 in one component, on the prototype's own DOM.
@@ -160,7 +161,12 @@ function PendingSection<T>({
   source,
   ...chrome
 }: Omit<SectionProps<T>, "data"> & { source: Promise<SectionData<T>> }) {
-  return <SectionBody<T> {...chrome} data={use(source)} />
+  // Waits for its own figure AND every streamed section above it, so a quick
+  // section never paints under a slow one and then gets pushed down. See
+  // `reveal-order.tsx`. No chain (a section outside both shells) reads the
+  // source directly, as before.
+  const chain = use(RevealOrderContext)
+  return <SectionBody<T> {...chrome} data={use(chain ? chain.gate(source) : source)} />
 }
 
 type SectionProps<T> = {

@@ -3,6 +3,7 @@
 import { useRef, useState, type ReactNode } from "react"
 import { usePathname, useSearchParams } from "next/navigation"
 import { Tabs } from "./tabs"
+import { RevealOrder } from "@/components/counter/surface/reveal-order"
 
 export type PageTab = {
   key: string
@@ -85,7 +86,9 @@ export function PageTabs({
           data-dir={t.key === active ? dir : undefined}
           hidden={t.key !== active}
         >
-          {t.content}
+          {/* Each panel reveals top to bottom on its own, so a closed tab
+              never holds back the open one (see reveal-order.tsx). */}
+          <RevealOrder>{t.content}</RevealOrder>
         </div>
       ))}
     </div>

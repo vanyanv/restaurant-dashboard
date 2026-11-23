@@ -1,5 +1,6 @@
 "use client"
 
+import { RevealOrder, revealKeyFor } from "@/components/counter/surface/reveal-order"
 import { Suspense, use, useCallback, useEffect, useMemo, useState, useTransition, type ReactNode } from "react"
 import Link from "next/link"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
@@ -69,6 +70,7 @@ export function PhoneShell({
   const pathname = usePathname()
   useKeepPlace(true)
   const searchParams = useSearchParams()
+  const revealKey = revealKeyFor(pathname, searchParams)
   const router = useRouter()
   // The ONE transition for this surface — see `counter-transition.tsx`. Every
   // control on the phone (the date sheet AND the store picker) writes through
@@ -209,7 +211,9 @@ export function PhoneShell({
           for `.mscroll > *`. */}
       <div className="mscroll">
         <CounterTransitionContext.Provider value={transition}>
-          <PageChromeContext.Provider value={setPage}>{children}</PageChromeContext.Provider>
+          <PageChromeContext.Provider value={setPage}>
+            <RevealOrder resetKey={revealKey}>{children}</RevealOrder>
+          </PageChromeContext.Provider>
         </CounterTransitionContext.Provider>
       </div>
     </div>
