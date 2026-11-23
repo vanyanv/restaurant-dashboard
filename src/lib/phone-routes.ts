@@ -69,6 +69,7 @@ export const DESKTOP_TO_MOBILE: Record<string, string> = {
   "/dashboard/menu-profit": "/m/menu-profit",
   "/dashboard/product-mix": "/m/product-mix",
   "/dashboard/recipes": "/m/recipes",
+  "/dashboard/screens": "/m/screens",
   // Monitoring, and a deferral its own pages have since answered. The note
   // below used to say this was "a question for whoever owns it" — whether the
   // phone view is the intended destination for an admin route. Five phone

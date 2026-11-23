@@ -279,6 +279,11 @@ model Store {
   checkPauses      CheckPause[]
   checkMarks       CheckMark[]
 
+  // Screens (2026-11-23): TVs in the store and what they play.
+  screens         Screen[]
+  screenPlaylists ScreenPlaylist[]
+  screenMedia     ScreenMedia[]
+
   @@index([ownerId])
   @@index([accountId])
   @@index([latitude, longitude])
@@ -2624,4 +2629,97 @@ model CheckPause {
   store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
 
   @@index([storeId, pausedAt])
+}
+
+// --- Screens: TV menu boards (2026-11-23) ------------------------------------
+//
+// A TV running the Screens app (/tv) pairs once with a 6-digit code and then
+// plays one playlist. Each store is its own workspace: a screen belongs to a
+// store, and a playlist or an image belongs to one store or to every store
+// (storeId null). `accountId` is the tenancy boundary on every row the owner
+// reads; a TV reaches only its own screen through its device token.
+
+/// A TV that has been paired. `tokenHash` is sha256 of the random token the
+/// TV made for itself and keeps; the token itself is never stored.
+model Screen {
+  id         String    @id @default(cuid())
+  accountId  String
+  storeId    String
+  name       String
+  playlistId String?
+  tokenHash  String    @unique
+  /// What the TV said it is, e.g. "Tizen 7.0 · 3840x2160". Shown, never trusted.
+  device     String?
+  pairedAt   DateTime  @default(now())
+  lastSeenAt DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  store    Store           @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  playlist ScreenPlaylist? @relation(fields: [playlistId], references: [id], onDelete: SetNull)
+
+  @@index([accountId, storeId])
+  @@index([playlistId])
+}
+
+/// A code a TV is showing and waiting on. Gone once claimed or expired.
+model ScreenPairing {
+  code      String   @id
+  tokenHash String   @unique
+  device    String?
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([expiresAt])
+}
+
+model ScreenPlaylist {
+  id        String   @id @default(cuid())
+  accountId String
+  /// Null: every store can use it.
+  storeId   String?
+  name      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  store   Store?        @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  slides  ScreenSlide[]
+  screens Screen[]
+
+  @@index([accountId, storeId])
+}
+
+model ScreenSlide {
+  id         String @id @default(cuid())
+  playlistId String
+  mediaId    String
+  position   Int
+  /// How long it stays up when the playlist has more than one slide.
+  seconds    Int    @default(10)
+
+  playlist ScreenPlaylist @relation(fields: [playlistId], references: [id], onDelete: Cascade)
+  media    ScreenMedia    @relation(fields: [mediaId], references: [id], onDelete: Cascade)
+
+  @@index([playlistId, position])
+  @@index([mediaId])
+}
+
+model ScreenMedia {
+  id          String   @id @default(cuid())
+  accountId   String
+  /// Null: every store can use it.
+  storeId     String?
+  name        String
+  /// R2 key, `screens/<account>/<uuid>.<ext>`. The uuid makes the TV's image URL unguessable.
+  blobKey     String   @unique
+  contentType String
+  width       Int?
+  height      Int?
+  bytes       Int
+  createdAt   DateTime @default(now())
+
+  store  Store?        @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  slides ScreenSlide[]
+
+  @@index([accountId, storeId])
 }
