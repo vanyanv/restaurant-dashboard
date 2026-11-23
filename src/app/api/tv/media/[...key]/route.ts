@@ -8,6 +8,8 @@ import { logger } from "@/lib/logger"
  * a TV cannot send one with an <img>. The key holds a random uuid, it must
  * match a row, and an image is never changed in place (a new upload is a new
  * key), so the TV and the browser keep it for a year; shared caches don't.
+ * Any origin may read it, so the Samsung app (which runs from its own package)
+ * can save it for offline play.
  */
 export async function GET(_request: NextRequest, { params }: { params: Promise<{ key: string[] }> }) {
   const { key } = await params
@@ -39,6 +41,7 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
       // private: a deleted image must not live on in a shared cache.
       "Cache-Control": "private, max-age=31536000, immutable",
       "X-Content-Type-Options": "nosniff",
+      "Access-Control-Allow-Origin": "*",
     },
   })
 }

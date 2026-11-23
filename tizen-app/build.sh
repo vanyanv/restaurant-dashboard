@@ -5,6 +5,7 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 profile="${1:?usage: ./build.sh <certificate profile name>}"
+npx --prefix .. tsx ../scripts/tizen-player.ts
 rm -rf .build && mkdir .build
 cp config.xml index.html icon.png .build/
 tizen package -t wgt -s "$profile" -- .build
@@ -14,7 +15,7 @@ size=$(wc -c < Screens.wgt | tr -d ' ')
 cat > sssp_config.xml <<XML
 <?xml version="1.0" encoding="UTF-8"?>
 <widget>
-  <ver>1.0.0</ver>
+  <ver>2.0.0</ver>
   <size>${size}</size>
   <widgetname>Screens</widgetname>
 </widget>

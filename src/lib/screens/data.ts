@@ -38,7 +38,9 @@ export async function pairingFor(tokenHash: string, device: string | null): Prom
     const expiresAt = new Date(now.getTime() + PAIR_CODE_TTL_MS)
     try {
       await prisma.$transaction([
-        prisma.screenPairing.deleteMany({ where: { OR: [{ tokenHash }, { expiresAt: { lt: now } }] } }),
+        // Only dead codes: a live one for this TV (made by a poll that ran at the
+        // same moment) must survive, so the create below hits P2002 and shows it.
+        prisma.screenPairing.deleteMany({ where: { expiresAt: { lte: now } } }),
         prisma.screenPairing.create({ data: { code, tokenHash, device, expiresAt } }),
       ])
       return { code, expiresAt }

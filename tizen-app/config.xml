@@ -1,21 +1,23 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
   The Screens app for Samsung TVs and Samsung business displays (Tizen).
-  It is a thin shell: it opens https://dashboard.chrisneddys.com/tv, where the
-  player lives, so the player updates without reinstalling anything.
+  The player is inside the app (index.html, written by scripts/tizen-player.ts);
+  it talks to https://dashboard.chrisneddys.com for its pairing code, playlist
+  and images.
   See README.md for how to install it.
 -->
 <widget xmlns="http://www.w3.org/ns/widgets" xmlns:tizen="http://tizen.org/ns/widgets"
-        id="https://dashboard.chrisneddys.com/tv" version="1.0.0" viewmodes="maximized">
+        id="https://dashboard.chrisneddys.com/tv" version="2.0.0" viewmodes="maximized">
   <tizen:application id="CnEScreens.Screens" package="CnEScreens" required_version="4.0"/>
   <tizen:profile name="tv-samsung"/>
   <content src="index.html"/>
   <icon src="icon.png"/>
   <name>Screens</name>
   <access origin="https://dashboard.chrisneddys.com" subdomains="false"/>
-  <tizen:allow-navigation>dashboard.chrisneddys.com</tizen:allow-navigation>
   <tizen:privilege name="http://tizen.org/privilege/internet"/>
   <tizen:privilege name="http://tizen.org/privilege/tv.inputdevice"/>
+  <!-- Samsung TV API: used to turn the screen saver off while slides play. -->
+  <tizen:privilege name="http://developer.samsung.com/privilege/productinfo"/>
   <tizen:setting screen-orientation="landscape" context-menu="disable" background-support="disable"
                  encryption="disable" install-location="auto" hwkey-event="enable"/>
 </widget>
