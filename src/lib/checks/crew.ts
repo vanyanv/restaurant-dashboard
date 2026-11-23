@@ -102,7 +102,8 @@ export type CrewView = {
   day: string
   rows: CrewDayRow[]
   active: ActiveCheck | null
-  next: { label: { en: string; es: string }; opensLabel: string } | null
+  /** `opensAt` is epoch ms: the crew page checks back right then instead of polling. */
+  next: { label: { en: string; es: string }; opensLabel: string; opensAt: number } | null
   closedToday: boolean
   /** Checks are paused for training: the page is practice. See `ActiveCheck.practice`. */
   practice: boolean
@@ -235,13 +236,21 @@ export async function loadCrewView(store: CrewStore, now: Date, opts: CrewViewOp
   }
 
   const upcoming = rows.find((r) => r.status === "upcoming")
+  const upcomingTemplate = upcoming ? templates.find((x) => x.kind === upcoming.kind) : undefined
 
   return {
     store: { name: store.name },
     day: today,
     rows,
     active: activeCheck,
-    next: upcoming ? { label: upcoming.label, opensLabel: upcoming.opensLabel } : null,
+    next:
+      upcoming && upcomingTemplate
+        ? {
+            label: upcoming.label,
+            opensLabel: upcoming.opensLabel,
+            opensAt: windowBounds(today, upcomingTemplate).opens.getTime(),
+          }
+        : null,
     closedToday: (grid?.preOpen ?? false) || (grid?.closedDays.includes(today) ?? false),
     practice,
     practiceSince: grid?.pausedSince ? grid.pausedSince.getTime() : null,
