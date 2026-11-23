@@ -1,0 +1,91 @@
+import { createHash, randomInt } from "node:crypto"
+
+/**
+ * Screens: the rules a TV and the dashboard share, kept free of the database
+ * so they can be tested on their own.
+ *
+ * A TV makes its own random token the first time the app opens and keeps it.
+ * The server only ever stores `hashToken(token)`, on the pairing row while
+ * the TV shows its code and on the Screen once the owner types the code in.
+ * Every call the TV makes after that sends the token, which is how it finds
+ * its own screen and nothing else.
+ */
+
+export * from "./limits"
+import { SLIDE_SECONDS_DEFAULT, SLIDE_SECONDS_MAX, SLIDE_SECONDS_MIN, ONLINE_WINDOW_MS } from "./limits"
+
+/** Six digits, never starting with 0 so it reads the same said aloud. */
+export function newPairCode(): string {
+  return String(randomInt(100_000, 1_000_000))
+}
+
+/** Digits only, so "482 913" and "482-913" both work. */
+export function normalizeCode(input: string): string {
+  return input.replace(/\D/g, "")
+}
+
+export function isPairCode(code: string): boolean {
+  return /^[1-9]\d{5}$/.test(code)
+}
+
+/** A TV token: 32 to 128 URL-safe characters. Anything else is refused before it is hashed. */
+export function isDeviceToken(token: unknown): token is string {
+  return typeof token === "string" && /^[A-Za-z0-9_-]{32,128}$/.test(token)
+}
+
+export function hashToken(token: string): string {
+  return createHash("sha256").update(token).digest("hex")
+}
+
+/** `Authorization: Bearer <token>`, or null. */
+export function tokenFromHeader(header: string | null): string | null {
+  if (!header) return null
+  const m = /^Bearer\s+(\S+)$/i.exec(header.trim())
+  return m && isDeviceToken(m[1]) ? m[1] : null
+}
+
+export type ScreenState = "on" | "off" | "waiting"
+
+/** On, off, or never heard from since pairing. */
+export function screenState(lastSeenAt: Date | null, now: Date = new Date()): ScreenState {
+  if (!lastSeenAt) return "waiting"
+  return now.getTime() - lastSeenAt.getTime() <= ONLINE_WINDOW_MS ? "on" : "off"
+}
+
+export function clampSeconds(n: number): number {
+  if (!Number.isFinite(n)) return SLIDE_SECONDS_DEFAULT
+  return Math.min(SLIDE_SECONDS_MAX, Math.max(SLIDE_SECONDS_MIN, Math.round(n)))
+}
+
+/** Where the TV and the dashboard load an image from. The key's uuid is what makes it unguessable. */
+export function screenMediaUrl(blobKey: string): string {
+  return `/api/tv/media/${blobKey.split("/").map(encodeURIComponent).join("/")}`
+}
+
+/** Accepted uploads. Videos come later; a 4K JPEG is what the boards are today. */
+export const SCREEN_MEDIA_TYPES = {
+  "image/jpeg": "jpg",
+  "image/png": "png",
+  "image/webp": "webp",
+} as const
+
+export type ScreenMediaType = keyof typeof SCREEN_MEDIA_TYPES
+
+export function isScreenMediaType(t: string): t is ScreenMediaType {
+  return Object.hasOwn(SCREEN_MEDIA_TYPES, t)
+}
+
+/**
+ * Vercel refuses a request body over 4.5 MB, so the browser shrinks anything
+ * bigger to a 3840 px JPEG before it sends it. This is the server's own limit.
+ */
+export const SCREEN_MEDIA_MAX_BYTES = 4 * 1024 * 1024
+
+/** One fingerprint for what a TV is showing, so it only reloads when something changed. */
+export function playlistVersion(parts: { id: string; seconds: number; key: string }[], name: string): string {
+  return createHash("sha1")
+    .update(name)
+    .update(parts.map((p) => `${p.id}:${p.seconds}:${p.key}`).join("|"))
+    .digest("hex")
+    .slice(0, 16)
+}

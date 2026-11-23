@@ -215,6 +215,7 @@ const MORE_GROUPS: ReadonlyArray<{ title: string; rows: MListRow[] }> = [
     rows: [
       r("checks", "/dashboard/checks", "Store checks", "Today, history, checklists, crew & PINs"),
       r("shop", "/dashboard/shop", "Shop", "Merch orders, products, pickup"),
+      r("screens", "/dashboard/screens", "Screens", "TV menu boards, playlists, images"),
     ],
   },
   {

@@ -316,3 +316,28 @@ export async function getCheckPhotoStream(pathname: string): Promise<ProductPhot
   }
   return getProductPhotoStream(pathname)
 }
+
+// --- Screens images (TV menu boards) ------------------------------------------
+
+/**
+ * A screen image: `screens/<account>/<uuid>.<ext>`. Stored like a check photo,
+ * so development without R2 writes to the same local folder.
+ */
+export async function putScreenMedia(
+  accountId: string,
+  bytes: Buffer,
+  contentType: ProductPhotoContentType,
+): Promise<ProductPhotoUpload> {
+  const safeId = accountId.replace(/[^A-Za-z0-9._-]/g, "_")
+  const key = `screens/${safeId}/${randomUUID()}.${PRODUCT_PHOTO_CONTENT_TYPES[contentType]}`
+  await putCheckObject(key, bytes, contentType)
+  return { pathname: key, size: bytes.byteLength, uploadedAt: new Date() }
+}
+
+export async function getScreenMediaStream(pathname: string): Promise<ProductPhotoFetch> {
+  return getCheckPhotoStream(pathname)
+}
+
+export async function deleteScreenMedia(pathname: string): Promise<void> {
+  return deleteCheckPhoto(pathname)
+}

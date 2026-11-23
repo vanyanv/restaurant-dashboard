@@ -1,0 +1,32 @@
+/* The TV player. Dark, edge to edge, no cursor, nothing to tap. */
+html:has(.tv), html:has(.tv) body { margin: 0; height: 100%; background: #000; overflow: hidden; cursor: none; }
+.tv { position: fixed; inset: 0; background: #000; color: oklch(93% 0.010 60); font-family: var(--font-ct-sans); container-type: size; }
+
+.tv-slide { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; opacity: 0; transition: opacity 700ms ease; }
+.tv-slide[data-on="true"] { opacity: 1; }
+@media (prefers-reduced-motion: reduce) { .tv-slide { transition: none; } }
+
+.tv-pair { position: absolute; inset: 0; display: grid; grid-template-columns: 1.1fr 1fr; align-items: center; gap: 5cqw; padding: 7cqh 7cqw; background: oklch(14% 0.009 55); }
+.tv-brand { font-family: var(--font-ct-display); font-weight: 700; font-size: 3.2cqh; color: oklch(70% 0.011 55); margin: 0; }
+.tv-pair h1 { font-family: var(--font-ct-display); font-weight: 700; font-size: 9cqh; line-height: 1.05; margin: 2cqh 0 3cqh; }
+.tv-pair p { font-size: 3.4cqh; line-height: 1.45; color: oklch(70% 0.011 55); margin: 0 0 2cqh; max-width: 34ch; }
+.tv-pair p b { color: oklch(93% 0.010 60); }
+.tv-code { display: grid; justify-items: center; gap: 3cqh; }
+.tv-digits { display: flex; gap: 1.6cqh; }
+.tv-digits span {
+  font-family: var(--font-ct-mono); font-size: 12cqh; font-weight: 500; width: 11cqh; height: 16cqh;
+  display: grid; place-items: center; border-radius: 1.6cqh; background: oklch(22% 0.008 55); box-shadow: inset 0 0 0 1px oklch(32% 0.01 55);
+}
+.tv-digits span:nth-child(3) { margin-right: 3cqh; }
+.tv-code small { font-family: var(--font-ct-mono); font-size: 2.6cqh; color: oklch(70% 0.011 55); }
+
+.tv-msg { position: absolute; inset: 0; display: grid; place-content: center; text-align: center; gap: 2cqh; background: oklch(14% 0.009 55); }
+.tv-msg h1 { font-family: var(--font-ct-display); font-size: 7cqh; margin: 0; }
+.tv-msg p { font-size: 3.2cqh; color: oklch(70% 0.011 55); margin: 0; }
+
+.tv-badge {
+  position: absolute; right: 2cqh; bottom: 2cqh; display: flex; align-items: center; gap: 1cqh;
+  background: oklch(14% 0.009 55 / .82); color: oklch(93% 0.010 60); font-family: var(--font-ct-mono); font-size: 2.2cqh;
+  padding: 1cqh 1.8cqh; border-radius: 1cqh;
+}
+.tv-badge::before { content: ""; width: 1.4cqh; height: 1.4cqh; border-radius: 50%; background: oklch(80% 0.155 78); }

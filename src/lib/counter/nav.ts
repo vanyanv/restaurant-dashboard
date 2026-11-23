@@ -37,7 +37,7 @@ import { phoneHref } from "@/lib/phone-routes"
 export type NavId =
   | "overview" | "ask" | "needs-you" | "checks" | "shop" | "decisions" | "orders"
   | "analytics" | "pnl" | "cogs" | "labor"
-  | "menu" | "recipes"
+  | "menu" | "recipes" | "screens"
   | "invoices" | "count" | "ingredients" | "vendors"
   | "stores" | "settings" | "monitoring" | "people"
 
@@ -112,6 +112,7 @@ export const NAV_GROUPS: readonly NavGroup[] = [
     items: [
       { id: "menu", label: "Menu", href: "/dashboard/menu", icon: "BookOpen" },
       { id: "recipes", label: "Recipes", href: "/dashboard/recipes", icon: "ChefHat" },
+      { id: "screens", label: "Screens", href: "/dashboard/screens", icon: "Tv" },
     ],
   },
   {

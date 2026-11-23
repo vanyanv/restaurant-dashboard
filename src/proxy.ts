@@ -157,7 +157,10 @@ export default withAuth(
       // Store checks: crew sign in with a PIN on the store's own page, not a
       // dashboard account. The logo is printed on that page and the poster.
       path.startsWith("/checks/") ||
-      path === "/checks-logo.png"
+      path === "/checks-logo.png" ||
+      // Screens: the TV player. A TV has no sign-in; it pairs with a code
+      // and then reaches only its own screen (see /api/tv/content).
+      path === "/tv"
     ) {
       return NextResponse.next()
     }

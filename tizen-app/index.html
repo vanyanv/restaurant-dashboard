@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Screens</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #000; color: #eee; font-family: sans-serif; cursor: none; }
+  main { height: 100%; display: grid; place-content: center; text-align: center; gap: 2vh; }
+  h1 { font-size: 7vh; margin: 0; }
+  p { font-size: 3vh; color: #aaa; margin: 0; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Screens</h1>
+  <p id="say">Connecting…</p>
+</main>
+<script>
+  // Opens the player. If the internet isn't up yet (a TV that just turned
+  // on), say so and try again every 10 seconds.
+  var PLAYER = "https://dashboard.chrisneddys.com/tv";
+  var say = document.getElementById("say");
+  function go() {
+    var x = new XMLHttpRequest();
+    x.open("HEAD", PLAYER, true);
+    x.timeout = 8000;
+    x.onload = function () { window.location.replace(PLAYER); };
+    x.onerror = x.ontimeout = function () {
+      say.textContent = "Waiting for the internet. Trying again in 10 seconds.";
+      setTimeout(go, 10000);
+    };
+    x.send();
+  }
+  go();
+</script>
+</body>
+</html>
