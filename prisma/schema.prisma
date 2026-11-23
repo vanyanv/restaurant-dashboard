@@ -2652,13 +2652,37 @@ model Screen {
   device     String?
   pairedAt   DateTime  @default(now())
   lastSeenAt DateTime?
+  /// Until then the TV shows its own name and store ("Which TV is which?").
+  identifyUntil DateTime?
   createdAt  DateTime  @default(now())
   updatedAt  DateTime  @updatedAt
 
   store    Store           @relation(fields: [storeId], references: [id], onDelete: Cascade)
   playlist ScreenPlaylist? @relation(fields: [playlistId], references: [id], onDelete: SetNull)
+  times    ScreenTime[]
 
   @@index([accountId, storeId])
+  @@index([playlistId])
+}
+
+/// Different pictures for part of the week on one screen (lunch, late night).
+/// Outside every window the screen shows its own playlist.
+model ScreenTime {
+  id          String   @id @default(cuid())
+  screenId    String
+  name        String
+  /// Bit 0 is Sunday. The day the window starts on.
+  days        Int
+  /// Minutes after midnight, store time. An end at or before the start runs past midnight.
+  startMinute Int
+  endMinute   Int
+  playlistId  String
+  createdAt   DateTime @default(now())
+
+  screen   Screen         @relation(fields: [screenId], references: [id], onDelete: Cascade)
+  playlist ScreenPlaylist @relation(fields: [playlistId], references: [id], onDelete: Cascade)
+
+  @@index([screenId])
   @@index([playlistId])
 }
 
@@ -2685,6 +2709,7 @@ model ScreenPlaylist {
   store   Store?        @relation(fields: [storeId], references: [id], onDelete: Cascade)
   slides  ScreenSlide[]
   screens Screen[]
+  times   ScreenTime[]
 
   @@index([accountId, storeId])
 }

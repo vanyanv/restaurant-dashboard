@@ -5,7 +5,7 @@
  * so the tests assert the elements, not only the text inside them.
  */
 import { describe, it, expect, vi } from "vitest"
-import { render, screen } from "@testing-library/react"
+import { act, render, screen } from "@testing-library/react"
 import { Section } from "@/components/counter/surface/section"
 import { ready, stale, loading, failed, empty, notComputed } from "@/lib/counter/section-data"
 
@@ -199,5 +199,27 @@ describe("Section", () => {
       "data-askabout",
       'why is food cost over "plan"?',
     )
+  })
+})
+
+describe("Section keep", () => {
+  const settle = async (ui: () => void) => act(async () => ui())
+
+  it("keeps the same body across a new promise, so an open panel survives a save", async () => {
+    const at = (n: number, keep: boolean) => (
+      <Section bare keep={keep} title="Screens" data={Promise.resolve(ready({ n }))}>
+        {(d) => <input aria-label="field" data-n={d.n} />}
+      </Section>
+    )
+    for (const keep of [true, false]) {
+      let r!: ReturnType<typeof render>
+      await settle(() => { r = render(at(1, keep)) })
+      const first = r.getByLabelText("field")
+      await settle(() => r.rerender(at(2, keep)))
+      const second = r.getByLabelText("field")
+      expect(second.dataset.n).toBe("2")
+      expect(second === first).toBe(keep)
+      r.unmount()
+    }
   })
 })

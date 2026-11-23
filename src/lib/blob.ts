@@ -341,3 +341,23 @@ export async function getScreenMediaStream(pathname: string): Promise<ProductPho
 export async function deleteScreenMedia(pathname: string): Promise<void> {
   return deleteCheckPhoto(pathname)
 }
+
+/** The small copy the dashboard shows, beside the full picture (no new column, like a check photo's). */
+export async function putScreenThumb(pathname: string, jpegBytes: Buffer): Promise<void> {
+  await putCheckObject(checkThumbKey(pathname), jpegBytes, "image/jpeg")
+}
+
+/** One part of a picture too big for one request. Joined and deleted by the upload that finishes it. */
+export function screenPartKey(accountId: string, uploadId: string, part: number): string {
+  return `screens-parts/${accountId.replace(/[^A-Za-z0-9._-]/g, "_")}/${uploadId}/${part}`
+}
+
+export async function putScreenPart(key: string, bytes: Buffer): Promise<void> {
+  await putCheckObject(key, bytes, "application/octet-stream")
+}
+
+export async function readScreenPart(key: string): Promise<Buffer | null> {
+  const res = await getCheckPhotoStream(key)
+  if (res.statusCode !== 200) return null
+  return Buffer.from(await new Response(res.stream).arrayBuffer())
+}

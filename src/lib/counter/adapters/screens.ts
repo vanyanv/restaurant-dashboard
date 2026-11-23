@@ -1,14 +1,14 @@
 import { getAccountStores } from "@/lib/account-stores"
 import { prisma } from "@/lib/prisma"
-import { screenMediaUrl, screenState, type ScreenState } from "@/lib/screens/core"
+import { activeTime, screenMediaUrl, screenState, storeOffsetMinutes, type ScreenState } from "@/lib/screens/core"
 import { classify, guardSection, lazy, type StreamedSections } from "./types"
 import type { SectionData } from "@/lib/counter/section-data"
 
 /**
- * Screens: every TV, playlist and image in the account, in one load.
+ * Screens: every TV and picture in the account, in one load.
  *
  * The page switches between stores (each store is a workspace) without a
- * new query: the four reads below run once, in parallel, for the whole
+ * new query: the reads below run once, in parallel, for the whole
  * account, and the client narrows them to the store picked (query rules:
  * load once for the widest span, per-store views filter it).
  *
@@ -16,131 +16,116 @@ import type { SectionData } from "@/lib/counter/section-data"
  * the session. Store-owned rows are also on the account through `accountId`.
  */
 
+export type SlideRow = { mediaId: string; seconds: number }
+
+/** Different pictures for part of the week. `days` has bit 0 for Sunday; minutes are store time. */
+export type TimeRow = { id: string; name: string; days: number; start: number; end: number; slides: SlideRow[] }
+
 export type ScreenRow = {
   id: string
   name: string
   storeId: string
-  playlistId: string | null
-  playlistName: string | null
-  slides: number
-  thumb: string | null
+  /** What it shows outside every window. */
+  slides: SlideRow[]
+  times: TimeRow[]
+  /** The window on now, worked out on the server so the page draws the same everywhere. */
+  onNow: string | null
   device: string | null
   state: ScreenState
   lastSeenAt: string | null
-  pairedAt: string
-}
-
-export type PlaylistRow = {
-  id: string
-  name: string
-  /** Null: every store can use it. */
-  storeId: string | null
-  slides: { mediaId: string; seconds: number }[]
-  screens: number
 }
 
 export type MediaRow = {
   id: string
   name: string
+  /** Null: every store can use it (every picture uploaded since the board; older ones may be one store's). */
   storeId: string | null
+  /** The small copy. The TV loads the full picture. */
   url: string
   width: number | null
   height: number | null
-  bytes: number
-  createdAt: string
-  playlists: number
+  /** How many screens have it. */
+  screens: number
 }
 
 export type ScreensData = {
   stores: { id: string; name: string }[]
   screens: ScreenRow[]
-  playlists: PlaylistRow[]
   media: MediaRow[]
-  checkedAt: string
 }
 
 export type ScreensSections = { screens: SectionData<ScreensData> }
 
+const SLIDES = { orderBy: { position: "asc" }, select: { mediaId: true, seconds: true } } as const
+
 export async function loadScreens(accountId: string): Promise<ScreensData> {
-  const [stores, screens, playlists, media] = await Promise.all([
+  const [stores, screens, media] = await Promise.all([
     getAccountStores(accountId),
     prisma.screen.findMany({
       where: { accountId },
-      orderBy: [{ name: "asc" }],
+      orderBy: [{ pairedAt: "asc" }],
       select: {
         id: true,
         name: true,
         storeId: true,
-        playlistId: true,
         device: true,
         lastSeenAt: true,
-        pairedAt: true,
-      },
-    }),
-    prisma.screenPlaylist.findMany({
-      where: { accountId },
-      orderBy: { name: "asc" },
-      select: {
-        id: true,
-        name: true,
-        storeId: true,
-        slides: { orderBy: { position: "asc" }, select: { mediaId: true, seconds: true } },
+        playlist: { select: { slides: SLIDES } },
+        times: {
+          orderBy: { createdAt: "asc" },
+          select: { id: true, name: true, days: true, startMinute: true, endMinute: true, playlist: { select: { slides: SLIDES } } },
+        },
       },
     }),
     prisma.screenMedia.findMany({
       where: { accountId },
       orderBy: { createdAt: "desc" },
-      select: { id: true, name: true, storeId: true, blobKey: true, width: true, height: true, bytes: true, createdAt: true },
+      select: { id: true, name: true, storeId: true, blobKey: true, width: true, height: true },
     }),
   ])
 
   const now = new Date()
-  const mediaById = new Map(media.map((m) => [m.id, m]))
-  const playlistById = new Map(playlists.map((p) => [p.id, p]))
-  const screensOn = new Map<string, number>()
-  for (const s of screens) if (s.playlistId) screensOn.set(s.playlistId, (screensOn.get(s.playlistId) ?? 0) + 1)
-  const inPlaylists = new Map<string, number>()
-  for (const p of playlists) for (const id of new Set(p.slides.map((x) => x.mediaId))) inPlaylists.set(id, (inPlaylists.get(id) ?? 0) + 1)
+  const local = new Date(now.getTime() + storeOffsetMinutes(now) * 60_000)
+  const day = local.getUTCDay()
+  const minute = local.getUTCHours() * 60 + local.getUTCMinutes()
+  const used = new Map<string, number>()
+  const rows = screens.map((s): ScreenRow => {
+    const slides = s.playlist?.slides ?? []
+    const times = s.times.map((t) => ({ id: t.id, name: t.name, days: t.days, start: t.startMinute, end: t.endMinute, slides: t.playlist.slides }))
+    for (const m of new Set([slides, ...times.map((t) => t.slides)].flat().map((x) => x.mediaId))) used.set(m, (used.get(m) ?? 0) + 1)
+    return {
+      id: s.id,
+      name: s.name,
+      storeId: s.storeId,
+      slides,
+      times,
+      onNow: activeTime(times.filter((t) => t.slides.length > 0), day, minute)?.id ?? null,
+      device: s.device,
+      state: screenState(s.lastSeenAt, now),
+      lastSeenAt: s.lastSeenAt?.toISOString() ?? null,
+    }
+  })
 
   return {
     stores: stores.map((s) => ({ id: s.id, name: s.name })),
-    screens: screens.map((s) => {
-      const p = s.playlistId ? playlistById.get(s.playlistId) : undefined
-      const first = p?.slides[0] ? mediaById.get(p.slides[0].mediaId) : undefined
-      return {
-        id: s.id,
-        name: s.name,
-        storeId: s.storeId,
-        playlistId: p?.id ?? null,
-        playlistName: p?.name ?? null,
-        slides: p?.slides.length ?? 0,
-        thumb: first ? screenMediaUrl(first.blobKey) : null,
-        device: s.device,
-        state: screenState(s.lastSeenAt, now),
-        lastSeenAt: s.lastSeenAt?.toISOString() ?? null,
-        pairedAt: s.pairedAt.toISOString(),
-      }
-    }),
-    playlists: playlists.map((p) => ({
-      id: p.id,
-      name: p.name,
-      storeId: p.storeId,
-      slides: p.slides,
-      screens: screensOn.get(p.id) ?? 0,
-    })),
+    // Left, Middle, Right, the way they hang; anything else after, oldest first.
+    screens: rows.sort((a, b) => spotOrder(a.name) - spotOrder(b.name)),
     media: media.map((m) => ({
       id: m.id,
       name: m.name,
       storeId: m.storeId,
-      url: screenMediaUrl(m.blobKey),
+      url: `${screenMediaUrl(m.blobKey)}?small=1`,
       width: m.width,
       height: m.height,
-      bytes: m.bytes,
-      createdAt: m.createdAt.toISOString(),
-      playlists: inPlaylists.get(m.id) ?? 0,
+      screens: used.get(m.id) ?? 0,
     })),
-    checkedAt: now.toISOString(),
   }
+}
+
+/** Pure, for the test: where a screen's name puts it in its row. */
+export function spotOrder(name: string): number {
+  const i = ["left", "middle", "right"].findIndex((s) => name.toLowerCase().includes(s))
+  return i === -1 ? 3 : i
 }
 
 export function getScreensSectionPromises(opts: { accountId: string }): StreamedSections<ScreensSections> {

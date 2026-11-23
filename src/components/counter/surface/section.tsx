@@ -138,12 +138,18 @@ function keyFor(source: object): number {
   return key
 }
 
-export function Section<T>({ data, ...chrome }: SectionProps<T>) {
+export function Section<T>({ data, keep = false, ...chrome }: SectionProps<T> & { keep?: boolean }) {
   if (isPendingSource(data)) {
     return (
       // The fallback is the section's own loading state, so the head, the
       // title and the box are already on screen and only the body swaps.
-      <Suspense key={keyFor(data)} fallback={<SectionBody<T> {...chrome} data={loading<T>()} />}>
+      //
+      // `keep`: one boundary for the section's life, for a page that is worked
+      // in rather than read (Screens). Every save there brings a new promise; a
+      // new key would throw the body away, closing the open TV and flashing the
+      // board to its skeleton. The body stays, with what it had, until the new
+      // answer lands.
+      <Suspense key={keep ? "keep" : keyFor(data)} fallback={<SectionBody<T> {...chrome} data={loading<T>()} />}>
         <PendingSection<T> {...chrome} source={data} />
       </Suspense>
     )

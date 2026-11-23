@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
-import { getScreenMediaStream } from "@/lib/blob"
+import { checkThumbKey, getScreenMediaStream } from "@/lib/blob"
 import { logger } from "@/lib/logger"
 
 /**
@@ -11,7 +11,7 @@ import { logger } from "@/lib/logger"
  * Any origin may read it, so the Samsung app (which runs from its own package)
  * can save it for offline play.
  */
-export async function GET(_request: NextRequest, { params }: { params: Promise<{ key: string[] }> }) {
+export async function GET(request: NextRequest, { params }: { params: Promise<{ key: string[] }> }) {
   const { key } = await params
   let blobKey: string
   try {
@@ -28,7 +28,9 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
 
   let result
   try {
-    result = await getScreenMediaStream(blobKey)
+    // `?small=1`: the dashboard's copy. Pictures uploaded before small copies existed have none.
+    result = request.nextUrl.searchParams.has("small") ? await getScreenMediaStream(checkThumbKey(blobKey)) : null
+    if (result?.statusCode !== 200) result = await getScreenMediaStream(blobKey)
   } catch (err) {
     logger.error("[screens] media fetch failed", { blobKey, message: err instanceof Error ? err.message : String(err) })
     return NextResponse.json({ error: "Image storage is temporarily unavailable" }, { status: 503 })
