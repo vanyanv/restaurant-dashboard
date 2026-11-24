@@ -82,7 +82,7 @@ function StoreChevron() {
 }
 
 /** The prototype's own `style="margin-left:auto"` on the date chip's wrapper. */
-const DATE_SLOT: CSSProperties = { marginLeft: "auto" }
+const DATE_SLOT: CSSProperties = { marginLeft: "auto", flexShrink: 0 }
 
 export interface MTopProps {
   stores: SwitchableStore[]
@@ -126,7 +126,9 @@ export function MTop({ stores, selectedStoreId, onSelectStore, date, back, store
         aria-controls={sheetId}
         onClick={() => setOpen(true)}
       >
-        {selected ? selected.name : storesPending && selectedStoreId !== null ? "Store" : "All stores"}
+        <span className="st__nm">
+          {selected ? selected.name : storesPending && selectedStoreId !== null ? "Store" : "All stores"}
+        </span>
         <StoreChevron />
       </button>
 

@@ -34,7 +34,10 @@ export function RowLine({
   sub,
   photo,
   children,
+  className,
 }: {
+  /** Extra class on the row, for a row that restacks on a narrow screen. */
+  className?: string
   /** The inline `grid-template-columns`, e.g. `"minmax(0,1fr) 96px auto auto"`. */
   columns: string
   name: string
@@ -46,7 +49,7 @@ export function RowLine({
   children: ReactNode
 }) {
   return (
-    <div className="rowline" style={{ gridTemplateColumns: columns } as CSSProperties}>
+    <div className={className ? `rowline ${className}` : "rowline"} style={{ gridTemplateColumns: columns } as CSSProperties}>
       <span className={photo ? "nm nm--photo" : "nm"}>
         {photo}
         {name}
