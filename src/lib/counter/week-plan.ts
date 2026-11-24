@@ -359,8 +359,10 @@ export function buildSellers(
   const byItem = new Map<string, number>()
   const covered = new Set<string>()
   for (const r of menu) {
-    if (!inWeek.has(r.key) || !(r.qty > 0)) continue
+    if (!inWeek.has(r.key)) continue
+    // A store whose forecast is all zeros still has a forecast.
     covered.add(r.storeId)
+    if (!(r.qty > 0)) continue
     byItem.set(r.item, (byItem.get(r.item) ?? 0) + r.qty)
   }
   const left = stores.filter((s) => !covered.has(s.id)).map((s) => s.name)

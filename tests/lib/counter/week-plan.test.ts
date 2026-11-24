@@ -302,6 +302,8 @@ describe("what will sell", () => {
       "Van Nuys and Glendale have no menu forecast for these days, so they are not counted",
     )
     expect(buildSellers(menu, THIS, ASOF, stores.slice(0, 2)).note).toBeNull()
+    const zeros = [...menu, { storeId: "vn", key: "2026-11-24", item: "Fries", qty: 0 }]
+    expect(buildSellers(zeros, NEXT, ASOF, stores.slice(0, 2)).note).toBeNull()
   })
   it("says a failed read failed and a missing forecast is missing", () => {
     expect(buildSellers(null, NEXT, ASOF).note).toBe("The menu forecast did not load")

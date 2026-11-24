@@ -2004,9 +2004,13 @@ export function getDecisionsSectionPromises(
   // that answers `{ ok: false }` is a FAILED section and not an empty one:
   // `empty` would tell the reader there is nothing to decide this week, and
   // there may be plenty — we could not load it.
+  // One business day for every read on the page: the view, the run-out and
+  // the menu forecast. Read separately, a load that crossed midnight could
+  // see a different week from the others.
+  const businessDayKey = ymdUTC(businessQueryDate(new Date()))
   const viewP: Promise<SectionData<DecisionsView>> = lazy(() => classify(
     async () => {
-      const res = await getDecisionsView({ storeId: input.storeId })
+      const res = await getDecisionsView({ storeId: input.storeId, asOf: businessDayKey })
       if (!res.ok) throw new Error(loadError(res.error))
       return res.data
     },
@@ -2092,7 +2096,7 @@ export function getDecisionsSectionPromises(
   // worked out here and the run-out reads run alongside the view's ~50
   // queries instead of after them. The section still waits for the view, so a
   // failed view fails this section exactly as before.
-  const runOutAsOf = parseDayKey(ymdUTC(businessQueryDate(new Date()))) ?? new Date()
+  const runOutAsOf = parseDayKey(businessDayKey) ?? new Date()
   const runOutLoad = lazy(() => (async () => {
     const resolved = await resolveStoreContext(input.storeId, input.accountId)
     if (!resolved.ok) return null
