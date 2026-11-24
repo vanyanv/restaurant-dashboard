@@ -1,18 +1,19 @@
+import { SCREEN_MEDIA_MAX_BYTES, SCREEN_PART_BYTES } from "@/lib/screens/limits"
+
 /**
- * Get an image ready to send: anything bigger than a 4K screen, or heavier
- * than the upload limit, is redrawn as a 3840 px-wide JPEG in the browser.
- * Vercel refuses a request over 4.5 MB, and a TV gains nothing from more
- * pixels than it has.
+ * Send a picture to Screens at full quality. A picture that fits a 4K screen
+ * is sent exactly as it is, in parts when it is big (Vercel refuses a body
+ * over 4.5 MB). Only one with more pixels than 4K, or over the size limit, is
+ * redrawn, at the highest quality that fits.
  */
 
 const MAX_W = 3840
 const MAX_H = 2160
-/** Keep well under Vercel's 4.5 MB body limit (the form adds a little). */
-const MAX_BYTES = 3.8 * 1024 * 1024
+const THUMB_W = 640
 
-export type Prepared = { blob: Blob; filename: string; width: number; height: number }
+type Source = ImageBitmap | HTMLImageElement
 
-async function decode(file: File): Promise<ImageBitmap | HTMLImageElement> {
+async function decode(file: Blob): Promise<Source> {
   if (typeof createImageBitmap === "function") {
     try {
       return await createImageBitmap(file)
@@ -31,33 +32,91 @@ async function decode(file: File): Promise<ImageBitmap | HTMLImageElement> {
   }
 }
 
-function sizeOf(src: ImageBitmap | HTMLImageElement) {
+function sizeOf(src: Source) {
   return "naturalWidth" in src ? { w: src.naturalWidth, h: src.naturalHeight } : { w: src.width, h: src.height }
 }
 
+/** Redrawn in halves, so fine text stays smooth instead of skipping pixels. */
+function redraw(src: Source, w: number, h: number): HTMLCanvasElement {
+  let from: CanvasImageSource = src
+  let { w: cw, h: ch } = sizeOf(src)
+  for (;;) {
+    const nw = Math.max(w, Math.ceil(cw / 2))
+    const nh = Math.max(h, Math.ceil(ch / 2))
+    const c = document.createElement("canvas")
+    c.width = nw
+    c.height = nh
+    const ctx = c.getContext("2d")
+    if (!ctx) throw new Error("this browser can't resize pictures")
+    ctx.imageSmoothingEnabled = true
+    ctx.imageSmoothingQuality = "high"
+    ctx.drawImage(from, 0, 0, nw, nh)
+    if (nw === w && nh === h) return c
+    from = c
+    cw = nw
+    ch = nh
+  }
+}
+
+function toBlob(c: HTMLCanvasElement, type: string, quality?: number): Promise<Blob | null> {
+  return new Promise((r) => c.toBlob(r, type, quality))
+}
+
+export type Prepared = { blob: Blob; width: number; height: number; thumb: Blob | null }
+
 export async function prepareUpload(file: File): Promise<Prepared> {
-  if (!/^image\/(jpeg|png|webp)$/.test(file.type)) throw new Error("use a JPG, PNG or WebP image")
+  if (!/^image\/(jpeg|png|webp)$/.test(file.type)) throw new Error("use a JPG, PNG or WebP picture")
   const src = await decode(file)
   const { w, h } = sizeOf(src)
+  const tw = Math.min(THUMB_W, w)
+  const thumb = await toBlob(redraw(src, tw, Math.max(1, Math.round((h * tw) / w))), "image/jpeg", 0.82)
+
   const scale = Math.min(1, MAX_W / w, MAX_H / h)
-  if (scale === 1 && file.size <= MAX_BYTES) {
-    return { blob: file, filename: file.name, width: w, height: h }
+  if (scale === 1 && file.size <= SCREEN_MEDIA_MAX_BYTES) return { blob: file, width: w, height: h, thumb }
+
+  const canvas = redraw(src, Math.round(w * scale), Math.round(h * scale))
+  const size = { width: canvas.width, height: canvas.height, thumb }
+  if (file.type === "image/png") {
+    const png = await toBlob(canvas, "image/png")
+    if (png && png.size <= SCREEN_MEDIA_MAX_BYTES) return { blob: png, ...size }
   }
+  for (const quality of [1, 0.97, 0.93]) {
+    const jpg = await toBlob(canvas, "image/jpeg", quality)
+    if (jpg && jpg.size <= SCREEN_MEDIA_MAX_BYTES) return { blob: jpg, ...size }
+  }
+  throw new Error("that picture is too large")
+}
 
-  const tw = Math.round(w * scale)
-  const th = Math.round(h * scale)
-  const canvas = document.createElement("canvas")
-  canvas.width = tw
-  canvas.height = th
-  const ctx = canvas.getContext("2d")
-  if (!ctx) throw new Error("this browser can't resize images")
-  ctx.drawImage(src, 0, 0, tw, th)
-
-  for (const quality of [0.9, 0.82, 0.72, 0.6]) {
-    const blob = await new Promise<Blob | null>((r) => canvas.toBlob(r, "image/jpeg", quality))
-    if (blob && blob.size <= MAX_BYTES) {
-      return { blob, filename: file.name.replace(/\.[^.]+$/, "") + ".jpg", width: tw, height: th }
+/** Upload one picture and return its id. Throws with words to show. */
+export async function uploadPicture(file: File): Promise<string> {
+  const { blob, width, height, thumb } = await prepareUpload(file)
+  const upload = crypto.randomUUID()
+  const parts = Math.ceil(blob.size / SCREEN_PART_BYTES)
+  const put = async (i: number) => {
+    const body = blob.slice(i * SCREEN_PART_BYTES, (i + 1) * SCREEN_PART_BYTES)
+    for (let attempt = 0; ; attempt++) {
+      const res = await fetch(`/api/screens/media/part?upload=${upload}&part=${i}`, { method: "PUT", body }).catch(() => null)
+      if (res?.ok) return
+      if (attempt === 2 || (res && res.status < 500)) {
+        const said = (await res?.json().catch(() => null)) as { error?: string } | null
+        throw new Error(said?.error ?? "didn't upload")
+      }
     }
   }
-  throw new Error("still too large after shrinking")
+  await Promise.all(Array.from({ length: parts }, (_, i) => put(i)))
+
+  const form = new FormData()
+  form.set("upload", upload)
+  form.set("parts", String(parts))
+  form.set("name", file.name.replace(/\.[^.]+$/, ""))
+  form.set("width", String(width))
+  form.set("height", String(height))
+  if (thumb) form.set("thumb", thumb, "thumb.jpg")
+  for (let attempt = 0; ; attempt++) {
+    const res = await fetch("/api/screens/media", { method: "POST", body: form }).catch(() => null)
+    const said = ((await res?.json().catch(() => null)) ?? {}) as { id?: string; error?: string }
+    if (res?.ok && said.id) return said.id
+    // Only a server that says it saved nothing is safe to ask again.
+    if (attempt === 1 || res?.status !== 503) throw new Error(said.error ?? "didn't upload")
+  }
 }

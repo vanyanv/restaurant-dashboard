@@ -12,7 +12,7 @@ import { createHash, randomInt } from "node:crypto"
  */
 
 export * from "./limits"
-import { SLIDE_SECONDS_DEFAULT, SLIDE_SECONDS_MAX, SLIDE_SECONDS_MIN, ONLINE_WINDOW_MS } from "./limits"
+import { SCREEN_TZ, SLIDE_SECONDS_DEFAULT, SLIDE_SECONDS_MAX, SLIDE_SECONDS_MIN, ONLINE_WINDOW_MS } from "./limits"
 
 /** Six digits, never starting with 0 so it reads the same said aloud. */
 export function newPairCode(): string {
@@ -62,7 +62,7 @@ export function screenMediaUrl(blobKey: string): string {
   return `/api/tv/media/${blobKey.split("/").map(encodeURIComponent).join("/")}`
 }
 
-/** Accepted uploads. Videos come later; a 4K JPEG is what the boards are today. */
+/** Accepted uploads. */
 export const SCREEN_MEDIA_TYPES = {
   "image/jpeg": "jpg",
   "image/png": "png",
@@ -75,11 +75,24 @@ export function isScreenMediaType(t: string): t is ScreenMediaType {
   return Object.hasOwn(SCREEN_MEDIA_TYPES, t)
 }
 
-/**
- * Vercel refuses a request body over 4.5 MB, so the browser shrinks anything
- * bigger to a 3840 px JPEG before it sends it. This is the server's own limit.
- */
-export const SCREEN_MEDIA_MAX_BYTES = 4 * 1024 * 1024
+/** What the bytes really are, whatever the browser called them. */
+export function sniffImage(b: Uint8Array): ScreenMediaType | null {
+  if (b.length < 12) return null
+  if (b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff) return "image/jpeg"
+  if (b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e && b[3] === 0x47) return "image/png"
+  const at = (i: number, s: string) => [...s].every((c, k) => b[i + k] === c.charCodeAt(0))
+  return at(0, "RIFF") && at(8, "WEBP") ? "image/webp" : null
+}
+
+/** Minutes between UTC and store time at `at` (-480 in a Los Angeles winter). Sent to the TV, whose own clock and zone are not trusted. */
+export function storeOffsetMinutes(at: Date, tz: string = SCREEN_TZ): number {
+  const p = Object.fromEntries(
+    new Intl.DateTimeFormat("en-US", { timeZone: tz, hourCycle: "h23", year: "numeric", month: "numeric", day: "numeric", hour: "numeric", minute: "numeric" })
+      .formatToParts(at)
+      .map((x) => [x.type, Number(x.value)]),
+  )
+  return Math.round((Date.UTC(p.year, p.month - 1, p.day, p.hour, p.minute) - Math.floor(at.getTime() / 60_000) * 60_000) / 60_000)
+}
 
 /** One fingerprint for what a TV is showing, so it only reloads when something changed. */
 export function playlistVersion(parts: { id: string; seconds: number; key: string }[], name: string): string {

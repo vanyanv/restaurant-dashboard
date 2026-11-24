@@ -1,19 +1,29 @@
 import { NextRequest, NextResponse } from "next/server"
 import { revalidatePath } from "next/cache"
+import { z } from "zod"
 import { prisma } from "@/lib/prisma"
 import { getSession } from "@/lib/auth-scope"
 import { hasOwnerAccess } from "@/lib/auth"
-import { putScreenMedia } from "@/lib/blob"
-import { rateLimit, RATE_LIMIT_TIERS } from "@/lib/rate-limit"
-import { SCREEN_MEDIA_MAX_BYTES, isScreenMediaType } from "@/lib/screens/core"
+import { checkThumbKey, deleteScreenMedia, putScreenMedia, putScreenThumb, readScreenPart, screenPartKey } from "@/lib/blob"
+import { logger } from "@/lib/logger"
+import { rateLimit } from "@/lib/rate-limit"
+import { SCREEN_MAX_PARTS, SCREEN_MEDIA_MAX_BYTES, SCREEN_THUMB_MAX_BYTES, sniffImage } from "@/lib/screens/core"
+
+const Input = z.object({
+  upload: z.string().uuid(),
+  parts: z.coerce.number().int().min(1).max(SCREEN_MAX_PARTS),
+  name: z.string().trim().max(200).default(""),
+  width: z.coerce.number().int().min(1).max(20_000),
+  height: z.coerce.number().int().min(1).max(20_000),
+})
 
 /**
- * Upload one image to Screens. Owners only. The browser has already shrunk
- * it to fit a 4K screen and Vercel's body limit (see SCREEN_MEDIA_MAX_BYTES).
- * `storeId` empty means every store can use it.
+ * Finish one picture: join the parts it was sent in and keep exactly those
+ * bytes. Nothing here re-encodes it, so the TV gets the owner's own file.
+ * Owners only. `thumb` is the small JPEG the dashboard shows.
  */
 export async function POST(request: NextRequest) {
-  const limited = await rateLimit(request, RATE_LIMIT_TIERS.moderate)
+  const limited = await rateLimit(request, { limit: 60, windowMs: 60_000 })
   if (limited) return limited
 
   const session = await getSession()
@@ -27,42 +37,61 @@ export async function POST(request: NextRequest) {
   } catch {
     return NextResponse.json({ error: "That upload could not be read" }, { status: 400 })
   }
-  const file = form.get("file")
-  if (!(file instanceof File)) return NextResponse.json({ error: "No image in the upload" }, { status: 400 })
-  if (!isScreenMediaType(file.type)) {
-    return NextResponse.json({ error: "Use a JPG, PNG or WebP image" }, { status: 415 })
+  const parsed = Input.safeParse(Object.fromEntries([...form].filter(([, v]) => typeof v === "string")))
+  if (!parsed.success) return NextResponse.json({ error: "That upload could not be read" }, { status: 400 })
+  const { upload, parts, width, height } = parsed.data
+
+  const keys = Array.from({ length: parts }, (_, i) => screenPartKey(accountId, upload, i))
+  const cleanUp = () =>
+    Promise.all(keys.map((k) => deleteScreenMedia(k).catch(() => undefined))).then(() => undefined)
+
+  const chunks = await Promise.all(keys.map(readScreenPart))
+  if (chunks.some((c) => c === null)) {
+    await cleanUp()
+    return NextResponse.json({ error: "Part of that picture didn't arrive. Try again." }, { status: 409 })
   }
-  if (file.size > SCREEN_MEDIA_MAX_BYTES) {
-    return NextResponse.json({ error: "That image is too large. Try a smaller copy." }, { status: 413 })
+  const bytes = Buffer.concat(chunks as Buffer[])
+  const type = sniffImage(bytes)
+  if (!type || bytes.length > SCREEN_MEDIA_MAX_BYTES) {
+    await cleanUp()
+    return type
+      ? NextResponse.json({ error: "That picture is too large. Try a smaller copy." }, { status: 413 })
+      : NextResponse.json({ error: "Use a JPG, PNG or WebP picture" }, { status: 415 })
   }
 
-  const storeIdRaw = form.get("storeId")
-  const storeId = typeof storeIdRaw === "string" && storeIdRaw ? storeIdRaw : null
-  if (storeId) {
-    const store = await prisma.store.findFirst({ where: { id: storeId, accountId }, select: { id: true } })
-    if (!store) return NextResponse.json({ error: "Store not found" }, { status: 404 })
+  let media: { id: string }
+  const stored = await putScreenMedia(accountId, bytes, type)
+  try {
+    const thumb = form.get("thumb")
+    if (thumb instanceof File && thumb.size > 0 && thumb.size <= SCREEN_THUMB_MAX_BYTES) {
+      const small = Buffer.from(await thumb.arrayBuffer())
+      // The dashboard falls back to the full picture without one.
+      if (sniffImage(small) === "image/jpeg") {
+        await putScreenThumb(stored.pathname, small).catch((err) =>
+          logger.error("[screens] thumb failed", { message: err instanceof Error ? err.message : String(err) }),
+        )
+      }
+    }
+    media = await prisma.screenMedia.create({
+      data: {
+        accountId,
+        storeId: null,
+        name: (parsed.data.name || "Picture").slice(0, 80),
+        blobKey: stored.pathname,
+        contentType: type,
+        width,
+        height,
+        bytes: stored.size,
+      },
+      select: { id: true },
+    })
+  } catch (err) {
+    // No row points at it, so nothing would ever delete it. The parts stay for the browser's second try.
+    await Promise.all([stored.pathname, checkThumbKey(stored.pathname)].map((k) => deleteScreenMedia(k).catch(() => undefined)))
+    logger.error("[screens] upload failed", { message: err instanceof Error ? err.message : String(err) })
+    return NextResponse.json({ error: "Couldn't save that picture. Try again." }, { status: 503 })
   }
-  const nameRaw = form.get("name")
-  const name = (typeof nameRaw === "string" && nameRaw.trim() ? nameRaw.trim() : file.name.replace(/\.[^.]+$/, "") || "Image").slice(0, 80)
-  const num = (k: string) => {
-    const v = Number(form.get(k))
-    return Number.isInteger(v) && v > 0 && v < 20_000 ? v : null
-  }
-
-  const upload = await putScreenMedia(accountId, Buffer.from(await file.arrayBuffer()), file.type)
-  const media = await prisma.screenMedia.create({
-    data: {
-      accountId,
-      storeId,
-      name,
-      blobKey: upload.pathname,
-      contentType: file.type,
-      width: num("width"),
-      height: num("height"),
-      bytes: upload.size,
-    },
-    select: { id: true },
-  })
+  await cleanUp()
 
   revalidatePath("/dashboard/screens")
   revalidatePath("/m/screens")

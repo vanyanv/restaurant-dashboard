@@ -1,10 +1,14 @@
 import { prisma } from "@/lib/prisma"
+import { pairLink, qrRows } from "./pair-link"
 import {
   PAIR_CODE_TTL_MS,
+  PLAYER_VERSION,
   SEEN_WRITE_EVERY_MS,
   newPairCode,
   playlistVersion,
   screenMediaUrl,
+  storeOffsetMinutes,
+  type TimeWindow,
 } from "./core"
 
 /**
@@ -14,14 +18,31 @@ import {
  */
 
 export type TvSlide = { id: string; url: string; seconds: number; name: string }
+export type TvTime = TimeWindow & { id: string; slides: TvSlide[] }
 
 export type TvContent =
-  | { paired: false; code: string; expiresAt: string }
+  | { paired: false; code: string; expiresAt: string; player: string; /** The pairing link as rows of 0 and 1. */ qr: string[] }
   | {
       paired: true
+      player: string
       screen: { name: string; store: string }
       playlist: { name: string; version: string; slides: TvSlide[] } | null
+      times: TvTime[]
+      /** The TV works out store time from these, so a wrong clock or zone on the TV does not matter. */
+      clock: { now: string; offsetMinutes: number }
+      identifyUntil: string | null
     }
+
+const SLIDES = {
+  orderBy: { position: "asc" },
+  select: { id: true, seconds: true, media: { select: { name: true, blobKey: true } } },
+} as const
+
+type SlideRow = { id: string; seconds: number; media: { name: string; blobKey: string } }
+
+function tvSlides(rows: SlideRow[]): TvSlide[] {
+  return rows.map((s) => ({ id: s.id, url: screenMediaUrl(s.media.blobKey), seconds: s.seconds, name: s.media.name }))
+}
 
 /**
  * The code this TV shows. Reuses a live one, so a TV that reloads keeps
@@ -67,18 +88,20 @@ export async function contentFor(tokenHash: string, device: string | null): Prom
       playlist: {
         select: {
           name: true,
-          slides: {
-            orderBy: { position: "asc" },
-            select: { id: true, seconds: true, media: { select: { name: true, blobKey: true } } },
-          },
+          slides: SLIDES,
         },
+      },
+      identifyUntil: true,
+      times: {
+        orderBy: { createdAt: "asc" },
+        select: { id: true, days: true, startMinute: true, endMinute: true, playlist: { select: { slides: SLIDES } } },
       },
     },
   })
 
   if (!screen) {
     const p = await pairingFor(tokenHash, device)
-    return { paired: false, code: p.code, expiresAt: p.expiresAt.toISOString() }
+    return { paired: false, code: p.code, expiresAt: p.expiresAt.toISOString(), player: PLAYER_VERSION, qr: qrRows(pairLink(p.code)) }
   }
 
   const now = new Date()
@@ -97,6 +120,7 @@ export async function contentFor(tokenHash: string, device: string | null): Prom
   const pl = screen.playlist
   return {
     paired: true,
+    player: PLAYER_VERSION,
     screen: { name: screen.name, store: screen.store.name },
     playlist: pl
       ? {
@@ -105,13 +129,11 @@ export async function contentFor(tokenHash: string, device: string | null): Prom
             pl.slides.map((s) => ({ id: s.id, seconds: s.seconds, key: s.media.blobKey })),
             pl.name,
           ),
-          slides: pl.slides.map((s) => ({
-            id: s.id,
-            url: screenMediaUrl(s.media.blobKey),
-            seconds: s.seconds,
-            name: s.media.name,
-          })),
+          slides: tvSlides(pl.slides),
         }
       : null,
+    times: screen.times.map((t) => ({ id: t.id, days: t.days, start: t.startMinute, end: t.endMinute, slides: tvSlides(t.playlist.slides) })),
+    clock: { now: now.toISOString(), offsetMinutes: storeOffsetMinutes(now) },
+    identifyUntil: screen.identifyUntil && screen.identifyUntil > now ? screen.identifyUntil.toISOString() : null,
   }
 }
