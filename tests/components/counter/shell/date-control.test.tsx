@@ -18,6 +18,11 @@ const props = {
 // resulting setState does NOT commit to the DOM before the next synchronous
 // line; only `fireEvent` (act-wrapped) flushes in time for an assertion right
 // after it.
+/** The month grid is loaded with next/dynamic; wait for it to draw. */
+async function calendarLoaded() {
+  await screen.findByRole("grid")
+}
+
 describe("DateControl", () => {
   it("has a TWO-LINE trigger: the dates over the preset and the comparison", () => {
     // The old control printed "Last 7 days" and hid the actual dates, so the
@@ -127,48 +132,53 @@ describe("DateControl", () => {
     expect((onRange.mock.calls[0][0] as { start: Date }).start.getDate()).toBe(4)
   })
 
-  describe("the calendar", () => {
-    it("is inside .drpop__cal > .drcals, showing the month the range ends in", () => {
+  describe("the calendar", async () => {
+    it("is inside .drpop__cal > .drcals, showing the month the range ends in", async () => {
       const { container } = render(<DateControl {...props} />)
+      await calendarLoaded()
       expect(container.querySelector(".drpop__cal .drcals .drgrid")).toBeTruthy()
-      expect(container.querySelector(".drcal__hd b")?.textContent).toBe("August 2026")
+      expect(container.querySelector(".drcal__hd h2")?.textContent).toBe("August 2026")
     })
 
-    it("shades the comparison window", () => {
+    it("shades the comparison window", async () => {
       // weekday, over a 7-day range: `comparisonRange` returns Jul 18 – Aug 14,
       // so August's shaded days run 1..14.
       const { container } = render(<DateControl {...props} />)
-      const shaded = [...container.querySelectorAll("button.drd.cmp")].map((b) => b.textContent)
+      await calendarLoaded()
+      const shaded = [...container.querySelectorAll("td.drd:not(.out).cmp")].map((b) => b.textContent)
       expect(shaded[0]).toBe("1")
       expect(shaded[shaded.length - 1]).toBe("14")
     })
 
-    it("picks a single day in ONE tap, and closes", () => {
+    it("picks a single day in ONE tap, and closes", async () => {
       // The owner's complaint: picking one day took several clicks.
       const onRange = vi.fn()
       const { container } = render(<DateControl {...props} onRange={onRange} />)
+      await calendarLoaded()
       fireEvent.click(container.querySelector(".dr__main") as HTMLElement)
-      fireEvent.click([...container.querySelectorAll("button.drd")].find((b) => b.textContent === "12")!)
+      fireEvent.click([...container.querySelectorAll("td.drd:not(.out)")].find((b) => b.textContent === "12")!)
       expect(onRange).toHaveBeenCalledTimes(1)
       const picked = onRange.mock.calls[0][0] as { start: Date; end: Date }
       expect([picked.start.getDate(), picked.end.getDate()]).toEqual([12, 12])
       expect((container.querySelector(".dr") as HTMLElement).className).toBe("dr")
     })
 
-    it("picks a whole Monday week from its week number", () => {
+    it("picks a whole Monday week from its week number", async () => {
       const onRange = vi.fn()
       const { container } = render(<DateControl {...props} onRange={onRange} />)
+      await calendarLoaded()
       fireEvent.click(screen.getByRole("button", { name: "Pick the week of August 10" }))
       const picked = onRange.mock.calls[0][0] as { start: Date; end: Date }
       expect([picked.start.getDate(), picked.end.getDate()]).toEqual([10, 16])
     })
 
-    it("in range mode, takes TWO clicks to make a range, and reports nothing on the first", () => {
+    it("in range mode, takes TWO clicks to make a range, and reports nothing on the first", async () => {
       const onRange = vi.fn()
       const { container } = render(<DateControl {...props} onRange={onRange} />)
+      await calendarLoaded()
       fireEvent.click(screen.getByRole("button", { name: "A range" }))
       const day = (n: string) =>
-        [...container.querySelectorAll("button.drd")].find((b) => b.textContent === n)!
+        [...container.querySelectorAll("td.drd:not(.out)")].find((b) => b.textContent === n)!
       fireEvent.click(day("4"))
       expect(onRange).not.toHaveBeenCalled()
       fireEvent.click(day("9"))
@@ -177,23 +187,25 @@ describe("DateControl", () => {
       expect([picked.start.getDate(), picked.end.getDate()]).toEqual([4, 9])
     })
 
-    it("orders the two clicks, so picking backwards still gives a forward range", () => {
+    it("orders the two clicks, so picking backwards still gives a forward range", async () => {
       const onRange = vi.fn()
       const { container } = render(<DateControl {...props} onRange={onRange} />)
+      await calendarLoaded()
       fireEvent.click(screen.getByRole("button", { name: "A range" }))
       const day = (n: string) =>
-        [...container.querySelectorAll("button.drd")].find((b) => b.textContent === n)!
+        [...container.querySelectorAll("td.drd:not(.out)")].find((b) => b.textContent === n)!
       fireEvent.click(day("9"))
       fireEvent.click(day("4"))
       const picked = onRange.mock.calls[0][0] as { start: Date; end: Date }
       expect([picked.start.getDate(), picked.end.getDate()]).toEqual([4, 9])
     })
 
-    it("walks months without touching the range", () => {
+    it("walks months without touching the range", async () => {
       const onRange = vi.fn()
       const { container } = render(<DateControl {...props} onRange={onRange} />)
+      await calendarLoaded()
       fireEvent.click(screen.getByRole("button", { name: /previous month/i }))
-      expect(container.querySelector(".drcal__hd b")?.textContent).toBe("July 2026")
+      expect(container.querySelector(".drcal__hd h2")?.textContent).toBe("July 2026")
       expect(onRange).not.toHaveBeenCalled()
     })
   })

@@ -10,8 +10,11 @@ import {
   type ComparisonId, type DateRange, type PresetId, type RangeId,
 } from "@/lib/counter/date-range"
 import { useFramePlacement } from "./frame-placement"
-import { Calendar } from "./calendar"
+import dynamic from "next/dynamic"
 import { RangeWeeks } from "./range-weeks"
+
+/** The month grid is a ui-sdk Calendar; loaded after the page draws so it is not in the first load. */
+const Calendar = dynamic(() => import("./calendar").then((m) => m.Calendar), { ssr: false })
 
 /**
  * `bar()`, prototype line 1915 — the most-used control in the product, and the

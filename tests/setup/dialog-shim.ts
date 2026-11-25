@@ -42,3 +42,27 @@ if (proto && typeof proto.showModal !== "function") {
     if (top.dispatchEvent(new Event("cancel", { cancelable: true }))) top.close()
   })
 }
+
+// ui-sdk's Drawer and Calendar measure themselves with ResizeObserver, which
+// jsdom lacks. Nothing in a component test resizes, so observing is a no-op.
+if (typeof window !== "undefined" && typeof window.ResizeObserver === "undefined") {
+  window.ResizeObserver = class {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  } as unknown as typeof ResizeObserver
+}
+
+// ui-sdk waits for exit animations with Element.getAnimations(); jsdom runs
+// none, so there is never one to wait for.
+if (typeof Element !== "undefined" && typeof Element.prototype.getAnimations !== "function") {
+  Element.prototype.getAnimations = () => []
+}
+
+// ui-sdk feature-checks CSS (scroll-snap, anchor positioning) with
+// CSS.supports(), which jsdom does not define. Answer "no" to everything.
+if (typeof window !== "undefined") {
+  const css = (globalThis as { CSS?: { supports?: unknown } }).CSS
+  if (!css) (globalThis as { CSS?: unknown }).CSS = { supports: () => false }
+  else if (typeof css.supports !== "function") css.supports = () => false
+}

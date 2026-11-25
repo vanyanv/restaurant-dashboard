@@ -1,6 +1,15 @@
 "use client"
 
-import { addDays, addMonths, getDaysInMonth, isSameDay, startOfMonth } from "date-fns"
+import { isSameDay, startOfMonth } from "date-fns"
+import {
+  Calendar as SdkCalendar,
+  CalendarDay,
+  CalendarGrid,
+  CalendarHeading,
+  CalendarNext,
+  CalendarPrevious,
+  CalendarWeekday,
+} from "@ui-sdk/react/calendar"
 import { isoDay, type DateRange } from "@/lib/counter/date-range"
 
 /**
@@ -46,13 +55,34 @@ import { isoDay, type DateRange } from "@/lib/counter/date-range"
  * hat. The caller passes the windows; this component only draws them.
  */
 
-const MONTH_LONG = [
-  "January", "February", "March", "April", "May", "June",
-  "July", "August", "September", "October", "November", "December",
-]
+/**
+ * ## The grid is ui-sdk's Calendar
+ *
+ * The month is a ui-sdk Calendar (`@ui-sdk/react/calendar`) drawn with this
+ * file's own markup and classes, so it looks as it did. What the SDK adds is
+ * what a calendar is expected to do from a keyboard or a screen reader: the
+ * month is one grid with one Tab stop, the arrow keys move a day or a week
+ * (crossing into the next month), Page Up/Down turn the month, Home/End go to
+ * the week's ends, and each day is read with its full date and whether it is
+ * in the range.
+ *
+ * What a press MEANS stays the caller's: one day, or the first then last day
+ * of a range (`pending`). The SDK runs in range mode so it marks the selected
+ * days for screen readers, but every press arrives as a range START, which is
+ * cancelled and handed to `onPickDay` — the SDK never holds a half-picked
+ * range of its own.
+ */
 
-/** Monday first, and the prototype's own single letters — two of them "T", two "S". */
-const DOW = ["M", "T", "W", "T", "F", "S", "S"]
+/** "2026-08" for the SDK's `month`. */
+function isoMonth(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`
+}
+
+/** An SDK ISO date ("2026-08-21") as a local midnight, like every Date here. */
+function fromIso(iso: string): Date {
+  const [y, m, d] = iso.split("-").map(Number)
+  return new Date(y, m - 1, d)
+}
 
 function Chevron({ dir }: { dir: -1 | 1 }) {
   return (
@@ -116,99 +146,93 @@ export function Calendar({
   onMonthChange: (month: Date) => void
 }) {
   const first = startOfMonth(month)
-  const year = first.getFullYear()
-  const monthIndex = first.getMonth()
-  const lead = (first.getDay() + 6) % 7
-  const days = getDaysInMonth(first)
+  const classFor = (day: Date) => {
+    const isPending = pending != null && isSameDay(day, pending)
+    const classes = ["drd"]
+    if (within(day, range) || isPending) classes.push("in")
+    if (isSameDay(day, range.start) || isSameDay(day, range.end) || isPending) classes.push("edge")
+    if (isSameDay(day, today)) classes.push("today")
+    if (compare?.some((w) => within(day, w))) classes.push("cmp")
+    return classes.join(" ")
+  }
 
   return (
-    <div>
+    <SdkCalendar
+      className="drcal"
+      mode="range"
+      value={[isoDay(range.start), isoDay(range.end)]}
+      month={isoMonth(first)}
+      onMonthChange={(next) => onMonthChange(fromIso(`${next}-01`))}
+      onAnchorChange={(anchor, details) => {
+        details.cancel()
+        if (anchor) onPickDay(fromIso(anchor))
+      }}
+      today={isoDay(today)}
+      weekStartsOn={1}
+      showOutsideDays={false}
+      weekdayFormat="narrow"
+      locale="en-US"
+    >
       <div className="drcal__hd">
-        <button
-          className="drnav"
-          type="button"
-          aria-label="Previous month"
-          onClick={() => onMonthChange(addMonths(first, -1))}
-        >
+        <CalendarPrevious className="drnav" aria-label="Previous month">
           <Chevron dir={-1} />
-        </button>
-        <b>
-          {MONTH_LONG[monthIndex]} {year}
-        </b>
-        <button
-          className="drnav"
-          type="button"
-          aria-label="Next month"
-          onClick={() => onMonthChange(addMonths(first, 1))}
-        >
+        </CalendarPrevious>
+        <CalendarHeading />
+        <CalendarNext className="drnav" aria-label="Next month">
           <Chevron dir={1} />
-        </button>
+        </CalendarNext>
       </div>
-      <div className={onPickWeek ? "drgrid drgrid--wk" : "drgrid"}>
-        {onPickWeek && (
-          <span className="dw" aria-hidden="true">
-            Wk
-          </span>
-        )}
-        {DOW.map((d, i) => (
-          <span className="dw" key={i} aria-hidden="true">
-            {d}
-          </span>
-        ))}
-        {Array.from({ length: lead + days }, (_, cell) => {
-          const weekButton = onPickWeek && cell % 7 === 0
-            ? (() => {
-              const monday = addDays(first, cell - lead)
-              return (
-                <button
-                  key={`wk-${cell}`}
-                  className="drwk"
-                  type="button"
-                  aria-label={`Pick the week of ${monday.toLocaleDateString("en-US", { month: "long", day: "numeric" })}`}
-                  // A week that has not started has nothing to show, and
-                  // `weekOf` would have no day in it to end on.
-                  disabled={monday > today}
-                  onClick={() => onPickWeek(monday)}
-                >
-                  {isoWeekOfMonday(monday)}
-                </button>
-              )
-            })()
-            : null
-          if (cell < lead) {
-            return [weekButton, <span className="drd out" key={`lead-${cell}`} />]
-          }
-          const i = cell - lead
-          const day = new Date(year, monthIndex, i + 1)
-          const isPending = pending != null && isSameDay(day, pending)
-          const classes = ["drd"]
-          if (within(day, range) || isPending) classes.push("in")
-          if (isSameDay(day, range.start) || isSameDay(day, range.end) || isPending) {
-            classes.push("edge")
-          }
-          if (isSameDay(day, today)) classes.push("today")
-          if (compare?.some((w) => within(day, w))) classes.push("cmp")
-          return (
-            [weekButton, <button
-              key={isoDay(day)}
-              className={classes.join(" ")}
-              type="button"
-              data-day={isoDay(day)}
-              // The prototype's cell is a bare number, which is ambiguous read
-              // aloud out of the grid's visual context.
-              aria-label={day.toLocaleDateString("en-US", {
-                weekday: "long",
-                month: "long",
-                day: "numeric",
-                year: "numeric",
+      <CalendarGrid className={onPickWeek ? "drgrid drgrid--wk" : "drgrid"}>
+        {(grid) => (
+          <>
+            <thead>
+              <tr>
+                {onPickWeek && (
+                  <th scope="col" className="dw">
+                    <abbr title="Week">Wk</abbr>
+                  </th>
+                )}
+                {grid.weekdays.map((weekday, index) => (
+                  <CalendarWeekday key={weekday} index={index} className="dw" />
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {grid.weeks.map((week) => {
+                const monday = fromIso(week[0]!.date)
+                return (
+                  <tr key={week[0]!.date}>
+                    {onPickWeek && (
+                      <th scope="row" className="drwkc">
+                        <button
+                          className="drwk"
+                          type="button"
+                          aria-label={`Pick the week of ${monday.toLocaleDateString("en-US", { month: "long", day: "numeric" })}`}
+                          // A week that has not started has nothing to show, and
+                          // `weekOf` would have no day in it to end on.
+                          disabled={monday > today}
+                          onClick={() => onPickWeek(monday)}
+                        >
+                          {isoWeekOfMonday(monday)}
+                        </button>
+                      </th>
+                    )}
+                    {week.map((cell) =>
+                      cell.hidden ? (
+                        <td key={cell.date} className="drd out" />
+                      ) : (
+                        <CalendarDay key={cell.date} value={cell.date} className={classFor(fromIso(cell.date))}>
+                          {String(Number(cell.date.slice(8)))}
+                        </CalendarDay>
+                      ),
+                    )}
+                  </tr>
+                )
               })}
-              onClick={() => onPickDay(day)}
-            >
-              {i + 1}
-            </button>]
-          )
-        })}
-      </div>
-    </div>
+            </tbody>
+          </>
+        )}
+      </CalendarGrid>
+    </SdkCalendar>
   )
 }

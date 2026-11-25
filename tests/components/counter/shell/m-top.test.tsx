@@ -10,7 +10,7 @@
  * that surface does not have.
  */
 import { describe, it, expect, vi } from "vitest"
-import { render, screen, fireEvent } from "@testing-library/react"
+import { render, screen, fireEvent, waitFor } from "@testing-library/react"
 import { readFileSync } from "node:fs"
 import { join } from "node:path"
 import { MTop } from "@/components/counter/shell/m-top"
@@ -37,6 +37,20 @@ function renderTop(overrides: Partial<React.ComponentProps<typeof MTop>> = {}) {
   )
   return { ...utils, onSelectStore }
 }
+
+/**
+ * The store sheet is a ui-sdk Drawer whose code loads on the first tap
+ * (next/dynamic), so opening is awaited. jsdom has no top layer, so ui-sdk
+ * renders it into <body> there (in place in a browser): it is read off
+ * `document`. Open and closed are the drawer's own `data-open`.
+ */
+async function openStores(container: HTMLElement) {
+  fireEvent.click(container.querySelector(".st")!)
+  await screen.findByRole("dialog", { name: "Pick a store" })
+  await waitFor(() => expect(isOpen()).toBe(true))
+}
+const isOpen = () => document.querySelector(".msheet")?.hasAttribute("data-open") ?? false
+const closes = () => waitFor(() => expect(isOpen()).toBe(false))
 
 describe("MTop — the phone's top chrome", () => {
   it("emits .mtop with the store trigger and the date slot, in the prototype's order", () => {
@@ -72,7 +86,7 @@ describe("MTop — the phone's top chrome", () => {
     }
   })
 
-  it("the store control is a BUTTON, because the prototype's chevron promises a picker it never had", () => {
+  it("the store control is a BUTTON, because the prototype's chevron promises a picker it never had", async () => {
     // `.st` is a <span> in `phoneFor()` — it wears a chevron and opens
     // nothing, which is note 46 ("markup that looks wired and is not") sitting
     // in the design itself. A phone reader has to be able to change the store.
@@ -81,9 +95,8 @@ describe("MTop — the phone's top chrome", () => {
     expect(trigger.tagName).toBe("BUTTON")
     expect(trigger.getAttribute("aria-haspopup")).toBe("dialog")
     expect(trigger.getAttribute("aria-expanded")).toBe("false")
-    expect(trigger.getAttribute("aria-controls")).toBe(
-      container.querySelector(".msheet")!.getAttribute("id"),
-    )
+    await openStores(container)
+    expect(trigger.getAttribute("aria-controls")).toBe(document.querySelector(".msheet")!.getAttribute("id"))
   })
 
   it("names the selected store, and 'All stores' when none is selected", () => {
@@ -95,22 +108,18 @@ describe("MTop — the phone's top chrome", () => {
     expect(container.querySelector(".st")!.textContent).toContain("All stores")
   })
 
-  it("the sheet is always in the DOM and shown by .on, exactly as the prototype writes it", () => {
+  it("the sheet is not drawn until the store control is tapped, then it slides up", async () => {
     const { container } = renderTop()
-    const sheet = () => container.querySelector(".msheet")!
-    const shade = () => container.querySelector(".pshade")!
-    expect(sheet().className).toBe("msheet")
-    expect(shade().className).toBe("pshade")
-
-    fireEvent.click(container.querySelector(".st")!)
-    expect(sheet().className).toBe("msheet on")
-    expect(shade().className).toBe("pshade on")
+    expect(document.querySelector(".msheet")).toBeNull()
+    await openStores(container)
+    expect(document.querySelector(".pshade")).toBeTruthy()
+    expect(container.querySelector(".st")!.getAttribute("aria-expanded")).toBe("true")
   })
 
-  it("offers every store plus 'All stores', pressed on the current one", () => {
+  it("offers every store plus 'All stores', pressed on the current one", async () => {
     const { container } = renderTop()
-    fireEvent.click(container.querySelector(".st")!)
-    const opts = [...container.querySelectorAll(".storeopt")]
+    await openStores(container)
+    const opts = [...document.querySelectorAll(".storeopt")]
     expect(opts.map((o) => o.querySelector("b")!.textContent)).toEqual([
       "All stores",
       "Hollywood",
@@ -127,13 +136,13 @@ describe("MTop — the phone's top chrome", () => {
     ])
   })
 
-  it("calls a store's stage by the SAME words and tones the rail uses", () => {
+  it("calls a store's stage by the SAME words and tones the rail uses", async () => {
     // One map, two surfaces (`STAGE_TAG`, exported from store-switcher.tsx).
     // A store that is "Warming up" in the rail must not be something else in a
     // sheet, and note 58 is why the third stage exists at all.
     const { container } = renderTop()
-    fireEvent.click(container.querySelector(".st")!)
-    const tags = [...container.querySelectorAll(".storeopt .mtag")]
+    await openStores(container)
+    const tags = [...document.querySelectorAll(".storeopt .mtag")]
     expect(tags.map((t) => `${t.className}|${t.textContent}`)).toEqual([
       "mtag|3",
       "mtag good|Trading",
@@ -142,28 +151,31 @@ describe("MTop — the phone's top chrome", () => {
     ])
   })
 
-  it("selecting a store reports it and closes the sheet; 'All stores' reports null", () => {
+  it("selecting a store reports it and closes the sheet; 'All stores' reports null", async () => {
     const { container, onSelectStore } = renderTop()
-    fireEvent.click(container.querySelector(".st")!)
+    await openStores(container)
     fireEvent.click(screen.getByText("Van Nuys"))
     expect(onSelectStore).toHaveBeenCalledWith("vannuys")
-    expect(container.querySelector(".msheet")!.className).toBe("msheet")
+    await closes()
 
-    fireEvent.click(container.querySelector(".st")!)
-    fireEvent.click(screen.getByText("All stores"))
+    await openStores(container)
+    fireEvent.click(screen.getByText("All stores", { selector: "b" }))
     // null is the ABSENCE of a store, not a magic "all" id.
     expect(onSelectStore).toHaveBeenLastCalledWith(null)
   })
 
-  it("the shade closes it, and so does Escape", () => {
+  it("the shade closes it, and so does Escape", async () => {
     const { container } = renderTop()
-    fireEvent.click(container.querySelector(".st")!)
-    fireEvent.click(container.querySelector(".pshade")!)
-    expect(container.querySelector(".msheet")!.className).toBe("msheet")
+    await openStores(container)
+    const shade = document.querySelector(".pshade")!
+    fireEvent.pointerDown(shade)
+    fireEvent.pointerUp(shade)
+    fireEvent.click(shade)
+    await closes()
 
-    fireEvent.click(container.querySelector(".st")!)
-    fireEvent.keyDown(document, { key: "Escape" })
-    expect(container.querySelector(".msheet")!.className).toBe("msheet")
+    await openStores(container)
+    fireEvent.keyDown(document.activeElement ?? document.body, { key: "Escape" })
+    await closes()
   })
 
   it("emits no .mback on a page with no trail, and no date slot with no date", () => {

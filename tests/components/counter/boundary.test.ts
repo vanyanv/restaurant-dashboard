@@ -25,8 +25,13 @@ describe("the Counter public surface", () => {
   // same way a new surface/*.tsx file would if someone forgot the export.
   it("re-exports every shell primitive, so a page imports from one place", () => {
     const barrel = readFileSync(BARREL, "utf8")
+    // phone-drawer.tsx is exempt for ask-mount's reason below: it is the ui-sdk
+    // Drawer PhoneSheet loads with next/dynamic, and a barrel export would let
+    // a page import it eagerly and put the drawer in every phone first load.
+    const LAZY = new Set(["phone-drawer"])
     for (const f of readdirSync(SHELL).filter((f) => f.endsWith(".tsx"))) {
       const name = f.replace(/\.tsx$/, "")
+      if (LAZY.has(name)) continue
       expect(barrel).toMatch(new RegExp(`from "\\./shell/${name}"`))
     }
   })

@@ -20,7 +20,7 @@ import { useLayoutEffect, useRef, type ComponentPropsWithoutRef } from "react"
  *
  * Two ways to use it:
  *  - mounted only while open (`{open && <ModalDialog …/>}`): leave `open` out;
- *  - always mounted (PhoneSheet, the Ask palette, which keep child state):
+ *  - always mounted (the Ask palette, which keeps child state):
  *    pass `open`.
  *
  * `onClose` runs when the browser asks to close (Escape, back gesture). Leave

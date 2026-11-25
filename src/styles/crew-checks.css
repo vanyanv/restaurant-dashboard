@@ -181,6 +181,9 @@
   .ckb, .ckb .ckc__col { min-height: 0 }
   .ckb__band { print-color-adjust: exact; -webkit-print-color-adjust: exact }
 }
+/* The ⋯ menu, photo, done and note sheets share the how-to drawer's shell. */
+.ckb__sheetbody { min-height: 0; flex: 1; overflow-y: auto; overscroll-behavior: contain; display: grid; align-content: start; gap: 10px }
+.ckb__sheetbody textarea { width: 100%; min-height: 84px; border: 1px solid var(--line-strong); padding: 10px; font: inherit; font-size: 16px; background: var(--surface); color: var(--ink) }
 
 /* "Forgot my PIN?": phone number in, PIN goes to the crew member's own email. */
 .ckb__forgot { display: grid; gap: 12px; text-align: center; margin-top: 8px }
