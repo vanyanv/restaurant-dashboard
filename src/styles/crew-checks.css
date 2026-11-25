@@ -168,3 +168,14 @@
   .ckb, .ckb .ckc__col { min-height: 0 }
   .ckb__band { print-color-adjust: exact; -webkit-print-color-adjust: exact }
 }
+
+/* "Forgot my PIN?": phone number in, PIN goes to the crew member's own email. */
+.ckb__forgot { display: grid; gap: 12px; text-align: center; margin-top: 8px }
+.ckb__forgot p { margin: 0; font-size: 14px; line-height: 1.4 }
+.ckb__phone { display: grid; gap: 6px; text-align: left }
+.ckb__phone span { font-family: var(--mono); font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-2) }
+.ckb__phone input { font: inherit; font-size: 20px; font-variant-numeric: tabular-nums; min-height: 56px; padding: 0 14px;
+  background: var(--surface); color: var(--ink); border: 1.5px solid var(--line-strong); border-radius: 0 }
+.ckb__phone input:focus-visible { outline: none; border: 2px solid var(--ink) }
+.ckb__phone input[aria-invalid="true"] { border-color: var(--bad) }
+.ckb__forgot .ckc__btn { width: 100% }
