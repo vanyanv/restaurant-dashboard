@@ -313,6 +313,7 @@ const CONTRAST: Array<[fg: string, bg: string, min: number, why: string]> = [
   ["--ct-good", "--ct-good-wash", 4.5, "good text on good wash"],
   ["--ct-warn", "--ct-warn-wash", 4.5, "warn text on warn wash"],
   ["--ct-bad", "--ct-bad-wash", 4.5, "bad text on bad wash"],
+  ["--ct-brand-cream", "--ct-brand-red", 4.5, "the crew page's store name, the poster and email bands"],
 ]
 
 const MX_BANDS = ["--ct-mx-1", "--ct-mx-2", "--ct-mx-3", "--ct-mx-4"] as const

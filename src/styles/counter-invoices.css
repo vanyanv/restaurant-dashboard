@@ -51,7 +51,7 @@
 @media (max-width:900px){.iv-split{grid-template-columns:minmax(0,1fr)}}
 
 .iv-days{display:grid}
-.iv-day__h{font-family:var(--mono);font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-3);
+.iv-day__h{font-family:var(--mono);font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-2);
   background:var(--sunk);padding:6px 16px}
 .iv-row{display:grid;grid-template-columns:minmax(0,1fr) auto auto auto;gap:4px 14px;align-items:center;padding:10px 16px;
   border-top:1px solid var(--line);color:inherit;text-decoration:none}

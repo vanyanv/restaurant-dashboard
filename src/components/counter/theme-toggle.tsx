@@ -1,6 +1,7 @@
 "use client"
 
 import { useCounterTheme, type Theme } from "./theme-provider"
+import { radioKeys } from "./ui/keys"
 
 /**
  * The theme control, as a `.seg` — the prototype's own segmented control
@@ -42,14 +43,14 @@ export function ThemeToggle() {
   }
 
   return (
-    <div className="seg" role="radiogroup" aria-label="Theme">
+    <div className="seg" role="radiogroup" aria-label="Theme" onKeyDown={radioKeys}>
       {OPTIONS.map(({ value, label }) => (
         <button
           key={value}
           type="button"
           role="radio"
           aria-checked={shown === value}
-          aria-pressed={shown === value}
+          tabIndex={shown === value ? 0 : -1}
           onClick={() => choose(value)}
         >
           {label}

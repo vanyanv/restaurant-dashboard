@@ -368,7 +368,7 @@
   --ct-brand-yellow-hi:  light-dark(oklch(74.4% 0.153 78), oklch(74.4% 0.153 78));
   --ct-brand-cream:      light-dark(oklch(96.1% 0.055 93), oklch(96.1% 0.055 93));
   --ct-brand-cream-line: light-dark(oklch(96.1% 0.055 93 / .6), oklch(96.1% 0.055 93 / .6));
-  --ct-brand-red:        light-dark(oklch(60.2% 0.218 29), oklch(60.2% 0.218 29));
+  --ct-brand-red:        light-dark(oklch(56% 0.218 29), oklch(56% 0.218 29));  /* lightness down from the site's 60.2%: cream text on it was 3.9:1, needs 4.5 */
   --ct-brand-green:      light-dark(oklch(47.6% 0.09 152), oklch(47.6% 0.09 152));
   --ct-brand-green-wash: light-dark(oklch(94% 0.023 137), oklch(94% 0.023 137));
   --ct-brand-warn:       light-dark(oklch(46.4% 0.099 73), oklch(46.4% 0.099 73));
