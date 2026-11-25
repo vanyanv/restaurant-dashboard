@@ -3,19 +3,37 @@ import type { PosterData } from "@/lib/counter/adapters/checks"
 
 export type PosterStore = PosterData["stores"][number]
 
+type Line = { en: string; es: string }
+
+/** "Morning or Night", "Morning, Transition or Night": the checks this store has switched on. */
+function orList(words: string[], or: string): string {
+  return words.length <= 1 ? words.join("") : `${words.slice(0, -1).join(", ")} ${or} ${words[words.length - 1]}`
+}
+
 /**
- * The step-by-step the crew follow, English over Spanish. The wording
- * follows the crew page's own labels (Morning/Mañana, Submit/Enviar,
- * Problem?/¿Problema?), so what the poster says is what the phone shows.
+ * The step-by-step the crew follow, English over Spanish, built from the
+ * store's own lists. The wording follows the crew page's labels
+ * (Morning/Mañana, Submit/Enviar, How/Cómo, Problem?/¿Problema?), so what
+ * the poster says is what the phone shows. The camera line only appears
+ * when some list asks for a photo.
  */
-const STEPS: Array<{ en: string; es: string }> = [
-  { en: "Scan the code with your phone.", es: "Escanea el código con tu teléfono." },
-  { en: "Tap Morning or Night.", es: "Toca Mañana o Noche. Toca ES para español." },
-  { en: "Enter your 4-digit PIN.", es: "Escribe tu PIN de 4 dígitos." },
-  { en: "Do each task, then tap it.", es: "Haz cada tarea y luego tócala." },
-  { en: "Photo required? Take it live.", es: "¿Foto obligatoria? Tómala en vivo." },
-  { en: "Tap Submit before time runs out.", es: "Toca Enviar antes de que se acabe el tiempo." },
-]
+export function posterSteps(store: Pick<PosterStore, "windows">): Line[] {
+  const checks = store.windows
+  return [
+    { en: "Scan the code with your phone.", es: "Escanea el código con tu teléfono." },
+    checks.length > 0
+      ? {
+          en: `Tap ${orList(checks.map((w) => w.label), "or")}.`,
+          es: `Toca ${orList(checks.map((w) => w.labelEs), "o")}. Toca ES para español.`,
+        }
+      : { en: "Tap the check you're doing.", es: "Toca la revisión que vas a hacer. Toca ES para español." },
+    { en: "Enter your 4-digit PIN.", es: "Escribe tu PIN de 4 dígitos." },
+    checks.some((w) => w.photos > 0)
+      ? { en: "Do each task, then tap it. Camera? Take a live photo.", es: "Haz cada tarea y tócala. ¿Cámara? Toma una foto en vivo." }
+      : { en: "Do each task, then tap it.", es: "Haz cada tarea y luego tócala." },
+    { en: "Tap Submit before time runs out.", es: "Toca Enviar antes de que se acabe el tiempo." },
+  ]
+}
 
 /** "Chris N Eddy's Van Nuys" or "Chris N Eddys - Van Nuys" -> "Van Nuys": the logo above already says the rest. */
 function bandName(name: string): string {
@@ -73,7 +91,7 @@ export function Poster({ store, className = "" }: { store: PosterStore; classNam
             <span>Cómo hacer la revisión</span>
           </h2>
           <ol>
-            {STEPS.map((s, i) => (
+            {posterSteps(store).map((s, i) => (
               <li key={s.en}>
                 <i>{i + 1}</i>
                 <p>
@@ -84,6 +102,12 @@ export function Poster({ store, className = "" }: { store: PosterStore; classNam
             ))}
           </ol>
           <div className="ck-letter__help">
+            {store.hasHelp && (
+              <p>
+                Not sure where or how? Tap How.
+                <span lang="es">¿No sabes dónde o cómo? Toca Cómo.</span>
+              </p>
+            )}
             <p>
               Forgot your PIN? Ask your manager.
               <span lang="es">¿Olvidaste tu PIN? Pregúntale a tu gerente.</span>
