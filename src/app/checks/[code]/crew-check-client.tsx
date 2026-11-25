@@ -5,16 +5,14 @@ import { deletePhoto, loadPhotos, savePhoto } from "./offline-photos"
 import { nextPollDelay } from "./poll-delay"
 import type { ActiveCheck, CrewItem, CrewMarkState, CrewView } from "@/lib/checks/crew"
 import { shortStoreName } from "@/lib/checks/names"
-import { crewHelpPhotoUrl } from "@/lib/checks/help"
+import dynamic from "next/dynamic"
 import { ModalDialog } from "@/components/counter/modal-dialog"
-import {
-  Carousel,
-  CarouselContent,
-  CarouselItem,
-  CarouselNext,
-  CarouselPrevious,
-  CarouselViewport,
-} from "@ui-sdk/react/carousel"
+
+/** Loaded on first open of a how-to with photos, so the carousel is not in the page's first load. */
+const HowPhotos = dynamic(() => import("./how-photos"), {
+  ssr: false,
+  loading: () => <div className="ckb__ref ckb__refwait" aria-hidden />,
+})
 
 /**
  * The crew flow, one job per screen: store page -> PIN -> shared checklist ->
@@ -1297,7 +1295,6 @@ function HowSheet({
   onAct: () => void
   onClose: () => void
 }) {
-  const [page, setPage] = useState(1)
   const n = photos.length
   return (
     <ModalDialog className="ckc__sheet" aria-label={t.howFor(title)} onClose={onClose} onClick={onClose}>
@@ -1305,33 +1302,14 @@ function HowSheet({
         <span className="ck-mono">{t.howTitle}</span>
         <h2>{title}</h2>
         {n > 0 && (
-          <Carousel className="ckb__ref" aria-label={t.refPhoto} page={page} onPageChange={(p) => setPage(p)}>
-            <CarouselViewport className="ckb__refview">
-              <CarouselContent className="ckb__refrow">
-                {photos.map((key, k) => (
-                  <CarouselItem key={key} className="ckb__refslide">
-                    <img src={crewHelpPhotoUrl(code, key)} alt={t.photoOf(k + 1, n)} loading={k === 0 ? "eager" : "lazy"} />
-                  </CarouselItem>
-                ))}
-              </CarouselContent>
-            </CarouselViewport>
-            <span className="ckb__reftag">
-              <PictureIcon size={12} /> {t.refPhoto}
-            </span>
-            {n > 1 && (
-              <>
-                <span className="ckb__refn">
-                  {page} / {n}
-                </span>
-                <CarouselPrevious className="ckb__refnav l" aria-label={t.prevPhoto}>
-                  ‹
-                </CarouselPrevious>
-                <CarouselNext className="ckb__refnav r" aria-label={t.nextPhoto}>
-                  ›
-                </CarouselNext>
-              </>
-            )}
-          </Carousel>
+          <HowPhotos
+            code={code}
+            photos={photos}
+            label={t.refPhoto}
+            photoOf={t.photoOf}
+            prev={t.prevPhoto}
+            next={t.nextPhoto}
+          />
         )}
         {steps.length > 0 && (
           <ol className={`ckb__steps${steps.length === 1 ? " one" : ""}`}>

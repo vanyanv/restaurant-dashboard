@@ -148,7 +148,8 @@ beta version because the API still moves between betas. Read
 its parts with Counter tokens (or the crew page's brand aliases) through their
 `data-slot` and state attributes; never load its `web.css`. Every pop-up still
 goes through `ModalDialog`. First use: the photo carousel in the crew how-to
-sheet (`src/app/checks/[code]/crew-check-client.tsx`).
+sheet (`src/app/checks/[code]/how-photos.tsx`, loaded with `next/dynamic`
+so it stays out of the crew page's first load; that route sits near its bundle budget).
 
 ## Other references
 

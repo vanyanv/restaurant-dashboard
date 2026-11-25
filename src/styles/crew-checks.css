@@ -133,6 +133,7 @@
 .ckb__refrow { display: flex }
 .ckb__refslide { flex: 0 0 100% }
 .ckb__ref img { display: block; width: 100%; height: min(52dvh, 75vw); object-fit: contain }
+.ckb__refwait { height: calc(min(52dvh, 75vw) + 6px) }
 .ckb__reftag { position: absolute; left: 0; top: 0; display: inline-flex; align-items: center; gap: 5px; background: var(--accent); color: var(--ink);
   font-family: var(--mono); font-size: 10px; font-weight: 600; letter-spacing: .07em; text-transform: uppercase; padding: 4px 7px }
 .ckb__refn { position: absolute; right: 0; top: 0; background: var(--ink); color: var(--surface); font-family: var(--mono); font-size: 11px; padding: 4px 7px }
