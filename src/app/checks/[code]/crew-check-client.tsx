@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useEffectEvent, useRef, useState } from "react"
+import { useCallback, useEffect, useEffectEvent, useRef, useState, type FormEvent } from "react"
 import { deletePhoto, loadPhotos, savePhoto } from "./offline-photos"
 import { nextPollDelay } from "./poll-delay"
 import type { ActiveCheck, CrewItem, CrewMarkState, CrewView } from "@/lib/checks/crew"
@@ -65,7 +65,22 @@ const T = {
     enterPin: "Enter your PIN",
     pinHelp: "4 digits. Your manager sent it to you.",
     forgot: "Forgot?",
-    forgotHelp: "Ask your manager. They can see your PIN in the dashboard.",
+    forgotTitle: "Forgot your PIN?",
+    forgotLead: "Type the phone number Harri has for you. We'll email your PIN to you.",
+    phoneLabel: "Phone number",
+    sendPin: "Email my PIN",
+    sentTitle: "Check your email",
+    sentLead: (e: string) => `We sent your PIN to ${e}. It can take a minute. Look in spam too.`,
+    backToPin: "Back to PIN",
+    forgotErr: {
+      format: "Type all 10 digits of your phone number.",
+      nomatch: "That number isn't on file here. Type the number Harri has for you.",
+      locked: "Too many tries today. Ask your manager for your PIN.",
+      noemail: "There's no email on file for you. Ask your manager for your PIN.",
+      sent: "We already sent it 3 times today. Check your email, or ask your manager.",
+      send: "We couldn't send the email. Ask your manager for your PIN.",
+      gone: "This QR code is no longer in use.",
+    } as Record<string, string>,
     del: "Delete",
     checking: "Checking…",
     hi: (n: string) => `Hi ${n}`,
@@ -159,7 +174,22 @@ const T = {
     enterPin: "Escribe tu PIN",
     pinHelp: "4 dígitos. Tu gerente te lo envió.",
     forgot: "¿Lo olvidaste?",
-    forgotHelp: "Pregúntale a tu gerente. Puede ver tu PIN en el panel.",
+    forgotTitle: "¿Olvidaste tu PIN?",
+    forgotLead: "Escribe el número de teléfono que Harri tiene para ti. Te enviaremos tu PIN por correo.",
+    phoneLabel: "Teléfono",
+    sendPin: "Enviar mi PIN",
+    sentTitle: "Revisa tu correo",
+    sentLead: (e: string) => `Enviamos tu PIN a ${e}. Puede tardar un minuto. Revisa también spam.`,
+    backToPin: "Volver al PIN",
+    forgotErr: {
+      format: "Escribe los 10 dígitos de tu teléfono.",
+      nomatch: "Ese número no está registrado aquí. Escribe el número que Harri tiene para ti.",
+      locked: "Demasiados intentos hoy. Pídele tu PIN a tu gerente.",
+      noemail: "No tenemos tu correo. Pídele tu PIN a tu gerente.",
+      sent: "Ya lo enviamos 3 veces hoy. Revisa tu correo o pregúntale a tu gerente.",
+      send: "No pudimos enviar el correo. Pídele tu PIN a tu gerente.",
+      gone: "Este código QR ya no se usa.",
+    } as Record<string, string>,
     del: "Borrar",
     checking: "Revisando…",
     hi: (n: string) => `Hola ${n}`,
@@ -573,7 +603,7 @@ function Pin({
   const [error, setError] = useState("")
   const [shake, setShake] = useState(false)
   const [busy, setBusy] = useState(false)
-  const [help, setHelp] = useState(false)
+  const [forgot, setForgot] = useState(false)
 
   const submit = useCallback(
     async (pin: string) => {
@@ -616,12 +646,15 @@ function Pin({
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      if (forgot) return
       if (/^\d$/.test(e.key)) press(e.key)
       else if (e.key === "Backspace") setDigits((c) => c.slice(0, -1))
     }
     window.addEventListener("keydown", onKey)
     return () => window.removeEventListener("keydown", onKey)
   })
+
+  if (forgot) return <ForgotPin code={code} t={t} onBack={() => setForgot(false)} />
 
   return (
     <>
@@ -631,7 +664,7 @@ function Pin({
       <div style={{ display: "grid", gap: 4, textAlign: "center", marginTop: 8 }}>
         <h2>{t.enterPin}</h2>
         <p className="ckc__dim" style={{ margin: 0, fontSize: 14 }}>
-          {help ? t.forgotHelp : t.pinHelp}
+          {t.pinHelp}
         </p>
       </div>
       <div className={`ckc__dots${shake ? " shake" : ""}`} aria-label={`${digits.length} of 4 digits entered`} role="status">
@@ -648,7 +681,7 @@ function Pin({
             {d}
           </button>
         ))}
-        <button type="button" className="x" onClick={() => setHelp(true)}>
+        <button type="button" className="x" onClick={() => setForgot(true)}>
           {t.forgot}
         </button>
         <button type="button" onClick={() => press("0")} aria-label="0">
@@ -658,6 +691,89 @@ function Pin({
           ⌫ {t.del}
         </button>
       </div>
+    </>
+  )
+}
+
+/**
+ * "Forgot my PIN?": crew type the phone number Harri has for them and the
+ * PIN goes to their own email (route `forgot-pin`). The PIN is never shown
+ * here, so knowing a coworker's number does not reveal their PIN.
+ */
+function ForgotPin({ code, t, onBack }: { code: string; t: Tx; onBack: () => void }) {
+  const [phone, setPhone] = useState("")
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState("")
+  const [sentTo, setSentTo] = useState<string | null>(null)
+  const [locked, setLocked] = useState(false)
+
+  const send = async (e: FormEvent) => {
+    e.preventDefault()
+    if (busy) return
+    setBusy(true)
+    setError("")
+    try {
+      const res = await fetch(`/api/checks/${encodeURIComponent(code)}/forgot-pin`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phone }),
+      })
+      const body = (await res.json().catch(() => ({}))) as { email?: string; reason?: string; error?: string }
+      if (res.ok && body.email) {
+        setSentTo(body.email)
+        return
+      }
+      if (body.reason === "locked") setLocked(true)
+      setError((body.reason && t.forgotErr[body.reason]) || body.error || t.offline)
+    } catch {
+      setError(t.offline)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  if (sentTo) {
+    return (
+      <>
+        <div className="ckb__forgot" role="status">
+          <h2>{t.sentTitle}</h2>
+          <p className="ckc__dim">{t.sentLead(sentTo)}</p>
+        </div>
+        <button type="button" className="ckc__btn" onClick={onBack}>
+          {t.backToPin}
+        </button>
+      </>
+    )
+  }
+
+  return (
+    <>
+      <button type="button" className="ckc__btn ckc__btn--ghost ckb__back" onClick={onBack}>
+        ‹ {t.backToPin}
+      </button>
+      <form className="ckb__forgot" onSubmit={send}>
+        <h2>{t.forgotTitle}</h2>
+        <p className="ckc__dim">{t.forgotLead}</p>
+        <label className="ckb__phone">
+          <span>{t.phoneLabel}</span>
+          <input
+            type="tel"
+            inputMode="tel"
+            autoComplete="tel-national"
+            placeholder="(818) 555-0147"
+            value={phone}
+            onChange={(e) => setPhone(e.target.value)}
+            disabled={locked}
+            aria-invalid={error ? true : undefined}
+          />
+        </label>
+        <div className="ckc__err" role="alert">
+          {error}
+        </div>
+        <button type="submit" className="ckc__btn" disabled={busy || locked || phone.replace(/\D/g, "").length < 10}>
+          {busy ? t.sending : t.sendPin}
+        </button>
+      </form>
     </>
   )
 }

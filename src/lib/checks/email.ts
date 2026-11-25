@@ -52,6 +52,13 @@ export function pinEmailContent(e: PinEmail): { subject: string; text: string; h
   return { subject, text, html }
 }
 
+/** m•••••@gmail.com: enough for the owner of the inbox to recognise it, not enough to learn it. */
+export function maskEmail(email: string): string {
+  const at = email.lastIndexOf("@")
+  if (at < 1) return "•••"
+  return `${email[0]}•••••${email.slice(at)}`
+}
+
 export async function sendPinEmail(e: PinEmail): Promise<SendResult> {
   return sendEmail({ to: [e.to], ...pinEmailContent(e) })
 }
