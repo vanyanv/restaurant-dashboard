@@ -90,6 +90,21 @@ function Editor({ data }: { data: ChecklistsData }) {
     setOutcome(null)
   }
   const updateSection = (si: number, fn: (s: EditorSection) => void) => update((t) => fn(t.sections[si]))
+  /**
+   * One task, found by id in the latest draft of the check it belongs to. A
+   * how-to photo can finish uploading after the owner reordered, removed or
+   * switched check, so it never writes by position; a task gone by then is skipped.
+   */
+  const updateItem = (k: string, id: string, fn: (i: EditorItem) => void) => {
+    setDrafts((d) => {
+      if (!d[k]?.sections.some((s) => s.items.some((i) => i.id === id))) return d
+      const next = structuredClone(d[k])
+      for (const s of next.sections) for (const i of s.items) if (i.id === id) fn(i)
+      return { ...d, [k]: next }
+    })
+    setDirty((d) => ({ ...d, [k]: true }))
+    setOutcome(null)
+  }
 
   if (!t) return <p className="ck-meta" style={{ padding: 16 }}>No checks set up for this store.</p>
 
@@ -425,7 +440,7 @@ function Editor({ data }: { data: ChecklistsData }) {
                   {helpFor === it.id && (
                     <HowToPanel
                       item={it}
-                      onChange={(fn) => updateSection(si, (s) => fn(s.items[ii]))}
+                      onChange={(fn) => updateItem(kind, it.id, fn)}
                       onClose={() => setHelpFor(null)}
                     />
                   )}
@@ -563,12 +578,13 @@ function HowToPanel({
               </span>
             </figure>
           ))}
-          {room > 0 && (
-            <label className="ck-howto__add">
+          {(room > 0 || uploading > 0) && (
+            <label className="ck-howto__add" aria-disabled={uploading > 0}>
               <input
                 type="file"
                 accept="image/jpeg,image/png,image/webp"
                 multiple
+                disabled={uploading > 0}
                 className="sr-only"
                 onChange={(e) => {
                   const files = Array.from(e.target.files ?? [])
