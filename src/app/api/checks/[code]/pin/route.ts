@@ -7,6 +7,7 @@ import { chargeWrongPin, pinTryAllowed } from "@/lib/checks/pin-guard"
 import { shortName } from "@/lib/checks/data"
 import { isUniqueViolation, isValidPin } from "@/lib/checks/setup"
 import { dayToDb } from "@/lib/checks/time"
+import { readDevice, setDeviceCookie } from "@/lib/checks/crew-device"
 
 /**
  * Crew PIN step. Public: the store's code in the URL is the only thing that
@@ -29,33 +30,9 @@ import { dayToDb } from "@/lib/checks/time"
  */
 const PIN_LIMIT = { limit: 20, windowMs: 60_000, identifyBy: "ip" as const }
 
-/**
- * A random id per phone, so wrong-PIN budgets are per phone, not per store
- * Wi-Fi (`pin-guard.ts`). Not a sign-in and carries nothing: a phone that
- * drops it just gets a new one, and the per-address ceiling still holds.
- */
-const DEVICE_COOKIE = "crew_dev"
-const DEVICE_ID = /^[0-9a-f-]{36}$/
-
-function readDevice(request: NextRequest): { id: string; isNew: boolean } {
-  const v = request.cookies.get(DEVICE_COOKIE)?.value
-  if (v && DEVICE_ID.test(v)) return { id: v, isNew: false }
-  return { id: crypto.randomUUID(), isNew: true }
-}
-
 export async function POST(request: NextRequest, ctx: { params: Promise<{ code: string }> }) {
   const device = readDevice(request)
-  const res = await handle(request, ctx, device.id)
-  if (device.isNew) {
-    res.cookies.set(DEVICE_COOKIE, device.id, {
-      httpOnly: true,
-      sameSite: "lax",
-      secure: process.env.NODE_ENV === "production",
-      path: "/api/checks",
-      maxAge: 400 * 24 * 60 * 60,
-    })
-  }
-  return res
+  return setDeviceCookie(await handle(request, ctx, device.id), device)
 }
 
 async function handle(

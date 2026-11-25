@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import { Section, useCounterTransition, usePageChrome } from "@/components/counter"
-import { copyChecklistToOtherStores, saveChecklist } from "@/lib/counter/actions/checks"
+import { copyChecklistToOtherStores, removeChecklistSection, saveChecklist } from "@/lib/counter/actions/checks"
 import type { SectionSources } from "@/lib/counter/adapters/types"
 import type {
   ChecklistsData,
@@ -62,6 +62,34 @@ const label12 = (min: number) => {
   return `${h % 12 === 0 ? 12 : h % 12}${m % 60 ? `:${pad2(m % 60)}` : ""} ${h < 12 ? "am" : "pm"}`
 }
 
+/**
+ * Swaps temporary ids for the ones the server gave, matched through the list
+ * as it was sent (by position there), then applied by id to the draft as it
+ * is now, so a keystroke made while saving isn't lost.
+ */
+function withSavedIds(
+  now: EditorTemplate,
+  sent: EditorTemplate,
+  saved: Array<{ id: string; items: string[] }>,
+): EditorTemplate {
+  const ids = new Map<string, string>()
+  sent.sections.forEach((s, si) => {
+    if (saved[si]) ids.set(s.id, saved[si].id)
+    s.items.forEach((i, ii) => {
+      const id = saved[si]?.items[ii]
+      if (id) ids.set(i.id, id)
+    })
+  })
+  return {
+    ...now,
+    sections: now.sections.map((s) => ({
+      ...s,
+      id: ids.get(s.id) ?? s.id,
+      items: s.items.map((i) => ({ ...i, id: ids.get(i.id) ?? i.id })),
+    })),
+  }
+}
+
 let tmpId = 0
 const newId = () => `new-${++tmpId}`
 
@@ -78,6 +106,8 @@ function Editor({ data }: { data: ChecklistsData }) {
   const reorder = useDragReorder()
   // The task whose how-to panel is open, one at a time.
   const [helpFor, setHelpFor] = useState<string | null>(null)
+  // The section waiting on "Yes, remove", one at a time.
+  const [removing, setRemoving] = useState<string | null>(null)
   const t = drafts[kind]
 
   const update = (fn: (t: EditorTemplate) => void) => {
@@ -108,8 +138,10 @@ function Editor({ data }: { data: ChecklistsData }) {
 
   if (!t) return <p className="ck-meta" style={{ padding: 16 }}>No checks set up for this store.</p>
 
-  const save = () =>
-    act("save", async () => {
+  /** Saves the list as shown; with `without`, minus that section (Remove section with other edits pending). */
+  const save = (without?: string) =>
+    act(without ? "remove" : "save", async () => {
+      const sent = { ...t, sections: t.sections.filter((s) => s.id !== without) }
       const r = await saveChecklist({
         storeId: data.store.id,
         kind: t.kind as "MORNING" | "EVENING",
@@ -119,7 +151,7 @@ function Editor({ data }: { data: ChecklistsData }) {
         dueByWeekday: t.dueByWeekday,
         graceMin: 0,
         enabled: t.enabled,
-        sections: t.sections.map((s) => ({
+        sections: sent.sections.map((s) => ({
           id: isNew(s.id) ? undefined : s.id,
           nameEn: s.nameEn,
           nameEs: s.nameEs,
@@ -136,12 +168,50 @@ function Editor({ data }: { data: ChecklistsData }) {
         })),
       })
       if (r.ok) {
+        // New sections and tasks take their saved ids, so a later Remove
+        // section or Save finds them on the server instead of making copies.
+        if ("saved" in r) {
+          setDrafts((d) => {
+            const now = without ? { ...d[kind], sections: d[kind].sections.filter((s) => s.id !== without) } : d[kind]
+            return { ...d, [kind]: withSavedIds(now, sent, r.saved) }
+          })
+        }
         setDirty((d) => ({ ...d, [kind]: false }))
-        setOutcome({ ok: true, text: r.message ?? "Saved." })
+        setOutcome({ ok: true, text: without ? "Section removed. Your other changes are saved too." : (r.message ?? "Saved.") })
         // saveChecklist revalidates /checks; no router.refresh() needed.
       } else setOutcome({ ok: false, text: r.error })
       return r
     })
+
+  /**
+   * Remove section saves on its own: a saved section is deleted on the server
+   * there and then, one never saved just leaves the draft. Any other unsaved
+   * edits stay in the draft, still waiting on Save.
+   */
+  const dropSection = (k: string, id: string) =>
+    setDrafts((d) => (d[k] ? { ...d, [k]: { ...d[k], sections: d[k].sections.filter((s) => s.id !== id) } } : d))
+  const removeSection = (id: string) => {
+    setRemoving(null)
+    if (isNew(id)) {
+      dropSection(kind, id)
+      return
+    }
+    const k = kind
+    // With other edits not saved yet, the server's copy isn't what the owner
+    // sees, so the list is saved as shown, without the section.
+    if (dirty[k]) {
+      save(id)
+      return
+    }
+    act("remove", async () => {
+      const r = await removeChecklistSection({ storeId: data.store.id, kind: k, sectionId: id })
+      if (r.ok) {
+        dropSection(k, id)
+        setOutcome({ ok: true, text: r.message ?? "Section removed." })
+      } else setOutcome({ ok: false, text: r.error })
+      return r
+    })
+  }
 
   const copy = () =>
     act("copy", async () => {
@@ -169,7 +239,7 @@ function Editor({ data }: { data: ChecklistsData }) {
           <button {...actMarks(stateOf("copy"))} type="button" className="btn" onClick={copy} disabled={busy}>
             Copy to other stores
           </button>
-          <button {...actMarks(stateOf("save"))} type="button" className="btn btn--primary" onClick={save} disabled={busy || !dirty[kind]}>
+          <button {...actMarks(stateOf("save"))} type="button" className="btn btn--primary" onClick={() => save()} disabled={busy || !dirty[kind]}>
             {dirty[kind] ? "Save changes" : "Saved"}
           </button>
         </div>
@@ -181,7 +251,10 @@ function Editor({ data }: { data: ChecklistsData }) {
             const items = d.sections.reduce((n, s) => n + (s.enabled ? s.items.length : 0), 0)
             const off = d.sections.filter((s) => !s.enabled).length
             return (
-              <button key={x.kind} type="button" aria-pressed={kind === x.kind} onClick={() => setKind(x.kind)}>
+              <button key={x.kind} type="button" aria-pressed={kind === x.kind} onClick={() => {
+                setKind(x.kind)
+                setRemoving(null)
+              }}>
                 <b>
                   {x.label}
                   {dirty[x.kind] ? " •" : ""}
@@ -364,16 +437,34 @@ function Editor({ data }: { data: ChecklistsData }) {
                     <i aria-hidden />
                     {s.enabled ? "On" : "Off"}
                   </button>
-                  <button
-                    type="button"
-                    className="ck-link"
-                    disabled={t.sections.length === 1}
-                    onClick={() => update((t) => void t.sections.splice(si, 1))}
-                  >
-                    Remove section
-                  </button>
+                  {removing === s.id ? (
+                    <>
+                      <button type="button" className="ck-link" disabled={busy} onClick={() => removeSection(s.id)}>
+                        Yes, remove
+                      </button>
+                      <button type="button" className="ck-link" onClick={() => setRemoving(null)}>
+                        Keep
+                      </button>
+                    </>
+                  ) : (
+                    <button
+                      {...actMarks(stateOf("remove"))}
+                      type="button"
+                      className="ck-link"
+                      disabled={busy || t.sections.length === 1}
+                      onClick={() => setRemoving(s.id)}
+                    >
+                      Remove section
+                    </button>
+                  )}
                 </span>
               </div>
+              {removing === s.id && (
+                <p className="ck-meta ck-secoff">
+                  Removes {s.nameEn || "this section"} and its {s.items.length} task{s.items.length === 1 ? "" : "s"} now, no Save
+                  needed. Past checks keep what crew ticked. To hide it for a while instead, switch it off.
+                </p>
+              )}
               {!s.enabled && (
                 <p className="ck-meta ck-secoff">
                   Off. Crew don&apos;t see this section or its {s.items.length} task{s.items.length === 1 ? "" : "s"}, and it

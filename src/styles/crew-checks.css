@@ -184,3 +184,14 @@
 /* The ⋯ menu, photo, done and note sheets share the how-to drawer's shell. */
 .ckb__sheetbody { min-height: 0; flex: 1; overflow-y: auto; overscroll-behavior: contain; display: grid; align-content: start; gap: 10px }
 .ckb__sheetbody textarea { width: 100%; min-height: 84px; border: 1px solid var(--line-strong); padding: 10px; font: inherit; font-size: 16px; background: var(--surface); color: var(--ink) }
+
+/* "Forgot my PIN?": phone number in, PIN goes to the crew member's own email. */
+.ckb__forgot { display: grid; gap: 12px; text-align: center; margin-top: 8px }
+.ckb__forgot p { margin: 0; font-size: 14px; line-height: 1.4 }
+.ckb__phone { display: grid; gap: 6px; text-align: left }
+.ckb__phone span { font-family: var(--mono); font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-2) }
+.ckb__phone input { font: inherit; font-size: 20px; font-variant-numeric: tabular-nums; min-height: 56px; padding: 0 14px;
+  background: var(--surface); color: var(--ink); border: 1.5px solid var(--line-strong); border-radius: 0 }
+.ckb__phone input:focus-visible { outline: none; border: 2px solid var(--ink) }
+.ckb__phone input[aria-invalid="true"] { border-color: var(--bad) }
+.ckb__forgot .ckc__btn { width: 100% }

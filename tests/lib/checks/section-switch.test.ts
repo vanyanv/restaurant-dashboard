@@ -48,6 +48,9 @@ beforeEach(() => {
     ],
   })
   asMock(prisma.checkSection.update).mockImplementation(({ where }: { where: { id: string } }) => Promise.resolve({ id: where.id }))
+  asMock(prisma.checkSection.create).mockResolvedValue({ id: "sec_created" })
+  asMock(prisma.checkItem.update).mockImplementation(({ where }: { where: { id: string } }) => Promise.resolve({ id: where.id }))
+  asMock(prisma.checkItem.create).mockResolvedValue({ id: "it_created" })
 })
 
 describe("saveChecklist with a section off", () => {

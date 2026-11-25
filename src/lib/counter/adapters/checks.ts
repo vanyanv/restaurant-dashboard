@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma"
 import { loadCheckGrid, shortName, type GridCell, type GridStore } from "@/lib/checks/data"
 import { recordCheckAlerts } from "@/lib/checks/missed-alerts"
 import { checkLink } from "@/lib/checks/crew"
+import { crewHelp } from "@/lib/checks/help"
 import { shortStoreName } from "@/lib/checks/names"
 import { emailConfigured } from "@/lib/checks/email"
 import { ensureCheckSetup } from "@/lib/checks/setup"
@@ -878,7 +879,11 @@ export type PosterData = {
       /** Days that close later or earlier, "3:00 am Fri, Sat, Sun", and the same in Spanish. */
       until: string[]
       untilEs: string[]
+      /** Tasks on this list that need a live photo (switched-off sections left out). */
+      photos: number
     }>
+    /** Some task on an enabled list has how-to help, so the poster can point crew at How. */
+    hasHelp: boolean
   }>
 }
 export type PostersSections = { posters: SectionData<PosterData> }
@@ -897,7 +902,17 @@ export function getChecksPostersSectionPromises(opts: { accountId: string }): St
           where: { accountId: opts.accountId, isActive: true },
           select: {
             id: true, name: true, checkCode: true,
-            checkTemplates: { select: { kind: true, opensAtMin: true, submitFromMin: true, dueAtMin: true, dueByWeekday: true, graceMin: true, enabled: true } },
+            checkTemplates: {
+              select: {
+                kind: true, opensAtMin: true, submitFromMin: true, dueAtMin: true, dueByWeekday: true, graceMin: true, enabled: true,
+                // What the poster tells crew must match the lists: photos only
+                // where a task asks for one, How only where a task has help.
+                sections: {
+                  where: { enabled: true },
+                  select: { items: { select: { photoRequired: true, helpEn: true, helpEs: true, helpPhotos: true } } },
+                },
+              },
+            },
           },
           orderBy: { name: "asc" },
         })
@@ -912,6 +927,10 @@ export function getChecksPostersSectionPromises(opts: { accountId: string }): St
             const size = qr.modules.size
             let cells = ""
             for (let i = 0; i < size * size; i++) cells += qr.modules.data[i] ? "1" : "0"
+            const live = r.checkTemplates.filter((t) => t.enabled)
+            const hasHelp = live.some((t) =>
+              t.sections.some((s) => s.items.some((i) => crewHelp(i) !== null)),
+            )
             return {
               id: r.id,
               name: r.name,
@@ -927,8 +946,10 @@ export function getChecksPostersSectionPromises(opts: { accountId: string }): St
                   submit: windowRange(t),
                   until: windowOverrides(t),
                   untilEs: windowOverrides(t, "es"),
+                  photos: t.sections.reduce((n, s) => n + s.items.filter((i) => i.photoRequired).length, 0),
                 }]
               }),
+              hasHelp,
             }
           }),
         }
