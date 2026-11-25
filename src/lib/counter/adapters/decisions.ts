@@ -24,6 +24,7 @@ import {
 import { count, delta, deltaSign, money, pct } from "@/lib/counter/format"
 import {
   buildWeekPlan,
+  type PlanMenuInput,
   type PlanSalesDayInput,
   type PlanStoreDayInput,
   type PlanStoreInput,
@@ -1832,11 +1833,51 @@ function soldWeek(days: SettledDay[], monday: string): number | null {
   return total
 }
 
+/**
+ * The menu item forecast for "What will sell": every store in scope, today
+ * to the end of next week, newest generation per (store, item, day).
+ *
+ * `ForecastMenuItem` is append-only across generations (the same trap
+ * `newestGenerationPerDay` names), so rows are deduped here before any sum.
+ * `otterItemSkuId` holds the Otter item NAME (see `forecast-depletion.ts`).
+ * Scoped by account through the store relation. Null when the read fails.
+ */
+export async function loadPlanMenu(
+  accountId: string,
+  storeIds: string[],
+  asOf: Date,
+): Promise<PlanMenuInput[] | null> {
+  if (storeIds.length === 0) return []
+  const thisMonday = weekStartUTC(asOf)
+  const end = new Date(thisMonday)
+  end.setUTCDate(end.getUTCDate() + 14)
+  try {
+    const rows = await prisma.forecastMenuItem.findMany({
+      where: {
+        storeId: { in: storeIds },
+        store: { accountId },
+        forecastDate: { gte: asOf, lt: end },
+      },
+      select: { storeId: true, otterItemSkuId: true, forecastDate: true, predictedQty: true, generatedAt: true },
+    })
+    const best = new Map<string, (typeof rows)[number]>()
+    for (const r of rows) {
+      const k = `${r.storeId}|${r.otterItemSkuId}|${ymdUTC(r.forecastDate)}`
+      const held = best.get(k)
+      if (held === undefined || r.generatedAt.getTime() >= held.generatedAt.getTime()) best.set(k, r)
+    }
+    return [...best.values()].map((r) => ({ storeId: r.storeId, key: ymdUTC(r.forecastDate), item: r.otterItemSkuId, qty: r.predictedQty }))
+  } catch {
+    return null
+  }
+}
+
 export function buildPlanFrom(
   view: DecisionsView,
   plan: PlanStores,
   runSd: SectionData<RunOut>,
   storeId: string | null,
+  menu?: PlanMenuInput[] | null,
 ): WeekPlan {
   const asOf = parseDayKey(view.asOf)
   const thisMonday = asOf === null ? view.asOf : ymdUTC(weekStartUTC(asOf))
@@ -1938,6 +1979,7 @@ export function buildPlanFrom(
       href: c.href,
     })),
     accuracy: insideOf(view),
+    menu,
     basePath: "/dashboard/decisions",
   })
 }
@@ -1962,9 +2004,13 @@ export function getDecisionsSectionPromises(
   // that answers `{ ok: false }` is a FAILED section and not an empty one:
   // `empty` would tell the reader there is nothing to decide this week, and
   // there may be plenty — we could not load it.
+  // One business day for every read on the page: the view, the run-out and
+  // the menu forecast. Read separately, a load that crossed midnight could
+  // see a different week from the others.
+  const businessDayKey = ymdUTC(businessQueryDate(new Date()))
   const viewP: Promise<SectionData<DecisionsView>> = lazy(() => classify(
     async () => {
-      const res = await getDecisionsView({ storeId: input.storeId })
+      const res = await getDecisionsView({ storeId: input.storeId, asOf: businessDayKey })
       if (!res.ok) throw new Error(loadError(res.error))
       return res.data
     },
@@ -2050,7 +2096,7 @@ export function getDecisionsSectionPromises(
   // worked out here and the run-out reads run alongside the view's ~50
   // queries instead of after them. The section still waits for the view, so a
   // failed view fails this section exactly as before.
-  const runOutAsOf = parseDayKey(ymdUTC(businessQueryDate(new Date()))) ?? new Date()
+  const runOutAsOf = parseDayKey(businessDayKey) ?? new Date()
   const runOutLoad = lazy(() => (async () => {
     const resolved = await resolveStoreContext(input.storeId, input.accountId)
     if (!resolved.ok) return null
@@ -2060,6 +2106,12 @@ export function getDecisionsSectionPromises(
       asOf: runOutAsOf,
     })
   })())
+  // "What will sell": started with the run-out reads, on the same day key.
+  const menuLoad = lazy(() => (async () => {
+    const resolved = await resolveStoreContext(input.storeId, input.accountId)
+    if (!resolved.ok) return null
+    return loadPlanMenu(input.accountId, [...resolved.ctx.storeIds], runOutAsOf)
+  })().catch(() => null))
   const runOutP: Promise<SectionData<RunOut>> = lazy(() => {
     // Start the run-out reads alongside the view, not after it. The catch
     // only keeps an early rejection from being reported as unhandled while
@@ -2127,12 +2179,12 @@ export function getDecisionsSectionPromises(
 
   return {
     plan: lazy(() => guardSection(
-      Promise.all([viewP, guardSection(runOutP, "retryDecisions"), planStoresP]).then(([sd, runSd, perStore]) => {
+      Promise.all([viewP, guardSection(runOutP, "retryDecisions"), planStoresP, menuLoad]).then(([sd, runSd, perStore, menu]) => {
         if (sd.status !== "ready" && sd.status !== "stale") {
           return mapReady(sd, () => undefined as never)
         }
         const view = sd.data
-        return ready(buildPlanFrom(view, perStore, runSd, input.storeId ?? null))
+        return ready(buildPlanFrom(view, perStore, runSd, input.storeId ?? null, menu))
       }),
       "retryDecisions",
     )),

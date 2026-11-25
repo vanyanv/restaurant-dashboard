@@ -100,3 +100,12 @@
 .wa-list small{font-size:var(--t-cap);color:var(--ink-2)}
 .wa-list .cu-status{flex:none}
 .wa-group+.wa-group{margin-top:14px}
+
+/* The shelf and "What will sell", side by side when the page is wide */
+.wa-two{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(min(100%,320px),1fr));align-items:start}
+.wa-sell{list-style:none;margin:0;padding:0;display:grid;gap:8px}
+.wa-sell>li{display:grid;grid-template-columns:minmax(0,9rem) minmax(0,1fr) auto;gap:10px;align-items:center;font-size:var(--t-cap)}
+.wa-sell>li>span:first-child{overflow-wrap:anywhere}
+.wa-sell b{font-weight:600;font-variant-numeric:tabular-nums;text-align:right;min-width:3ch}
+.wa-sell__track{height:8px;border-radius:3px;background:var(--line);overflow:hidden}
+.wa-sell__track>i{display:block;height:100%;background:var(--ink-2);transform:scaleX(var(--w,1));transform-origin:left;transition:transform var(--ct-dur-quick) var(--ct-ease)}

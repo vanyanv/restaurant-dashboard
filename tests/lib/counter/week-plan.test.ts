@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest"
 import {
+  buildSellers,
   buildWeekPlan,
   defaultWeekFor,
   weatherWords,
@@ -274,5 +275,44 @@ describe("week plan", () => {
     const fri = buildWeekPlan(input).weeks.next.days.find((d) => d.key === "2026-11-27")!
     expect(fri.detail.why).toBeNull()
     expect(fri.detail.whyNote).toContain("only some stores")
+  })
+})
+
+describe("what will sell", () => {
+  const menu = [
+    { storeId: "hw", key: "2026-11-18", item: "Fries", qty: 999 }, // sold day, left out
+    { storeId: "hw", key: "2026-11-19", item: "Fries", qty: 40 },
+    { storeId: "vn", key: "2026-11-20", item: "Fries", qty: 60 },
+    { storeId: "hw", key: "2026-11-20", item: "Shake", qty: 30 },
+    { storeId: "hw", key: "2026-11-21", item: "Slider", qty: 120 },
+    { storeId: "hw", key: "2026-11-23", item: "Shake", qty: 500 },
+  ]
+  it("ranks this week's items from today to Sunday, and next week Monday to Sunday", () => {
+    const sellers = buildSellers(menu, THIS, ASOF)
+    expect(sellers.span).toBe("Thursday to Sunday")
+    expect(sellers.rows.map((r) => [r.item, r.qty])).toEqual([["Slider", 120], ["Fries", 100], ["Shake", 30]])
+    expect(sellers.rows[1].share).toBeCloseTo(100 / 120)
+    const next = buildSellers(menu, NEXT, ASOF)
+    expect(next.span).toBe("Monday to Sunday")
+    expect(next.rows).toEqual([{ item: "Shake", qty: 500, qtyText: "500", share: 1 }])
+  })
+  it("names a store in scope with no menu forecast instead of summing it as zero", () => {
+    const stores = [{ id: "hw", name: "Hollywood" }, { id: "vn", name: "Van Nuys" }, { id: "gl", name: "Glendale" }]
+    expect(buildSellers(menu, NEXT, ASOF, stores).note).toBe(
+      "Van Nuys and Glendale have no menu forecast for these days, so they are not counted",
+    )
+    expect(buildSellers(menu, THIS, ASOF, stores.slice(0, 2)).note).toBeNull()
+    const zeros = [...menu, { storeId: "vn", key: "2026-11-24", item: "Fries", qty: 0 }]
+    expect(buildSellers(zeros, NEXT, ASOF, stores.slice(0, 2)).note).toBeNull()
+  })
+  it("says a failed read failed and a missing forecast is missing", () => {
+    expect(buildSellers(null, NEXT, ASOF).note).toBe("The menu forecast did not load")
+    expect(buildSellers([], NEXT, ASOF).note).toBe("No menu forecast for these days yet")
+    expect(buildSellers(undefined, NEXT, ASOF).rows).toEqual([])
+  })
+  it("rides on each week of the plan", () => {
+    const plan = buildWeekPlan(base({ menu }))
+    expect(plan.weeks.next.sellers.rows[0].item).toBe("Shake")
+    expect(plan.weeks.this.sellers.rows[0].item).toBe("Slider")
   })
 })
