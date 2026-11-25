@@ -147,9 +147,11 @@ beta version because the API still moves between betas. Read
 (`.agents/skills/ui-sdk`, pinned in `skills-lock.json`) before using it. Style
 its parts with Counter tokens (or the crew page's brand aliases) through their
 `data-slot` and state attributes; never load its `web.css`. Every pop-up still
-goes through `ModalDialog`. First use: the photo carousel in the crew how-to
-sheet (`src/app/checks/[code]/how-photos.tsx`, loaded with `next/dynamic`
-so it stays out of the crew page's first load; that route sits near its bundle budget).
+goes through `ModalDialog`, with one exception: the crew how-to sheet is a
+ui-sdk Drawer (`src/app/checks/[code]/how-sheet.tsx`) holding a Carousel
+(`how-photos.tsx`), because the owner asked for the SDK there. It loads with
+`next/dynamic` so it stays out of the crew page's first load; that route sits
+near its bundle budget.
 
 ## Other references
 

@@ -8,11 +8,8 @@ import { shortStoreName } from "@/lib/checks/names"
 import dynamic from "next/dynamic"
 import { ModalDialog } from "@/components/counter/modal-dialog"
 
-/** Loaded on first open of a how-to with photos, so the carousel is not in the page's first load. */
-const HowPhotos = dynamic(() => import("./how-photos"), {
-  ssr: false,
-  loading: () => <div className="ckb__ref ckb__refwait" aria-hidden />,
-})
+/** Loaded on the first tap of a How button, so the drawer and carousel are not in the page's first load. */
+const HowSheet = dynamic(() => import("./how-sheet"), { ssr: false })
 
 /**
  * The crew flow, one job per screen: store page -> PIN -> shared checklist ->
@@ -741,6 +738,8 @@ function Checklist({
   const [menuFor, setMenuFor] = useState<CrewItem | null>(null)
   /** The task whose how-to is open: the owner's photos and steps. */
   const [howFor, setHowFor] = useState<CrewItem | null>(null)
+  /** Kept apart from howFor so the sheet slides out with its content still in it. */
+  const [howOpen, setHowOpen] = useState(false)
   const [photoFor, setPhotoFor] = useState<{ item: CrewItem; blob: Blob; url: string } | null>(null)
   /** Sections folded or unfolded by hand; untouched ones fold when they are all done. */
   const [folded, setFolded] = useState<Record<string, boolean>>({})
@@ -1070,7 +1069,10 @@ function Checklist({
                       </span>
                     </button>
                     {i.help && (
-                      <button type="button" className="ckb__how" aria-label={t.howFor(task)} onClick={() => setHowFor(i)}>
+                      <button type="button" className="ckb__how" aria-label={t.howFor(task)} onClick={() => {
+                          setHowFor(i)
+                          setHowOpen(true)
+                        }}>
                         {i.help.photos.length > 0 ? <PictureIcon /> : <StepsIcon />}
                         <small>{t.how}</small>
                       </button>
@@ -1143,6 +1145,8 @@ function Checklist({
       {howFor?.help && (
         <HowSheet
           t={t}
+          open={howOpen}
+          onOpenChange={setHowOpen}
           code={code}
           title={txt(howFor.en, howFor.es)}
           steps={lang === "es" && howFor.help.es.length > 0 ? howFor.help.es : howFor.help.en}
@@ -1150,11 +1154,9 @@ function Checklist({
           done={stateOf(howFor.id).done}
           photoTask={howFor.photoRequired}
           onAct={() => {
-            const item = howFor
-            setHowFor(null)
-            tap(item)
+            setHowOpen(false)
+            tap(howFor)
           }}
-          onClose={() => setHowFor(null)}
         />
       )}
       {photoFor && (
@@ -1269,71 +1271,6 @@ function PracticeBanner({ t }: { t: Tx }) {
       <b>{t.practiceTitle}</b>
       <span>{t.practiceHelp}</span>
     </div>
-  )
-}
-
-/** The how-to on a task: the owner's reference photos first, then the steps. */
-function HowSheet({
-  t,
-  code,
-  title,
-  steps,
-  photos,
-  done,
-  photoTask,
-  onAct,
-  onClose,
-}: {
-  t: Tx
-  code: string
-  title: string
-  steps: string[]
-  photos: string[]
-  done: boolean
-  photoTask: boolean
-  /** Not done yet: tick it, or open the camera on a photo task. */
-  onAct: () => void
-  onClose: () => void
-}) {
-  const n = photos.length
-  return (
-    <ModalDialog className="ckc__sheet" aria-label={t.howFor(title)} onClose={onClose} onClick={onClose}>
-      <div className="ckb__howsheet" onClick={(e) => e.stopPropagation()}>
-        <span className="ck-mono">{t.howTitle}</span>
-        <h2>{title}</h2>
-        {n > 0 && (
-          <HowPhotos
-            code={code}
-            photos={photos}
-            label={t.refPhoto}
-            photoOf={t.photoOf}
-            prev={t.prevPhoto}
-            next={t.nextPhoto}
-          />
-        )}
-        {steps.length > 0 && (
-          <ol className={`ckb__steps${steps.length === 1 ? " one" : ""}`}>
-            {steps.map((s, k) => (
-              <li key={k}>{s}</li>
-            ))}
-          </ol>
-        )}
-        {!done && (
-          <button type="button" className="ckc__btn" onClick={onAct}>
-            {photoTask ? (
-              <>
-                <CameraIcon /> {t.takePhoto}
-              </>
-            ) : (
-              t.howTick
-            )}
-          </button>
-        )}
-        <button type="button" className="ckc__btn ckc__btn--ghost" onClick={onClose}>
-          {t.close}
-        </button>
-      </div>
-    </ModalDialog>
   )
 }
 
