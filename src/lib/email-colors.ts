@@ -23,7 +23,7 @@ export const EMAIL_TOKENS = {
   badWash: "oklch(94.5% 0.030 25)",
   brandInk: "oklch(20.3% 0.01 67)",
   brandLine: "oklch(88.4% 0.039 89)",
-  brandRed: "oklch(60.2% 0.218 29)",
+  brandRed: "oklch(56% 0.218 29)",
   brandCream: "oklch(96.1% 0.055 93)",
   brandYellow: "oklch(81.8% 0.157 82)",
 } as const

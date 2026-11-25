@@ -153,6 +153,7 @@ export function AskComposer({
   const commands = matchSlashCommands(value)
   const menuOpen = commands.length > 0
   const listId = useId()
+  const optionId = (i: number) => `${listId}-${i}`
 
   // Grow to the text, five lines at most; the rest scrolls inside.
   const grow = () => {
@@ -195,35 +196,35 @@ export function AskComposer({
           send()
         }}
       >
-        <div
-          className={`slash${menuOpen ? " on" : ""}`}
-          id={listId}
-          role="listbox"
-          aria-label="Shortcuts"
-          aria-hidden={!menuOpen}
-        >
+        <div className={`slash${menuOpen ? " on" : ""}`}>
           <div className="k" aria-hidden="true">Shortcuts</div>
-          {commands.map((c, i) => (
-            <button
-              type="button"
-              role="option"
-              id={`${listId}-${i}`}
-              tabIndex={-1}
-              aria-selected={i === cursor}
-              className={i === cursor ? "on" : undefined}
-              key={c.key}
-              // Mouse down, not click: a click would blur the textarea first
-              // and close the menu under the pointer.
-              onMouseDown={(e) => {
-                e.preventDefault()
-                take(i)
-              }}
-            >
-              <code>{c.key}</code>
-              <b>{c.template}</b>
-              <span>{c.description}</span>
-            </button>
-          ))}
+          {/* Only while it has options: an empty listbox is announced as one. */}
+          {menuOpen ? (
+            <div className="slash__l" role="listbox" id={listId} aria-label="Shortcuts">
+              {commands.map((c, i) => (
+                <button
+                  type="button"
+                  role="option"
+                  id={optionId(i)}
+                  // Focus stays in the field; `aria-activedescendant` says which is lit.
+                  tabIndex={-1}
+                  aria-selected={i === cursor}
+                  className={i === cursor ? "on" : undefined}
+                  key={c.key}
+                  // Mouse down, not click: a click would blur the textarea first
+                  // and close the menu under the pointer.
+                  onMouseDown={(e) => {
+                    e.preventDefault()
+                    take(i)
+                  }}
+                >
+                  <code>{c.key}</code>
+                  <b>{c.template}</b>
+                  <span>{c.description}</span>
+                </button>
+              ))}
+            </div>
+          ) : null}
         </div>
         <label className="csr">
           <AskGlyph />
@@ -261,8 +262,8 @@ export function AskComposer({
             placeholder={placeholder}
             aria-label="Ask a question"
             aria-autocomplete="list"
-            aria-controls={listId}
-            aria-activedescendant={menuOpen ? `${listId}-${cursor}` : undefined}
+            aria-controls={menuOpen ? listId : undefined}
+            aria-activedescendant={menuOpen ? optionId(Math.min(cursor, commands.length - 1)) : undefined}
           />
         </label>
         <div className="tools">

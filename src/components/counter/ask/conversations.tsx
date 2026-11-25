@@ -1,11 +1,12 @@
 "use client"
 
-import { useEffect, useRef, useState, type ReactNode } from "react"
+import { useEffect, useId, useRef, useState, type ReactNode } from "react"
+import { flushSync } from "react-dom"
+import { menuKeys, menuTrigger } from "@/components/counter/ui/keys"
 import { SearchGlyph } from "@/components/counter/surface/search-glyph"
 import type { AskConversation } from "@/lib/counter/adapters/ask"
 import { groupThreadsByDay, threadWhenLabel } from "@/lib/counter/thread-groups"
 import { DotsGlyph, ForkGlyph, PenGlyph, PlusGlyph, TrashGlyph } from "./rail-glyphs"
-import { rovingKeyDown } from "@/components/counter/roving-keys"
 
 /**
  * The `.convs` rail — what this account has already asked.
@@ -44,7 +45,7 @@ import { rovingKeyDown } from "@/components/counter/roving-keys"
  *
  *   <div class="convs">
  *     <div class="convs__h"><span>Conversations</span><button>New</button>
- *     <button class="cv" aria-current="true"><b>title</b><span>meta</span>
+ *     <div class="cv" aria-current="true"><button class="tx"><b>title</b><span>meta</span>
  *
  * `aria-current` is the prototype's own selector for the active row
  * (`.cv[aria-current="true"]` paints the accent left border), so it is both
@@ -310,9 +311,16 @@ function ConversationRow({
     })
   }
 
-  // The "row" is a div, not a button, once it holds a menu and an input of
-  // its own: a button cannot contain them. It keeps the button's behaviour —
-  // Enter/Space open, `r` renames, Delete/Backspace arm — via the handlers.
+  const uid = useId()
+  const openId = `${uid}-open`
+  const kebabId = `${uid}-kebab`
+  const menuId = `${uid}-menu`
+  const toRow = () => document.getElementById(openId)?.focus()
+
+  // The row is a plain div: the whole of it takes a press, and inside it are
+  // two real buttons, the title (opens; `r` renames, Delete/Backspace arm)
+  // and the ⋯. It used to be a `role="button"` with the ⋯ nested in it, which
+  // hid the ⋯ from a screen reader and from Tab.
   const cls = [
     "cv",
     isNew ? "is-new" : "",
@@ -323,34 +331,27 @@ function ConversationRow({
     .filter(Boolean)
     .join(" ")
 
+  const caption = (
+    <span className={`m${said ? " is-said" : ""}`}>
+      {said ?? meta}
+      {!said && chip ? <em className={fig?.direction === "down" ? "dn" : undefined}>{chip}</em> : null}
+    </span>
+  )
+  const trigger = menuTrigger({ open: menuOpen, setOpen: onMenu, menuId })
+
   return (
     <div className="swipe" data-id={c.id}>
       <div
         className={cls}
-        role="button"
-        tabIndex={0}
         {...(current ? { "aria-current": true as const } : {})}
         onClick={(e) => {
           if (arming || renaming) return
           if ((e.target as HTMLElement).closest("[data-cv-menu]")) return
           onOpen()
         }}
-        onKeyDown={(e) => {
-          if (renaming || (e.target as HTMLElement).tagName === "INPUT") return
-          if (e.key === "Enter" || e.key === " ") {
-            e.preventDefault()
-            if (!arming) onOpen()
-          } else if (e.key === "r" || e.key === "R") {
-            e.preventDefault()
-            startRename()
-          } else if (e.key === "Delete" || e.key === "Backspace") {
-            e.preventDefault()
-            arm()
-          }
-        }}
       >
-        <span className="tx">
-          {renaming ? (
+        {renaming ? (
+          <span className="tx">
             <input
               className="rn"
               type="text"
@@ -365,37 +366,55 @@ function ConversationRow({
                 // isComposing: an IME's Enter picks a candidate word, not "save".
                 if (e.key === "Enter" && !e.nativeEvent.isComposing) {
                   e.preventDefault()
-                  finishRename(true)
+                  flushSync(() => finishRename(true))
+                  toRow()
                 } else if (e.key === "Escape") {
                   e.preventDefault()
-                  finishRename(false)
+                  flushSync(() => finishRename(false))
+                  toRow()
                 }
               }}
             />
-          ) : (
-            <b>{c.title ?? "Untitled"}</b>
-          )}
-          <span className={`m${said ? " is-said" : ""}`}>
-            {said ?? meta}
-            {!said && chip ? <em className={fig?.direction === "down" ? "dn" : undefined}>{chip}</em> : null}
+            {caption}
           </span>
-        </span>
+        ) : (
+          <button
+            type="button"
+            className="tx"
+            id={openId}
+            {...(current ? { "aria-current": true as const } : {})}
+            // Enter and Space are the button's own: the click they make is
+            // the row's, above.
+            onKeyDown={(e) => {
+              if (e.metaKey || e.ctrlKey || e.altKey) return
+              if (e.key === "r" || e.key === "R") {
+                e.preventDefault()
+                startRename()
+              } else if (e.key === "Delete" || e.key === "Backspace") {
+                e.preventDefault()
+                arm()
+              }
+            }}
+          >
+            <b>{c.title ?? "Untitled"}</b>
+            {caption}
+          </button>
+        )}
         {!renaming && !arming ? (
-          <span
+          <button
+            type="button"
             className="kebab"
-            role="button"
-            tabIndex={-1}
-            aria-label="Thread actions"
-            aria-haspopup="menu"
-            aria-expanded={menuOpen}
+            id={kebabId}
+            aria-label={`Actions for ${c.title ?? "Untitled"}`}
             data-cv-menu
+            {...trigger}
             onClick={(e) => {
               e.stopPropagation()
-              onMenu(!menuOpen)
+              trigger.onClick(e)
             }}
           >
             <DotsGlyph />
-          </span>
+          </button>
         ) : null}
         {arming ? (
           <span className="arm">
@@ -412,9 +431,12 @@ function ConversationRow({
             <button
               type="button"
               className="keep"
+              // The safe choice takes focus, as it does in the app's dialogs.
+              autoFocus
               onClick={(e) => {
                 e.stopPropagation()
-                setArming(false)
+                flushSync(() => setArming(false))
+                toRow()
               }}
             >
               Keep
@@ -425,21 +447,12 @@ function ConversationRow({
       <div
         className={`cvmenu${menuOpen ? " on" : ""}`}
         role="menu"
-        aria-label="Thread actions"
+        id={menuId}
+        aria-labelledby={kebabId}
         data-cv-menu
-        inert={!menuOpen}
-        onKeyDown={(e) => {
-          if (e.key === "Escape") {
-            e.preventDefault()
-            onMenu(false)
-            // Back to the row this menu belongs to; the menu only fades out.
-            ;(e.currentTarget.previousElementSibling as HTMLElement | null)?.focus()
-            return
-          }
-          rovingKeyDown(e, '[role="menuitem"]')
-        }}
+        onKeyDown={(e) => menuKeys(e, { close: () => onMenu(false), triggerId: kebabId })}
       >
-        <button type="button" role="menuitem" onClick={startRename}>
+        <button type="button" role="menuitem" tabIndex={-1} onClick={startRename}>
           <PenGlyph />
           Rename
           <span className="kbd">R</span>
@@ -448,6 +461,7 @@ function ConversationRow({
           <button
             type="button"
             role="menuitem"
+            tabIndex={-1}
             onClick={() => {
               onMenu(false)
               actions.onFork(c)
@@ -457,7 +471,7 @@ function ConversationRow({
             Fork from the end
           </button>
         ) : null}
-        <button type="button" role="menuitem" className="danger" onClick={arm}>
+        <button type="button" role="menuitem" tabIndex={-1} className="danger" onClick={arm}>
           <TrashGlyph />
           Delete
           <span className="kbd">⌫</span>
