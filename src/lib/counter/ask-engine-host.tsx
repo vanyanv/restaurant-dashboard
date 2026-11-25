@@ -28,12 +28,13 @@ export function AskEngineHost({
   onEngine,
 }: {
   initialConversationId: string | null
-  onEngine: (engine: AskEngine) => void
+  /** The engine, and the address (`?c=`) its `conversationId` was read under. */
+  onEngine: (engine: AskEngine, address: string | null) => void
 }) {
   const engine = useAsk(initialConversationId)
 
   useEffect(() => {
-    onEngine(engine)
+    onEngine(engine, initialConversationId)
     // Deps are the four DATA halves on purpose: `ask`/`follow`/`stop`/`reset`
     // are stable useCallbacks inside useAsk, and publishing on every render
     // would loop through the parent's setState. `askedAt` joins them because
@@ -48,6 +49,8 @@ export function AskEngineHost({
     engine.conversationId,
     engine.askedAt,
     engine.lastTurnId,
+    // Leaving for an address must publish even when nothing else moved.
+    initialConversationId,
     onEngine,
   ])
 

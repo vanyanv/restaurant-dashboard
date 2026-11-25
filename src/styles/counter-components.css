@@ -2709,9 +2709,9 @@ button.wkd {
 
 /* Ask, which has both: the composer is fixed above the bar and the history
    has to end above the composer. Restated at this specificity because the
-   rule that says so (`.mscroll:has(> .composer)`, above) is now outranked by
+   rule that says so (`.mscroll:has(> .dock__in)`, above) is now outranked by
    the one directly above this. */
-.m-shell__main > .ct-root.ct-phone > .mscroll:has(> .composer) {
+.m-shell__main > .ct-root.ct-phone > .mscroll:has(> .dock__in) {
   padding-bottom: calc(
     12px + var(--m-bar-h) + env(safe-area-inset-bottom, 0px) + 51px + 11px
   );

@@ -124,7 +124,8 @@
 .ckb__how section { display: grid; gap: 8px }
 .ckb__how h1 { font-family: var(--display); font-size: 26px }
 .ckb__how h2 { font-family: var(--display); font-size: 19px }
-.ckb__how ol { margin: 0; padding-left: 22px; display: grid; gap: 6px; font-size: 16px; line-height: 1.4 }
+/* The global reset takes list markers off; these are steps, so the numbers go back on. */
+.ckb__how ol { list-style: decimal; margin: 0; padding-left: 22px; display: grid; gap: 6px; font-size: 16px; line-height: 1.4 }
 .ckb__how p { margin: 0; line-height: 1.45 }
 .ckb__how hr { border: none; border-top: 1px solid var(--line) }
 .ckb__how a.ckc__btn { display: flex; align-items: center; justify-content: center; text-decoration: none }

@@ -133,6 +133,17 @@ export function useAsk(
 
   const [conversationId, setConversationId] = useState<string | null>(initialConversationId)
   /*
+   * A new address is this hook's thread from the render it arrives in. Left to
+   * the effect below, one render reported the OLD thread under the NEW address,
+   * and the page read that as "the route named a thread" and wrote the old id
+   * back: the two swapped without end.
+   */
+  const [address, setAddress] = useState(initialConversationId)
+  if (address !== initialConversationId) {
+    setAddress(initialConversationId)
+    setConversationId(initialConversationId)
+  }
+  /*
    * THE REF IS THE AUTHORITY, and it is deliberately NOT mirrored from state
    * on every render. The transport is built once and reads the id at send
    * time, so it needs a ref; but the id most often arrives inside a `fetch`
@@ -174,8 +185,11 @@ export function useAsk(
             askScope: askScopeRef.current,
           },
         }),
-        fetch: (input, init) =>
-          fetch(input as RequestInfo, init).then((res) => {
+        fetch: (input, init) => {
+          // The thread this turn was sent in. If the reader is in another by
+          // the time it answers, the answer names a thread they have left.
+          const sentIn = conversationIdRef.current
+          return fetch(input as RequestInfo, init).then((res) => {
             /*
              * THE TURN'S ID, OFF THE HEADER, BEFORE ANYTHING CAN GO WRONG.
              *
@@ -188,6 +202,7 @@ export function useAsk(
              */
             const turnId = res.headers.get("x-chat-turn-id")
             if (turnId) lastTurnIdRef.current = turnId
+            if (conversationIdRef.current !== sentIn) return res
 
             /*
              * A thread that is gone — deleted, or on another account.
@@ -203,7 +218,9 @@ export function useAsk(
              */
             if (res.status === 404) {
               conversationIdRef.current = null
-              setTimeout(() => setConversationId(null), 0)
+              setTimeout(() => {
+                if (conversationIdRef.current === null) setConversationId(null)
+              }, 0)
               return res
             }
             if (res.status === 403) return res
@@ -212,10 +229,13 @@ export function useAsk(
               conversationIdRef.current = id
               // Next tick: this runs inside the fetch that a render started,
               // and setting state during it would be a render-phase update.
-              setTimeout(() => setConversationId(id), 0)
+              setTimeout(() => {
+                if (conversationIdRef.current === id) setConversationId(id)
+              }, 0)
             }
             return res
-          }),
+          })
+        },
       }),
     [],
   )
@@ -233,7 +253,6 @@ export function useAsk(
   useEffect(() => {
     if (initialConversationId === conversationIdRef.current) return
     conversationIdRef.current = initialConversationId
-    setConversationId(initialConversationId)
     setQuestions([])
     setScopes([])
     setMessages([])

@@ -47,15 +47,18 @@ export function useAskDeferred(initialConversationId: string | null): AskEngine 
     conversationId: string | null
     askedAt: number | null
     lastTurnId: string | null
+    /** The `?c=` that `conversationId` was read under. */
+    address: string | null
   }>({
     turns: [],
     state: { status: "idle" },
     conversationId: initialConversationId,
     askedAt: null,
     lastTurnId: null,
+    address: initialConversationId,
   })
 
-  const onEngine = useCallback((engine: AskEngine) => {
+  const onEngine = useCallback((engine: AskEngine, address: string | null) => {
     const first = engineRef.current === null
     engineRef.current = engine
     if (first && pendingRef.current) {
@@ -74,6 +77,7 @@ export function useAskDeferred(initialConversationId: string | null): AskEngine 
       conversationId: engine.conversationId,
       askedAt: engine.askedAt,
       lastTurnId: engine.lastTurnId,
+      address,
     })
   }, [])
 
@@ -118,8 +122,11 @@ export function useAskDeferred(initialConversationId: string | null): AskEngine 
     state: snapshot.state,
     // Until the engine exists nothing can have renamed the thread, so the
     // address bar's value IS the conversation id — and `useAsk` seeds from
-    // the same prop when it arrives.
-    conversationId: engineRef.current ? snapshot.conversationId : initialConversationId,
+    // the same prop when it arrives. The same goes for a snapshot published
+    // under an address the reader has since left: the page writes this id into
+    // `?c=`, so a stale one sends them back to the thread they just closed.
+    conversationId:
+      snapshot.address === initialConversationId ? snapshot.conversationId : initialConversationId,
     ask,
     follow,
     stop,
