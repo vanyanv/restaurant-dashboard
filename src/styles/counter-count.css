@@ -81,7 +81,10 @@
 .cw-fig b{font-size:28px;font-weight:600;letter-spacing:-.03em;line-height:1.05;font-variant-numeric:tabular-nums}
 .cw-fig b.miss{color:var(--bad)}
 .cw-fig span:last-child{font-size:13px;color:var(--ink-2)}
-.cw-pad{padding:14px;display:grid;gap:12px}
+.cw-pad{padding:14px;display:grid;grid-template-columns:minmax(0,1fr);gap:12px}
+/* A select sizes to its longest option; a long ingredient name made the
+   "Add an item" row 620px wide on a phone. Cap it at its row. */
+.cw-pad select.cw__input{max-width:100%;min-width:0}
 .cw-set{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:center;padding:10px 14px;border-bottom:1px solid var(--line)}
 .cw-set:last-child{border-bottom:0}
 .cw-set__name{display:grid;gap:2px}
@@ -240,8 +243,12 @@
 /* Count's five tabs fit in one row on a phone; the caption is dropped there. */
 .ct-phone .pagehead:has(.seg[aria-label="Inventory sections"]) .sub{display:none}
 .ct-phone .pagehead .phactions:has(>.seg[aria-label="Inventory sections"]){width:100%;margin-left:0}
-.ct-phone .pagehead .seg[aria-label="Inventory sections"]{grid-template-columns:repeat(5,auto);width:100%}
-.ct-phone .pagehead .seg[aria-label="Inventory sections"]>*{white-space:nowrap;padding-left:4px;padding-right:4px}
+/* Six sections since "Past counts" joined: two rows of three, like every
+   other phone tab row of five or more. A five-track row put the sixth on a
+   second line and pushed "Count report" past the screen edge at 320px; on
+   Past counts, outside a page head, the row ran 60px off the screen. */
+.ct-phone .seg[aria-label="Inventory sections"]{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));width:100%;box-sizing:border-box}
+.ct-phone .seg[aria-label="Inventory sections"]>*{padding-left:4px;padding-right:4px;text-align:center;justify-content:center}
 
 /* Desk sheet */
 .cw-sheet{display:none}

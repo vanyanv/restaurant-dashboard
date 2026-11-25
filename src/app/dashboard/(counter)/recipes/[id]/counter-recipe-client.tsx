@@ -141,8 +141,13 @@ const ASK_SUGGESTIONS = [
   "What else uses these ingredients?",
 ]
 
-/** The prototype's own builder grid: name, qty, unit, extended, remove. */
-const LINE_COLUMNS = "minmax(0,1fr) 72px 92px 84px 32px"
+/**
+ * The prototype's own builder grid: name, qty, unit, extended, remove. The
+ * four fixed tracks need 316px, more than a phone card has, so on a narrow
+ * screen `.rowline--builder` swaps in its own tracks through the variable and
+ * puts the name on a line of its own (see counter-components.css).
+ */
+const LINE_COLUMNS = "var(--builder-cols, minmax(0,1fr) 72px 92px 84px 32px)"
 
 /** How long the editor sits still before it asks the server to re-cost. */
 const COST_DEBOUNCE_MS = 400
@@ -700,7 +705,7 @@ function Picker({
             onClick={() => onAdd(o)}
           >
             <MenuPhoto frame={pictureOf(o.kind, o.name)} alt={o.name} className="mi-photo--line" />
-            <span>{o.name}</span>
+            <span className="pickrow__nm">{o.name}</span>
             <span>{o.price}</span>
             {here ? (
               <Tag tone="good">In this recipe</Tag>
@@ -973,6 +978,7 @@ function Builder({
           <RowLine
             key={l.key}
             columns={LINE_COLUMNS}
+            className="rowline--builder"
             name={l.name}
             sub={l.sub}
             photo={<MenuPhoto frame={pictureOf(l.kind, l.name)} alt={l.name} className="mi-photo--line" />}

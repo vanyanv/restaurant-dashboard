@@ -240,7 +240,7 @@ function MTopWhenStoresArrive({
  */
 function PhoneBack({ href, label }: { href: string; label: string }) {
   return (
-    <Link className="mback" href={href}>
+    <Link className="mback" href={href} aria-label={label}>
       <svg
         viewBox="0 0 16 16"
         fill="none"
@@ -250,7 +250,7 @@ function PhoneBack({ href, label }: { href: string; label: string }) {
       >
         <path d="M10 3.5L5.5 8l4.5 4.5" />
       </svg>
-      {label}
+      <span className="mback__lb">{label}</span>
     </Link>
   )
 }

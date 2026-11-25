@@ -115,12 +115,12 @@ a.cu-card:focus-visible,button.cu-card:focus-visible{outline:2px solid var(--acc
 .cu-store__hint{font-size:var(--t-cap);font-weight:600;color:var(--ink-2)}
 .cu-store__hint::before{content:"+ More"}
 .cu-store--opens[open] .cu-store__hint::before{content:"− Less"}
-.cu-store__more{display:grid;gap:12px;margin-top:10px;padding-top:2px;border-top:1px solid var(--line)}
+.cu-store__more{display:grid;grid-template-columns:minmax(0,1fr);gap:12px;margin-top:10px;padding-top:2px;border-top:1px solid var(--line)}
 .cu-store__rows{display:grid;margin:0}
 .cu-store__rows>div{display:flex;justify-content:space-between;align-items:baseline;gap:12px;padding:8px 0;border-bottom:1px solid var(--line);font-size:var(--t-body)}
 .cu-store__rows dt{color:var(--ink-2)}
 .cu-store__rows dd{margin:0;font-weight:600;font-variant-numeric:tabular-nums;text-align:right}
-.cu-store__go{justify-self:start}
+.cu-store__go{justify-self:start;max-width:100%;white-space:normal;text-align:center;line-height:1.25;padding-block:8px}
 @container (max-width:520px){.cu-store__go{justify-self:stretch;min-height:44px}}
 @container (max-width:520px){.cu-stores__in{grid-template-columns:minmax(0,1fr);gap:10px}}
 

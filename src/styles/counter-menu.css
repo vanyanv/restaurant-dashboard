@@ -89,3 +89,11 @@
 .rowline .nm--photo{display:grid;grid-template-columns:auto minmax(0,1fr);column-gap:10px;align-items:center}
 .rowline .nm--photo > .mi-photo{grid-row:1 / span 2;margin-top:0}
 .pickrow--photo{grid-template-columns:auto minmax(0,1fr) auto auto}
+/* Phone: the pantry name gets the whole first line, price and tag share the
+   second. Four tracks squeezed the name to a word per line and its price was
+   drawn over it at 320px. */
+@media (max-width:560px){
+  .pickrow--photo{grid-template-columns:auto minmax(0,1fr) auto;row-gap:4px}
+  .pickrow--photo>:first-child{grid-row:span 2}
+  .pickrow--photo>.pickrow__nm{grid-column:2 / -1}
+}

@@ -40,13 +40,13 @@
 }
 
 /* The desk on a narrow window (a phone browser on the desk URL, a split
-   screen): the page head may be narrower than its five tabs, which then share
-   one row the way they do in the phone shell, and scroll inside their own box
-   before they would push the page sideways. */
+   screen): the page head may be narrower than its six tabs, which then sit in
+   two rows of three the way they do in the phone shell rather than push the
+   page sideways. */
 @media (max-width:760px){
   .screen > .pagehead:has(.seg[aria-label="Inventory sections"]){min-width:0}
   .screen > .pagehead .phactions:has(> .seg[aria-label="Inventory sections"]){width:100%;margin-left:0}
-  .screen > .pagehead .seg[aria-label="Inventory sections"]{display:grid;grid-template-columns:repeat(5,auto);width:100%;box-sizing:border-box}
+  .screen > .pagehead .seg[aria-label="Inventory sections"]{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));width:100%;box-sizing:border-box}
   .screen > .pagehead .seg[aria-label="Inventory sections"] > *{padding-left:4px;padding-right:4px;text-align:center;justify-content:center}
 }
 
