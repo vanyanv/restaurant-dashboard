@@ -10,7 +10,7 @@ import type { SwitcherSections } from "@/lib/counter/adapters/inventory-shelf"
 import { setDraftSkipCount } from "@/lib/counter/actions/count"
 import { COVER_DAY_CHOICES, COVER_LABELS, DEFAULT_COVER_DAYS } from "@/lib/counter/draft-orders"
 import { CountHead, money, OutcomeLine, type Outcome } from "../count-ui"
-import { actMarks, useAct } from "@/components/counter/ui"
+import { actMarks, tabKeys, useAct } from "@/components/counter/ui"
 
 /**
  * Count & waste — Restock. Per store: what is on the shelf and how long it
@@ -61,17 +61,17 @@ function Restock({ data }: { data: DraftData }) {
             </small>
           </div>
         )}
-        <div className="rs-seg" role="tablist" aria-label="Show">
-          <button type="button" role="tab" aria-selected={view === "order"} onClick={() => setView("order")}>Order{lines > 0 ? ` · ${lines}` : ""}</button>
-          <button type="button" role="tab" aria-selected={view === "stock"} onClick={() => setView("stock")}>Stock · {data.stock.length}</button>
+        <div className="rs-seg" role="tablist" aria-label="Show" onKeyDown={tabKeys}>
+          <button type="button" role="tab" id="rs-tab-order" aria-selected={view === "order"} tabIndex={view === "order" ? 0 : -1} onClick={() => setView("order")}>Order{lines > 0 ? ` · ${lines}` : ""}</button>
+          <button type="button" role="tab" id="rs-tab-stock" aria-selected={view === "stock"} tabIndex={view === "stock" ? 0 : -1} onClick={() => setView("stock")}>Stock · {data.stock.length}</button>
         </div>
       </div>
 
       <div className="rs-split">
-        <div className="rs-pane rs-pane--stock" data-on={view === "stock"}>
+        <div className="rs-pane rs-pane--stock" role="tabpanel" aria-labelledby="rs-tab-stock" data-on={view === "stock"}>
           <StockList rows={data.stock} />
         </div>
-        <div className="rs-pane rs-pane--order" data-on={view === "order"}>
+        <div className="rs-pane rs-pane--order" role="tabpanel" aria-labelledby="rs-tab-order" data-on={view === "order"}>
           <DraftPanel data={data} />
         </div>
       </div>

@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useRef, useState, useTransition } from "react"
+import { useEffect, useId, useRef, useState, useTransition } from "react"
 import { PageHead, Section, useCounterTransition, usePageChrome } from "@/components/counter"
 import {
   cancelInvite,
@@ -16,7 +16,7 @@ import {
 import type { SectionSources } from "@/lib/counter/adapters/types"
 import type { PeopleAccessData, PeopleAccessSections, PersonRow, PersonState } from "@/lib/counter/adapters/people-access"
 import { useUrlParam } from "@/components/counter/keep/use-url-param"
-import { Status, type StatusTone } from "@/components/counter/ui"
+import { menuKeys, menuTrigger, Status, tabKeys, type StatusTone } from "@/components/counter/ui"
 import { ModalDialog } from "@/components/counter/modal-dialog"
 
 /**
@@ -217,28 +217,30 @@ function People({ data }: { data: PeopleAccessData }) {
         </div>
       ) : null}
 
-      <div className="pp-tabs" role="tablist" aria-label="Show">
+      <div className="pp-tabs" role="tablist" aria-label="Show" onKeyDown={tabKeys}>
         {tabs.map((t) => (
-          <button key={t.f} type="button" role="tab" aria-selected={filter === t.f} onClick={() => setFilter(t.f)}>
+          <button key={t.f} type="button" role="tab" id={`pp-tab-${t.f}`} aria-selected={filter === t.f} tabIndex={filter === t.f ? 0 : -1} onClick={() => setFilter(t.f)}>
             {t.label}
             <span className="tnum">{t.n}</span>
           </button>
         ))}
       </div>
 
-      <ul className="pp-list">
-        {rows.length === 0 ? <li className="pp-empty">Nobody here.</li> : null}
-        {rows.map((r) => (
-          <PersonLine
-            key={r.key}
-            r={r}
-            busy={busy}
-            canDemote={data.activeDevelopers > 1}
-            onRun={run}
-            onRemove={() => setConfirm(r)}
-          />
-        ))}
-      </ul>
+      <div role="tabpanel" aria-labelledby={`pp-tab-${filter}`}>
+        <ul className="pp-list">
+          {rows.length === 0 ? <li className="pp-empty">Nobody here.</li> : null}
+          {rows.map((r) => (
+            <PersonLine
+              key={r.key}
+              r={r}
+              busy={busy}
+              canDemote={data.activeDevelopers > 1}
+              onRun={run}
+              onRemove={() => setConfirm(r)}
+            />
+          ))}
+        </ul>
+      </div>
 
       {confirm ? (
         <RemoveDialog
@@ -378,6 +380,8 @@ function PersonLine({
   onRemove: () => void
 }) {
   const [menu, setMenu] = useState(false)
+  const menuId = useId()
+  const kebabId = useId()
   const wrap = useRef<HTMLDivElement>(null)
   useEffect(() => {
     if (!menu) return
@@ -398,8 +402,11 @@ function PersonLine({
       key={label}
       type="button"
       role="menuitem"
+      tabIndex={-1}
       className={danger ? "is-danger" : undefined}
       onClick={() => {
+        // Back to the ⋯ first, so a dialog that opens hands focus back to it.
+        document.getElementById(kebabId)?.focus()
         setMenu(false)
         fn()
       }}
@@ -465,15 +472,20 @@ function PersonLine({
             <button
               type="button"
               className="pp-kebab"
-              aria-haspopup="menu"
-              aria-expanded={menu}
+              id={kebabId}
               aria-label={`More for ${r.name}`}
-              onClick={() => setMenu((v) => !v)}
+              {...menuTrigger({ open: menu, setOpen: setMenu, menuId })}
             >
               ⋯
             </button>
             {menu ? (
-              <span className="pp-menu" role="menu">
+              <span
+                className="pp-menu"
+                role="menu"
+                id={menuId}
+                aria-labelledby={kebabId}
+                onKeyDown={(e) => menuKeys(e, { close: () => setMenu(false), triggerId: kebabId })}
+              >
                 {items}
               </span>
             ) : null}

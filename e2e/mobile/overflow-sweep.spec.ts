@@ -18,6 +18,11 @@ import { phoneRoutes } from "../fidelity/routes"
  * `overflow-x: auto` box. An element inside a scroller is therefore not a
  * finding; only one that escapes the viewport with no scroller above it is.
  *
+ * `.mscroll` IS THE VIEWPORT. Phone pages scroll inside it, and scrolling down
+ * makes its computed `overflow-x` `auto` too, so treating it as a scroller
+ * excused every element on every phone page. It is the one box that must not
+ * scroll sideways, and it is measured like the document.
+ *
  * A one-pixel tolerance: sub-pixel layout rounds, and a 412.5px box on a 412px
  * viewport is a rounding artefact, not a defect.
  */
@@ -38,8 +43,14 @@ test("no route overflows sideways (phone)", { tag: "@real-data" }, async ({ page
         out.push(`DOCUMENT scrolls sideways: ${doc.scrollWidth}px in ${width}px`)
       }
 
+      const pane = document.querySelector(".mscroll")
+      if (pane && pane.scrollWidth > pane.clientWidth + 1) {
+        out.push(`.mscroll scrolls sideways: ${pane.scrollWidth}px in ${pane.clientWidth}px`)
+      }
+
       const scrollable = (el: Element): boolean => {
         for (let p: Element | null = el.parentElement; p; p = p.parentElement) {
+          if (p === pane) return false
           const ox = getComputedStyle(p).overflowX
           if (ox === "auto" || ox === "scroll" || ox === "hidden") return true
         }

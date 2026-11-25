@@ -30,7 +30,7 @@
 .cu-status--warn{background:var(--warn-wash);color:var(--warn)}
 .cu-status--bad{background:var(--bad-wash);color:var(--bad)}
 .cu-status--wait{background:none;color:var(--ink-2);border:1px dashed var(--line-strong)}
-.cu-status--off{background:var(--sunk);color:var(--ink-3)}
+.cu-status--off{background:var(--sunk);color:var(--ink-2)}
 .cu-status--plain{background:none;border:0;padding:0;gap:5px}
 a.cu-status,button.cu-status{font-family:inherit;text-decoration:none;cursor:pointer}
 @media (hover:hover){a.cu-status:hover,button.cu-status:hover{text-decoration:underline;text-underline-offset:3px}}

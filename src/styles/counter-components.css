@@ -169,7 +169,7 @@ display:grid;grid-template-columns:212px 1fr;
 .seg{display:flex;gap:2px;padding:2px;border:1px solid var(--line-strong);border-radius:var(--r-sm);background:var(--sunk)}
 .seg button{font-family:var(--mono);font-size:var(--t-micro);font-weight:500;letter-spacing:.08em;padding:5px 10px;border-radius:3px;color:var(--ink-2);transition:background-color .16s var(--ease),color .16s var(--ease)}
 @media (hover:hover){.seg button:hover{color:var(--ink)}}
-.seg button[aria-pressed="true"]{background:var(--surface);color:var(--ink);box-shadow:0 1px 2px oklch(24% 0.014 40 / .10)}
+.seg button:is([aria-pressed="true"],[aria-checked="true"]){background:var(--surface);color:var(--ink);box-shadow:0 1px 2px oklch(24% 0.014 40 / .10)}
 .headline{display:grid;grid-template-columns:minmax(210px,auto) 1fr;gap:20px;align-items:center;padding:18px 20px;border:1px solid var(--line-strong);border-radius:var(--r);background:var(--surface)}
 .headline .fig{display:grid;gap:3px}
 .headline .k{font-family:var(--mono);font-size:var(--t-micro);letter-spacing:.16em;text-transform:uppercase;color:var(--ink-3)}
@@ -911,6 +911,8 @@ width:340px; height:718px; flex:none;
 .pickrow:last-child{border-bottom:none}
 @media (hover:hover){.pickrow:hover{background:var(--accent-wash)}}
 .pickrow span{font-family:var(--mono);font-size:9.5px;color:var(--ink-3)}
+/* The rule above also caught a toneless tag, whose sunk ground needs ink-2 (ink-3 on it is 4.3:1). */
+.pickrow span.mtag:not(.good,.warn,.bad){color:var(--ink-2)}
 .frame{container-type:inline-size;container-name:fr;position:relative}
 @container fr (max-width:1000px){
   .rgrid{grid-template-columns:minmax(0,1fr)}
@@ -3953,12 +3955,14 @@ html[data-theme-switching] .ct-root *::after {
  * it, and the row is a flex line: text block, then the clock or the ⋯.
  */
 .cv{display:flex;align-items:center;gap:6px;padding:8px 8px 8px 12px;cursor:pointer;flex-wrap:wrap;position:relative;transition:background-color .14s var(--ease),border-color .14s var(--ease)}
-.cv:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+.cv:has(>.tx:focus-visible){outline:2px solid var(--accent);outline-offset:-2px}
+.cv button.tx{border:0;background:none;padding:0;text-align:left;line-height:inherit;cursor:pointer}
+.cv button.tx:focus-visible{outline:none}
 .cv .tx{flex:1;min-width:0;display:grid;gap:2px;font-family:var(--body);font-size:inherit;letter-spacing:0;color:inherit}
 .cv b{margin-bottom:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .cv span.m{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .cv span.m.is-said{color:var(--bad);white-space:normal}
-.cv .kebab{flex:none;width:22px;height:22px;border-radius:4px;display:grid;place-items:center;color:var(--ink-3);opacity:0;cursor:pointer;transition:opacity .14s var(--ease),background-color .14s var(--ease)}
+.cv .kebab{flex:none;border:0;background:none;padding:0;width:22px;height:22px;border-radius:4px;display:grid;place-items:center;color:var(--ink-3);opacity:0;cursor:pointer;transition:opacity .14s var(--ease),background-color .14s var(--ease)}
 .cv:focus-within .kebab,.cv[aria-current="true"] .kebab,.cv.menu-open .kebab{opacity:1}
 @media (hover:hover){.cv:hover .kebab{opacity:1}}
 @media (hover:hover){.cv .kebab:hover{background:var(--sunk);color:var(--ink)}}
@@ -3972,8 +3976,8 @@ html[data-theme-switching] .ct-root *::after {
 .cv.leaving{transition:opacity .18s var(--ease),transform .18s var(--ease);opacity:0;transform:translateX(-6px)}
 .cv input.rn{flex:1;min-width:0;width:100%;border:1px solid var(--accent);border-radius:4px;background:var(--surface);font:inherit;font-size:var(--t-cap);font-weight:600;color:var(--ink);padding:2px 6px;outline:none;box-shadow:0 0 0 3px var(--accent-wash)}
 .swipe{position:relative}
-.cvmenu{position:absolute;right:8px;top:calc(100% - 6px);z-index:5;min-width:150px;background:var(--surface);border:1px solid var(--line-strong);border-radius:var(--r);box-shadow:0 18px 40px -20px var(--raise);padding:5px;display:grid;gap:1px;transform-origin:top right;opacity:0;transform:scale(.96) translateY(-3px);transition:opacity .14s var(--ease),transform .14s var(--ease);pointer-events:none}
-.cvmenu.on{opacity:1;transform:none;pointer-events:auto}
+.cvmenu{position:absolute;right:8px;top:calc(100% - 6px);z-index:5;min-width:150px;background:var(--surface);border:1px solid var(--line-strong);border-radius:var(--r);box-shadow:0 18px 40px -20px var(--raise);padding:5px;display:grid;gap:1px;transform-origin:top right;opacity:0;visibility:hidden;transform:scale(.96) translateY(-3px);transition:opacity .14s var(--ease),transform .14s var(--ease),visibility 0s .14s;pointer-events:none}
+.cvmenu.on{opacity:1;visibility:visible;transform:none;pointer-events:auto;transition-delay:0s}
 .cvmenu button{display:flex;align-items:center;gap:8px;width:100%;text-align:left;padding:6px 8px;border:0;border-radius:var(--r-sm);background:none;font:inherit;font-size:var(--t-body);color:var(--ink);cursor:pointer;transition:background-color .12s var(--ease)}
 @media (hover:hover){.cvmenu button:hover{background:var(--paper)}}
 .cvmenu button.danger{color:var(--bad)}
@@ -4013,8 +4017,9 @@ html[data-theme-switching] .ct-root *::after {
 .thumbs>button svg{width:12px;height:12px}
 .thumbs>button.on{color:var(--good);background:var(--good-wash)}
 .thumbs>button.on.dn{color:var(--bad);background:var(--bad-wash)}
-.pop{position:absolute;right:0;bottom:calc(100% + 8px);width:230px;background:var(--surface);border:1px solid var(--line-strong);border-radius:var(--r);box-shadow:0 18px 40px -20px var(--raise);padding:6px;display:grid;gap:2px;transform-origin:bottom right;opacity:0;transform:scale(.96) translateY(3px);transition:opacity .15s var(--ease),transform .15s var(--ease);pointer-events:none;letter-spacing:0;text-transform:none;font-family:var(--body);font-size:var(--t-body);z-index:4}
-.pop.on{opacity:1;transform:none;pointer-events:auto}
+.pop{position:absolute;right:0;bottom:calc(100% + 8px);width:230px;background:var(--surface);border:1px solid var(--line-strong);border-radius:var(--r);box-shadow:0 18px 40px -20px var(--raise);padding:6px;display:grid;gap:2px;transform-origin:bottom right;opacity:0;visibility:hidden;transform:scale(.96) translateY(3px);transition:opacity .15s var(--ease),transform .15s var(--ease),visibility 0s .15s;pointer-events:none;letter-spacing:0;text-transform:none;font-family:var(--body);font-size:var(--t-body);z-index:4}
+.pop.below{bottom:auto;top:calc(100% + 8px);z-index:6;transform-origin:top right}
+.pop.on{opacity:1;visibility:visible;transform:none;pointer-events:auto;transition-delay:0s}
 .pop .k{font-family:var(--mono);font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-3);padding:4px 8px 2px}
 .pop button{display:block;width:100%;text-align:left;padding:6px 8px;border:0;border-radius:var(--r-sm);background:none;font:inherit;color:var(--ink);cursor:pointer;transition:background-color .12s var(--ease)}
 @media (hover:hover){.pop button:hover{background:var(--accent-wash);color:var(--accent-hi)}}
@@ -4086,9 +4091,10 @@ html[data-theme-switching] .ct-root *::after {
 .sendbtn.busy .ic.stop{opacity:1;transform:none}
 .sendbtn.busy::after{content:"";position:absolute;inset:-2px;border-radius:7px;border:1.5px solid var(--accent);animation:ring2 1.4s var(--ease) infinite}
 @keyframes ring2{from{opacity:.7;transform:scale(.9)}to{opacity:0;transform:scale(1.25)}}
-.slash{position:absolute;left:-1px;bottom:calc(100% + 6px);width:min(360px,100%);background:var(--surface);border:1px solid var(--line-strong);border-radius:var(--r);box-shadow:0 18px 40px -20px var(--raise);padding:5px;display:grid;gap:1px;transform-origin:bottom left;opacity:0;transform:scale(.97) translateY(3px);transition:opacity .14s var(--ease),transform .14s var(--ease);pointer-events:none;z-index:4}
-.slash.on{opacity:1;transform:none;pointer-events:auto}
+.slash{position:absolute;left:-1px;bottom:calc(100% + 6px);width:min(360px,100%);background:var(--surface);border:1px solid var(--line-strong);border-radius:var(--r);box-shadow:0 18px 40px -20px var(--raise);padding:5px;display:grid;gap:1px;transform-origin:bottom left;opacity:0;visibility:hidden;transform:scale(.97) translateY(3px);transition:opacity .14s var(--ease),transform .14s var(--ease),visibility 0s .14s;pointer-events:none;z-index:4}
+.slash.on{opacity:1;visibility:visible;transform:none;pointer-events:auto;transition-delay:0s}
 .slash .k{font-family:var(--mono);font-size:9px;letter-spacing:.15em;text-transform:uppercase;color:var(--ink-3);padding:5px 8px 2px}
+.slash__l{display:grid;gap:1px}
 .slash button{display:grid;grid-template-columns:auto 1fr;gap:1px 10px;text-align:left;padding:6px 8px;border:0;border-radius:var(--r-sm);background:none;font:inherit;cursor:pointer;transition:background-color .12s var(--ease)}
 .slash button.on{background:var(--accent-wash)}
 @media (hover:hover){.slash button:hover{background:var(--accent-wash)}}

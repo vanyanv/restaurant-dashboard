@@ -1,9 +1,10 @@
 "use client"
 
 import type { ToolRead } from "@/lib/counter/ask-state"
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useId, useRef, useState } from "react"
 import { ASK_DOWN_REASONS, askFeedbackLabel, type AskFeedback } from "@/lib/counter/ask-feedback"
 import type { AskTurnMeta } from "@/lib/counter/ask-meta"
+import { menuKeys, menuTrigger } from "@/components/counter/ui/keys"
 
 /**
  * `.turnfoot` — what the turn cost and what you can do with it.
@@ -47,12 +48,25 @@ export interface TurnFootProps {
   copyText: string
 }
 
+/** The topbar's height and a little air. */
+const CHROME_PX = 72
+
+function roomAbove(menuId: string): boolean {
+  const menu = document.getElementById(menuId)
+  const thumbs = menu?.parentElement
+  if (!menu || !thumbs) return true
+  return thumbs.getBoundingClientRect().top - menu.offsetHeight - 8 >= CHROME_PX
+}
+
 export function TurnFoot({ read, meta, liveDurationMs = null, onRate, onFork, copyText }: TurnFootProps) {
   const [rating, setRating] = useState<string | null>(meta?.feedback ?? null)
   const [asking, setAsking] = useState(false)
+  const [below, setBelow] = useState(false)
   const [said, setSaid] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
   const pop = useRef<HTMLSpanElement>(null)
+  const menuId = useId()
+  const downId = useId()
 
   // The stored rating arrives with the thread; a later render of the same
   // turn must not wipe a thumb the reader just pressed.
@@ -95,6 +109,16 @@ export function TurnFoot({ read, meta, liveDurationMs = null, onRate, onFork, co
   const cost = meta?.costUsd !== null && meta?.costUsd !== undefined ? `$${meta.costUsd.toFixed(3)}` : null
   const noted = said ?? askFeedbackLabel(rating)
   const down = rating !== null && rating !== "up"
+  const trigger = menuTrigger({
+    open: asking,
+    setOpen: (open) => {
+      // It opens upward. Under a short first answer there is no room there and
+      // the topbar covers it, so it opens downward instead.
+      if (open) setBelow(!roomAbove(menuId))
+      setAsking(open)
+    },
+    menuId,
+  })
 
   return (
     <div className="turnfoot">
@@ -138,19 +162,36 @@ export function TurnFoot({ read, meta, liveDurationMs = null, onRate, onFork, co
           type="button"
           className={down ? "on dn" : undefined}
           aria-pressed={down}
-          aria-haspopup="menu"
-          aria-expanded={asking}
+          {...trigger}
+          id={downId}
           aria-label="Wrong or unhelpful"
-          onClick={() => (down ? rate(null) : setAsking((v) => !v))}
+          // Lit already: the press clears the rating and there is no menu to enter.
+          onClick={(e) => (down ? rate(null) : trigger.onClick(e))}
+          onKeyDown={down ? undefined : trigger.onKeyDown}
         >
           <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={1.4} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
             <path d="M11 2h1.5a1 1 0 011 1v5a1 1 0 01-1 1H11M11 9l-2.6 4.6a1.3 1.3 0 01-2.4-.7V10H3.3a1.4 1.4 0 01-1.4-1.6l.9-5.2A1.4 1.4 0 014.2 2H11z" />
           </svg>
         </button>
-        <div className={`pop${asking ? " on" : ""}`} role="menu">
-          <div className="k">What was wrong?</div>
+        <div
+          className={`pop${below ? " below" : ""}${asking ? " on" : ""}`}
+          role="menu"
+          id={menuId}
+          aria-label="What was wrong?"
+          onKeyDown={(e) => menuKeys(e, { close: () => setAsking(false), triggerId: downId })}
+        >
+          <div className="k" aria-hidden="true">What was wrong?</div>
           {ASK_DOWN_REASONS.map((r) => (
-            <button type="button" role="menuitem" key={r.code} onClick={() => rate(r.code)}>
+            <button
+              type="button"
+              role="menuitem"
+              tabIndex={-1}
+              key={r.code}
+              onClick={() => {
+                document.getElementById(downId)?.focus()
+                rate(r.code)
+              }}
+            >
               {r.label}
               <span>{r.hint}</span>
             </button>
