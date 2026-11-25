@@ -11,6 +11,8 @@ vi.mock("@/lib/cron-auth", () => ({
       fn(req, { fromCron: true }),
   parseJsonBody: async (req: Request) => req.json(),
 }))
+// The cron path never reads Store, but the route imports prisma.
+vi.mock("@/lib/prisma", () => ({ prisma: {} }))
 vi.mock("@/lib/harri-labor-sync", () => ({
   runHarriLaborSync: vi.fn(async () => ({ daysWritten: 0, positionsWritten: 0, alertsWritten: 0, rowsChanged: 0 })),
 }))
