@@ -69,7 +69,7 @@ describe("withCronAuth", () => {
 
     expect(res.status).toBe(200)
     expect(handler).toHaveBeenCalledOnce()
-    expect(handler.mock.calls[0][1]).toEqual({ fromCron: true })
+    expect(handler.mock.calls[0][1]).toEqual({ fromCron: true, accountId: null })
   })
 
   it("rejects an unauthenticated request with 401 Unauthorized by default", async () => {
@@ -123,8 +123,10 @@ describe("withCronAuth", () => {
     })
   })
 
-  it("ownerFallback: owner session passes through with fromCron=false", async () => {
-    mockedSession.mockResolvedValue({ user: { id: "u1", role: "OWNER" } })
+  it("ownerFallback: owner session passes through with fromCron=false and the caller's accountId", async () => {
+    mockedSession.mockResolvedValue({
+      user: { id: "u1", role: "OWNER", accountId: "acct-a" },
+    })
     const handler = vi.fn(
       async (_req: NextRequest, _ctx: { fromCron: boolean }) =>
         Response.json({ ok: true })
@@ -136,7 +138,7 @@ describe("withCronAuth", () => {
     const res = await route(anonReq())
 
     expect(res.status).toBe(200)
-    expect(handler.mock.calls[0][1]).toEqual({ fromCron: false })
+    expect(handler.mock.calls[0][1]).toEqual({ fromCron: false, accountId: "acct-a" })
   })
 })
 
