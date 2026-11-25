@@ -16,7 +16,17 @@ import { isCronRequest, rateLimit, RATE_LIMIT_TIERS } from "@/lib/rate-limit"
  * The bearer check (isCronRequest) is timing-safe and lives in lib/rate-limit.
  */
 
-type CronAuthContext = { fromCron: boolean }
+type CronAuthContext = {
+  fromCron: boolean
+  /**
+   * The signed-in owner's account on the ownerFallback path; null for a cron
+   * bearer. An owner session proves the caller owns SOME account, not the one
+   * a request names, so a manual trigger must scope its work to this account
+   * (store ids from the body go through requireOwnerStore). Cron runs are the
+   * platform's own and stay unscoped.
+   */
+  accountId: string | null
+}
 
 type CronAuthOptions = {
   /**
@@ -40,6 +50,7 @@ export function withCronAuth(
     }
 
     const fromCron = isCronRequest(req)
+    let accountId: string | null = null
     if (!fromCron) {
       if (opts.ownerFallback) {
         const session = await getServerSession(authOptions)
@@ -52,6 +63,15 @@ export function withCronAuth(
             { status: 403 }
           )
         }
+        // Fail closed: every scoped handler keys on this, so a session with
+        // no account must never fall through to the unscoped (cron) path.
+        if (!session.user.accountId) {
+          return NextResponse.json(
+            { error: opts.ownerFallback.forbiddenMessage },
+            { status: 403 }
+          )
+        }
+        accountId = session.user.accountId
       } else {
         const { status, error } = opts.unauthorized ?? {
           status: 401,
@@ -61,7 +81,7 @@ export function withCronAuth(
       }
     }
 
-    return handler(req, { fromCron })
+    return handler(req, { fromCron, accountId })
   }
 }
 

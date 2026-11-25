@@ -69,7 +69,7 @@ describe("withCronAuth", () => {
 
     expect(res.status).toBe(200)
     expect(handler).toHaveBeenCalledOnce()
-    expect(handler.mock.calls[0][1]).toEqual({ fromCron: true })
+    expect(handler.mock.calls[0][1]).toEqual({ fromCron: true, accountId: null })
   })
 
   it("rejects an unauthenticated request with 401 Unauthorized by default", async () => {
@@ -123,8 +123,10 @@ describe("withCronAuth", () => {
     })
   })
 
-  it("ownerFallback: owner session passes through with fromCron=false", async () => {
-    mockedSession.mockResolvedValue({ user: { id: "u1", role: "OWNER" } })
+  it("ownerFallback: owner session passes through with fromCron=false and the caller's accountId", async () => {
+    mockedSession.mockResolvedValue({
+      user: { id: "u1", role: "OWNER", accountId: "acct-a" },
+    })
     const handler = vi.fn(
       async (_req: NextRequest, _ctx: { fromCron: boolean }) =>
         Response.json({ ok: true })
@@ -136,7 +138,31 @@ describe("withCronAuth", () => {
     const res = await route(anonReq())
 
     expect(res.status).toBe(200)
-    expect(handler.mock.calls[0][1]).toEqual({ fromCron: false })
+    expect(handler.mock.calls[0][1]).toEqual({ fromCron: false, accountId: "acct-a" })
+  })
+})
+
+describe("withCronAuth ownerFallback account scope", () => {
+  it("403s an owner session with no accountId instead of running unscoped", async () => {
+    mockedSession.mockResolvedValue({ user: { id: "u-no-account", role: "OWNER", accountId: "" } })
+    const handler = vi.fn(async () => Response.json({ ok: true }))
+    const route = withCronAuth(handler, {
+      ownerFallback: { forbiddenMessage: "Only owners can run the Harri sync" },
+    })
+    const res = await route(anonReq())
+    expect(res.status).toBe(403)
+    expect(handler).not.toHaveBeenCalled()
+  })
+
+  it("a cron bearer gets accountId null even with a session present", async () => {
+    mockedSession.mockResolvedValue({ user: { id: "u1", role: "OWNER", accountId: "acct-a" } })
+    const handler = vi.fn(async (_r: NextRequest, _c: { fromCron: boolean; accountId: string | null }) =>
+      Response.json({ ok: true }))
+    const route = withCronAuth(handler, {
+      ownerFallback: { forbiddenMessage: "x" },
+    })
+    await route(cronReq())
+    expect(handler.mock.calls[0][1]).toEqual({ fromCron: true, accountId: null })
   })
 })
 

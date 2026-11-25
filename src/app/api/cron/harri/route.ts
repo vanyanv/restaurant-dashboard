@@ -6,6 +6,7 @@ import { scheduleSyncWindow } from "@/lib/harri-schedule"
 import { bustTags, monthTagsForRange } from "@/lib/cache/cached"
 import { laIsoWeeksSpanning, withScopedWrites } from "@/lib/cache/closed-range"
 import { businessQueryDate } from "@/lib/counter/business-date"
+import { prisma } from "@/lib/prisma"
 
 // Raised from 60 when the schedule sync joined this route: it adds four
 // week-addressable gateway calls plus a transaction each, on top of the labor
@@ -28,13 +29,28 @@ export const maxDuration = 120
  * labor sync that already succeeded, so it is reported rather than thrown.
  */
 export const POST = withCronAuth(
-  async (request, { fromCron }) => {
+  async (request, { fromCron, accountId }) => {
     const body = await parseJsonBody<{ storeId?: string; days?: number }>(request)
     if (body instanceof NextResponse) return body
 
     const storeId = body.storeId
     if (!storeId || typeof storeId !== "string") {
       return NextResponse.json({ error: "storeId required" }, { status: 400 })
+    }
+
+    // A manual trigger is an owner of SOME account; the store must be one of
+    // theirs. Without this, an owner of one account could sync (rewrite labour
+    // and schedule rows, bust caches of) another account's store by posting
+    // its id. "Store not found" either way, so the reply does not say whether
+    // another account's store exists. Cron runs every store and is unscoped.
+    if (!fromCron) {
+      const own = await prisma.store.findFirst({
+        where: { id: storeId, accountId: accountId ?? "" },
+        select: { id: true },
+      })
+      if (!own) {
+        return NextResponse.json({ error: "Store not found" }, { status: 404 })
+      }
     }
 
     const days = Math.max(1, Math.min(14, body.days ?? 3))

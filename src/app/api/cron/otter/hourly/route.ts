@@ -8,7 +8,7 @@ export const maxDuration = 60
 
 // Allow cron (CRON_SECRET bearer) or authenticated owner for manual triggers.
 export const POST = withCronAuth(
-  async (_request, { fromCron }) => {
+  async (_request, { fromCron, accountId }) => {
     try {
       // Scoped: the sync rewrites today and yesterday only, so afterwards it
       // retires the saved figures of exactly those days, and last week's stay.
@@ -22,8 +22,11 @@ export const POST = withCronAuth(
           return written
         },
         async () => {
+          // A manual trigger syncs the caller's own account's stores only;
+          // cron (accountId null) syncs every store, as before.
           const r = await runHourlySync({
             triggeredBy: fromCron ? "cron" : "manual",
+            ...(accountId !== null ? { accountId } : {}),
           })
           written = r.bucketsChanged > 0 ? r.datesCovered : []
           return r

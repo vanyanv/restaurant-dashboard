@@ -64,6 +64,9 @@ export type HourlySyncOpts = {
   anchorDate?: string
   triggeredBy?: "cron" | "manual" | "github-actions"
   metadata?: Record<string, unknown>
+  // Limit the run to one account's stores. Set by an owner's manual trigger,
+  // which must not sync other accounts; scheduled runs leave it unset.
+  accountId?: string
 }
 
 /**
@@ -95,6 +98,7 @@ export async function runHourlySync(
         windowDays: opts?.windowDays ?? 2,
         rowLimit: opts?.rowLimit ?? 10000,
         ...(opts?.anchorDate ? { anchorDate: opts.anchorDate } : {}),
+        ...(opts?.accountId !== undefined ? { accountId: opts.accountId } : {}),
         ...(opts?.metadata ?? {}),
       },
     },
@@ -111,6 +115,7 @@ async function runHourlySyncInner(opts?: HourlySyncOpts): Promise<HourlySyncResu
   const rowLimit = opts?.rowLimit ?? 10000
 
   const otterStores = await prisma.otterStore.findMany({
+    ...(opts?.accountId !== undefined ? { where: { store: { accountId: opts.accountId } } } : {}),
     select: {
       otterStoreId: true,
       storeId: true,

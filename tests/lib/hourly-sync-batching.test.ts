@@ -139,3 +139,19 @@ describe("runHourlySync — single-transaction, change-only write", () => {
     expect(result.bucketsWritten).toBe(0)
   })
 })
+
+describe("runHourlySync — account scope", () => {
+  it("a manual run with accountId reads only that account's Otter stores", async () => {
+    vi.mocked(queryMetrics).mockResolvedValue([] as never)
+    await runHourlySync({ triggeredBy: "manual", accountId: "acct-a" })
+    const args = vi.mocked(prisma.otterStore.findMany).mock.calls[0][0] as { where?: unknown }
+    expect(args.where).toEqual({ store: { accountId: "acct-a" } })
+  })
+
+  it("a cron run without accountId reads every store", async () => {
+    vi.mocked(queryMetrics).mockResolvedValue([] as never)
+    await runHourlySync({ triggeredBy: "cron" })
+    const args = vi.mocked(prisma.otterStore.findMany).mock.calls[0][0] as { where?: unknown }
+    expect(args.where).toBeUndefined()
+  })
+})
