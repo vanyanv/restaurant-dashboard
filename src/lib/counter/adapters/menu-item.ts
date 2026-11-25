@@ -711,14 +711,14 @@ function behindOf(d: ItemData): ItemBehind {
 export function getMenuItemSectionPromises(
   input: MenuItemInput,
 ): StreamedSections<MenuItemSections> {
-  const dataP = classify(
-    async () => {
-      const d = await loadItem(input)
-      if (!d) throw new Error("item not found in this range")
-      return d
-    },
-    { retryAction: "retryMenuItem", isEmpty: (d) => d.qty === 0, emptyReason: "no_match" },
-  )
+  // An item that did not sell in this window is "empty", not "failed": the
+  // page turns an empty headline into its 404, and a throw here printed five
+  // "did not load" boxes on a page that should not exist.
+  const dataP = classify<ItemData | null>(() => loadItem(input), {
+    retryAction: "retryMenuItem",
+    isEmpty: (d) => d === null || d.qty === 0,
+    emptyReason: "no_match",
+  }).then((sd) => mapReady(sd, (d) => d as ItemData))
 
   return {
     plain: guardSection(dataP.then((sd) => mapReady(sd, plainOf)), "retryMenuItem"),

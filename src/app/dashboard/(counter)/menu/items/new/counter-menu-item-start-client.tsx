@@ -231,9 +231,16 @@ function NewDish({
   const [copyFrom, setCopyFrom] = useState<string | null>(null)
   const source = data.copy.find((d) => d.id === copyFrom) ?? null
 
+  // The category a pick filled in, so arrowing past a dish does not leave its
+  // category behind; one the reader typed is never replaced.
+  const [autoCategory, setAutoCategory] = useState("")
+
   const pick = (d: RecipeChoice | null) => {
     setCopyFrom(d?.id ?? null)
-    if (d && !category) setCategory(d.category)
+    if (category !== "" && category !== autoCategory) return
+    const next = d?.category ?? ""
+    setCategory(next)
+    setAutoCategory(next)
   }
 
   return (

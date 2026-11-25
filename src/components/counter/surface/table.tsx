@@ -10,6 +10,8 @@ export interface Column {
   label: string
   /** The prototype's `c.n`. Puts `class="num"` on BOTH the `th` and every `td`. */
   numeric?: boolean
+  /** Read to screen readers when `label` is blank, so no header is empty. */
+  srLabel?: string
 }
 
 /**
@@ -174,7 +176,7 @@ export function Table({ columns, rows }: { columns: Column[]; rows: Row[] }) {
           <tr>
             {columns.map((c) => (
               <th key={c.key} scope="col" className={c.numeric ? "num" : undefined}>
-                {c.label}
+                {c.label || (c.srLabel ? <span className="sr-only">{c.srLabel}</span> : null)}
               </th>
             ))}
           </tr>

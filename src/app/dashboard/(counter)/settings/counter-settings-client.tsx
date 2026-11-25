@@ -42,7 +42,7 @@ const TEAM_COLUMNS: Column[] = [
   { key: "role", label: "Role" },
   { key: "timezone", label: "Timezone" },
   { key: "stores", label: "Stores owned", numeric: true },
-  { key: "you", label: "" },
+  { key: "you", label: "", srLabel: "You" },
 ]
 
 /** The three that write. Labels are the prototype's, minus the daily digest. */
