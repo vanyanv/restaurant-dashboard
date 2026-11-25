@@ -115,4 +115,30 @@ describe("Ask: the thread and the address", () => {
     expect(url()).toBe("b")
     expect(replaced).toEqual(["new"])
   })
+
+  it("an answer that lands after the reader moved on does not pull them back", async () => {
+    await mount("a")
+    let land!: (r: Response) => void
+    vi.stubGlobal("fetch", () => new Promise<Response>((r) => (land = r)))
+    const sent = sdk.fetch!("/api/chat")
+    await open("b")
+    land(new Response("", { headers: { "x-conversation-id": "a" } }))
+    await sent
+    await settle()
+    expect(url()).toBe("b")
+    expect(engine.conversationId).toBe("b")
+    expect(replaced).toEqual([])
+  })
+
+  it("a refusal that lands after the reader moved on does not close their thread", async () => {
+    await mount("a")
+    let land!: (r: Response) => void
+    vi.stubGlobal("fetch", () => new Promise<Response>((r) => (land = r)))
+    const sent = sdk.fetch!("/api/chat")
+    await open("b")
+    land(new Response("", { status: 404 }))
+    await sent
+    await settle()
+    expect(engine.conversationId).toBe("b")
+  })
 })

@@ -185,8 +185,11 @@ export function useAsk(
             askScope: askScopeRef.current,
           },
         }),
-        fetch: (input, init) =>
-          fetch(input as RequestInfo, init).then((res) => {
+        fetch: (input, init) => {
+          // The thread this turn was sent in. If the reader is in another by
+          // the time it answers, the answer names a thread they have left.
+          const sentIn = conversationIdRef.current
+          return fetch(input as RequestInfo, init).then((res) => {
             /*
              * THE TURN'S ID, OFF THE HEADER, BEFORE ANYTHING CAN GO WRONG.
              *
@@ -199,6 +202,7 @@ export function useAsk(
              */
             const turnId = res.headers.get("x-chat-turn-id")
             if (turnId) lastTurnIdRef.current = turnId
+            if (conversationIdRef.current !== sentIn) return res
 
             /*
              * A thread that is gone — deleted, or on another account.
@@ -214,7 +218,9 @@ export function useAsk(
              */
             if (res.status === 404) {
               conversationIdRef.current = null
-              setTimeout(() => setConversationId(null), 0)
+              setTimeout(() => {
+                if (conversationIdRef.current === null) setConversationId(null)
+              }, 0)
               return res
             }
             if (res.status === 403) return res
@@ -223,10 +229,13 @@ export function useAsk(
               conversationIdRef.current = id
               // Next tick: this runs inside the fetch that a render started,
               // and setting state during it would be a render-phase update.
-              setTimeout(() => setConversationId(id), 0)
+              setTimeout(() => {
+                if (conversationIdRef.current === id) setConversationId(id)
+              }, 0)
             }
             return res
-          }),
+          })
+        },
       }),
     [],
   )
