@@ -2,6 +2,7 @@
 // the caller's own account. The owner fallback in withCronAuth proves the
 // caller owns SOME account; before this check, posting another account's
 // storeId synced that store. Cron runs stay unscoped.
+// (A thrown lookup surfaces as Next's 500; it is not mapped to 404.)
 
 import { describe, it, expect, vi, beforeEach } from "vitest"
 import { NextResponse } from "next/server"
@@ -14,7 +15,7 @@ vi.mock("@/lib/cron-auth", () => ({
       fn(req, ctx),
   parseJsonBody: async (req: Request) => req.json(),
 }))
-vi.mock("@/lib/auth-scope", () => ({ requireOwnerStore: vi.fn() }))
+vi.mock("@/lib/prisma", () => ({ prisma: { store: { findFirst: vi.fn() } } }))
 vi.mock("@/lib/harri-labor-sync", () => ({
   runHarriLaborSync: vi.fn(async () => ({ daysWritten: 0, positionsWritten: 0, alertsWritten: 0, rowsChanged: 0 })),
 }))
@@ -29,7 +30,7 @@ vi.mock("@/lib/cache/closed-range", () => ({
 }))
 
 import { POST } from "@/app/api/cron/harri/route"
-import { requireOwnerStore } from "@/lib/auth-scope"
+import { prisma } from "@/lib/prisma"
 import { runHarriLaborSync } from "@/lib/harri-labor-sync"
 import { runHarriScheduleSync } from "@/lib/harri-schedule-sync"
 
@@ -49,20 +50,28 @@ beforeEach(() => {
 
 describe("POST /api/cron/harri account scope", () => {
   it("refuses another account's store with 404 and syncs nothing", async () => {
-    vi.mocked(requireOwnerStore).mockRejectedValue(new Error("Store not found"))
+    vi.mocked(prisma.store.findFirst).mockResolvedValue(null)
     const res = await post("store-of-account-b")
     expect(res.status).toBe(404)
     expect(await res.json()).toEqual({ error: "Store not found" })
-    expect(requireOwnerStore).toHaveBeenCalledWith("store-of-account-b")
+    expect(vi.mocked(prisma.store.findFirst).mock.calls[0][0]).toMatchObject({
+      where: { id: "store-of-account-b", accountId: "acct-a" },
+    })
     expect(runHarriLaborSync).not.toHaveBeenCalled()
     expect(runHarriScheduleSync).not.toHaveBeenCalled()
   })
 
   it("syncs the caller's own store", async () => {
-    vi.mocked(requireOwnerStore).mockResolvedValue({ id: "s1", name: "Hollywood" })
+    vi.mocked(prisma.store.findFirst).mockResolvedValue({ id: "s1" } as never)
     const res = await post("s1")
     expect(res.status).toBe(200)
     expect(runHarriLaborSync).toHaveBeenCalledOnce()
+  })
+
+  it("a database error is a 500, not a misleading 404", async () => {
+    vi.mocked(prisma.store.findFirst).mockRejectedValue(new Error("db down"))
+    await expect(post("s1")).rejects.toThrow("db down")
+    expect(runHarriLaborSync).not.toHaveBeenCalled()
   })
 
   it("a cron run skips the account check", async () => {
@@ -70,7 +79,7 @@ describe("POST /api/cron/harri account scope", () => {
     ctx.accountId = null
     const res = await post("s1")
     expect(res.status).toBe(200)
-    expect(requireOwnerStore).not.toHaveBeenCalled()
+    expect(prisma.store.findFirst).not.toHaveBeenCalled()
     expect(runHarriLaborSync).toHaveBeenCalledOnce()
   })
 })

@@ -142,6 +142,30 @@ describe("withCronAuth", () => {
   })
 })
 
+describe("withCronAuth ownerFallback account scope", () => {
+  it("403s an owner session with no accountId instead of running unscoped", async () => {
+    mockedSession.mockResolvedValue({ user: { id: "u-no-account", role: "OWNER", accountId: "" } })
+    const handler = vi.fn(async () => Response.json({ ok: true }))
+    const route = withCronAuth(handler, {
+      ownerFallback: { forbiddenMessage: "Only owners can run the Harri sync" },
+    })
+    const res = await route(anonReq())
+    expect(res.status).toBe(403)
+    expect(handler).not.toHaveBeenCalled()
+  })
+
+  it("a cron bearer gets accountId null even with a session present", async () => {
+    mockedSession.mockResolvedValue({ user: { id: "u1", role: "OWNER", accountId: "acct-a" } })
+    const handler = vi.fn(async (_r: NextRequest, _c: { fromCron: boolean; accountId: string | null }) =>
+      Response.json({ ok: true }))
+    const route = withCronAuth(handler, {
+      ownerFallback: { forbiddenMessage: "x" },
+    })
+    await route(cronReq())
+    expect(handler.mock.calls[0][1]).toEqual({ fromCron: true, accountId: null })
+  })
+})
+
 describe("parseJsonBody", () => {
   it("returns the parsed object for valid JSON", async () => {
     const req = new NextRequest("http://localhost/api/cron/x", {

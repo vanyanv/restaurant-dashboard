@@ -26,7 +26,7 @@ export const POST = withCronAuth(
           // cron (accountId null) syncs every store, as before.
           const r = await runHourlySync({
             triggeredBy: fromCron ? "cron" : "manual",
-            ...(accountId ? { accountId } : {}),
+            ...(accountId !== null ? { accountId } : {}),
           })
           written = r.bucketsChanged > 0 ? r.datesCovered : []
           return r

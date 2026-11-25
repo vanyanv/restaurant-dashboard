@@ -63,6 +63,14 @@ export function withCronAuth(
             { status: 403 }
           )
         }
+        // Fail closed: every scoped handler keys on this, so a session with
+        // no account must never fall through to the unscoped (cron) path.
+        if (!session.user.accountId) {
+          return NextResponse.json(
+            { error: opts.ownerFallback.forbiddenMessage },
+            { status: 403 }
+          )
+        }
         accountId = session.user.accountId
       } else {
         const { status, error } = opts.unauthorized ?? {

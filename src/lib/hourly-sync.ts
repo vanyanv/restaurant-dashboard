@@ -98,7 +98,7 @@ export async function runHourlySync(
         windowDays: opts?.windowDays ?? 2,
         rowLimit: opts?.rowLimit ?? 10000,
         ...(opts?.anchorDate ? { anchorDate: opts.anchorDate } : {}),
-        ...(opts?.accountId ? { accountId: opts.accountId } : {}),
+        ...(opts?.accountId !== undefined ? { accountId: opts.accountId } : {}),
         ...(opts?.metadata ?? {}),
       },
     },
@@ -115,7 +115,7 @@ async function runHourlySyncInner(opts?: HourlySyncOpts): Promise<HourlySyncResu
   const rowLimit = opts?.rowLimit ?? 10000
 
   const otterStores = await prisma.otterStore.findMany({
-    ...(opts?.accountId ? { where: { store: { accountId: opts.accountId } } } : {}),
+    ...(opts?.accountId !== undefined ? { where: { store: { accountId: opts.accountId } } } : {}),
     select: {
       otterStoreId: true,
       storeId: true,
