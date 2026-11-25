@@ -165,9 +165,9 @@ button.ck-gl:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .ck-letter__scan .ck-qr{box-sizing:border-box;width:100%;padding:1.6cqw;background:var(--ct-brand-surface);border:.7cqw solid var(--ct-brand-ink);margin-bottom:1.2cqw}
 .ck-letter__scan > b{font-family:var(--ck-letter-display);font-weight:400;font-size:3.9cqw;line-height:1;text-transform:uppercase;letter-spacing:.02em}
 .ck-letter__scan > span{font-size:2.3cqw;font-weight:600;color:var(--ct-brand-ink-2)}
-.ck-letter__how h2{font-family:var(--ck-letter-display);font-weight:400;font-size:3.3cqw;line-height:1;text-transform:uppercase;letter-spacing:.02em;display:grid;gap:.8cqw;margin-bottom:2.4cqw}
+.ck-letter__how h2{font-family:var(--ck-letter-display);font-weight:400;font-size:3.3cqw;line-height:1;text-transform:uppercase;letter-spacing:.02em;display:grid;gap:.8cqw;margin-bottom:2cqw}
 .ck-letter__how h2 span{font-family:var(--sans);font-size:2.5cqw;font-weight:600;text-transform:none;letter-spacing:0;color:var(--ct-brand-ink-2)}
-.ck-letter__how ol{list-style:none;margin:0;padding:0;display:grid;gap:2.4cqw}
+.ck-letter__how ol{list-style:none;margin:0;padding:0;display:grid;gap:1.8cqw}
 .ck-letter__how li{display:grid;grid-template-columns:4.8cqw 1fr;gap:2cqw;align-items:start}
 .ck-letter__how li i{font-style:normal;width:4.8cqw;height:4.8cqw;box-sizing:border-box;display:grid;place-items:center;background:var(--ct-brand-yellow);color:var(--ct-brand-ink);
   border:.35cqw solid var(--ct-brand-ink);font-family:var(--ck-letter-display);font-size:2.8cqw;line-height:1}
@@ -180,7 +180,7 @@ button.ck-gl:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .ck-letter__when b{font-family:var(--ck-letter-display);font-weight:400;font-size:2.7cqw;line-height:1;text-transform:uppercase;letter-spacing:.02em;margin-bottom:.3cqw}
 .ck-letter__when strong{font-size:2.5cqw;font-weight:700;line-height:1.2;font-variant-numeric:tabular-nums}
 .ck-letter__when > div > span{font-size:1.75cqw;line-height:1.3;color:var(--ct-brand-ink-2)}
-.ck-letter__help{display:grid;gap:1.6cqw;margin-top:2.6cqw;padding-top:2.2cqw;border-top:.35cqw dashed var(--ct-brand-ink)}
+.ck-letter__help{display:grid;gap:1.2cqw;margin-top:2.2cqw;padding-top:1.8cqw;border-top:.35cqw dashed var(--ct-brand-ink)}
 .ck-letter__help p{font-size:2.2cqw;font-weight:700;line-height:1.25}
 .ck-letter__help p span{display:block;font-weight:500;margin-top:.3cqw}
 .ck-letter__foot{background:var(--ct-brand-ink);color:var(--ct-brand-cream);padding:1.6cqw 6cqw;text-align:center;font-family:var(--mono);font-size:1.6cqw;letter-spacing:.02em;overflow-wrap:anywhere}
