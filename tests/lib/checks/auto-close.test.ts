@@ -37,12 +37,12 @@ const sections: CrewSection[] = [
     en: "Kitchen",
     es: "Cocina",
     items: [
-      { id: "grill", en: "Scrape the grills", es: null, photoRequired: true },
-      { id: "mop", en: "Mop floors", es: null, photoRequired: true },
-      { id: "soda", en: "Wipe soda machine", es: null, photoRequired: false },
+      { id: "grill", en: "Scrape the grills", es: null, photoRequired: true, help: null },
+      { id: "mop", en: "Mop floors", es: null, photoRequired: true, help: null },
+      { id: "soda", en: "Wipe soda machine", es: null, photoRequired: false, help: null },
     ],
   },
-  { id: "f", en: "Front of house", es: null, items: [{ id: "bags", en: "Restock to-go bags", es: null, photoRequired: false }] },
+  { id: "f", en: "Front of house", es: null, items: [{ id: "bags", en: "Restock to-go bags", es: null, photoRequired: false, help: null }] },
 ]
 
 const mark = (itemId: string, at: string, over: Partial<CloseMark> = {}): CloseMark => ({

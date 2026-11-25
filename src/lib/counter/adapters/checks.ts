@@ -661,7 +661,17 @@ function reportSentence(f: CheckReportFigures, range: number): string {
 
 // ─── Checklists ─────────────────────────────────────────────────────────────
 
-export type EditorItem = { id: string; en: string; es: string; photoRequired: boolean }
+export type EditorItem = {
+  id: string
+  en: string
+  es: string
+  photoRequired: boolean
+  /** How-to steps, one per line; "" when none. */
+  helpEn: string
+  helpEs: string
+  /** Reference photo storage keys, in order. */
+  helpPhotos: string[]
+}
 export type EditorSection = {
   id: string
   nameEn: string
@@ -728,7 +738,15 @@ export function getChecksChecklistsSectionPromises(opts: {
                 nameEn: s.nameEn,
                 nameEs: s.nameEs ?? "",
                 enabled: s.enabled,
-                items: s.items.map((i) => ({ id: i.id, en: i.textEn, es: i.textEs ?? "", photoRequired: i.photoRequired })),
+                items: s.items.map((i) => ({
+                  id: i.id,
+                  en: i.textEn,
+                  es: i.textEs ?? "",
+                  photoRequired: i.photoRequired,
+                  helpEn: i.helpEn ?? "",
+                  helpEs: i.helpEs ?? "",
+                  helpPhotos: i.helpPhotos,
+                })),
               })),
             }]
           }),

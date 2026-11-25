@@ -300,6 +300,27 @@ button.ck-gl:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .ck-secswitch[aria-checked="true"] i::after{left:12px}
 .ck-secoff{margin:0}
 .ck-esect--off > .ck-erow:not(:first-child){opacity:.55}
+/* How-to on a task: the tag beside Photo, and the panel it opens under the row. */
+.ck-howtag{border-style:dashed}
+.ck-howtag.has{border-style:solid;background:var(--good-wash);border-color:var(--good);color:var(--good)}
+.ck-howtag[aria-expanded="true"]{outline:2px solid var(--ink);outline-offset:1px}
+.ck-erow > .ck-howto{grid-column:1/-1;grid-row:auto}
+.ck-howto{display:grid;gap:12px;margin:4px 0 8px;padding:12px;border:1px solid var(--signal-line);border-radius:var(--r-sm);background:var(--signal-wash)}
+.ck-howto__part{display:grid;gap:8px}
+.ck-howto__photos{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:8px}
+.ck-howto__photo{position:relative;margin:0;aspect-ratio:1;max-width:100%;border-radius:var(--r-sm);overflow:hidden;background:var(--sunk);border:1px solid var(--line-strong)}
+.ck-howto__photo img{width:100%;height:100%;object-fit:cover;display:block}
+.ck-howto__n{position:absolute;left:4px;top:4px;font-family:var(--mono);font-size:var(--t-micro);background:var(--ink);color:var(--surface);padding:1px 6px;border-radius:3px}
+.ck-howto__tools{position:absolute;left:4px;right:4px;bottom:4px;display:flex;justify-content:space-between;gap:4px}
+.ck-howto__add{aspect-ratio:1;max-width:100%;display:grid;place-items:center;border:1.5px dashed var(--line-strong);border-radius:var(--r-sm);background:var(--surface);
+  color:var(--ink);font-weight:600;font-size:var(--t-cap);cursor:pointer;min-height:44px}
+.ck-howto__add:focus-within{outline:2px solid var(--accent);outline-offset:1px}
+.ck-howto__pair{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.ck-howto__pair label{display:grid;gap:4px;min-width:0}
+.ck-howto__pair textarea{resize:vertical;min-height:96px;font:inherit;line-height:1.45}
+.ck-howto__err{margin:0;color:var(--bad);font-weight:600;font-size:var(--t-cap)}
+.ck-howto__foot{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}
+@media (max-width:640px){.ck-howto__pair{grid-template-columns:1fr}.ck-howto__photos{grid-template-columns:repeat(2,minmax(0,1fr))}}
 
 /* ── crew page (phone) ───────────────────────────────────────────────── */
 .ckc{min-height:100dvh;background:var(--surface);color:var(--ink);display:flex;justify-content:center;font-size:15px;

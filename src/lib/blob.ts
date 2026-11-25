@@ -7,6 +7,7 @@ import {
   PutObjectCommand,
   S3Client,
 } from "@aws-sdk/client-s3"
+import { helpPhotoPrefix } from "@/lib/checks/help"
 
 export type InvoicePdfUpload = {
   pathname: string
@@ -265,6 +266,20 @@ export async function putCheckPhoto(
 ): Promise<ProductPhotoUpload> {
   const safeId = storeId.replace(/[^A-Za-z0-9._-]/g, "_")
   const key = `checks/${safeId}/${randomUUID()}.${PRODUCT_PHOTO_CONTENT_TYPES[contentType]}`
+  await putCheckObject(key, photoBytes, contentType)
+  return { pathname: key, size: photoBytes.byteLength, uploadedAt: new Date() }
+}
+
+/**
+ * One of the owner's how-to reference photos for a check task:
+ * `check-help/<account>/<uuid>.<ext>`, stored like a check photo.
+ */
+export async function putCheckHelpPhoto(
+  accountId: string,
+  photoBytes: Buffer,
+  contentType: ProductPhotoContentType,
+): Promise<ProductPhotoUpload> {
+  const key = `${helpPhotoPrefix(accountId)}${randomUUID()}.${PRODUCT_PHOTO_CONTENT_TYPES[contentType]}`
   await putCheckObject(key, photoBytes, contentType)
   return { pathname: key, size: photoBytes.byteLength, uploadedAt: new Date() }
 }

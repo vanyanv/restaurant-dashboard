@@ -2468,6 +2468,14 @@ model CheckItem {
   textEs    String?
   /// Crew must take a photo to tick this task.
   photoRequired Boolean @default(false)
+  /// How-to help crew open from the task: where things are and how to do it,
+  /// one step per line. Null means no help in that language (Spanish falls
+  /// back to English).
+  helpEn String?
+  helpEs String?
+  /// The owner's reference photos for the how-to, in order: storage keys under
+  /// `check-help/<accountId>/`. Never proof: crew's own photos are CheckMark rows.
+  helpPhotos String[] @default([])
 
   section CheckSection @relation(fields: [sectionId], references: [id], onDelete: Cascade)
 

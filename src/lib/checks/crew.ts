@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma"
 import { currentMarks, loadCheckGrid, type GridCell, type GridMark } from "./data"
 import { ensureCheckSetup } from "./setup"
 import { loadSections } from "./sections"
+import type { CrewHelp } from "./help"
 import { checkStateVersion } from "./version"
 import {
   addDays,
@@ -53,7 +54,14 @@ export type CrewDayRow = {
   tasksTotal: number
 }
 
-export type CrewItem = { id: string; en: string; es: string | null; photoRequired: boolean }
+export type CrewItem = {
+  id: string
+  en: string
+  es: string | null
+  photoRequired: boolean
+  /** How-to steps and reference photos, when the owner added some. */
+  help: CrewHelp | null
+}
 export type CrewSection = {
   id: string
   en: string

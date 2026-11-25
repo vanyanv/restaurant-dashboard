@@ -18,6 +18,7 @@ import {
 } from "@/lib/checks/setup"
 import { dayToDb } from "@/lib/checks/time"
 import { loadCheckGrid, type SubmissionContent } from "@/lib/checks/data"
+import { helpText, isHelpPhotoKey, MAX_HELP_CHARS, MAX_HELP_PHOTOS } from "@/lib/checks/help"
 
 /**
  * The owner's write path for store checks. Every action starts from
@@ -55,7 +56,17 @@ const ChecklistInput = z.object({
         // Off hides the section from crew; its tasks stay saved.
         enabled: z.boolean().default(true),
         items: z
-          .array(z.object({ id: rowId, en: text(140).min(1, "A task is empty"), es: text(140), photoRequired: z.boolean() }))
+          .array(
+            z.object({
+              id: rowId,
+              en: text(140).min(1, "A task is empty"),
+              es: text(140),
+              photoRequired: z.boolean(),
+              helpEn: z.string().max(MAX_HELP_CHARS, "How-to steps are too long. Keep them short.").default(""),
+              helpEs: z.string().max(MAX_HELP_CHARS, "How-to steps are too long. Keep them short.").default(""),
+              helpPhotos: z.array(z.string().max(200)).max(MAX_HELP_PHOTOS, `A how-to holds up to ${MAX_HELP_PHOTOS} photos`).default([]),
+            }),
+          )
           .max(40),
       }),
     )
@@ -100,6 +111,15 @@ export async function saveChecklist(raw: z.input<typeof ChecklistInput>): Promis
       }
     }
     await requireOwnerStore(input.storeId)
+    // A how-to photo must be one this account uploaded, never a key typed in.
+    const helpKeys = input.sections.flatMap((s) => s.items.flatMap((i) => i.helpPhotos))
+    if (helpKeys.length > 0) {
+      const accountId = (await getSession())?.user?.accountId
+      if (!accountId) return { ok: false, error: "Unauthorized" }
+      if (helpKeys.some((k) => !isHelpPhotoKey(accountId, k))) {
+        return { ok: false, error: "A how-to photo didn't upload properly. Remove it and add it again." }
+      }
+    }
     const tpl = await prisma.checkTemplate.findUnique({
       where: { storeId_kind: { storeId: input.storeId, kind: input.kind } },
       select: { id: true, sections: { select: { id: true, items: { select: { id: true } } } } },
@@ -133,7 +153,16 @@ export async function saveChecklist(raw: z.input<typeof ChecklistInput>): Promis
           ? (await tx.checkSection.update({ where: { id: s.id }, data: sectionData, select: { id: true } })).id
           : (await tx.checkSection.create({ data: { ...sectionData, templateId: tpl.id }, select: { id: true } })).id
         for (const [ii, i] of s.items.entries()) {
-          const itemData = { sectionId, position: ii, textEn: i.en, textEs: i.es || null, photoRequired: i.photoRequired }
+          const itemData = {
+            sectionId,
+            position: ii,
+            textEn: i.en,
+            textEs: i.es || null,
+            photoRequired: i.photoRequired,
+            helpEn: helpText(i.helpEn),
+            helpEs: helpText(i.helpEs),
+            helpPhotos: i.helpPhotos,
+          }
           if (i.id && keptItems.has(i.id)) await tx.checkItem.update({ where: { id: i.id }, data: itemData })
           else await tx.checkItem.create({ data: itemData })
         }
@@ -166,7 +195,15 @@ export async function copyChecklistToOtherStores(input: { storeId: string; kind:
         nameEn: s.nameEn,
         nameEs: s.nameEs ?? "",
         enabled: s.enabled,
-        items: s.items.map((i) => ({ en: i.textEn, es: i.textEs ?? "", photoRequired: i.photoRequired })),
+        items: s.items.map((i) => ({
+          en: i.textEn,
+          es: i.textEs ?? "",
+          photoRequired: i.photoRequired,
+          // The photos stay where they are; every store in the account may show them.
+          helpEn: i.helpEn ?? "",
+          helpEs: i.helpEs ?? "",
+          helpPhotos: i.helpPhotos,
+        })),
       }))
       const existing = await prisma.checkTemplate.findUnique({
         where: { storeId_kind: { storeId: t.id, kind } },
