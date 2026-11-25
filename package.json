@@ -29,7 +29,7 @@
     "tokens": "tsx scripts/counter-lint.ts",
     "typecheck": "tsc --noEmit",
     "typecheck:scripts": "tsc --noEmit -p tsconfig.scripts.json",
-    "lint:hooks": "eslint src --max-warnings 60",
+    "lint:hooks": "eslint src --max-warnings 59",
     "test": "vitest run",
     "shot": "tsx scripts/shot-page.ts",
     "e2e": "playwright test",

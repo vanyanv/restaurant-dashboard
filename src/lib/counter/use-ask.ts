@@ -133,6 +133,17 @@ export function useAsk(
 
   const [conversationId, setConversationId] = useState<string | null>(initialConversationId)
   /*
+   * A new address is this hook's thread from the render it arrives in. Left to
+   * the effect below, one render reported the OLD thread under the NEW address,
+   * and the page read that as "the route named a thread" and wrote the old id
+   * back: the two swapped without end.
+   */
+  const [address, setAddress] = useState(initialConversationId)
+  if (address !== initialConversationId) {
+    setAddress(initialConversationId)
+    setConversationId(initialConversationId)
+  }
+  /*
    * THE REF IS THE AUTHORITY, and it is deliberately NOT mirrored from state
    * on every render. The transport is built once and reads the id at send
    * time, so it needs a ref; but the id most often arrives inside a `fetch`
@@ -233,7 +244,6 @@ export function useAsk(
   useEffect(() => {
     if (initialConversationId === conversationIdRef.current) return
     conversationIdRef.current = initialConversationId
-    setConversationId(initialConversationId)
     setQuestions([])
     setScopes([])
     setMessages([])
