@@ -381,13 +381,19 @@ function PersonLine({
   const [menu, setMenu] = useState(false)
   const wrap = useRef<HTMLDivElement>(null)
   const menuEl = useRef<HTMLSpanElement>(null)
+  const kebab = useRef<HTMLButtonElement>(null)
   useEffect(() => {
     if (!menu) return
     focusFirstItem(menuEl.current)
     const close = (e: MouseEvent) => {
       if (!wrap.current?.contains(e.target as Node)) setMenu(false)
     }
-    const esc = (e: KeyboardEvent) => e.key === "Escape" && setMenu(false)
+    const esc = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return
+      const inside = menuEl.current?.contains(document.activeElement) ?? false
+      setMenu(false)
+      if (inside) kebab.current?.focus()
+    }
     document.addEventListener("mousedown", close)
     document.addEventListener("keydown", esc)
     return () => {
@@ -404,6 +410,7 @@ function PersonLine({
       className={danger ? "is-danger" : undefined}
       onClick={() => {
         setMenu(false)
+        kebab.current?.focus()
         fn()
       }}
     >
@@ -467,6 +474,7 @@ function PersonLine({
           <>
             <button
               type="button"
+              ref={kebab}
               className="pp-kebab"
               aria-haspopup="menu"
               aria-expanded={menu}

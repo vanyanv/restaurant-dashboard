@@ -427,10 +427,13 @@ function ConversationRow({
         role="menu"
         aria-label="Thread actions"
         data-cv-menu
+        inert={!menuOpen}
         onKeyDown={(e) => {
           if (e.key === "Escape") {
             e.preventDefault()
             onMenu(false)
+            // Back to the row this menu belongs to; the menu only fades out.
+            ;(e.currentTarget.previousElementSibling as HTMLElement | null)?.focus()
             return
           }
           rovingKeyDown(e, '[role="menuitem"]')

@@ -55,6 +55,7 @@ export function TurnFoot({ read, meta, liveDurationMs = null, onRate, onFork, co
   const [copied, setCopied] = useState(false)
   const pop = useRef<HTMLSpanElement>(null)
   const menuEl = useRef<HTMLDivElement>(null)
+  const wrongBtn = useRef<HTMLButtonElement>(null)
 
   // The stored rating arrives with the thread; a later render of the same
   // turn must not wipe a thumb the reader just pressed.
@@ -64,7 +65,9 @@ export function TurnFoot({ read, meta, liveDurationMs = null, onRate, onFork, co
 
   useEffect(() => {
     if (!asking) return
-    focusFirstItem(menuEl.current)
+    const menu = menuEl.current
+    const opener = wrongBtn.current
+    focusFirstItem(menu)
     const off = (e: MouseEvent) => {
       if (pop.current?.contains(e.target as Node)) return
       setAsking(false)
@@ -77,6 +80,9 @@ export function TurnFoot({ read, meta, liveDurationMs = null, onRate, onFork, co
     return () => {
       document.removeEventListener("click", off)
       document.removeEventListener("keydown", esc)
+      // The menu only fades out, so focus left inside it would sit on an
+      // invisible item: hand it back to the button that opened it.
+      if (menu?.contains(document.activeElement)) opener?.focus()
     }
   }, [asking])
 
@@ -141,6 +147,7 @@ export function TurnFoot({ read, meta, liveDurationMs = null, onRate, onFork, co
           type="button"
           className={down ? "on dn" : undefined}
           aria-pressed={down}
+          ref={wrongBtn}
           aria-haspopup="menu"
           aria-expanded={asking}
           aria-label="Wrong or unhelpful"
@@ -155,6 +162,7 @@ export function TurnFoot({ read, meta, liveDurationMs = null, onRate, onFork, co
           role="menu"
           aria-label="What was wrong?"
           ref={menuEl}
+          inert={!asking}
           onKeyDown={(e) => rovingKeyDown(e, '[role="menuitem"]')}
         >
           <div className="k" aria-hidden="true">What was wrong?</div>
