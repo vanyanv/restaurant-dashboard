@@ -146,7 +146,9 @@ describe("thrown out at one store", () => {
   it("keeps theft and sent back apart from waste, each with its own figure", async () => {
     logged([
       adj("store_a", "DROPPED", 1, 4, 2), // $8 of waste
-      adj("store_a", "THEFT", 1, 10, 2), // $20, never waste
+      // A shade older than the drop: two rows made in the same millisecond tie
+      // on time, and the list (newest first) then has no fixed order.
+      adj("store_a", "THEFT", 1.1, 10, 2), // $20, never waste
       adj("store_a", "SUPPLIER_RETURN", 2, 5, 2), // $10, never waste
       adj("store_a", "SUPPLIER_RETURN", 2, 1, null),
     ])
