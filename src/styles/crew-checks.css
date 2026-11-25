@@ -129,7 +129,10 @@
 .ckb__howsheet { max-height: 92dvh; overflow-y: auto; border-top: 4px solid var(--accent) }
 .ckb__howsheet h2 { font-size: 21px; line-height: 1.1 }
 .ckb__ref { position: relative; margin: 0; border: 3px solid var(--accent-wash); outline: 1.5px solid var(--accent-hi); background: var(--chrome) }
-.ckb__ref img { display: block; width: 100%; max-height: 52dvh; object-fit: contain }
+.ckb__refview { scrollbar-width: none }
+.ckb__refrow { display: flex }
+.ckb__refslide { flex: 0 0 100% }
+.ckb__ref img { display: block; width: 100%; height: min(52dvh, 75vw); object-fit: contain }
 .ckb__reftag { position: absolute; left: 0; top: 0; display: inline-flex; align-items: center; gap: 5px; background: var(--accent); color: var(--ink);
   font-family: var(--mono); font-size: 10px; font-weight: 600; letter-spacing: .07em; text-transform: uppercase; padding: 4px 7px }
 .ckb__refn { position: absolute; right: 0; top: 0; background: var(--ink); color: var(--surface); font-family: var(--mono); font-size: 11px; padding: 4px 7px }
@@ -137,6 +140,7 @@
   font-size: 24px; font-weight: 800; cursor: pointer; opacity: .95 }
 .ckb__refnav.l { left: 0 }
 .ckb__refnav.r { right: 0 }
+.ckb__refnav[data-disabled] { display: none }
 .ckb__steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; counter-reset: step }
 .ckb__steps li { display: grid; grid-template-columns: 26px minmax(0, 1fr); gap: 10px; font-size: 16px; line-height: 1.4; counter-increment: step }
 .ckb__steps li::before { content: counter(step); width: 24px; height: 24px; display: grid; place-items: center; background: var(--ink); color: var(--surface);

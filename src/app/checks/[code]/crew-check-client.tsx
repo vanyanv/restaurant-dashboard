@@ -7,6 +7,14 @@ import type { ActiveCheck, CrewItem, CrewMarkState, CrewView } from "@/lib/check
 import { shortStoreName } from "@/lib/checks/names"
 import { crewHelpPhotoUrl } from "@/lib/checks/help"
 import { ModalDialog } from "@/components/counter/modal-dialog"
+import {
+  Carousel,
+  CarouselContent,
+  CarouselItem,
+  CarouselNext,
+  CarouselPrevious,
+  CarouselViewport,
+} from "@ui-sdk/react/carousel"
 
 /**
  * The crew flow, one job per screen: store page -> PIN -> shared checklist ->
@@ -1289,32 +1297,41 @@ function HowSheet({
   onAct: () => void
   onClose: () => void
 }) {
-  const [at, setAt] = useState(0)
+  const [page, setPage] = useState(1)
   const n = photos.length
-  const pi = Math.min(at, Math.max(0, n - 1))
   return (
     <ModalDialog className="ckc__sheet" aria-label={t.howFor(title)} onClose={onClose} onClick={onClose}>
       <div className="ckb__howsheet" onClick={(e) => e.stopPropagation()}>
         <span className="ck-mono">{t.howTitle}</span>
         <h2>{title}</h2>
         {n > 0 && (
-          <figure className="ckb__ref">
-            <img src={crewHelpPhotoUrl(code, photos[pi])} alt={t.photoOf(pi + 1, n)} />
+          <Carousel className="ckb__ref" aria-label={t.refPhoto} page={page} onPageChange={(p) => setPage(p)}>
+            <CarouselViewport className="ckb__refview">
+              <CarouselContent className="ckb__refrow">
+                {photos.map((key, k) => (
+                  <CarouselItem key={key} className="ckb__refslide">
+                    <img src={crewHelpPhotoUrl(code, key)} alt={t.photoOf(k + 1, n)} loading={k === 0 ? "eager" : "lazy"} />
+                  </CarouselItem>
+                ))}
+              </CarouselContent>
+            </CarouselViewport>
             <span className="ckb__reftag">
               <PictureIcon size={12} /> {t.refPhoto}
             </span>
-            {n > 1 && <span className="ckb__refn">{pi + 1} / {n}</span>}
-            {pi > 0 && (
-              <button type="button" className="ckb__refnav l" aria-label={t.prevPhoto} onClick={() => setAt(pi - 1)}>
-                ‹
-              </button>
+            {n > 1 && (
+              <>
+                <span className="ckb__refn">
+                  {page} / {n}
+                </span>
+                <CarouselPrevious className="ckb__refnav l" aria-label={t.prevPhoto}>
+                  ‹
+                </CarouselPrevious>
+                <CarouselNext className="ckb__refnav r" aria-label={t.nextPhoto}>
+                  ›
+                </CarouselNext>
+              </>
             )}
-            {pi < n - 1 && (
-              <button type="button" className="ckb__refnav r" aria-label={t.nextPhoto} onClick={() => setAt(pi + 1)}>
-                ›
-              </button>
-            )}
-          </figure>
+          </Carousel>
         )}
         {steps.length > 0 && (
           <ol className={`ckb__steps${steps.length === 1 ? " one" : ""}`}>
