@@ -138,6 +138,19 @@ where the two differ. Its CLI sends anonymous usage data to Google unless
 default: Baseline Widely available features freely, anything newer only with
 the fallback its guide gives.
 
+## ui-sdk
+
+`@ui-sdk/react` and `@ui-sdk/core` (Vercel Labs, unstyled behaviour
+components) were installed 2026-11-25 at the owner's ask, pinned to an exact
+beta version because the API still moves between betas. Read
+`node_modules/@ui-sdk/react/docs/llms.txt` and the `ui-sdk` skill
+(`.agents/skills/ui-sdk`, pinned in `skills-lock.json`) before using it. Style
+its parts with Counter tokens (or the crew page's brand aliases) through their
+`data-slot` and state attributes; never load its `web.css`. Every pop-up still
+goes through `ModalDialog`. First use: the photo carousel in the crew how-to
+sheet (`src/app/checks/[code]/how-photos.tsx`, loaded with `next/dynamic`
+so it stays out of the crew page's first load; that route sits near its bundle budget).
+
 ## Other references
 
 - Refactor playbook (split big files safely): [`docs/refactor-playbook.md`](docs/refactor-playbook.md)

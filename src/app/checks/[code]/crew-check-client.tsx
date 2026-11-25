@@ -5,7 +5,14 @@ import { deletePhoto, loadPhotos, savePhoto } from "./offline-photos"
 import { nextPollDelay } from "./poll-delay"
 import type { ActiveCheck, CrewItem, CrewMarkState, CrewView } from "@/lib/checks/crew"
 import { shortStoreName } from "@/lib/checks/names"
+import dynamic from "next/dynamic"
 import { ModalDialog } from "@/components/counter/modal-dialog"
+
+/** Loaded on first open of a how-to with photos, so the carousel is not in the page's first load. */
+const HowPhotos = dynamic(() => import("./how-photos"), {
+  ssr: false,
+  loading: () => <div className="ckb__ref ckb__refwait" aria-hidden />,
+})
 
 /**
  * The crew flow, one job per screen: store page -> PIN -> shared checklist ->
@@ -70,6 +77,15 @@ const T = {
     more: (task: string) => `More for ${task}`,
     doneWithNote: "Done, with a note",
     takePhoto: "Take the photo",
+    how: "How",
+    howFor: (task: string) => `How to: ${task}`,
+    howTitle: "How to do it",
+    refPhoto: "Reference photo",
+    photoOf: (n: number, of: number) => `Photo ${n} of ${of}`,
+    prevPhoto: "Previous photo",
+    nextPhoto: "Next photo",
+    howTick: "Done, tick it",
+    close: "Close",
     closingSoon: (left: string) => `${left} left. Anything not ticked when it closes counts as missed.`,
     queued: (n: number) => `No signal. ${n} tick${n === 1 ? "" : "s"} kept on this phone, sending when it's back.`,
     redo: (note: string) => `Sent back · ${note.replace(/^Redo:?\s*/i, "")}`,
@@ -155,6 +171,15 @@ const T = {
     more: (task: string) => `Más para ${task}`,
     doneWithNote: "Hecha, con una nota",
     takePhoto: "Tomar la foto",
+    how: "Cómo",
+    howFor: (task: string) => `Cómo: ${task}`,
+    howTitle: "Cómo hacerlo",
+    refPhoto: "Foto de referencia",
+    photoOf: (n: number, of: number) => `Foto ${n} de ${of}`,
+    prevPhoto: "Foto anterior",
+    nextPhoto: "Foto siguiente",
+    howTick: "Listo, marcarla",
+    close: "Cerrar",
     closingSoon: (left: string) => `Quedan ${left}. Lo que no esté marcado al cerrar cuenta como no hecho.`,
     queued: (n: number) => `Sin señal. ${n} marca${n === 1 ? "" : "s"} guardada${n === 1 ? "" : "s"} en este teléfono; se envían al volver la señal.`,
     redo: (note: string) => `Devuelta · ${note.replace(/^Redo:?\s*/i, "")}`,
@@ -714,6 +739,8 @@ function Checklist({
   const [doneFor, setDoneFor] = useState<CrewItem | null>(null)
   /** The ⋯ menu on a task not done yet: a note, or the photo. */
   const [menuFor, setMenuFor] = useState<CrewItem | null>(null)
+  /** The task whose how-to is open: the owner's photos and steps. */
+  const [howFor, setHowFor] = useState<CrewItem | null>(null)
   const [photoFor, setPhotoFor] = useState<{ item: CrewItem; blob: Blob; url: string } | null>(null)
   /** Sections folded or unfolded by hand; untouched ones fold when they are all done. */
   const [folded, setFolded] = useState<Record<string, boolean>>({})
@@ -1027,7 +1054,7 @@ function Checklist({
                 const task = txt(i.en, i.es)
                 const cls = `ckc__row${isDone ? " done" : ""}${flagged ? " is-flag" : ""}${!isDone && i.photoRequired ? " cam" : ""}${redo ? " is-redo" : ""}`
                 return (
-                  <div key={i.id} className="ckb__task">
+                  <div key={i.id} className={`ckb__task${i.help ? " has-help" : ""}${isDone ? " is-done" : ""}`}>
                     <button type="button" className={cls} aria-pressed={isDone} onClick={() => tap(i)}>
                       <span className="ck">{flagged ? "!" : isDone ? "✓" : i.photoRequired ? <CameraIcon size={16} /> : ""}</span>
                       <span>
@@ -1042,6 +1069,12 @@ function Checklist({
                         {!isDone && i.photoRequired && <span className="ckb__need">{t.photoRequired}</span>}
                       </span>
                     </button>
+                    {i.help && (
+                      <button type="button" className="ckb__how" aria-label={t.howFor(task)} onClick={() => setHowFor(i)}>
+                        {i.help.photos.length > 0 ? <PictureIcon /> : <StepsIcon />}
+                        <small>{t.how}</small>
+                      </button>
+                    )}
                     {!isDone && (
                       <button type="button" className="ckb__more" aria-label={t.more(task)} onClick={() => setMenuFor(i)}>
                         ⋯
@@ -1105,6 +1138,23 @@ function Checklist({
             openCamera(item)
           }}
           onCancel={() => setMenuFor(null)}
+        />
+      )}
+      {howFor?.help && (
+        <HowSheet
+          t={t}
+          code={code}
+          title={txt(howFor.en, howFor.es)}
+          steps={lang === "es" && howFor.help.es.length > 0 ? howFor.help.es : howFor.help.en}
+          photos={howFor.help.photos}
+          done={stateOf(howFor.id).done}
+          photoTask={howFor.photoRequired}
+          onAct={() => {
+            const item = howFor
+            setHowFor(null)
+            tap(item)
+          }}
+          onClose={() => setHowFor(null)}
         />
       )}
       {photoFor && (
@@ -1219,6 +1269,90 @@ function PracticeBanner({ t }: { t: Tx }) {
       <b>{t.practiceTitle}</b>
       <span>{t.practiceHelp}</span>
     </div>
+  )
+}
+
+/** The how-to on a task: the owner's reference photos first, then the steps. */
+function HowSheet({
+  t,
+  code,
+  title,
+  steps,
+  photos,
+  done,
+  photoTask,
+  onAct,
+  onClose,
+}: {
+  t: Tx
+  code: string
+  title: string
+  steps: string[]
+  photos: string[]
+  done: boolean
+  photoTask: boolean
+  /** Not done yet: tick it, or open the camera on a photo task. */
+  onAct: () => void
+  onClose: () => void
+}) {
+  const n = photos.length
+  return (
+    <ModalDialog className="ckc__sheet" aria-label={t.howFor(title)} onClose={onClose} onClick={onClose}>
+      <div className="ckb__howsheet" onClick={(e) => e.stopPropagation()}>
+        <span className="ck-mono">{t.howTitle}</span>
+        <h2>{title}</h2>
+        {n > 0 && (
+          <HowPhotos
+            code={code}
+            photos={photos}
+            label={t.refPhoto}
+            photoOf={t.photoOf}
+            prev={t.prevPhoto}
+            next={t.nextPhoto}
+          />
+        )}
+        {steps.length > 0 && (
+          <ol className={`ckb__steps${steps.length === 1 ? " one" : ""}`}>
+            {steps.map((s, k) => (
+              <li key={k}>{s}</li>
+            ))}
+          </ol>
+        )}
+        {!done && (
+          <button type="button" className="ckc__btn" onClick={onAct}>
+            {photoTask ? (
+              <>
+                <CameraIcon /> {t.takePhoto}
+              </>
+            ) : (
+              t.howTick
+            )}
+          </button>
+        )}
+        <button type="button" className="ckc__btn ckc__btn--ghost" onClick={onClose}>
+          {t.close}
+        </button>
+      </div>
+    </ModalDialog>
+  )
+}
+
+function PictureIcon({ size = 18 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+      <rect x="3" y="5" width="18" height="14" />
+      <circle cx="9" cy="10" r="1.8" />
+      <path d="M21 16l-5-5-8 8" />
+    </svg>
+  )
+}
+
+function StepsIcon({ size = 18 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+      <path d="M6 3h9l4 4v14H6z" />
+      <path d="M9 11h7M9 15h7" />
+    </svg>
   )
 }
 

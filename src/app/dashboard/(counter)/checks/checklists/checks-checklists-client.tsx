@@ -7,9 +7,12 @@ import type { SectionSources } from "@/lib/counter/adapters/types"
 import type {
   ChecklistsData,
   ChecklistsSections,
+  EditorItem,
   EditorSection,
   EditorTemplate,
 } from "@/lib/counter/adapters/checks"
+import { MAX_HELP_PHOTOS, ownerHelpPhotoUrl } from "@/lib/checks/help"
+import { shrinkPhoto } from "@/lib/checks/shrink-photo"
 import { ChecksHead, OutcomeLine, StorePicker, type Outcome } from "../checks-ui"
 import { useLeaveGuard } from "@/components/counter/keep/use-leave-guard"
 import { actMarks, Grip, useAct, useDragReorder } from "@/components/counter/ui"
@@ -18,7 +21,8 @@ import { actMarks, Grip, useAct, useDragReorder } from "@/components/counter/ui"
  * Store checks — Checklists. One store and one check at a time: the window
  * (crew can see it from, Submit opens, when it closes itself, per night if
  * the close moves), then each section's tasks in English and Spanish side by side, each
- * with its own photo switch. A missing Spanish line shows crew the English one.
+ * with its own photo switch and how-to (reference photos and steps crew can
+ * open from the task). A missing Spanish line shows crew the English one.
  */
 export function ChecksChecklistsClient({ sections }: { sections: SectionSources<ChecklistsSections> }) {
   usePageChrome({ leaf: "Checklists" })
@@ -72,6 +76,8 @@ function Editor({ data }: { data: ChecklistsData }) {
   const [outcome, setOutcome] = useState<Outcome>(null)
   const { act, stateOf, busy } = useAct()
   const reorder = useDragReorder()
+  // The task whose how-to panel is open, one at a time.
+  const [helpFor, setHelpFor] = useState<string | null>(null)
   const t = drafts[kind]
 
   const update = (fn: (t: EditorTemplate) => void) => {
@@ -84,6 +90,21 @@ function Editor({ data }: { data: ChecklistsData }) {
     setOutcome(null)
   }
   const updateSection = (si: number, fn: (s: EditorSection) => void) => update((t) => fn(t.sections[si]))
+  /**
+   * One task, found by id in the latest draft of the check it belongs to. A
+   * how-to photo can finish uploading after the owner reordered, removed or
+   * switched check, so it never writes by position; a task gone by then is skipped.
+   */
+  const updateItem = (k: string, id: string, fn: (i: EditorItem) => void) => {
+    setDrafts((d) => {
+      if (!d[k]?.sections.some((s) => s.items.some((i) => i.id === id))) return d
+      const next = structuredClone(d[k])
+      for (const s of next.sections) for (const i of s.items) if (i.id === id) fn(i)
+      return { ...d, [k]: next }
+    })
+    setDirty((d) => ({ ...d, [k]: true }))
+    setOutcome(null)
+  }
 
   if (!t) return <p className="ck-meta" style={{ padding: 16 }}>No checks set up for this store.</p>
 
@@ -103,7 +124,15 @@ function Editor({ data }: { data: ChecklistsData }) {
           nameEn: s.nameEn,
           nameEs: s.nameEs,
           enabled: s.enabled,
-          items: s.items.map((i) => ({ id: isNew(i.id) ? undefined : i.id, en: i.en, es: i.es, photoRequired: i.photoRequired })),
+          items: s.items.map((i) => ({
+            id: isNew(i.id) ? undefined : i.id,
+            en: i.en,
+            es: i.es,
+            photoRequired: i.photoRequired,
+            helpEn: i.helpEn,
+            helpEs: i.helpEs,
+            helpPhotos: i.helpPhotos,
+          })),
         })),
       })
       if (r.ok) {
@@ -392,6 +421,15 @@ function Editor({ data }: { data: ChecklistsData }) {
                   </button>
                   <button
                     type="button"
+                    className={`ck-phototag ck-howtag${hasHelp(it) ? " has" : ""}`}
+                    aria-expanded={helpFor === it.id}
+                    title="Photos and steps crew can open from this task"
+                    onClick={() => setHelpFor((f) => (f === it.id ? null : it.id))}
+                  >
+                    {helpLabel(it)}
+                  </button>
+                  <button
+                    type="button"
                     className="ck-iconbtn"
                     aria-label={`Remove item ${ii + 1}`}
                     onClick={() => updateSection(si, (s) => void s.items.splice(ii, 1))}
@@ -399,13 +437,20 @@ function Editor({ data }: { data: ChecklistsData }) {
                     ✕
                   </button>
                   </span>
+                  {helpFor === it.id && (
+                    <HowToPanel
+                      item={it}
+                      onChange={(fn) => updateItem(kind, it.id, fn)}
+                      onClose={() => setHelpFor(null)}
+                    />
+                  )}
                 </div>
               ))}
               <div>
                 <button
                   type="button"
                   className="ck-link"
-                  onClick={() => updateSection(si, (s) => void s.items.push({ id: newId(), en: "", es: "", photoRequired: false }))}
+                  onClick={() => updateSection(si, (s) => void s.items.push({ id: newId(), en: "", es: "", photoRequired: false, helpEn: "", helpEs: "", helpPhotos: [] }))}
                 >
                   + Add task
                 </button>
@@ -424,7 +469,7 @@ function Editor({ data }: { data: ChecklistsData }) {
                       nameEn: "",
                       nameEs: "",
                       enabled: true,
-                      items: [{ id: newId(), en: "", es: "", photoRequired: false }],
+                      items: [{ id: newId(), en: "", es: "", photoRequired: false, helpEn: "", helpEs: "", helpPhotos: [] }],
                     }),
                   )
                 }
@@ -442,4 +487,156 @@ function Editor({ data }: { data: ChecklistsData }) {
 
 function photoCount(t: { sections: Array<{ enabled: boolean; items: Array<{ photoRequired: boolean }> }> }): number {
   return t.sections.reduce((n, s) => n + (s.enabled ? s.items.filter((i) => i.photoRequired).length : 0), 0)
+}
+
+const hasHelp = (i: EditorItem) => Boolean(i.helpEn.trim() || i.helpEs.trim() || i.helpPhotos.length)
+function helpLabel(i: EditorItem): string {
+  if (!hasHelp(i)) return "+ How-to"
+  const n = i.helpPhotos.length
+  return n ? `How-to · ${n} photo${n === 1 ? "" : "s"}` : "How-to · steps"
+}
+
+/**
+ * One task's how-to, opened under its row: the owner's reference photos
+ * (crew only look at them; they are never proof) and the steps, one per
+ * line, in both languages. Changes join the list's own draft, so Save keeps
+ * them with everything else.
+ */
+function HowToPanel({
+  item,
+  onChange,
+  onClose,
+}: {
+  item: EditorItem
+  onChange: (fn: (i: EditorItem) => void) => void
+  onClose: () => void
+}) {
+  const [uploading, setUploading] = useState(0)
+  const [error, setError] = useState("")
+  const room = MAX_HELP_PHOTOS - item.helpPhotos.length
+
+  const add = async (files: File[]) => {
+    setError("")
+    const take = files.slice(0, Math.max(0, room))
+    if (files.length > take.length) setError(`A how-to holds up to ${MAX_HELP_PHOTOS} photos.`)
+    setUploading((n) => n + take.length)
+    for (const file of take) {
+      try {
+        const body = new FormData()
+        body.append("photo", await shrinkPhoto(file), "photo.jpg")
+        const res = await fetch("/api/checks/help-photo", { method: "POST", body })
+        const out = (await res.json().catch(() => ({}))) as { key?: string; error?: string }
+        if (!res.ok || !out.key) setError(out.error ?? "That photo didn't upload. Try again.")
+        else {
+          const key = out.key
+          onChange((i) => void (i.helpPhotos = [...i.helpPhotos, key].slice(0, MAX_HELP_PHOTOS)))
+        }
+      } catch {
+        setError("No connection. Try again.")
+      } finally {
+        setUploading((n) => n - 1)
+      }
+    }
+  }
+  const move = (from: number, to: number) =>
+    onChange((i) => {
+      const p = [...i.helpPhotos]
+      p.splice(to, 0, ...p.splice(from, 1))
+      i.helpPhotos = p
+    })
+
+  return (
+    <div className="ck-howto" role="group" aria-label={`How-to for ${item.en || "this task"}`}>
+      <div className="ck-howto__part">
+        <span className="ck-mono">Photos · {item.helpPhotos.length} of {MAX_HELP_PHOTOS}</span>
+        <div className="ck-howto__photos">
+          {item.helpPhotos.map((key, pi) => (
+            <figure key={key} className="ck-howto__photo">
+              <img src={ownerHelpPhotoUrl(key)} alt={`How-to photo ${pi + 1}`} />
+              <span className="ck-howto__n">{pi + 1}</span>
+              <span className="ck-howto__tools">
+                <button type="button" className="ck-iconbtn" aria-label={`Move photo ${pi + 1} earlier`} disabled={pi === 0} onClick={() => move(pi, pi - 1)}>
+                  ‹
+                </button>
+                <button
+                  type="button"
+                  className="ck-iconbtn"
+                  aria-label={`Move photo ${pi + 1} later`}
+                  disabled={pi === item.helpPhotos.length - 1}
+                  onClick={() => move(pi, pi + 1)}
+                >
+                  ›
+                </button>
+                <button
+                  type="button"
+                  className="ck-iconbtn"
+                  aria-label={`Remove photo ${pi + 1}`}
+                  onClick={() => onChange((i) => void (i.helpPhotos = i.helpPhotos.filter((k) => k !== key)))}
+                >
+                  ✕
+                </button>
+              </span>
+            </figure>
+          ))}
+          {(room > 0 || uploading > 0) && (
+            <label className="ck-howto__add" aria-disabled={uploading > 0}>
+              <input
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                multiple
+                disabled={uploading > 0}
+                className="sr-only"
+                onChange={(e) => {
+                  const files = Array.from(e.target.files ?? [])
+                  e.target.value = ""
+                  if (files.length) void add(files)
+                }}
+              />
+              {uploading > 0 ? "Uploading…" : "+ Add photo"}
+            </label>
+          )}
+        </div>
+        <p className="ck-meta" style={{ margin: 0 }}>
+          From your phone or computer. Crew see photo 1 first. These only show crew where and how: they are not proof, so tasks
+          marked Photo required still need crew to take their own.
+        </p>
+        {error && (
+          <p className="ck-howto__err" role="alert">
+            {error}
+          </p>
+        )}
+      </div>
+      <div className="ck-howto__part">
+        <span className="ck-mono">Steps · one per line</span>
+        <div className="ck-howto__pair">
+          <label>
+            <span className="ck-meta">English</span>
+            <textarea
+              className="ck-input"
+              rows={4}
+              value={item.helpEn}
+              placeholder={"Go to the kitchen, by the drink bibs.\nUse the ladder."}
+              onChange={(e) => onChange((i) => void (i.helpEn = e.target.value))}
+            />
+          </label>
+          <label>
+            <span className="ck-meta">Español</span>
+            <textarea
+              className={`ck-input${item.helpEs ? "" : " ck-input--empty"}`}
+              rows={4}
+              value={item.helpEs}
+              placeholder="Shows English until filled in"
+              onChange={(e) => onChange((i) => void (i.helpEs = e.target.value))}
+            />
+          </label>
+        </div>
+      </div>
+      <div className="ck-howto__foot">
+        <span className="ck-meta">Save the checklist to keep it.</span>
+        <button type="button" className="ck-link" onClick={onClose}>
+          Close
+        </button>
+      </div>
+    </div>
+  )
 }
