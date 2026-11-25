@@ -32,7 +32,9 @@
   padding-right: 0;
 }
 .ckb .ckc__col { padding: 0 0 24px; gap: 14px; background: var(--paper) }
-.ckb .ckc__col > :not(.ckb__band):not(.ckc__head):not(.ckc__foot) { margin-inline: 16px }
+/* Not on dialogs or the drawer's viewport: a pop-up rendered in the column took
+   this margin and stopped 16px short of each edge, leaving two undimmed strips. */
+.ckb .ckc__col > :not(.ckb__band):not(.ckc__head):not(.ckc__foot):not(dialog):not([data-slot^="drawer"]) { margin-inline: 16px }
 /* A button straight in the column: the column stretches it, so 100% plus the margins above would run off the screen. */
 .ckb .ckc__col > .ckc__btn { width: auto }
 .ckb h1, .ckb h2 { font-weight: 400; letter-spacing: .01em; line-height: 1 }
@@ -126,14 +128,25 @@
   color: var(--ink); cursor: pointer; min-height: 60px; padding: 4px 0 }
 .ckb__how small { font-family: var(--mono); font-size: 10px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase }
 .ckb__how:active { background: var(--chrome) }
-.ckb__howsheet { max-height: 92dvh; overflow-y: auto; border-top: 4px solid var(--accent) }
-.ckb__howsheet h2 { font-size: 21px; line-height: 1.1 }
+/* The how-to is a ui-sdk Drawer: it owns translate and the backdrop's opacity,
+   this owns size, surface and colour. */
+/* Solid ink: the drawer sets its opacity from how far the sheet is open. */
+.ckb__howdim { position: fixed; inset: 0; background: var(--ink) }
+.ckb__howsheet { box-sizing: border-box; width: 100%; max-width: 480px; margin-inline: auto; max-height: 92dvh;
+  display: flex; flex-direction: column; background: var(--surface); color: var(--ink); border-top: 4px solid var(--accent);
+  padding: 0 16px max(16px, env(safe-area-inset-bottom, 0px)); outline: none }
+/* Covers the gap under the sheet when it is pulled up past its edge. */
+.ckb__howsheet::after { content: ""; position: absolute; left: 0; right: 0; top: 100%; height: 100dvh; background: var(--surface) }
+.ckb__grip { align-self: center; flex: none; width: 64px; height: 22px; display: grid; align-items: center }
+.ckb__grip::before { content: ""; display: block; width: 44px; height: 5px; margin: 0 auto; background: var(--line-strong) }
+.ckb__howbody { min-height: 0; flex: 1; overflow-y: auto; overscroll-behavior: contain; display: grid; align-content: start; gap: 10px; padding-bottom: 10px }
+.ckb__howsheet h2 { margin: 0; font-size: 21px; line-height: 1.1 }
+.ckb__howacts { flex: none; display: grid; gap: 10px }
 .ckb__ref { position: relative; margin: 0; border: 3px solid var(--accent-wash); outline: 1.5px solid var(--accent-hi); background: var(--chrome) }
 .ckb__refview { scrollbar-width: none }
 .ckb__refrow { display: flex }
 .ckb__refslide { flex: 0 0 100% }
 .ckb__ref img { display: block; width: 100%; height: min(52dvh, 75vw); object-fit: contain }
-.ckb__refwait { height: calc(min(52dvh, 75vw) + 6px) }
 .ckb__reftag { position: absolute; left: 0; top: 0; display: inline-flex; align-items: center; gap: 5px; background: var(--accent); color: var(--ink);
   font-family: var(--mono); font-size: 10px; font-weight: 600; letter-spacing: .07em; text-transform: uppercase; padding: 4px 7px }
 .ckb__refn { position: absolute; right: 0; top: 0; background: var(--ink); color: var(--surface); font-family: var(--mono); font-size: 11px; padding: 4px 7px }
