@@ -109,8 +109,8 @@ export function Poster({ store, className = "" }: { store: PosterStore; classNam
               </p>
             )}
             <p>
-              Forgot your PIN? Ask your manager.
-              <span lang="es">¿Olvidaste tu PIN? Pregúntale a tu gerente.</span>
+              Forgot your PIN? Tap Forgot? We&apos;ll email it.
+              <span lang="es">¿Olvidaste tu PIN? Toca ¿Lo olvidaste? Te llega por correo.</span>
             </p>
             <p>
               Can&apos;t do a task? Tap Problem?

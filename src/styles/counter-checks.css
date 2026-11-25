@@ -167,7 +167,7 @@ button.ck-gl:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .ck-letter__scan > span{font-size:2.3cqw;font-weight:600;color:var(--ct-brand-ink-2)}
 .ck-letter__how h2{font-family:var(--ck-letter-display);font-weight:400;font-size:3.3cqw;line-height:1;text-transform:uppercase;letter-spacing:.02em;display:grid;gap:.8cqw;margin-bottom:2cqw}
 .ck-letter__how h2 span{font-family:var(--sans);font-size:2.5cqw;font-weight:600;text-transform:none;letter-spacing:0;color:var(--ct-brand-ink-2)}
-.ck-letter__how ol{list-style:none;margin:0;padding:0;display:grid;gap:1.8cqw}
+.ck-letter__how ol{list-style:none;margin:0;padding:0;display:grid;gap:1.4cqw}
 .ck-letter__how li{display:grid;grid-template-columns:4.8cqw 1fr;gap:2cqw;align-items:start}
 .ck-letter__how li i{font-style:normal;width:4.8cqw;height:4.8cqw;box-sizing:border-box;display:grid;place-items:center;background:var(--ct-brand-yellow);color:var(--ct-brand-ink);
   border:.35cqw solid var(--ct-brand-ink);font-family:var(--ck-letter-display);font-size:2.8cqw;line-height:1}
