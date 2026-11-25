@@ -7,6 +7,7 @@ import { MenuPhoto, PageHead, Section, SubNav, usePageChrome, useSurfaceHref } f
 import { MENU_TABS } from "@/lib/counter/nav"
 import { count } from "@/lib/counter/format"
 import { linkSellingItem, startMenuItem } from "@/lib/counter/actions/menu-item"
+import { rovingKeyDown } from "@/components/counter/roving-keys"
 import type { SectionSources } from "@/lib/counter/adapters/types"
 import type {
   MenuItemStartData,
@@ -287,8 +288,20 @@ function NewDish({
         </p>
       </form>
 
-      <div className="mi-cards" role="radiogroup" aria-label="Start from">
-        <button type="button" role="radio" aria-checked={copyFrom === null} className="mi-card" onClick={() => pick(null)}>
+      <div
+        className="mi-cards"
+        role="radiogroup"
+        aria-label="Start from"
+        onKeyDown={(e) => rovingKeyDown(e, '[role="radio"]', { select: true })}
+      >
+        <button
+          type="button"
+          role="radio"
+          aria-checked={copyFrom === null}
+          tabIndex={copyFrom === null ? 0 : -1}
+          className="mi-card"
+          onClick={() => pick(null)}
+        >
           <MenuPhoto frame={null} alt="Blank" className="mi-photo--fill" />
           <b>Blank</b>
           <span className="ck-meta">No lines yet</span>
@@ -298,6 +311,7 @@ function NewDish({
             type="button"
             role="radio"
             aria-checked={copyFrom === d.id}
+            tabIndex={copyFrom === d.id ? 0 : -1}
             key={d.id}
             className="mi-card"
             onClick={() => pick(d)}

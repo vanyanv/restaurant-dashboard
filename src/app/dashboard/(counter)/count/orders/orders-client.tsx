@@ -61,9 +61,9 @@ function Restock({ data }: { data: DraftData }) {
             </small>
           </div>
         )}
-        <div className="rs-seg" role="tablist" aria-label="Show">
-          <button type="button" role="tab" aria-selected={view === "order"} onClick={() => setView("order")}>Order{lines > 0 ? ` · ${lines}` : ""}</button>
-          <button type="button" role="tab" aria-selected={view === "stock"} onClick={() => setView("stock")}>Stock · {data.stock.length}</button>
+        <div className="rs-seg" role="group" aria-label="Show">
+          <button type="button" aria-pressed={view === "order"} onClick={() => setView("order")}>Order{lines > 0 ? ` · ${lines}` : ""}</button>
+          <button type="button" aria-pressed={view === "stock"} onClick={() => setView("stock")}>Stock · {data.stock.length}</button>
         </div>
       </div>
 

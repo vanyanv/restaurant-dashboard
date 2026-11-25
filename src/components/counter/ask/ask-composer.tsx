@@ -1,7 +1,7 @@
 "use client"
 
 import { useDraft } from "@/components/counter/keep/use-draft"
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useId, useRef, useState } from "react"
 import { AskGlyph } from "@/components/counter/surface/ask-glyph"
 import { applySlashCommand, matchSlashCommands } from "@/lib/chat/composer"
 import { ASK_EFFORTS, type AskEffort } from "@/lib/counter/ask-context"
@@ -152,6 +152,7 @@ export function AskComposer({
 
   const commands = matchSlashCommands(value)
   const menuOpen = commands.length > 0
+  const listId = useId()
 
   // Grow to the text, five lines at most; the rest scrolls inside.
   const grow = () => {
@@ -194,12 +195,20 @@ export function AskComposer({
           send()
         }}
       >
-        <div className={`slash${menuOpen ? " on" : ""}`} role="listbox" aria-label="Shortcuts">
-          <div className="k">Shortcuts</div>
+        <div
+          className={`slash${menuOpen ? " on" : ""}`}
+          id={listId}
+          role="listbox"
+          aria-label="Shortcuts"
+          aria-hidden={!menuOpen}
+        >
+          <div className="k" aria-hidden="true">Shortcuts</div>
           {commands.map((c, i) => (
             <button
               type="button"
               role="option"
+              id={`${listId}-${i}`}
+              tabIndex={-1}
               aria-selected={i === cursor}
               className={i === cursor ? "on" : undefined}
               key={c.key}
@@ -252,7 +261,8 @@ export function AskComposer({
             placeholder={placeholder}
             aria-label="Ask a question"
             aria-autocomplete="list"
-            aria-expanded={menuOpen}
+            aria-controls={listId}
+            aria-activedescendant={menuOpen ? `${listId}-${cursor}` : undefined}
           />
         </label>
         <div className="tools">

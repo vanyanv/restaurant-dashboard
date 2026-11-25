@@ -5,6 +5,7 @@ import { SearchGlyph } from "@/components/counter/surface/search-glyph"
 import type { AskConversation } from "@/lib/counter/adapters/ask"
 import { groupThreadsByDay, threadWhenLabel } from "@/lib/counter/thread-groups"
 import { DotsGlyph, ForkGlyph, PenGlyph, PlusGlyph, TrashGlyph } from "./rail-glyphs"
+import { rovingKeyDown } from "@/components/counter/roving-keys"
 
 /**
  * The `.convs` rail — what this account has already asked.
@@ -421,7 +422,20 @@ function ConversationRow({
           </span>
         ) : null}
       </div>
-      <div className={`cvmenu${menuOpen ? " on" : ""}`} role="menu" data-cv-menu>
+      <div
+        className={`cvmenu${menuOpen ? " on" : ""}`}
+        role="menu"
+        aria-label="Thread actions"
+        data-cv-menu
+        onKeyDown={(e) => {
+          if (e.key === "Escape") {
+            e.preventDefault()
+            onMenu(false)
+            return
+          }
+          rovingKeyDown(e, '[role="menuitem"]')
+        }}
+      >
         <button type="button" role="menuitem" onClick={startRename}>
           <PenGlyph />
           Rename

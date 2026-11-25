@@ -53,7 +53,7 @@
 .pp-tabs{display:flex;gap:2px;border-bottom:1px solid var(--line);overflow-x:auto;scrollbar-width:none}
 .pp-tabs button{border:0;background:none;padding:8px 12px;font:inherit;font-size:var(--t-body);font-weight:500;color:var(--ink-2);border-bottom:2px solid transparent;margin-bottom:-1px;cursor:pointer;white-space:nowrap;display:flex;gap:6px;align-items:baseline}
 .pp-tabs button span{color:var(--ink-3);font-size:var(--t-cap)}
-.pp-tabs button[aria-selected="true"]{color:var(--ink);font-weight:600;border-bottom-color:var(--accent)}
+.pp-tabs button[aria-pressed="true"]{color:var(--ink);font-weight:600;border-bottom-color:var(--accent)}
 
 .pp-list{list-style:none;margin:0;padding:0;display:grid;border:1px solid var(--line);border-radius:var(--r);background:var(--surface)}
 .pp-empty{padding:24px 16px;text-align:center;color:var(--ink-3);font-size:var(--t-body)}
@@ -115,7 +115,7 @@
 /* ── Sign-up (the login page's parts, plus these) ─────────────────────── */
 .su-locked{background:var(--sunk)}
 .su-locked input{color:var(--ink-2)}
-.su-lock{font-family:var(--mono);font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-3)}
+.su-lock{font-family:var(--mono);font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-2)}
 .su-meter{display:grid;grid-template-columns:repeat(4,1fr);gap:4px;margin-top:6px}
 .su-meter i{height:3px;border-radius:3px;background:var(--line);transition:background-color .2s var(--ease)}
 .su-meter[data-strength="1"] i:nth-child(-n+1){background:var(--warn)}

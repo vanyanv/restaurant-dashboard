@@ -46,7 +46,7 @@ vi.mock("@/lib/counter/item-discounts", async (importOriginal) => ({
 import { prisma } from "@/lib/prisma"
 import { getScopedStores } from "@/lib/account-stores"
 import { getMenuItemSectionPromises } from "@/lib/counter/adapters/menu-item"
-import { hasData } from "@/lib/counter/section-data"
+import { hasData, isMissing } from "@/lib/counter/section-data"
 import { getItemDiscounts } from "@/lib/counter/item-discounts"
 import { cogsGroupBy, cogsRow } from "../fixtures/item-economics"
 
@@ -271,5 +271,18 @@ describe("menu item — Kept", () => {
     expect(cell(headline, "Kept")?.value).toBe("—")
     expect(cell(headline, "Kept")?.delta).toBe("no channel data")
     expect(cell(headline, "Kept")?.delta).not.toBe("after commission")
+  })
+})
+
+/* ── An item with no sales in the window ──────────────────────────────── */
+
+describe("an item that did not sell in this range", () => {
+  it("is empty, so the page 404s, rather than failed", async () => {
+    setup([])
+    vi.mocked(prisma.otterMenuItem.findMany).mockResolvedValue([] as never)
+    const { headline, channels } = await load()
+    expect(headline.status).toBe("empty")
+    expect(isMissing(headline)).toBe(true)
+    expect(channels.status).toBe("empty")
   })
 })

@@ -125,11 +125,15 @@ function Setup({ data }: { data: SetupData }) {
   )
 }
 
-type Draft = { label: string; qty: string; of: string; quarters: boolean }
+type Draft = { id: number; label: string; qty: string; of: string; quarters: boolean }
+
+// Row keys for the layer editor: adding a layer on top shifts every index, and
+// an index key would leave focus and the picker on the wrong row.
+let nextDraftId = 0
 
 function Editor({ item, busy, state, onSave }: { item: SetupItem; busy: boolean; state: ActState; onSave: (area: string, layers: LayerInput[]) => void }) {
   const [area, setArea] = useState(item.area)
-  const [rows, setRows] = useState<Draft[]>(() => item.layers.map((l) => ({ label: l.label, qty: l.unsized ? "" : fmtQty(l.qty).replace(/,/g, ""), of: l.of, quarters: Boolean(l.quarters) })))
+  const [rows, setRows] = useState<Draft[]>(() => item.layers.map((l) => ({ id: nextDraftId++, label: l.label, qty: l.unsized ? "" : fmtQty(l.qty).replace(/,/g, ""), of: l.of, quarters: Boolean(l.quarters) })))
   const layers: LayerInput[] = rows.map((r) => ({ label: r.label, qty: Number(r.qty), of: r.of, quarters: r.quarters, ...(r.qty.trim() === "" ? { unsized: true } : {}) }))
   const check = resolveLayers(layers, item.unit)
   const set = (i: number, patch: Partial<Draft>) => setRows((rs) => rs.map((r, j) => (j === i ? { ...r, ...patch } : r)))
@@ -151,7 +155,7 @@ function Editor({ item, busy, state, onSave }: { item: SetupItem; busy: boolean;
         const lower = rows.slice(i + 1).map((x) => x.label.trim()).filter(Boolean)
         const choices = [...lower, ...item.units]
         return (
-          <div className="cw-ed__row" key={i}>
+          <div className="cw-ed__row" key={r.id}>
             <span className="cw__mono" style={{ width: 92 }}>{i === 0 ? "How it comes" : i === rows.length - 1 ? "Loose" : "Inside it"}</span>
             <input className="cw__input" style={{ width: 170 }} value={r.label} aria-label="Layer name" placeholder="Case" onChange={(e) => set(i, { label: e.target.value })} />
             <span>holds</span>
@@ -174,7 +178,7 @@ function Editor({ item, busy, state, onSave }: { item: SetupItem; busy: boolean;
       })}
       <div className="cw-ed__row">
         {rows.length < 4 && (
-          <button type="button" className="cw__link" onClick={() => setRows((rs) => [{ label: "Case", qty: "1", of: rs[0]?.label ?? item.unit, quarters: false }, ...rs])}>
+          <button type="button" className="cw__link" onClick={() => setRows((rs) => [{ id: nextDraftId++, label: "Case", qty: "1", of: rs[0]?.label ?? item.unit, quarters: false }, ...rs])}>
             + Add a bigger layer on top
           </button>
         )}

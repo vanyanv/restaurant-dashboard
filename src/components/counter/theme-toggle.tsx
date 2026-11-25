@@ -42,13 +42,11 @@ export function ThemeToggle() {
   }
 
   return (
-    <div className="seg" role="radiogroup" aria-label="Theme">
+    <div className="seg" role="group" aria-label="Theme">
       {OPTIONS.map(({ value, label }) => (
         <button
           key={value}
           type="button"
-          role="radio"
-          aria-checked={shown === value}
           aria-pressed={shown === value}
           onClick={() => choose(value)}
         >

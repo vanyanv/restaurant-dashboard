@@ -18,6 +18,7 @@ import type { PeopleAccessData, PeopleAccessSections, PersonRow, PersonState } f
 import { useUrlParam } from "@/components/counter/keep/use-url-param"
 import { Status, type StatusTone } from "@/components/counter/ui"
 import { ModalDialog } from "@/components/counter/modal-dialog"
+import { focusFirstItem, rovingKeyDown } from "@/components/counter/roving-keys"
 
 /**
  * Admin > People (developer only). Everyone who can sign in, everyone waiting
@@ -217,9 +218,9 @@ function People({ data }: { data: PeopleAccessData }) {
         </div>
       ) : null}
 
-      <div className="pp-tabs" role="tablist" aria-label="Show">
+      <div className="pp-tabs" role="group" aria-label="Show">
         {tabs.map((t) => (
-          <button key={t.f} type="button" role="tab" aria-selected={filter === t.f} onClick={() => setFilter(t.f)}>
+          <button key={t.f} type="button" aria-pressed={filter === t.f} onClick={() => setFilter(t.f)}>
             {t.label}
             <span className="tnum">{t.n}</span>
           </button>
@@ -379,8 +380,10 @@ function PersonLine({
 }) {
   const [menu, setMenu] = useState(false)
   const wrap = useRef<HTMLDivElement>(null)
+  const menuEl = useRef<HTMLSpanElement>(null)
   useEffect(() => {
     if (!menu) return
+    focusFirstItem(menuEl.current)
     const close = (e: MouseEvent) => {
       if (!wrap.current?.contains(e.target as Node)) setMenu(false)
     }
@@ -473,7 +476,13 @@ function PersonLine({
               ⋯
             </button>
             {menu ? (
-              <span className="pp-menu" role="menu">
+              <span
+                className="pp-menu"
+                role="menu"
+                aria-label={`More for ${r.name}`}
+                ref={menuEl}
+                onKeyDown={(e) => rovingKeyDown(e, '[role="menuitem"]')}
+              >
                 {items}
               </span>
             ) : null}

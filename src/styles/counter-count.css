@@ -124,7 +124,7 @@
 .rs-lead__num small{font-size:13px;color:var(--ink-2)}
 .rs-seg{display:grid;grid-template-columns:1fr 1fr;gap:4px;padding:4px;border-radius:10px;background:var(--sunk)}
 .rs-seg button{min-height:44px;border:0;border-radius:8px;background:none;font:inherit;font-size:15px;font-weight:600;color:var(--ink-2);cursor:pointer}
-.rs-seg button[aria-selected="true"]{background:var(--surface);color:var(--ink);box-shadow:0 1px 2px var(--line-strong)}
+.rs-seg button[aria-pressed="true"]{background:var(--surface);color:var(--ink);box-shadow:0 1px 2px var(--line-strong)}
 .rs-pane[data-on="false"]{display:none}
 .rs-copy{flex:0 0 auto;min-height:40px;font-size:14px}
 .rs-list{grid-template-columns:minmax(0,1fr)}

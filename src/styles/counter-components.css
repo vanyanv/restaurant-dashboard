@@ -2029,7 +2029,7 @@ button.wkd {
  * — and wrong only here, where the layout drops it for want of a session.
  * Restated as the prototype's own symmetric 26px rather than zeroed, so the
  * form keeps its breathing room at the bottom of a short viewport. */
-.editorial-surface--mobile main.plogin { padding-bottom: 26px }
+.editorial-surface--mobile div.plogin { padding-bottom: 26px }
 
 /*
  * The rail gains a sign-out row, and the four properties a `<button>` needs to
@@ -3352,13 +3352,13 @@ button.wkd {
 
 /* The tab-bar reserve, once more, and this time it has to go to zero.
  *
- * `.editorial-surface--mobile main.plogin { padding-bottom: 26px }` above is
+ * `.editorial-surface--mobile div.plogin { padding-bottom: 26px }` above is
  * right for a centred card and wrong for a bottom sheet: it left 26px of the
  * night ground below a sheet that is supposed to meet the foot of the screen.
  * Same specificity as that rule (0,2,1) and later in the file, which is how it
  * wins — deliberately not raised, so the two stay legible as a pair.
  */
-.editorial-surface--mobile main.plogin--sign { padding-bottom: 0 }
+.editorial-surface--mobile div.plogin--sign { padding-bottom: 0 }
 
 /* ===========================================================================
  * WHAT MOVES, AND HOW LOUDLY

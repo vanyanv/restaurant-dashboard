@@ -148,7 +148,8 @@ export function CounterPhoneLoginClient() {
   const busy = phase === "working" || phase === "good"
 
   return (
-    <main
+    // A div: the phone layout's own <main> already wraps this screen.
+    <div
       className={`ct-root ct-phone plogin plogin--sign${typing ? " is-typing" : ""}${
         phase === "bad" ? " is-stutter" : ""
       }${phase === "good" ? " is-flooding" : ""}`}
@@ -248,6 +249,6 @@ export function CounterPhoneLoginClient() {
 
         <p className="mono plogin__foot">Invite only · nothing here is your data</p>
       </div>
-    </main>
+    </div>
   )
 }

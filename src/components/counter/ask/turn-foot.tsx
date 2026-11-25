@@ -2,6 +2,7 @@
 
 import type { ToolRead } from "@/lib/counter/ask-state"
 import { useEffect, useRef, useState } from "react"
+import { focusFirstItem, rovingKeyDown } from "@/components/counter/roving-keys"
 import { ASK_DOWN_REASONS, askFeedbackLabel, type AskFeedback } from "@/lib/counter/ask-feedback"
 import type { AskTurnMeta } from "@/lib/counter/ask-meta"
 
@@ -53,6 +54,7 @@ export function TurnFoot({ read, meta, liveDurationMs = null, onRate, onFork, co
   const [said, setSaid] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
   const pop = useRef<HTMLSpanElement>(null)
+  const menuEl = useRef<HTMLDivElement>(null)
 
   // The stored rating arrives with the thread; a later render of the same
   // turn must not wipe a thumb the reader just pressed.
@@ -62,6 +64,7 @@ export function TurnFoot({ read, meta, liveDurationMs = null, onRate, onFork, co
 
   useEffect(() => {
     if (!asking) return
+    focusFirstItem(menuEl.current)
     const off = (e: MouseEvent) => {
       if (pop.current?.contains(e.target as Node)) return
       setAsking(false)
@@ -147,8 +150,14 @@ export function TurnFoot({ read, meta, liveDurationMs = null, onRate, onFork, co
             <path d="M11 2h1.5a1 1 0 011 1v5a1 1 0 01-1 1H11M11 9l-2.6 4.6a1.3 1.3 0 01-2.4-.7V10H3.3a1.4 1.4 0 01-1.4-1.6l.9-5.2A1.4 1.4 0 014.2 2H11z" />
           </svg>
         </button>
-        <div className={`pop${asking ? " on" : ""}`} role="menu">
-          <div className="k">What was wrong?</div>
+        <div
+          className={`pop${asking ? " on" : ""}`}
+          role="menu"
+          aria-label="What was wrong?"
+          ref={menuEl}
+          onKeyDown={(e) => rovingKeyDown(e, '[role="menuitem"]')}
+        >
+          <div className="k" aria-hidden="true">What was wrong?</div>
           {ASK_DOWN_REASONS.map((r) => (
             <button type="button" role="menuitem" key={r.code} onClick={() => rate(r.code)}>
               {r.label}
