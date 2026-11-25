@@ -30,7 +30,9 @@ import { helpText, isHelpPhotoKey, MAX_HELP_CHARS, MAX_HELP_PHOTOS } from "@/lib
 export type ActionResult = { ok: true; message?: string } | { ok: false; error: string }
 
 const KIND = z.enum(["MORNING", "EVENING"])
-const text = (max: number) => z.string().trim().max(max)
+const text = (max: number, what: string) => z.string().trim().max(max, `${what} is too long. Keep it under ${max} characters.`)
+/** A task line, in either language. Spanish runs longer than English, so this is roomy. */
+const MAX_TASK_CHARS = 240
 /** A row that already exists keeps its id, so ticks on today's form stay on their task. */
 const rowId = z.string().max(40).optional()
 
@@ -51,27 +53,27 @@ const ChecklistInput = z.object({
     .array(
       z.object({
         id: rowId,
-        nameEn: text(60).min(1, "Every section needs a name"),
-        nameEs: text(60),
+        nameEn: text(60, "A section name").min(1, "Every section needs a name"),
+        nameEs: text(60, "A section name in Spanish"),
         // Off hides the section from crew; its tasks stay saved.
         enabled: z.boolean().default(true),
         items: z
           .array(
             z.object({
               id: rowId,
-              en: text(140).min(1, "A task is empty"),
-              es: text(140),
+              en: text(MAX_TASK_CHARS, "A task").min(1, "A task is empty"),
+              es: text(MAX_TASK_CHARS, "A task in Spanish"),
               photoRequired: z.boolean(),
               helpEn: z.string().max(MAX_HELP_CHARS, "How-to steps are too long. Keep them short.").default(""),
               helpEs: z.string().max(MAX_HELP_CHARS, "How-to steps are too long. Keep them short.").default(""),
               helpPhotos: z.array(z.string().max(200)).max(MAX_HELP_PHOTOS, `A how-to holds up to ${MAX_HELP_PHOTOS} photos`).default([]),
             }),
           )
-          .max(40),
+          .max(40, "A section holds up to 40 tasks"),
       }),
     )
     .min(1, "A check needs at least one section")
-    .max(8)
+    .max(8, "A check holds up to 8 sections")
     .refine((ss) => ss.some((s) => s.items.length > 0), "A check needs at least one task")
 })
   // A check that is off may have every section off too; one that is on needs something to show.
@@ -171,6 +173,47 @@ export async function saveChecklist(raw: z.input<typeof ChecklistInput>): Promis
     }, { timeout: 20_000 })
     revalidateChecks()
     return { ok: true, message: "Saved. Crew see the new list straight away." }
+  } catch (err) {
+    return fail(err)
+  }
+}
+
+/**
+ * Removes one section and its tasks straight away, with no Save. Past checks
+ * keep their own copy of each task (CheckMark text, submission content), so
+ * history and the Report tab are unchanged. The check's other sections keep
+ * their order.
+ */
+export async function removeChecklistSection(input: { storeId: string; kind: string; sectionId: string }): Promise<ActionResult> {
+  try {
+    const kind = KIND.parse(input.kind)
+    const sectionId = z.string().min(1).max(40).parse(input.sectionId)
+    await requireOwnerStore(input.storeId)
+    const tpl = await prisma.checkTemplate.findUnique({
+      where: { storeId_kind: { storeId: input.storeId, kind } },
+      select: {
+        id: true,
+        enabled: true,
+        sections: { orderBy: { position: "asc" }, select: { id: true, enabled: true, _count: { select: { items: true } } } },
+      },
+    })
+    if (!tpl || !tpl.sections.some((s) => s.id === sectionId)) {
+      return { ok: false, error: "That section is already gone. Reload the page." }
+    }
+    const rest = tpl.sections.filter((s) => s.id !== sectionId)
+    if (rest.length === 0 || !rest.some((s) => s._count.items > 0)) {
+      return { ok: false, error: "A check needs at least one task, so this section can't go." }
+    }
+    if (tpl.enabled && !rest.some((s) => s.enabled && s._count.items > 0)) {
+      return { ok: false, error: "This is the only section crew see. Switch another one on first, or turn the whole check off." }
+    }
+    await prisma.$transaction([
+      // Items go with the section (onDelete: Cascade).
+      prisma.checkSection.delete({ where: { id: sectionId } }),
+      ...rest.map((s, position) => prisma.checkSection.update({ where: { id: s.id }, data: { position } })),
+    ])
+    revalidateChecks()
+    return { ok: true, message: "Section removed." }
   } catch (err) {
     return fail(err)
   }
@@ -300,8 +343,8 @@ export async function setChecksPaused(input: { storeId: string; paused: boolean 
 // ─── Crew ───────────────────────────────────────────────────────────────────
 
 const CrewInput = z.object({
-  firstName: text(40).min(1, "First name is required"),
-  lastName: text(40),
+  firstName: text(40, "First name").min(1, "First name is required"),
+  lastName: text(40, "Last name"),
   email: z.union([z.literal(""), z.string().trim().email("That email doesn't look right").max(120)]),
   phone: z
     .string()
@@ -516,7 +559,7 @@ export async function saveCheckReportEmails(input: { emails: string[] }): Promis
 const ReviewInput = z.object({
   markId: z.string().min(1).max(40),
   verdict: z.enum(["ok", "redo"]),
-  note: text(200).optional(),
+  note: text(200, "The note").optional(),
 })
 
 /**

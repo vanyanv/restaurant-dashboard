@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import { Section, useCounterTransition, usePageChrome } from "@/components/counter"
-import { copyChecklistToOtherStores, saveChecklist } from "@/lib/counter/actions/checks"
+import { copyChecklistToOtherStores, removeChecklistSection, saveChecklist } from "@/lib/counter/actions/checks"
 import type { SectionSources } from "@/lib/counter/adapters/types"
 import type {
   ChecklistsData,
@@ -78,6 +78,8 @@ function Editor({ data }: { data: ChecklistsData }) {
   const reorder = useDragReorder()
   // The task whose how-to panel is open, one at a time.
   const [helpFor, setHelpFor] = useState<string | null>(null)
+  // The section waiting on "Yes, remove", one at a time.
+  const [removing, setRemoving] = useState<string | null>(null)
   const t = drafts[kind]
 
   const update = (fn: (t: EditorTemplate) => void) => {
@@ -142,6 +144,30 @@ function Editor({ data }: { data: ChecklistsData }) {
       } else setOutcome({ ok: false, text: r.error })
       return r
     })
+
+  /**
+   * Remove section saves on its own: a saved section is deleted on the server
+   * there and then, one never saved just leaves the draft. Any other unsaved
+   * edits stay in the draft, still waiting on Save.
+   */
+  const dropSection = (k: string, id: string) =>
+    setDrafts((d) => (d[k] ? { ...d, [k]: { ...d[k], sections: d[k].sections.filter((s) => s.id !== id) } } : d))
+  const removeSection = (id: string) => {
+    setRemoving(null)
+    if (isNew(id)) {
+      dropSection(kind, id)
+      return
+    }
+    const k = kind
+    act("remove", async () => {
+      const r = await removeChecklistSection({ storeId: data.store.id, kind: k, sectionId: id })
+      if (r.ok) {
+        dropSection(k, id)
+        setOutcome({ ok: true, text: r.message ?? "Section removed." })
+      } else setOutcome({ ok: false, text: r.error })
+      return r
+    })
+  }
 
   const copy = () =>
     act("copy", async () => {
@@ -364,16 +390,34 @@ function Editor({ data }: { data: ChecklistsData }) {
                     <i aria-hidden />
                     {s.enabled ? "On" : "Off"}
                   </button>
-                  <button
-                    type="button"
-                    className="ck-link"
-                    disabled={t.sections.length === 1}
-                    onClick={() => update((t) => void t.sections.splice(si, 1))}
-                  >
-                    Remove section
-                  </button>
+                  {removing === s.id ? (
+                    <>
+                      <button type="button" className="ck-link" disabled={busy} onClick={() => removeSection(s.id)}>
+                        Yes, remove
+                      </button>
+                      <button type="button" className="ck-link" onClick={() => setRemoving(null)}>
+                        Keep
+                      </button>
+                    </>
+                  ) : (
+                    <button
+                      {...actMarks(stateOf("remove"))}
+                      type="button"
+                      className="ck-link"
+                      disabled={busy || t.sections.length === 1}
+                      onClick={() => setRemoving(s.id)}
+                    >
+                      Remove section
+                    </button>
+                  )}
                 </span>
               </div>
+              {removing === s.id && (
+                <p className="ck-meta ck-secoff">
+                  Removes {s.nameEn || "this section"} and its {s.items.length} task{s.items.length === 1 ? "" : "s"} now, no Save
+                  needed. Past checks keep what crew ticked. To hide it for a while instead, switch it off.
+                </p>
+              )}
               {!s.enabled && (
                 <p className="ck-meta ck-secoff">
                   Off. Crew don&apos;t see this section or its {s.items.length} task{s.items.length === 1 ? "" : "s"}, and it
