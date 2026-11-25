@@ -32,6 +32,9 @@ beforeEach(() => {
     typeof arg === "function" ? (arg as (tx: typeof prisma) => unknown)(prisma) : Promise.all(arg as unknown[]),
   )
   asMock(prisma.checkSection.update).mockImplementation(({ where }: { where: { id: string } }) => Promise.resolve({ id: where.id }))
+  asMock(prisma.checkSection.create).mockResolvedValue({ id: "sec_created" })
+  asMock(prisma.checkItem.update).mockImplementation(({ where }: { where: { id: string } }) => Promise.resolve({ id: where.id }))
+  asMock(prisma.checkItem.create).mockResolvedValue({ id: "it_created" })
 })
 
 describe("removeChecklistSection", () => {
@@ -74,6 +77,16 @@ describe("saveChecklist task length", () => {
 
   it("saves a 150-character Spanish line", async () => {
     expect((await saveChecklist(withEs("a".repeat(150)))).ok).toBe(true)
+  })
+
+  it("hands back the saved ids so the editor drops its temporary ones", async () => {
+    asMock(prisma.checkSection.create).mockResolvedValue({ id: "sec_new" })
+    asMock(prisma.checkItem.update).mockResolvedValue({ id: "i" })
+    asMock(prisma.checkItem.create).mockResolvedValue({ id: "it_new" })
+    const input = withEs("")
+    input.sections.push({ id: undefined as unknown as string, nameEn: "New", nameEs: "", enabled: true, items: [{ id: undefined as unknown as string, en: "Mop", es: "", photoRequired: false }] })
+    const r = await saveChecklist(input)
+    expect(r.ok && "saved" in r && r.saved).toEqual([{ id: "s", items: ["i"] }, { id: "sec_new", items: ["it_new"] }])
   })
 
   it("says which line is too long, in words", async () => {

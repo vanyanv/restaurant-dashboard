@@ -96,7 +96,12 @@ function fail(err: unknown): ActionResult {
   return { ok: false, error: "Couldn't save. Try again." }
 }
 
-export async function saveChecklist(raw: z.input<typeof ChecklistInput>): Promise<ActionResult> {
+/** The saved rows' ids, in the order sent, so the editor can swap its temporary ids for real ones. */
+export type SavedChecklistIds = Array<{ id: string; items: string[] }>
+
+export async function saveChecklist(
+  raw: z.input<typeof ChecklistInput>,
+): Promise<ActionResult | { ok: true; message: string; saved: SavedChecklistIds }> {
   try {
     const input = ChecklistInput.parse(raw)
     // Seven equal days are the same as none, and keep the summary short.
@@ -135,7 +140,9 @@ export async function saveChecklist(raw: z.input<typeof ChecklistInput>): Promis
       input.sections.flatMap((s) => s.items.map((i) => i.id)).filter((id): id is string => Boolean(id && ownItems.has(id))),
     )
 
+    const saved: SavedChecklistIds = []
     await prisma.$transaction(async (tx) => {
+      saved.length = 0
       await tx.checkTemplate.update({
         where: { id: tpl.id },
         data: {
@@ -154,6 +161,7 @@ export async function saveChecklist(raw: z.input<typeof ChecklistInput>): Promis
         const sectionId = s.id && keptSections.has(s.id)
           ? (await tx.checkSection.update({ where: { id: s.id }, data: sectionData, select: { id: true } })).id
           : (await tx.checkSection.create({ data: { ...sectionData, templateId: tpl.id }, select: { id: true } })).id
+        const items: string[] = []
         for (const [ii, i] of s.items.entries()) {
           const itemData = {
             sectionId,
@@ -165,14 +173,17 @@ export async function saveChecklist(raw: z.input<typeof ChecklistInput>): Promis
             helpEs: helpText(i.helpEs),
             helpPhotos: i.helpPhotos,
           }
-          if (i.id && keptItems.has(i.id)) await tx.checkItem.update({ where: { id: i.id }, data: itemData })
-          else await tx.checkItem.create({ data: itemData })
+          const itemId = i.id && keptItems.has(i.id)
+            ? (await tx.checkItem.update({ where: { id: i.id }, data: itemData, select: { id: true } })).id
+            : (await tx.checkItem.create({ data: itemData, select: { id: true } })).id
+          items.push(itemId)
         }
+        saved.push({ id: sectionId, items })
       }
       // One query per task over Neon; the 5 s default is too tight for a long list.
     }, { timeout: 20_000 })
     revalidateChecks()
-    return { ok: true, message: "Saved. Crew see the new list straight away." }
+    return { ok: true, message: "Saved. Crew see the new list straight away.", saved }
   } catch (err) {
     return fail(err)
   }
