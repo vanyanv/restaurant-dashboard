@@ -28,7 +28,7 @@ function draw(props: Partial<Parameters<typeof Calendar>[0]> = {}) {
 describe("Calendar", () => {
   it("is the prototype's cal(): a .drcal__hd over a .drgrid", () => {
     const { container } = draw()
-    expect(container.querySelector(".drcal__hd b")?.textContent).toBe("August 2026")
+    expect(container.querySelector(".drcal__hd h2")?.textContent).toBe("August 2026")
     expect(container.querySelectorAll(".drgrid .dw")).toHaveLength(7)
   })
 
@@ -37,21 +37,22 @@ describe("Calendar", () => {
     expect([...container.querySelectorAll(".dw")].map((d) => d.textContent)).toEqual([
       "M", "T", "W", "T", "F", "S", "S",
     ])
-    expect(container.querySelectorAll(".drd.out")).toHaveLength(5)
-    expect(container.querySelectorAll("button.drd")).toHaveLength(31)
+    const firstWeek = container.querySelector(".drgrid tbody tr")!
+    expect(firstWeek.querySelectorAll(".drd.out")).toHaveLength(5)
+    expect(container.querySelectorAll("td.drd:not(.out)")).toHaveLength(31)
   })
 
   it("marks the range with .in and its two ends with .edge", () => {
     const { container } = draw()
-    const inRange = [...container.querySelectorAll("button.drd.in")].map((b) => b.textContent)
+    const inRange = [...container.querySelectorAll("td.drd:not(.out).in")].map((b) => b.textContent)
     expect(inRange).toEqual(["15", "16", "17", "18", "19", "20", "21"])
-    const edges = [...container.querySelectorAll("button.drd.edge")].map((b) => b.textContent)
+    const edges = [...container.querySelectorAll("td.drd:not(.out).edge")].map((b) => b.textContent)
     expect(edges).toEqual(["15", "21"])
   })
 
   it("dots today, wherever it falls", () => {
     const { container } = draw()
-    const marked = [...container.querySelectorAll("button.drd.today")].map((b) => b.textContent)
+    const marked = [...container.querySelectorAll("td.drd:not(.out).today")].map((b) => b.textContent)
     expect(marked).toEqual(["21"])
   })
 
@@ -61,7 +62,7 @@ describe("Calendar", () => {
     // computed from, so the calendar cannot disagree with the deltas above it.
     const compare = comparisonWindows(range, "prev")
     const { container } = draw({ compare })
-    const shaded = [...container.querySelectorAll("button.drd.cmp")].map((b) => b.textContent)
+    const shaded = [...container.querySelectorAll("td.drd:not(.out).cmp")].map((b) => b.textContent)
     expect(shaded).toEqual(["8", "9", "10", "11", "12", "13", "14"])
   })
 
@@ -74,7 +75,7 @@ describe("Calendar", () => {
      */
     const oneDay = { start: new Date(2026, 7, 21), end: new Date(2026, 7, 21) }
     const { container } = draw({ range: oneDay, compare: comparisonWindows(oneDay, "weekday") })
-    const shaded = [...container.querySelectorAll("button.drd.cmp")].map((b) => b.textContent)
+    const shaded = [...container.querySelectorAll("td.drd:not(.out).cmp")].map((b) => b.textContent)
     // Aug 21 2026 is a Friday; its four preceding Fridays are Jul 24, Jul 31,
     // Aug 7 and Aug 14, of which this grid draws the two in August. The
     // eighteen days BETWEEN them are the point: the hull would have shaded
@@ -84,12 +85,12 @@ describe("Calendar", () => {
 
   it("shades nothing when the comparison is off", () => {
     const { container } = draw({ compare: comparisonWindows(range, "none") })
-    expect(container.querySelectorAll("button.drd.cmp")).toHaveLength(0)
+    expect(container.querySelectorAll("td.drd:not(.out).cmp")).toHaveLength(0)
   })
 
   it("shows the half-finished pick as an edge, so the first click is visible", () => {
     const { container } = draw({ pending: new Date(2026, 7, 4) })
-    const four = [...container.querySelectorAll("button.drd")].find((b) => b.textContent === "4")!
+    const four = [...container.querySelectorAll("td.drd:not(.out)")].find((b) => b.textContent === "4")!
     expect(four.className).toContain("in")
     expect(four.className).toContain("edge")
   })
@@ -97,7 +98,7 @@ describe("Calendar", () => {
   it("reports the day it was given, as a real Date", () => {
     const onPickDay = vi.fn()
     const { container } = draw({ onPickDay })
-    const nine = [...container.querySelectorAll("button.drd")].find((b) => b.textContent === "9")!
+    const nine = [...container.querySelectorAll("td.drd:not(.out)")].find((b) => b.textContent === "9")!
     fireEvent.click(nine)
     expect(onPickDay).toHaveBeenCalledTimes(1)
     const picked = onPickDay.mock.calls[0][0] as Date
@@ -115,6 +116,27 @@ describe("Calendar", () => {
 
   it("names each day for a screen reader, where the prototype prints a bare number", () => {
     draw()
-    expect(screen.getByRole("button", { name: "Friday, August 21, 2026" })).toBeTruthy()
+    expect(screen.getByRole("gridcell", { name: /Friday, August 21, 2026/ })).toBeTruthy()
+  })
+
+  it("is one grid with one Tab stop, and the arrow keys walk the days", () => {
+    // The ui-sdk Calendar under the markup: a keyboard reaches the month with
+    // one Tab and moves through it with the arrows, rather than tabbing 31 times.
+    const { container } = draw()
+    expect(screen.getByRole("grid", { name: "August 2026" })).toBeTruthy()
+    const stops = [...container.querySelectorAll("td.drd:not(.out)")].filter((d) => d.getAttribute("tabindex") === "0")
+    expect(stops).toHaveLength(1)
+    const start = stops[0] as HTMLElement
+    start.focus()
+    fireEvent.keyDown(start, { key: "ArrowRight" })
+    expect(Number(document.activeElement?.textContent)).toBe(Number(start.textContent) + 1)
+    fireEvent.keyDown(document.activeElement!, { key: "ArrowDown" })
+    expect(Number(document.activeElement?.textContent)).toBe(Number(start.textContent) + 8)
+  })
+
+  it("marks the range for a screen reader, not only by colour", () => {
+    draw()
+    const sel = screen.getAllByRole("gridcell").filter((c) => c.getAttribute("aria-selected") === "true")
+    expect(sel.map((c) => c.textContent)).toEqual(["15", "16", "17", "18", "19", "20", "21"])
   })
 })

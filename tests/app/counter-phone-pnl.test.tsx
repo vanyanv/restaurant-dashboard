@@ -16,7 +16,7 @@
  *    this page's range from a row that sets someone else's.
  */
 import { describe, it, expect, vi, beforeEach } from "vitest"
-import { render, fireEvent, within } from "@testing-library/react"
+import { render, fireEvent, within, waitFor } from "@testing-library/react"
 
 const push = vi.fn()
 // The SHELL around the island reads the URL directly now. `SEARCH` is set by
@@ -328,12 +328,11 @@ describe("Counter P&L — the phone", () => {
     expect(top.querySelector(".mdate")?.tagName).toBe("BUTTON")
   })
 
-  it("the store control writes ?store on THIS page — the same parameter the desk writes", () => {
+  it("the store control writes ?store on THIS page — the same parameter the desk writes", async () => {
     const { container } = renderPhone()
     fireEvent.click(container.querySelector(".st")!)
-    const sheet = document.getElementById(
-      container.querySelector(".st")!.getAttribute("aria-controls")!,
-    )!
+    // The sheet's drawer loads on the first tap (next/dynamic).
+    const sheet = await waitFor(() => { const el = document.getElementById(container.querySelector(".st")!.getAttribute("aria-controls")!); if (!el) throw new Error("sheet not drawn yet"); return el })
     fireEvent.click(within(sheet).getByText("Hollywood"))
     expect(push).toHaveBeenCalledWith("/m/pnl?store=holly", { scroll: false })
   })

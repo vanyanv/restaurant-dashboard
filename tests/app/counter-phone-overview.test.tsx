@@ -10,7 +10,7 @@
  * every gate in this repo green. These tests are that surface's gate.
  */
 import { describe, it, expect, vi } from "vitest"
-import { render, fireEvent, within } from "@testing-library/react"
+import { render, fireEvent, within, waitFor } from "@testing-library/react"
 
 const push = vi.fn()
 // The SHELL around the island reads the URL directly now — `usePathname()` for
@@ -85,9 +85,10 @@ const sections: OverviewSections = {
 }
 
 /** The sheet `.mdate` controls — `.mtop` holds two. */
-function dateSheet(container: HTMLElement): HTMLElement {
+function dateSheet(container: HTMLElement): Promise<HTMLElement> {
   const id = container.querySelector(".mdate")!.getAttribute("aria-controls")!
-  return document.getElementById(id) as HTMLElement
+  // The sheet's drawer loads on the first tap (next/dynamic).
+  return waitFor(() => { const el = document.getElementById(id); if (!el) throw new Error("sheet not drawn yet"); return el })
 }
 
 /**
@@ -130,21 +131,22 @@ describe("Counter Overview — the phone", () => {
     expect(top.querySelector(".mdate")!.tagName).toBe("BUTTON")
   })
 
-  it("the store control writes ?store — the SAME parameter the desk writes", () => {
+  it("the store control writes ?store — the SAME parameter the desk writes", async () => {
     // Not `?period=`. Two range vocabularies on one page is note 60's defect,
     // and it is why the editorial MToolbar could not simply be kept.
     const { container } = renderPhone()
     fireEvent.click(container.querySelector(".st")!)
     // The store sheet is the one `.st` controls — two sheets live in `.mtop`.
-    const storeSheet = document.getElementById(container.querySelector(".st")!.getAttribute("aria-controls")!)!
+    // Its drawer loads on the first tap (next/dynamic).
+    const storeSheet = await waitFor(() => { const el = document.getElementById(container.querySelector(".st")!.getAttribute("aria-controls")!); if (!el) throw new Error("sheet not drawn yet"); return el })
     fireEvent.click(within(storeSheet).getByText("Glendale"))
     expect(push).toHaveBeenCalledWith("/m?store=glendale", { scroll: false })
   })
 
-  it("the date control writes ?range, and drops it again at the default", () => {
+  it("the date control writes ?range, and drops it again at the default", async () => {
     const { container } = renderPhone("store=hollywood")
     fireEvent.click(container.querySelector(".mdate")!)
-    const sheet = within(dateSheet(container))
+    const sheet = within(await dateSheet(container))
 
     fireEvent.click(sheet.getByText("Last 7 days"))
     expect(push).toHaveBeenLastCalledWith("/m?store=hollywood&range=d7", { scroll: false })
@@ -155,10 +157,10 @@ describe("Counter Overview — the phone", () => {
     expect(push).toHaveBeenLastCalledWith("/m?store=hollywood", { scroll: false })
   })
 
-  it("the comparison control writes ?cmp", () => {
+  it("the comparison control writes ?cmp", async () => {
     const { container } = renderPhone()
     fireEvent.click(container.querySelector(".mdate")!)
-    const cmp = container.querySelector(".drcmp")!
+    const cmp = (await dateSheet(container)).querySelector(".drcmp")!
     fireEvent.click(within(cmp as HTMLElement).getByText("None"))
     expect(push).toHaveBeenLastCalledWith("/m?cmp=none", { scroll: false })
   })

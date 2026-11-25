@@ -6,10 +6,16 @@ import { nextPollDelay } from "./poll-delay"
 import type { ActiveCheck, CrewItem, CrewMarkState, CrewView } from "@/lib/checks/crew"
 import { shortStoreName } from "@/lib/checks/names"
 import dynamic from "next/dynamic"
-import { ModalDialog } from "@/components/counter/modal-dialog"
 
 /** Loaded on the first tap of a How button, so the drawer and carousel are not in the page's first load. */
-const HowSheet = dynamic(() => import("./how-sheet"), { ssr: false })
+const loadHow = () => import("./how-sheet")
+const HowSheet = dynamic(loadHow, { ssr: false })
+/** The ⋯ menu, photo, done and note sheets: also drawers, loaded the same way and fetched once the page is up. */
+const loadSheets = () => import("./crew-sheets")
+const TaskMenu = dynamic(() => loadSheets().then((m) => m.TaskMenu), { ssr: false })
+const PhotoSheet = dynamic(() => loadSheets().then((m) => m.PhotoSheet), { ssr: false })
+const DoneSheet = dynamic(() => loadSheets().then((m) => m.DoneSheet), { ssr: false })
+const FlagSheet = dynamic(() => loadSheets().then((m) => m.FlagSheet), { ssr: false })
 
 /**
  * The crew flow, one job per screen: store page -> PIN -> shared checklist ->
@@ -234,7 +240,7 @@ const T = {
     practiceThanks: (n: string) => `Buen trabajo, ${n}. No se guardó nada y la lista quedó limpia para la siguiente persona.`,
   },
 }
-type Tx = (typeof T)["en"]
+export type Tx = (typeof T)["en"]
 
 function readLang(): Lang {
   try {
@@ -301,6 +307,13 @@ async function thumbnail(photo: Blob): Promise<Blob | null> {
 
 export function CrewCheckClient({ code, initial }: { code: string; initial: CrewView }) {
   const [view, setView] = useState<CrewView>(initial)
+  // Fetch the sheets' code as soon as the page is up, while the phone still has
+  // the signal that loaded it: crew reach the list a PIN later, often in a back
+  // room with none, and a sheet whose code never arrived could not open there.
+  useEffect(() => {
+    void loadSheets().catch(() => {})
+    void loadHow().catch(() => {})
+  }, [])
   const [lang, setLangState] = useState<Lang>("en")
   useEffect(() => setLangState(readLang()), [])
   const setLang = (l: Lang) => {
@@ -1126,20 +1139,16 @@ function Checklist({
       />
       {menuFor && (
         <TaskMenu
+          key={menuFor.id}
           t={t}
           title={txt(menuFor.en, menuFor.es)}
           photo={menuFor.photoRequired}
           onNote={() => {
             const mark = stateOf(menuFor.id).mark
             setFlagFor({ item: menuFor, note: "", seen: mark?.markId })
-            setMenuFor(null)
           }}
-          onPhoto={() => {
-            const item = menuFor
-            setMenuFor(null)
-            openCamera(item)
-          }}
-          onCancel={() => setMenuFor(null)}
+          onPhoto={() => openCamera(menuFor)}
+          onClosed={() => setMenuFor((m) => (m === menuFor ? null : m))}
         />
       )}
       {howFor?.help && (
@@ -1161,42 +1170,28 @@ function Checklist({
       )}
       {photoFor && (
         <PhotoSheet
+          key={photoFor.url}
           t={t}
           title={txt(photoFor.item.en, photoFor.item.es)}
           url={photoFor.url}
-          onRetake={() => {
+          onRetake={() => openCamera(photoFor.item)}
+          onUse={() => send(photoFor.item, { done: true, photo: photoFor.blob })}
+          onClosed={() => {
             URL.revokeObjectURL(photoFor.url)
-            const item = photoFor.item
-            setPhotoFor(null)
-            openCamera(item)
-          }}
-          onUse={async () => {
-            const ok = await send(photoFor.item, { done: true, photo: photoFor.blob })
-            if (ok) {
-              URL.revokeObjectURL(photoFor.url)
-              setPhotoFor(null)
-            }
-          }}
-          onCancel={() => {
-            URL.revokeObjectURL(photoFor.url)
-            setPhotoFor(null)
+            // A retake may already have put the next photo here.
+            setPhotoFor((p) => (p === photoFor ? null : p))
           }}
           error={error}
         />
       )}
       {flagFor && (
         <FlagSheet
+          key={flagFor.item.id}
           t={t}
           current={flagFor.note}
-          onCancel={() => setFlagFor(null)}
-          onSave={(note) => {
-            void send(flagFor.item, { done: true, note })
-            setFlagFor(null)
-          }}
-          onRemove={() => {
-            void send(flagFor.item, { done: false, seen: flagFor.seen })
-            setFlagFor(null)
-          }}
+          onSave={(note) => void send(flagFor.item, { done: true, note })}
+          onRemove={() => void send(flagFor.item, { done: false, seen: flagFor.seen })}
+          onClosed={() => setFlagFor((f) => (f === flagFor ? null : f))}
         />
       )}
       {doneFor && (() => {
@@ -1204,20 +1199,14 @@ function Checklist({
         if (!mark?.done) return null
         return (
           <DoneSheet
+            key={doneFor.id}
             t={t}
             title={txt(doneFor.en, doneFor.es)}
             mark={mark}
             mine={mark.by === who.name}
-            onPhoto={doneFor.photoRequired && !mark.hasPhoto ? () => {
-              const item = doneFor
-              setDoneFor(null)
-              openCamera(item)
-            } : undefined}
-            onKeep={() => setDoneFor(null)}
-            onUndo={() => {
-              void send(doneFor, { done: false, seen: mark.markId })
-              setDoneFor(null)
-            }}
+            onPhoto={doneFor.photoRequired && !mark.hasPhoto ? () => openCamera(doneFor) : undefined}
+            onUndo={() => void send(doneFor, { done: false, seen: mark.markId })}
+            onClosed={() => setDoneFor((d) => (d === doneFor ? null : d))}
           />
         )
       })()}
@@ -1225,44 +1214,6 @@ function Checklist({
   )
 }
 
-/** The ⋯ on a task not done yet: finish it with a note, or take its photo. */
-function TaskMenu({
-  t,
-  title,
-  photo,
-  onNote,
-  onPhoto,
-  onCancel,
-}: {
-  t: Tx
-  title: string
-  photo: boolean
-  onNote: () => void
-  onPhoto: () => void
-  onCancel: () => void
-}) {
-  return (
-    <ModalDialog className="ckc__sheet" aria-label={title} onClose={onCancel} onClick={onCancel}>
-      <div onClick={(e) => e.stopPropagation()}>
-        <h2>{title}</h2>
-        {photo && (
-          <button type="button" className="ckc__btn" onClick={onPhoto}>
-            <CameraIcon /> {t.takePhoto}
-          </button>
-        )}
-        <button type="button" className={`ckc__btn${photo ? " ckc__btn--light" : ""}`} onClick={onNote}>
-          {t.doneWithNote}
-        </button>
-        <p className="ckc__dim" style={{ margin: 0, fontSize: 13 }}>
-          {t.flagHelp}
-        </p>
-        <button type="button" className="ckc__btn ckc__btn--ghost" onClick={onCancel}>
-          {t.cancel}
-        </button>
-      </div>
-    </ModalDialog>
-  )
-}
 
 /** Said on the store page and over the list while the owner has checks paused. */
 function PracticeBanner({ t }: { t: Tx }) {
@@ -1302,149 +1253,8 @@ function CameraIcon({ size = 20 }: { size?: number }) {
   )
 }
 
-function PhotoSheet({
-  t,
-  title,
-  url,
-  error,
-  onUse,
-  onRetake,
-  onCancel,
-}: {
-  t: Tx
-  title: string
-  url: string
-  error: string
-  onUse: () => Promise<void>
-  onRetake: () => void
-  onCancel: () => void
-}) {
-  const [busy, setBusy] = useState(false)
-  return (
-    <ModalDialog className="ckc__sheet" aria-label={t.photoTitle} onClose={busy ? undefined : onCancel} onClick={busy ? undefined : onCancel}>
-      <div onClick={(e) => e.stopPropagation()}>
-        <span className="ck-mono">{t.photoTitle}</span>
-        <h2>{title}</h2>
-        <img className="ckb__preview" src={url} alt="" />
-        <div className="ckc__err" role="alert">
-          {busy ? t.uploading : error}
-        </div>
-        <button
-          type="button"
-          className="ckc__btn"
-          disabled={busy}
-          onClick={async () => {
-            setBusy(true)
-            await onUse()
-            setBusy(false)
-          }}
-        >
-          {busy ? t.uploading : t.photoUse}
-        </button>
-        <button type="button" className="ckc__btn ckc__btn--ghost" disabled={busy} onClick={onRetake}>
-          {t.retake}
-        </button>
-      </div>
-    </ModalDialog>
-  )
-}
 
-function DoneSheet({
-  t,
-  title,
-  mark,
-  mine,
-  onKeep,
-  onUndo,
-  onPhoto,
-}: {
-  t: Tx
-  title: string
-  mark: CrewMarkState
-  mine: boolean
-  onKeep: () => void
-  onUndo: () => void
-  /** A photo task finished with a note: the photo can still be added. */
-  onPhoto?: () => void
-}) {
-  return (
-    <ModalDialog className="ckc__sheet" aria-label={t.doneSheetTitle} onClose={onKeep} onClick={onKeep}>
-      <div onClick={(e) => e.stopPropagation()}>
-        <h2>{t.doneSheetTitle}</h2>
-        <b>{title}</b>
-        <p className="ckc__dim" style={{ margin: 0, fontSize: 14 }}>
-          {mine ? t.doneByYou(mark.at) : t.doneByAt(mark.by, mark.at)}
-          {mark.hasPhoto ? ` ${t.withPhoto}` : ""}
-        </p>
-        {mark.note && (
-          <p className="ckc__dim" style={{ margin: 0, fontSize: 13 }}>
-            {t.needsAttention} · {mark.note}
-          </p>
-        )}
-        <button type="button" className="ckc__btn" onClick={onKeep}>
-          ✓ {t.keepDone}
-        </button>
-        {onPhoto && (
-          <button type="button" className="ckc__btn ckc__btn--light" onClick={onPhoto}>
-            <CameraIcon /> {t.addPhoto}
-          </button>
-        )}
-        <button type="button" className="ckc__btn ckc__btn--ghost" onClick={onUndo}>
-          {mine ? t.undoMine : t.undoTheirs(mark.by)}
-        </button>
-        <p className="ckc__dim" style={{ margin: 0, fontSize: 12.5 }}>
-          {t.undoWarn}
-        </p>
-      </div>
-    </ModalDialog>
-  )
-}
 
-function FlagSheet({
-  t,
-  current,
-  onSave,
-  onRemove,
-  onCancel,
-}: {
-  t: Tx
-  current: string
-  onSave: (note: string) => void
-  onRemove: () => void
-  onCancel: () => void
-}) {
-  const [note, setNote] = useState(current)
-  return (
-    <ModalDialog className="ckc__sheet" aria-label={t.flagTitle} onClose={onCancel} onClick={onCancel}>
-      <div onClick={(e) => e.stopPropagation()}>
-        <h2>{t.flagTitle}</h2>
-        <p className="ckc__dim" style={{ margin: 0, fontSize: 13 }}>
-          {t.flagHelp}
-        </p>
-        <div className="ckc__chips">
-          {t.flagChips.map((c) => (
-            <button key={c} type="button" onClick={() => setNote(c)}>
-              {c}
-            </button>
-          ))}
-        </div>
-        <textarea value={note} maxLength={200} onChange={(e) => setNote(e.target.value)} aria-label={t.flagTitle} />
-        <button type="button" className="ckc__btn" disabled={!note.trim()} onClick={() => onSave(note.trim())}>
-          {t.saveFlag}
-        </button>
-        {current ? (
-          <button type="button" className="ckc__btn ckc__btn--ghost" onClick={onRemove}>
-            {t.removeFlag}
-          </button>
-        ) : (
-          <button type="button" className="ckc__btn ckc__btn--ghost" onClick={onCancel}>
-            {t.cancel}
-          </button>
-        )}
-      </div>
-    </ModalDialog>
-  )
-}
 
 function Done({
   t,

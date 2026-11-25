@@ -147,11 +147,19 @@ beta version because the API still moves between betas. Read
 (`.agents/skills/ui-sdk`, pinned in `skills-lock.json`) before using it. Style
 its parts with Counter tokens (or the crew page's brand aliases) through their
 `data-slot` and state attributes; never load its `web.css`. Every pop-up still
-goes through `ModalDialog`, with one exception: the crew how-to sheet is a
-ui-sdk Drawer (`src/app/checks/[code]/how-sheet.tsx`) holding a Carousel
-(`how-photos.tsx`), because the owner asked for the SDK there. It loads with
-`next/dynamic` so it stays out of the crew page's first load; that route sits
-near its bundle budget.
+goes through `ModalDialog`, except the bottom sheets the owner asked to move to
+the SDK (2026-11-25): every crew sheet on `/checks/<code>` (the how-to in
+`how-sheet.tsx` with its Carousel in `how-photos.tsx`; the ⋯ menu, photo, done
+and note sheets in `crew-sheets.tsx`) and the phone dashboard's `PhoneSheet`
+(store picker, date range, Ask threads; `shell/phone-drawer.tsx`) are ui-sdk
+Drawers, so they can be dragged down to close. The date picker's month grid
+(`shell/calendar.tsx`) is a ui-sdk Calendar drawn with Counter's own markup, for
+its arrow-key and screen-reader behaviour. All of them load with
+`next/dynamic` so the SDK stays out of every first load (the Drawer alone is
+~130 KB raw; `/checks/[code]` sits near its budget), and each page fetches the
+chunk once it is up. In jsdom ui-sdk renders popups into `<body>` (no top
+layer), so tests read a sheet off `document`; `tests/setup/dialog-shim.ts`
+stubs the `ResizeObserver`, `getAnimations` and `CSS.supports` it needs.
 
 ## Other references
 

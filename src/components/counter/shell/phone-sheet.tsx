@@ -1,56 +1,25 @@
 "use client"
 
-import { type CSSProperties, type ReactNode } from "react"
-import { ModalDialog } from "@/components/counter/modal-dialog"
+import { useEffect, useState, type ReactNode } from "react"
+import dynamic from "next/dynamic"
+
+const loadDrawer = () => import("./phone-drawer")
+const PhoneDrawer = dynamic(loadDrawer, { ssr: false })
 
 /**
- * `.pshade` + `.msheet` — the phone's bottom sheet, and the ONE place the two
- * divergences it needs are written down.
+ * The phone's bottom sheet (`.pshade` + `.msheet`): the store picker, the date
+ * range picker and Ask's thread list.
  *
- * The prototype composes this shape twice inside `CD.sheet()` (line 1945) and
- * styles it in three rules (counter-components.css:983–991):
+ * It is a ui-sdk Drawer (`phone-drawer.tsx`) so it can be dragged down to
+ * close, like a system sheet; the grab bar on top used to be only a picture
+ * of one. The drawer renders in the browser's top layer, so it sits above the
+ * tab bar and the page behind is inert without any z-index of ours.
  *
- * ```
- * <div class="pshade" data-mclose></div>
- * <div class="msheet"><span class="msheet__grab"></span><h4>…</h4> … </div>
- * ```
- *
- * Both are always in the DOM; `.on` shows them. That is the prototype's own
- * choice and it is kept — the open state is a class, not a mount, so the
- * sheet's children keep their state across an open/close and there is no
- * mount cost on the first tap.
- *
- * ## The two divergences, both about the shell this route still lives in
- *
- * 1. **`position: fixed`, not `absolute`.** `.msheet` and `.pshade` are
- *    positioned against `.pframe`, a 718px-tall bezel that never scrolls.
- *    `/m` is a document that does. Left `absolute`, the sheet would anchor to
- *    the bottom of the whole scrolled page, so a reader who opened it from the
- *    top would see nothing happen. `fixed` is what "absolute inside a fixed
- *    bezel" MEANS once the bezel is a real phone.
- *
- * 2. **A z-index above `.m-tabbar`.** The prototype's 15/20 are relative to a
- *    bezel with nothing overlaying it: `.mtabs` is an in-flow sibling and the
- *    sheet's `bottom:0` covers it — which is the behaviour being preserved,
- *    not changed. The editorial mobile shell that still wraps this route pins
- *    its tab bar at `position:fixed; z-index:40`, so both are raised past it,
- *    keeping the prototype's own order (shade under sheet). These two numbers
- *    go away with the shell when the phone is rebuilt on Counter.
- *
- * Neither is a colour and neither is a layout the design decided differently;
- * they are the cost of mounting a bezel's furniture in a scrolling document.
- *
- * ## Modal behaviour is the browser's
- *
- * Shade and sheet sit inside one native modal `<dialog>` (`ModalDialog`),
- * still always mounted, opened with `showModal()` when `open` turns on. The
- * browser makes the page behind inert, keeps Tab inside, closes on Escape or
- * the back gesture, and hands focus back to the trigger. This file used to do
- * all four by hand.
+ * The drawer's code is not in the page's first load: nothing renders until
+ * the sheet first opens, and the chunk is fetched a moment after the page
+ * draws so the first tap does not wait on the network. Once opened it stays
+ * mounted (hidden while closed), so its children keep their state.
  */
-const SHEET_STYLE: CSSProperties = { position: "fixed", zIndex: 42 }
-const SHADE_STYLE: CSSProperties = { position: "fixed", zIndex: 41 }
-
 export function PhoneSheet({
   open,
   onClose,
@@ -60,25 +29,22 @@ export function PhoneSheet({
 }: {
   open: boolean
   onClose: () => void
-  /** The sheet's `<h4>`, and its accessible name. */
+  /** The sheet's heading, and its accessible name. */
   title: string
   /** So the trigger can `aria-controls` it. */
   id: string
   children: ReactNode
 }) {
+  const [used, setUsed] = useState(open)
+  if (open && !used) setUsed(true)
+  useEffect(() => {
+    const t = window.setTimeout(() => void loadDrawer(), 1500)
+    return () => window.clearTimeout(t)
+  }, [])
+  if (!used) return null
   return (
-    <ModalDialog open={open} onClose={onClose} aria-label={title}>
-      <div
-        className={open ? "pshade on" : "pshade"}
-        style={SHADE_STYLE}
-        onClick={onClose}
-        aria-hidden="true"
-      />
-      <div className={open ? "msheet on" : "msheet"} style={SHEET_STYLE} id={id}>
-        <span className="msheet__grab" />
-        <h4>{title}</h4>
-        {children}
-      </div>
-    </ModalDialog>
+    <PhoneDrawer open={open} onClose={onClose} title={title} id={id}>
+      {children}
+    </PhoneDrawer>
   )
 }
