@@ -374,6 +374,19 @@ p b { color: #ede6e1; }
     loading = want;
     slides.forEach(function (s) { if (!want1[s.url]) want1[s.url] = live[s.url] ? P.resolve(live[s.url]) : picture(s); });
     var urls = Object.keys(want1);
+    // Nothing up is wanted any more: put the first picture up the moment it is
+    // here, and bring the rest in behind it. retry keeps the load going.
+    var stale = !slides.some(function (s) { return live[s.url] && live[s.url].img === top; });
+    if (stale && urls.length > 1) want1[slides[0].url].then(function (it) {
+      if (!it || mine !== gen || loading !== want) return;
+      var was = live;
+      live = {}; live[it.url] = it; set = [slides[0]]; sig = want; retry = true; index = 0;
+      if (slideTimer) clearTimeout(slideTimer);
+      slideTimer = null;
+      bring(it);
+      only(null);
+      setTimeout(function () { Object.keys(was).forEach(function (u) { if (was[u] !== it) drop(was[u]); }); }, FADE + 100);
+    });
     P.all(urls.map(function (u) { return want1[u]; })).then(function (items) {
       var got = {};
       items.forEach(function (it) { if (it) got[it.url] = it; });
@@ -477,8 +490,9 @@ p b { color: #ede6e1; }
       say(c.screen.store + ", " + c.screen.name, "Connected. Pick a picture on your phone.", true);
       holdUntil = Date.now() + 3500;
     }
-    if (fresh) store(c);
+    // What is on now first: store() queues every window's pictures, one at a time.
     draw();
+    if (fresh) store(c);
   }
 
   /* ---- talking to the dashboard ---- */
@@ -487,10 +501,64 @@ p b { color: #ede6e1; }
     badge.textContent = on ? (paired ? "No internet. Still showing your menu." : "No internet. Waiting to connect.") : "";
     badge.style.display = on ? "block" : "none";
   }
-  var pollTimer = null, polling = false;
+  /* ---- told the moment something changes ---- */
+
+  // Pusher's socket protocol by hand: its library would not run on the oldest
+  // sets. While the socket is up the 30-second check slows to every 5 minutes,
+  // as a backstop; when it drops, the TV is back on 30 seconds.
+  var PUSHED_POLL = 300000, sock = null, sockFor = "", sockUp = false, sockWait = 5000, sockTimer = null, sockQuiet = null;
+  function listen(p) {
+    var want = p && p.key && p.cluster && p.channel ? p.key + "|" + p.cluster + "|" + p.channel : "";
+    if (want === sockFor) return;
+    sockFor = want;
+    hangUp();
+    sockWait = 5000;
+    if (want) dial(p);
+  }
+  function hangUp() {
+    var was = sockUp;
+    if (sockTimer) { clearTimeout(sockTimer); sockTimer = null; }
+    if (sockQuiet) { clearTimeout(sockQuiet); sockQuiet = null; }
+    sockUp = false;
+    if (sock) { var s = sock; sock = null; s.onclose = s.onerror = s.onmessage = null; try { s.close(); } catch (e) {} }
+    if (was && !polling) { if (pollTimer) clearTimeout(pollTimer); pollTimer = setTimeout(poll, PAIRED_POLL); }
+  }
+  function dial(p) {
+    if (!window.WebSocket || !window.JSON) return;
+    var s;
+    try { s = new WebSocket("wss://ws-" + p.cluster + ".pusher.com/app/" + encodeURIComponent(p.key) + "?protocol=7&client=cne-tv&version=1.0"); } catch (e) { redial(p); return; }
+    sock = s;
+    // Pusher speaks at least every 2 minutes. A socket quiet for longer is dead, even if it never said so.
+    function quiet() {
+      if (sockQuiet) clearTimeout(sockQuiet);
+      sockQuiet = setTimeout(function () { if (sock === s) { hangUp(); redial(p); } }, 180000);
+    }
+    quiet();
+    s.onmessage = function (m) {
+      if (sock !== s) return;
+      quiet();
+      var e;
+      try { e = JSON.parse(m.data); } catch (x) { return; }
+      if (e.event === "pusher:connection_established") s.send(JSON.stringify({ event: "pusher:subscribe", data: { channel: p.channel } }));
+      else if (e.event === "pusher_internal:subscription_succeeded") { sockUp = true; sockWait = 5000; poll(); }
+      else if (e.event === "pusher:ping") s.send(JSON.stringify({ event: "pusher:pong", data: {} }));
+      else if (e.event === "change") poll();
+    };
+    s.onclose = s.onerror = function () { if (sock !== s) return; hangUp(); redial(p); };
+  }
+  function redial(p) {
+    var mine = sockFor;
+    if (sockTimer) clearTimeout(sockTimer);
+    sockTimer = setTimeout(function () { sockTimer = null; if (mine === sockFor && !sock) dial(p); }, sockWait);
+    sockWait = Math.min(sockWait * 2, 300000);
+  }
+
+  var pollTimer = null, polling = false, again = false;
   function poll() {
-    if (polling) return;
+    // A change heard while a check is on its way may be newer than that check's answer.
+    if (polling) { again = true; return; }
     polling = true;
+    again = false;
     if (pollTimer) clearTimeout(pollTimer);
     var paired = now ? now.paired : true;
     ask(BASE + "/api/tv/content", "json", { authorization: "Bearer " + token, "x-screen-device": device }, TIMEOUT).then(function (c) {
@@ -498,6 +566,7 @@ p b { color: #ede6e1; }
       seenAt = Date.now();
       if (!c.paired) { keepAnswer(c); storing = stored = null; }
       setOffline(false, paired);
+      listen(c.push);
       if (!APP && c.player && c.player !== PLAYER && reloadOnce(c.player)) return;
       apply(c, true);
     }).then(null, function () {
@@ -505,7 +574,8 @@ p b { color: #ede6e1; }
     }).then(function () {
       polling = false;
       if (menu.className === "on") drawMenu();
-      pollTimer = setTimeout(poll, paired ? PAIRED_POLL : UNPAIRED_POLL);
+      if (again) { poll(); return; }
+      pollTimer = setTimeout(poll, !paired ? (sockUp ? PAIRED_POLL : UNPAIRED_POLL) : sockUp ? PUSHED_POLL : PAIRED_POLL);
     });
   }
   // Once per version, so a page that can't be replaced never reloads in a circle.

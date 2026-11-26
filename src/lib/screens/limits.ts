@@ -40,7 +40,7 @@ export const SCREEN_ORIGINAL_MAX_PARTS = Math.ceil(SCREEN_ORIGINAL_MAX_BYTES / S
 export const SCREEN_THUMB_MAX_BYTES = 400 * 1024
 
 /** Bump when the hosted /tv page must be picked up by TVs already showing it. */
-export const PLAYER_VERSION = "2"
+export const PLAYER_VERSION = "3"
 
 /** Every store is in Los Angeles; windows of the week are in store time. */
 export const SCREEN_TZ = "America/Los_Angeles"
