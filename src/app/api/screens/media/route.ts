@@ -4,7 +4,7 @@ import { z } from "zod"
 import { prisma } from "@/lib/prisma"
 import { getSession } from "@/lib/auth-scope"
 import { hasOwnerAccess } from "@/lib/auth"
-import { checkThumbKey, deleteScreenMedia, putScreenMedia, putScreenOriginal, putScreenThumb, readScreenPart, screenPartKey } from "@/lib/blob"
+import { checkThumbKey, deleteScreenMedia, putScreenFhd, putScreenMedia, putScreenOriginal, putScreenThumb, readScreenPart, screenFhdKey, screenPartKey } from "@/lib/blob"
 import { logger } from "@/lib/logger"
 import { rateLimit } from "@/lib/rate-limit"
 import { SCREEN_MAX_PARTS, SCREEN_MEDIA_MAX_BYTES, SCREEN_THUMB_MAX_BYTES, sniffImage } from "@/lib/screens/core"
@@ -19,6 +19,9 @@ const Input = z.object({
   /** Sent only when the TV copy was redrawn: the owner's own file, in its own parts. */
   original: z.string().uuid().optional(),
   originalParts: z.coerce.number().int().min(1).max(SCREEN_ORIGINAL_MAX_PARTS).optional(),
+  /** The lossless 1920 x 1080 PNG for TVs that draw at that size, when the picture is bigger. */
+  fhd: z.string().uuid().optional(),
+  fhdParts: z.coerce.number().int().min(1).max(SCREEN_MAX_PARTS).optional(),
 })
 
 /**
@@ -45,8 +48,12 @@ export async function POST(request: NextRequest) {
   }
   const parsed = Input.safeParse(Object.fromEntries([...form].filter(([, v]) => typeof v === "string")))
   if (!parsed.success) return NextResponse.json({ error: "That upload could not be read" }, { status: 400 })
-  const { upload, parts, width, height, original, originalParts } = parsed.data
-  if ((original === undefined) !== (originalParts === undefined) || original === upload) {
+  const { upload, parts, width, height, original, originalParts, fhd, fhdParts } = parsed.data
+  if (
+    (original === undefined) !== (originalParts === undefined) ||
+    (fhd === undefined) !== (fhdParts === undefined) ||
+    new Set([upload, original, fhd].filter(Boolean)).size !== [upload, original, fhd].filter(Boolean).length
+  ) {
     return NextResponse.json({ error: "That upload could not be read" }, { status: 400 })
   }
 
@@ -54,14 +61,16 @@ export async function POST(request: NextRequest) {
   const originalKeys = original
     ? Array.from({ length: originalParts! }, (_, i) => screenPartKey(accountId, original, i))
     : []
+  const fhdKeys = fhd ? Array.from({ length: fhdParts! }, (_, i) => screenPartKey(accountId, fhd, i)) : []
   const cleanUp = () =>
-    Promise.all([...keys, ...originalKeys].map((k) => deleteScreenMedia(k).catch(() => undefined))).then(() => undefined)
+    Promise.all([...keys, ...originalKeys, ...fhdKeys].map((k) => deleteScreenMedia(k).catch(() => undefined))).then(() => undefined)
 
-  const [chunks, originalChunks] = await Promise.all([
+  const [chunks, originalChunks, fhdChunks] = await Promise.all([
     Promise.all(keys.map(readScreenPart)),
     Promise.all(originalKeys.map(readScreenPart)),
+    Promise.all(fhdKeys.map(readScreenPart)),
   ])
-  if ([...chunks, ...originalChunks].some((c) => c === null)) {
+  if ([...chunks, ...originalChunks, ...fhdChunks].some((c) => c === null)) {
     await cleanUp()
     return NextResponse.json({ error: "Part of that picture didn't arrive. Try again." }, { status: 409 })
   }
@@ -69,6 +78,9 @@ export async function POST(request: NextRequest) {
   const type = sniffImage(bytes)
   const originalBytes = original ? Buffer.concat(originalChunks as Buffer[]) : null
   const originalType = originalBytes ? sniffImage(originalBytes) : null
+  // Only a PNG no bigger than the TV copy is worth keeping; anything else, and TVs get the full picture.
+  const fhdBytes = fhd ? Buffer.concat(fhdChunks as Buffer[]) : null
+  const fhdOk = !!fhdBytes && sniffImage(fhdBytes) === "image/png" && fhdBytes.length <= bytes.length
   if (!type || bytes.length > SCREEN_MEDIA_MAX_BYTES || (originalBytes && (!originalType || originalBytes.length > SCREEN_ORIGINAL_MAX_BYTES))) {
     await cleanUp()
     return type && (!originalBytes || originalType)
@@ -81,6 +93,7 @@ export async function POST(request: NextRequest) {
   let originalKey: string | null = null
   try {
     if (originalBytes && originalType) originalKey = await putScreenOriginal(stored.pathname, originalBytes, originalType)
+    if (fhdOk) await putScreenFhd(stored.pathname, fhdBytes!)
     const thumb = form.get("thumb")
     if (thumb instanceof File && thumb.size > 0 && thumb.size <= SCREEN_THUMB_MAX_BYTES) {
       const small = Buffer.from(await thumb.arrayBuffer())
@@ -109,7 +122,7 @@ export async function POST(request: NextRequest) {
   } catch (err) {
     // No row points at it, so nothing would ever delete it. The parts stay for the browser's second try.
     await Promise.all(
-      [stored.pathname, checkThumbKey(stored.pathname), ...(originalKey ? [originalKey] : [])].map((k) =>
+      [stored.pathname, checkThumbKey(stored.pathname), screenFhdKey(stored.pathname), ...(originalKey ? [originalKey] : [])].map((k) =>
         deleteScreenMedia(k).catch(() => undefined),
       ),
     )

@@ -58,8 +58,23 @@ export function clampSeconds(n: number): number {
 }
 
 /** Where the TV and the dashboard load an image from. The key's uuid is what makes it unguessable. */
-export function screenMediaUrl(blobKey: string): string {
-  return `/api/tv/media/${blobKey.split("/").map(encodeURIComponent).join("/")}`
+export function screenMediaUrl(blobKey: string, fit?: "fhd"): string {
+  return `/api/tv/media/${blobKey.split("/").map(encodeURIComponent).join("/")}${fit ? `?fit=${fit}` : ""}`
+}
+
+/**
+ * Whether a TV draws at most 1920 x 1080, from the label its player sends
+ * ("Tizen 7.0 · 1920x1080"). Samsung's apps draw at 1920 x 1080 even on a 4K
+ * panel, so those TVs get the lossless 1920 x 1080 copy: the same pixels the
+ * TV would make itself, at a quarter of the download and the decoding. A TV
+ * that says nothing, or draws more, gets the full picture.
+ */
+export function drawsFullHd(device: string | null | undefined): boolean {
+  const m = /(\d{3,5})x(\d{3,5})/.exec(device ?? "")
+  if (!m) return false
+  const w = Number(m[1])
+  const h = Number(m[2])
+  return Math.max(w, h) <= 1920 && Math.min(w, h) <= 1080
 }
 
 /** Accepted uploads. */

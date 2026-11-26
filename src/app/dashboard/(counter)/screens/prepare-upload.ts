@@ -64,8 +64,15 @@ function toBlob(c: HTMLCanvasElement, type: string, quality?: number): Promise<B
   return new Promise((r) => c.toBlob(r, type, quality))
 }
 
-/** `original` is the owner's own file, set only when `blob` is a redrawn copy of it. */
-export type Prepared = { blob: Blob; width: number; height: number; thumb: Blob | null; original: File | null }
+/**
+ * `original` is the owner's own file, set only when `blob` is a redrawn copy of it.
+ * `fhd` is a lossless PNG at most 1920 x 1080, for TVs that draw at that size
+ * (every Samsung app does, even on a 4K panel); null when the picture is no bigger.
+ */
+export type Prepared = { blob: Blob; width: number; height: number; thumb: Blob | null; original: File | null; fhd: Blob | null }
+
+const FHD_W = 1920
+const FHD_H = 1080
 
 export async function prepareUpload(file: File): Promise<Prepared> {
   if (!/^image\/(jpeg|png|webp)$/.test(file.type)) throw new Error("use a JPG, PNG or WebP picture")
@@ -74,12 +81,15 @@ export async function prepareUpload(file: File): Promise<Prepared> {
   const tw = Math.min(THUMB_W, w)
   const thumb = await toBlob(redraw(src, tw, Math.max(1, Math.round((h * tw) / w))), "image/jpeg", 0.82)
 
+  const fit = Math.min(1, FHD_W / w, FHD_H / h)
+  const fhd = fit < 1 ? await toBlob(redraw(src, Math.round(w * fit), Math.round(h * fit)), "image/png") : null
+
   const scale = Math.min(1, MAX_W / w, MAX_H / h)
-  if (scale === 1 && file.size <= SCREEN_MEDIA_MAX_BYTES) return { blob: file, width: w, height: h, thumb, original: null }
+  if (scale === 1 && file.size <= SCREEN_MEDIA_MAX_BYTES) return { blob: file, width: w, height: h, thumb, original: null, fhd }
   if (file.size > SCREEN_ORIGINAL_MAX_BYTES) throw new Error("that picture is over 100 MB. Export a smaller copy")
 
   const canvas = redraw(src, Math.round(w * scale), Math.round(h * scale))
-  const size = { width: canvas.width, height: canvas.height, thumb, original: file }
+  const size = { width: canvas.width, height: canvas.height, thumb, original: file, fhd }
   const png = await toBlob(canvas, "image/png")
   if (png && png.size <= SCREEN_MEDIA_MAX_BYTES) return { blob: png, ...size }
   for (const quality of [1, 0.97, 0.93]) {
@@ -91,9 +101,13 @@ export async function prepareUpload(file: File): Promise<Prepared> {
 
 /** Upload one picture and return its id. Throws with words to show. */
 export async function uploadPicture(file: File): Promise<string> {
-  const { blob, width, height, thumb, original } = await prepareUpload(file)
-  const sent = await Promise.all([sendParts(blob), original ? sendParts(original) : null])
-  const [{ upload, parts }, kept] = sent
+  const { blob, width, height, thumb, original, fhd } = await prepareUpload(file)
+  const small = fhd && fhd.size <= SCREEN_MEDIA_MAX_BYTES && fhd.size < blob.size ? fhd : null
+  const [{ upload, parts }, kept, fit] = await Promise.all([
+    sendParts(blob),
+    original ? sendParts(original) : null,
+    small ? sendParts(small) : null,
+  ])
 
   const form = new FormData()
   form.set("upload", upload)
@@ -101,6 +115,10 @@ export async function uploadPicture(file: File): Promise<string> {
   if (kept) {
     form.set("original", kept.upload)
     form.set("originalParts", String(kept.parts))
+  }
+  if (fit) {
+    form.set("fhd", fit.upload)
+    form.set("fhdParts", String(fit.parts))
   }
   form.set("name", file.name.replace(/\.[^.]+$/, ""))
   form.set("width", String(width))

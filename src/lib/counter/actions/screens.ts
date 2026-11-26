@@ -8,7 +8,7 @@ import { Prisma } from "@/generated/prisma/client"
 import { prisma } from "@/lib/prisma"
 import { hasOwnerAccess } from "@/lib/auth"
 import { getSession } from "@/lib/auth-scope"
-import { checkThumbKey, deleteScreenMedia } from "@/lib/blob"
+import { checkThumbKey, deleteScreenMedia, screenFhdKey } from "@/lib/blob"
 import { rateLimitKey } from "@/lib/rate-limit"
 import { EVERY_DAY, IDENTIFY_MS, SLIDES_MAX, TIMES_MAX, clampSeconds, isPairCode, normalizeCode } from "@/lib/screens/core"
 import { logger } from "@/lib/logger"
@@ -355,6 +355,7 @@ export async function deleteMedia(mediaId: string): Promise<ScreensResult> {
       await Promise.all([
         deleteScreenMedia(media.blobKey),
         deleteScreenMedia(checkThumbKey(media.blobKey)),
+        deleteScreenMedia(screenFhdKey(media.blobKey)),
         ...(media.originalKey ? [deleteScreenMedia(media.originalKey)] : []),
       ])
     } catch (err) {

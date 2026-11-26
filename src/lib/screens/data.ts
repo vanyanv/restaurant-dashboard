@@ -6,6 +6,7 @@ import {
   SEEN_WRITE_EVERY_MS,
   newPairCode,
   playlistVersion,
+  drawsFullHd,
   screenMediaUrl,
   storeOffsetMinutes,
   type TimeWindow,
@@ -40,8 +41,9 @@ const SLIDES = {
 
 type SlideRow = { id: string; seconds: number; media: { name: string; blobKey: string } }
 
-function tvSlides(rows: SlideRow[]): TvSlide[] {
-  return rows.map((s) => ({ id: s.id, url: screenMediaUrl(s.media.blobKey), seconds: s.seconds, name: s.media.name }))
+/** `fit`: ask for the 1920 x 1080 copy (the media route falls back to the full picture where there is none). */
+function tvSlides(rows: SlideRow[], fit?: "fhd"): TvSlide[] {
+  return rows.map((s) => ({ id: s.id, url: screenMediaUrl(s.media.blobKey, fit), seconds: s.seconds, name: s.media.name }))
 }
 
 /**
@@ -118,6 +120,7 @@ export async function contentFor(tokenHash: string, device: string | null): Prom
   }
 
   const pl = screen.playlist
+  const fit = drawsFullHd(device ?? screen.device) ? "fhd" : undefined
   return {
     paired: true,
     player: PLAYER_VERSION,
@@ -126,13 +129,13 @@ export async function contentFor(tokenHash: string, device: string | null): Prom
       ? {
           name: pl.name,
           version: playlistVersion(
-            pl.slides.map((s) => ({ id: s.id, seconds: s.seconds, key: s.media.blobKey })),
+            pl.slides.map((s) => ({ id: s.id, seconds: s.seconds, key: s.media.blobKey + (fit ?? "") })),
             pl.name,
           ),
-          slides: tvSlides(pl.slides),
+          slides: tvSlides(pl.slides, fit),
         }
       : null,
-    times: screen.times.map((t) => ({ id: t.id, days: t.days, start: t.startMinute, end: t.endMinute, slides: tvSlides(t.playlist.slides) })),
+    times: screen.times.map((t) => ({ id: t.id, days: t.days, start: t.startMinute, end: t.endMinute, slides: tvSlides(t.playlist.slides, fit) })),
     clock: { now: now.toISOString(), offsetMinutes: storeOffsetMinutes(now) },
     identifyUntil: screen.identifyUntil && screen.identifyUntil > now ? screen.identifyUntil.toISOString() : null,
   }
