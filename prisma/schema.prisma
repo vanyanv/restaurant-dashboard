@@ -2749,6 +2749,10 @@ model ScreenMedia {
   width       Int?
   height      Int?
   bytes       Int
+  /// The owner's untouched upload, kept when the TV copy (`blobKey`) had to be
+  /// redrawn: bigger than 4K or over 25 MB. Null when the TV copy is the original.
+  originalKey   String?
+  originalBytes Int?
   createdAt   DateTime @default(now())
 
   store  Store?        @relation(fields: [storeId], references: [id], onDelete: Cascade)

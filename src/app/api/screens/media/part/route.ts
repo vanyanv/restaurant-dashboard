@@ -3,7 +3,7 @@ import { getSession } from "@/lib/auth-scope"
 import { hasOwnerAccess } from "@/lib/auth"
 import { putScreenPart, screenPartKey } from "@/lib/blob"
 import { rateLimit, rateLimitKey } from "@/lib/rate-limit"
-import { SCREEN_MAX_PARTS, SCREEN_PART_BYTES } from "@/lib/screens/limits"
+import { SCREEN_ORIGINAL_MAX_PARTS, SCREEN_PART_BYTES } from "@/lib/screens/limits"
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 
@@ -26,7 +26,7 @@ export async function PUT(request: NextRequest) {
 
   const upload = request.nextUrl.searchParams.get("upload") ?? ""
   const part = Number(request.nextUrl.searchParams.get("part"))
-  if (!UUID.test(upload) || !Number.isInteger(part) || part < 0 || part >= SCREEN_MAX_PARTS) {
+  if (!UUID.test(upload) || !Number.isInteger(part) || part < 0 || part >= SCREEN_ORIGINAL_MAX_PARTS) {
     return NextResponse.json({ error: "That upload could not be read" }, { status: 400 })
   }
   const bytes = Buffer.from(await request.arrayBuffer())

@@ -362,6 +362,36 @@ export async function putScreenThumb(pathname: string, jpegBytes: Buffer): Promi
   await putCheckObject(checkThumbKey(pathname), jpegBytes, "image/jpeg")
 }
 
+/**
+ * The owner's original file, kept beside the TV copy whenever the TV copy was
+ * redrawn: `screens/<account>/originals/<uuid>.<ext>`, same uuid. The extra
+ * folder keeps it off /api/tv/media, whose key rule allows no subfolder.
+ */
+/** The lossless 1920 x 1080 copy, beside the TV copy like its thumbnail (no new column). */
+export function screenFhdKey(blobKey: string): string {
+  return `${blobKey.replace(/\.[A-Za-z0-9]+$/, "")}.fhd.png`
+}
+
+export async function putScreenFhd(blobKey: string, pngBytes: Buffer): Promise<void> {
+  await putCheckObject(screenFhdKey(blobKey), pngBytes, "image/png")
+}
+
+export function screenOriginalKey(blobKey: string, contentType: ProductPhotoContentType): string {
+  const m = /^(screens\/[^/]+)\/([^/]+)\.[A-Za-z0-9]+$/.exec(blobKey)
+  if (!m) throw new Error("bad screen media key")
+  return `${m[1]}/originals/${m[2]}.${PRODUCT_PHOTO_CONTENT_TYPES[contentType]}`
+}
+
+export async function putScreenOriginal(
+  blobKey: string,
+  bytes: Buffer,
+  contentType: ProductPhotoContentType,
+): Promise<string> {
+  const key = screenOriginalKey(blobKey, contentType)
+  await putCheckObject(key, bytes, contentType)
+  return key
+}
+
 /** One part of a picture too big for one request. Joined and deleted by the upload that finishes it. */
 export function screenPartKey(accountId: string, uploadId: string, part: number): string {
   return `screens-parts/${accountId.replace(/[^A-Za-z0-9._-]/g, "_")}/${uploadId}/${part}`

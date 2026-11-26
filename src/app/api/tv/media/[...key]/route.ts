@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
-import { checkThumbKey, getScreenMediaStream } from "@/lib/blob"
+import { checkThumbKey, getScreenMediaStream, screenFhdKey } from "@/lib/blob"
 import { logger } from "@/lib/logger"
 
 /**
@@ -30,6 +30,11 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   try {
     // `?small=1`: the dashboard's copy. Pictures uploaded before small copies existed have none.
     result = request.nextUrl.searchParams.has("small") ? await getScreenMediaStream(checkThumbKey(blobKey)) : null
+    // `?fit=fhd`: the lossless 1920 x 1080 copy, for a TV that draws at that size. Older pictures have none.
+    if (result?.statusCode !== 200 && request.nextUrl.searchParams.get("fit") === "fhd") {
+      result = await getScreenMediaStream(screenFhdKey(blobKey))
+      if (result.statusCode === 200) result = { ...result, contentType: "image/png" }
+    }
     if (result?.statusCode !== 200) result = await getScreenMediaStream(blobKey)
   } catch (err) {
     logger.error("[screens] media fetch failed", { blobKey, message: err instanceof Error ? err.message : String(err) })
