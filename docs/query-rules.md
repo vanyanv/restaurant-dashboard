@@ -73,6 +73,10 @@ A PR that breaks a rule on purpose says which one and why in its body.
     via `getPgPool()`. Don't create another `pg.Pool`. The pool
     stays at 10: on 2026-11-20 a pool of 5 made Decisions 13% slower, since
     pages run 20-47 queries at once. Lower it only after re-measuring.
+    Idle clients close after 2 s (`src/lib/pg-pool-idle.ts`), because
+    `attachDatabasePool` keeps the function instance alive for that long
+    after every query and Vercel bills the memory; at node-postgres's 10 s
+    default it was most of the account's function GB-hours.
 
 ## Proof
 

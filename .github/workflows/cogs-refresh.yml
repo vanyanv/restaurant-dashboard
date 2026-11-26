@@ -25,83 +25,47 @@ permissions:
   issues: write
 
 jobs:
-  list-stores:
+  # One job on the runner since 2026-11-26. This used to be two jobs that
+  # called the Vercel app: GET /api/cron/cogs/stores, then a matrix of
+  # POST /api/cron/cogs/sweep, one per store. The recompute is the app's most
+  # processor-heavy background job and all of it counted against the Vercel
+  # Hobby plan's 4 hours of Active CPU a month. scripts/sweep-cogs.ts runs the
+  # same code here instead (src/lib/cogs-sweep-job.ts): same store list, same
+  # source-change skip, same cogs.stores and cogs.sweep JobRun rows. Stores go
+  # one after another; a store that fails does not stop the rest, and the step
+  # fails at the end if any did.
+  sweep:
     runs-on: ubuntu-latest
-    outputs:
-      ids: ${{ steps.fetch.outputs.ids }}
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v6
-      - name: GET /api/cron/cogs/stores
-        id: fetch
-        env:
-          APP_URL: ${{ secrets.APP_URL }}
-          CRON_SECRET: ${{ secrets.CRON_SECRET }}
-          FORCE: ${{ github.event.inputs.force || 'false' }}
-          LOG_FILE: logs/cogs-refresh-list-stores.log
-          CRON_MAX_TIME: "30"
-        run: |
-          bash .github/scripts/run-with-cron-logging.sh bash -lc '
-            payload=$(.github/scripts/curl-cron-json.sh GET "$APP_URL/api/cron/cogs/stores?force=$FORCE")
-            ids=$(echo "$payload" | jq -c "[.stores[].id]")
-            echo "Found stores: $ids"
-            echo "ids=$ids" >> "$GITHUB_OUTPUT"
-          '
-      - name: Upload failure log
-        if: failure()
-        uses: actions/upload-artifact@v4
+      - uses: actions/setup-node@v6
         with:
-          name: cogs-refresh-list-stores-log-${{ github.run_id }}
-          path: logs/cogs-refresh-list-stores.log
-          retention-days: 14
-      - name: Open or update incident issue
-        if: failure()
-        env:
-          GH_TOKEN: ${{ github.token }}
-          WORKFLOW_NAME: COGS Refresh Stores
-          ISSUE_TITLE: "[Auto] COGS Refresh Stores failing"
-          ISSUE_LABEL: cron-failure
-          LOG_FILE: logs/cogs-refresh-list-stores.log
-          FAILED_EXIT_CODE: ${{ steps.fetch.outputs.status }}
-        run: bash .github/scripts/report-workflow-failure.sh
-      - name: Close incident issue on recovery
-        if: success()
-        env:
-          GH_TOKEN: ${{ github.token }}
-          WORKFLOW_NAME: COGS Refresh Stores
-          ISSUE_TITLE: "[Auto] COGS Refresh Stores failing"
-          ISSUE_LABEL: cron-failure
-        run: bash .github/scripts/report-workflow-recovery.sh
-
-  refresh:
-    needs: list-stores
-    if: needs.list-stores.outputs.ids != '[]'
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      max-parallel: 4
-      matrix:
-        storeId: ${{ fromJson(needs.list-stores.outputs.ids) }}
-    steps:
-      - uses: actions/checkout@v6
-      - name: POST /api/cron/cogs/sweep (last 30 days)
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npx prisma generate
+      - name: Sweep COGS (last ${{ github.event.inputs.lookbackDays || '30' }} days)
         id: cron
-        env:
-          APP_URL: ${{ secrets.APP_URL }}
-          CRON_SECRET: ${{ secrets.CRON_SECRET }}
-          STORE_ID: ${{ matrix.storeId }}
-          LOOKBACK: ${{ github.event.inputs.lookbackDays || '30' }}
-          FORCE: ${{ github.event.inputs.force || 'false' }}
-          LOG_FILE: logs/cogs-refresh-${{ matrix.storeId }}.log
-          CRON_MAX_TIME: "295"
         run: |
           bash .github/scripts/run-with-cron-logging.sh \
-            .github/scripts/curl-cron-json.sh POST "$APP_URL/api/cron/cogs/sweep?storeId=$STORE_ID&lookbackDays=$LOOKBACK&force=$FORCE"
+            npx tsx scripts/sweep-cogs.ts "$LOOKBACK" "--force=$FORCE"
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          # The sweep retires the saved figures of the days it rewrote
+          # (src/lib/cache). Without these they stay pre-sweep for up to 6h.
+          UPSTASH_REDIS_REST_URL: ${{ secrets.UPSTASH_REDIS_REST_URL }}
+          UPSTASH_REDIS_REST_TOKEN: ${{ secrets.UPSTASH_REDIS_REST_TOKEN }}
+          LOOKBACK: ${{ github.event.inputs.lookbackDays || '30' }}
+          FORCE: ${{ github.event.inputs.force || 'false' }}
+          LOG_FILE: logs/cogs-refresh.log
+          CRON_RETRIES: "2"
       - name: Upload failure log
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: cogs-refresh-log-${{ matrix.storeId }}-${{ github.run_id }}
-          path: logs/cogs-refresh-${{ matrix.storeId }}.log
+          name: cogs-refresh-log-${{ github.run_id }}
+          path: logs/cogs-refresh.log
           retention-days: 14
       - name: Open or update incident issue
         if: failure()
@@ -110,7 +74,7 @@ jobs:
           WORKFLOW_NAME: COGS Refresh
           ISSUE_TITLE: "[Auto] COGS Refresh failing"
           ISSUE_LABEL: cron-failure
-          LOG_FILE: logs/cogs-refresh-${{ matrix.storeId }}.log
+          LOG_FILE: logs/cogs-refresh.log
           FAILED_EXIT_CODE: ${{ steps.cron.outputs.status }}
         run: bash .github/scripts/report-workflow-failure.sh
       - name: Close incident issue on recovery
