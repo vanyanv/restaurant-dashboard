@@ -13,6 +13,7 @@ import { rateLimitKey } from "@/lib/rate-limit"
 import { EVERY_DAY, IDENTIFY_MS, SLIDES_MAX, TIMES_MAX, clampSeconds, isPairCode, normalizeCode } from "@/lib/screens/core"
 import { logger } from "@/lib/logger"
 import { pingAccountTvs, pingTvs } from "@/lib/screens/push"
+import { recordScreenEvent } from "@/lib/screens/events"
 
 /**
  * The owner's write path for Screens. Every action starts from `ownerAccount`
@@ -26,10 +27,14 @@ export type ScreensResult = { ok: true; id?: string } | { ok: false; error: stri
 class Refused extends Error {}
 
 async function ownerAccount(): Promise<string> {
+  return (await owner()).accountId
+}
+
+async function owner(): Promise<{ accountId: string; userId: string | null }> {
   const session = await getSession()
   if (!session?.user) throw new Refused("Sign in again to make changes")
   if (!hasOwnerAccess(session.user.role)) throw new Refused("Only an owner can change screens")
-  return session.user.accountId
+  return { accountId: session.user.accountId, userId: (session.user as { id?: string }).id ?? null }
 }
 
 /** The pages show the change, and every TV in the account hears of it now rather than at its next check. */
@@ -69,7 +74,7 @@ const CLAIM_LIMIT_IP = { limit: 30, windowMs: 10 * 60_000 }
 export async function claimScreen(raw: z.input<typeof ClaimInput>): Promise<ScreensResult> {
   try {
     const input = ClaimInput.parse(raw)
-    const accountId = await ownerAccount()
+    const { accountId, userId } = await owner()
     const code = normalizeCode(input.code)
     if (!isPairCode(code)) return { ok: false, error: "The code on the TV is 6 digits" }
 
@@ -94,13 +99,14 @@ export async function claimScreen(raw: z.input<typeof ClaimInput>): Promise<Scre
       if (existing && existing.accountId !== accountId) throw new Refused("That TV is already paired to another account")
       if (existing) {
         // Re-pairing a TV of this account (a reset, a move) keeps its pictures on the same row.
-        return tx.screen.update({
+        const again = await tx.screen.update({
           where: { id: existing.id },
           data: { storeId: input.storeId, name: input.name, pairedAt: new Date(), lastSeenAt: null },
           select: { id: true },
         })
+        return { ...again, repaired: true }
       }
-      return tx.screen.create({
+      const made = await tx.screen.create({
         data: {
           accountId,
           storeId: input.storeId,
@@ -110,8 +116,18 @@ export async function claimScreen(raw: z.input<typeof ClaimInput>): Promise<Scre
         },
         select: { id: true },
       })
+      return { ...made, repaired: false }
     })
 
+    await recordScreenEvent({
+      kind: screen.repaired ? "repaired" : "paired",
+      tokenHash: pairing.tokenHash,
+      accountId,
+      screenName: input.name,
+      storeId: input.storeId,
+      device: pairing.device,
+      userId,
+    })
     await refresh(accountId)
     return { ok: true, id: screen.id }
   } catch (err) {
@@ -142,10 +158,10 @@ export async function updateScreen(raw: z.input<typeof ScreenInput>): Promise<Sc
 /** Unpair a screen, and drop the picture lists only it used. The TV goes back to showing a code. */
 export async function removeScreen(screenId: string): Promise<ScreensResult> {
   try {
-    const accountId = await ownerAccount()
+    const { accountId, userId } = await owner()
     const screen = await prisma.screen.findFirst({
       where: { id: id.parse(screenId), accountId },
-      select: { id: true, tokenHash: true, playlistId: true, times: { select: { playlistId: true } } },
+      select: { id: true, name: true, storeId: true, device: true, tokenHash: true, playlistId: true, times: { select: { playlistId: true } } },
     })
     if (!screen) return { ok: false, error: "That screen is gone. Reload the page." }
     const lists = [screen.playlistId, ...screen.times.map((t) => t.playlistId)].filter((x): x is string => x !== null)
@@ -157,6 +173,15 @@ export async function removeScreen(screenId: string): Promise<ScreensResult> {
     revalidatePath("/m/screens")
     // The row is gone, so an account-wide ping would miss it: tell this TV by name, and it goes back to its code.
     await pingTvs([screen.tokenHash])
+    await recordScreenEvent({
+      kind: "unpaired",
+      tokenHash: screen.tokenHash,
+      accountId,
+      screenName: screen.name,
+      storeId: screen.storeId,
+      device: screen.device,
+      userId,
+    })
     return { ok: true }
   } catch (err) {
     return fail(err)

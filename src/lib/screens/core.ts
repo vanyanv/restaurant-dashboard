@@ -44,6 +44,17 @@ export function tokenFromHeader(header: string | null): string | null {
   return m && isDeviceToken(m[1]) ? m[1] : null
 }
 
+/**
+ * What the TV says it is, cleaned for storing. The player joins its parts with
+ * "·", which arrives mangled in an HTTP header; any run of non-ASCII is put
+ * back as one "·", so "Tizen 7.0 Â· 3840x2160" reads "Tizen 7.0 · 3840x2160".
+ */
+export function cleanDevice(raw: string | null | undefined): string | null {
+  if (!raw) return null
+  const s = raw.replace(/[^\x20-\x7e]+/g, "·").replace(/\s+/g, " ").trim().slice(0, 120)
+  return s || null
+}
+
 export type ScreenState = "on" | "off" | "waiting"
 
 /** On, off, or never heard from since pairing. */

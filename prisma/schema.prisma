@@ -2737,6 +2737,27 @@ model ScreenSlide {
   @@index([mediaId])
 }
 
+/// What happened to a TV's pairing, kept because Vercel keeps runtime logs
+/// for an hour: who paired or unpaired a screen, and when a TV that was once
+/// paired is back on its code.
+model ScreenEvent {
+  id         String   @id @default(cuid())
+  /// Null for "code": an unpaired TV belongs to no account.
+  accountId  String?
+  /// "paired", "repaired", "unpaired" or "code" (a TV seen paired before is showing a pairing code).
+  kind       String
+  /// First 12 hex of the TV's token hash: enough to tell TVs apart, useless for posing as one.
+  tv         String
+  screenName String?
+  storeId    String?
+  device     String?
+  userId     String?
+  at         DateTime @default(now())
+
+  @@index([accountId, at(sort: Desc)])
+  @@index([tv])
+}
+
 model ScreenMedia {
   id          String   @id @default(cuid())
   accountId   String
