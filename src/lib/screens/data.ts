@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma"
 import { pairLink, qrRows } from "./pair-link"
 import { tvPush } from "./push"
+import { noteCodeShown } from "./events"
 import {
   PAIR_CODE_TTL_MS,
   PLAYER_VERSION,
@@ -71,6 +72,8 @@ export async function pairingFor(tokenHash: string, device: string | null): Prom
         prisma.screenPairing.deleteMany({ where: { expiresAt: { lte: now } } }),
         prisma.screenPairing.create({ data: { code, tokenHash, device, expiresAt } }),
       ])
+      // Once per new code (every 10 minutes at most per TV), never per poll.
+      await noteCodeShown(tokenHash, device)
       return { code, expiresAt }
     } catch (err) {
       if ((err as { code?: string }).code !== "P2002") throw err

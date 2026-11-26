@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
-import { hashToken, tokenFromHeader } from "@/lib/screens/core"
+import { cleanDevice, hashToken, tokenFromHeader } from "@/lib/screens/core"
 import { contentFor } from "@/lib/screens/data"
 import { rateLimit, rateLimitKey } from "@/lib/rate-limit"
 
@@ -35,7 +35,7 @@ export async function GET(request: NextRequest) {
   const limited = await rateLimitKey(`tv:${tokenHash.slice(0, 24)}`, { limit: 30, windowMs: 60_000 })
   if (limited) return withCors(limited)
 
-  const device = request.headers.get("x-screen-device")?.slice(0, 120) ?? null
+  const device = cleanDevice(request.headers.get("x-screen-device"))
   const content = await contentFor(tokenHash, device)
   return NextResponse.json(content, { headers: { ...CORS, "Cache-Control": "no-store" } })
 }
