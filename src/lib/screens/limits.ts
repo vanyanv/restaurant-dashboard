@@ -9,6 +9,13 @@ export const ONLINE_WINDOW_MS = 2 * 60_000
 /** How often the TV asks for its playlist. */
 export const TV_POLL_MS = 30_000
 
+/**
+ * How often it asks while Pusher's socket is up and tells it of changes. A
+ * backstop, so it can be slow, but it is also how the dashboard knows the TV
+ * is on: it must stay well inside ONLINE_WINDOW_MS or live TVs read "Off".
+ */
+export const TV_PUSHED_POLL_MS = 60_000
+
 /** lastSeenAt is written at most this often per screen, so polling is not a write per call. */
 export const SEEN_WRITE_EVERY_MS = 60_000
 
@@ -40,7 +47,7 @@ export const SCREEN_ORIGINAL_MAX_PARTS = Math.ceil(SCREEN_ORIGINAL_MAX_BYTES / S
 export const SCREEN_THUMB_MAX_BYTES = 400 * 1024
 
 /** Bump when the hosted /tv page must be picked up by TVs already showing it. */
-export const PLAYER_VERSION = "2"
+export const PLAYER_VERSION = "3"
 
 /** Every store is in Los Angeles; windows of the week are in store time. */
 export const SCREEN_TZ = "America/Los_Angeles"

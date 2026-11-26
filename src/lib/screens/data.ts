@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma"
 import { pairLink, qrRows } from "./pair-link"
+import { tvPush } from "./push"
 import {
   PAIR_CODE_TTL_MS,
   PLAYER_VERSION,
@@ -21,11 +22,15 @@ import {
 export type TvSlide = { id: string; url: string; seconds: number; name: string }
 export type TvTime = TimeWindow & { id: string; slides: TvSlide[] }
 
+/** Where the TV listens for "something changed", or null when push is off. */
+type TvPushInfo = { key: string; cluster: string; channel: string } | null
+
 export type TvContent =
-  | { paired: false; code: string; expiresAt: string; player: string; /** The pairing link as rows of 0 and 1. */ qr: string[] }
+  | { paired: false; code: string; expiresAt: string; player: string; /** The pairing link as rows of 0 and 1. */ qr: string[]; push: TvPushInfo }
   | {
       paired: true
       player: string
+      push: TvPushInfo
       screen: { name: string; store: string }
       playlist: { name: string; version: string; slides: TvSlide[] } | null
       times: TvTime[]
@@ -103,7 +108,7 @@ export async function contentFor(tokenHash: string, device: string | null): Prom
 
   if (!screen) {
     const p = await pairingFor(tokenHash, device)
-    return { paired: false, code: p.code, expiresAt: p.expiresAt.toISOString(), player: PLAYER_VERSION, qr: qrRows(pairLink(p.code)) }
+    return { paired: false, code: p.code, expiresAt: p.expiresAt.toISOString(), player: PLAYER_VERSION, qr: qrRows(pairLink(p.code)), push: tvPush(tokenHash) }
   }
 
   const now = new Date()
@@ -124,6 +129,7 @@ export async function contentFor(tokenHash: string, device: string | null): Prom
   return {
     paired: true,
     player: PLAYER_VERSION,
+    push: tvPush(tokenHash),
     screen: { name: screen.name, store: screen.store.name },
     playlist: pl
       ? {

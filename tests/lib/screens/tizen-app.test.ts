@@ -12,9 +12,13 @@ describe("ChrisnEddysTV package", () => {
     expect(pkg).toMatch(/^[A-Za-z0-9]{10}$/)
     expect(/application id="([^"]+)"/.exec(config)![1]).toBe(`${pkg}.ChrisnEddysTV`)
   })
-  it("names the TV screen size and only the dashboard's address", () => {
+  it("names the TV screen size, and only the dashboard's address and Pusher's socket", () => {
     expect(config).toContain('name="http://tizen.org/feature/screen.size.normal.1080.1920"')
-    expect(config.match(/<access [^>]*>/g)).toEqual(['<access origin="https://dashboard.chrisneddys.com" subdomains="false"/>'])
+    expect(config.match(/<access [^>]*>/g)).toEqual([
+      '<access origin="https://dashboard.chrisneddys.com" subdomains="false"/>',
+      '<access origin="wss://pusher.com" subdomains="true"/>',
+      '<access origin="https://pusher.com" subdomains="true"/>',
+    ])
   })
   it("the build writes the install file a business display reads", () => {
     const sh = read("build.sh")
