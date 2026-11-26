@@ -2,6 +2,7 @@ import { PrismaClient } from '@/generated/prisma/client'
 import { PrismaPg } from '@prisma/adapter-pg'
 import { attachDatabasePool } from '@vercel/functions'
 import { Pool } from 'pg'
+import { poolIdleMs } from '@/lib/pg-pool-idle'
 import { after } from 'next/server'
 import {
   bumpClosedGeneration,
@@ -85,6 +86,9 @@ export const getPgPool = (): Pool => {
     connectionString: stripSslMode(databaseUrl),
     ssl: needsSsl(databaseUrl),
     max: poolMax(),
+    // 2 s, not node-postgres's 10 s: on Vercel this is also how long each
+    // instance is held open after its last query. See `@/lib/pg-pool-idle`.
+    idleTimeoutMillis: poolIdleMs(),
   })
   // Closes idle clients before a Vercel function suspends, so a frozen
   // instance does not hold Neon pooler connections. Does nothing off Vercel.

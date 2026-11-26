@@ -1,55 +1,16 @@
 import { NextResponse } from "next/server"
-import { prisma } from "@/lib/prisma"
 import { withCronAuth } from "@/lib/cron-auth"
-import { withJobRun } from "@/lib/monitoring/job-run"
+import { listCogsSweepStores } from "@/lib/cogs-sweep-job"
 
 /**
- * Enumerate active store IDs for matrix fan-out from GitHub Actions. The
- * cogs-sweep / cogs-refresh workflows hit this first, then expand the result
- * into a per-store matrix so each downstream sweep call is bounded to one
- * store and stays well under Vercel's function timeout.
+ * The active store ids a COGS sweep would visit. The scheduled sweeps read
+ * this list on the GitHub Actions runner now (`scripts/sweep-cogs.ts`); the
+ * endpoint stays for a sweep triggered by hand.
  */
 export const GET = withCronAuth(async (request) => {
   const url = new URL(request.url)
   const force = url.searchParams.get("force") === "true"
-
-  const result = await withJobRun(
-    "cogs.stores",
-    { triggeredBy: "github-actions", metadata: { force } },
-    async ({ addRows }) => {
-      const activeStores = await prisma.store.findMany({
-        where: { isActive: true },
-        select: {
-          id: true,
-          name: true,
-          accountId: true,
-          _count: {
-            select: {
-              otterMenuItems: true,
-              otterOrders: true,
-            },
-          },
-        },
-        orderBy: { name: "asc" },
-      })
-
-      const rows = (force
-        ? activeStores
-        : activeStores.filter(
-            (store) =>
-              store._count.otterMenuItems > 0 || store._count.otterOrders > 0,
-          )
-      ).map(({ _count, ...store }) => store)
-
-      addRows(rows.length)
-      return {
-        stores: rows,
-        activeStoreCount: activeStores.length,
-        skippedEmptyStoreCount: activeStores.length - rows.length,
-        force,
-      }
-    }
+  return NextResponse.json(
+    await listCogsSweepStores({ force, triggeredBy: "github-actions" }),
   )
-
-  return NextResponse.json(result)
 })
