@@ -385,7 +385,7 @@ p b { color: #ede6e1; }
       slideTimer = null;
       bring(it);
       only(null);
-      setTimeout(function () { Object.keys(was).forEach(function (u) { if (was[u] !== it) drop(was[u]); }); }, FADE + 100);
+      setTimeout(function () { Object.keys(was).forEach(function (u) { if (live[u] !== was[u]) drop(was[u]); }); }, FADE + 100);
     });
     P.all(urls.map(function (u) { return want1[u]; })).then(function (items) {
       var got = {};
@@ -528,10 +528,17 @@ p b { color: #ede6e1; }
     var s;
     try { s = new WebSocket("wss://ws-" + p.cluster + ".pusher.com/app/" + encodeURIComponent(p.key) + "?protocol=7&client=cne-tv&version=1.0"); } catch (e) { redial(p); return; }
     sock = s;
-    // Pusher speaks at least every 2 minutes. A socket quiet for longer is dead, even if it never said so.
+    // Pusher's own rule: after activity_timeout seconds with nothing heard, send
+    // pusher:ping; no answer in 30 seconds means the socket is dead, even if it
+    // never said so. (Its WebSocket-level pings never reach this page.)
+    var idle = 120000;
     function quiet() {
       if (sockQuiet) clearTimeout(sockQuiet);
-      sockQuiet = setTimeout(function () { if (sock === s) { hangUp(); redial(p); } }, 180000);
+      sockQuiet = setTimeout(function () {
+        if (sock !== s) return;
+        try { s.send(JSON.stringify({ event: "pusher:ping", data: {} })); } catch (x) {}
+        sockQuiet = setTimeout(function () { if (sock === s) { hangUp(); redial(p); } }, 30000);
+      }, idle);
     }
     quiet();
     s.onmessage = function (m) {
@@ -539,7 +546,10 @@ p b { color: #ede6e1; }
       quiet();
       var e;
       try { e = JSON.parse(m.data); } catch (x) { return; }
-      if (e.event === "pusher:connection_established") s.send(JSON.stringify({ event: "pusher:subscribe", data: { channel: p.channel } }));
+      if (e.event === "pusher:connection_established") {
+        try { var t = JSON.parse(e.data).activity_timeout; if (t > 0) { idle = Math.min(t, 120) * 1000; quiet(); } } catch (x) {}
+        s.send(JSON.stringify({ event: "pusher:subscribe", data: { channel: p.channel } }));
+      }
       else if (e.event === "pusher_internal:subscription_succeeded") { sockUp = true; sockWait = 5000; poll(); }
       else if (e.event === "pusher:ping") s.send(JSON.stringify({ event: "pusher:pong", data: {} }));
       else if (e.event === "change") poll();

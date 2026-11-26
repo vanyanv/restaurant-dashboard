@@ -16,6 +16,9 @@ afterEach(() => {
 describe("TV push", () => {
   it("is off, and sends nothing, without all four keys", async () => {
     vi.stubEnv("PUSHER_APP_ID", "3")
+    vi.stubEnv("PUSHER_KEY", undefined)
+    vi.stubEnv("PUSHER_SECRET", undefined)
+    vi.stubEnv("PUSHER_CLUSTER", undefined)
     expect(pushConfig()).toBeNull()
     expect(tvPush("h1")).toBeNull()
     const f = vi.fn()
