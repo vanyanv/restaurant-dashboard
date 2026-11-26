@@ -1,5 +1,6 @@
 import { getAccountStores } from "@/lib/account-stores"
 import { prisma } from "@/lib/prisma"
+import { seenAt } from "@/lib/screens/tv-cache"
 import { activeTime, screenMediaUrl, screenState, storeOffsetMinutes, type ScreenState } from "@/lib/screens/core"
 import { classify, guardSection, lazy, type StreamedSections } from "./types"
 import type { SectionData } from "@/lib/counter/section-data"
@@ -70,6 +71,7 @@ export async function loadScreens(accountId: string): Promise<ScreensData> {
         storeId: true,
         device: true,
         lastSeenAt: true,
+        tokenHash: true,
         playlist: { select: { slides: SLIDES } },
         times: {
           orderBy: { createdAt: "asc" },
@@ -83,6 +85,13 @@ export async function loadScreens(accountId: string): Promise<ScreensData> {
       select: { id: true, name: true, storeId: true, blobKey: true, width: true, height: true },
     }),
   ])
+
+  // A TV served from Redis notes its check-in there, not on the row; take the later of the two.
+  const seen = await seenAt(screens.map((s) => s.tokenHash))
+  const lastSeen = (s: { tokenHash: string; lastSeenAt: Date | null }) => {
+    const r = seen.get(s.tokenHash)
+    return r && (!s.lastSeenAt || r > s.lastSeenAt) ? r : s.lastSeenAt
+  }
 
   const now = new Date()
   const local = new Date(now.getTime() + storeOffsetMinutes(now) * 60_000)
@@ -101,8 +110,8 @@ export async function loadScreens(accountId: string): Promise<ScreensData> {
       times,
       onNow: activeTime(times.filter((t) => t.slides.length > 0), day, minute)?.id ?? null,
       device: s.device,
-      state: screenState(s.lastSeenAt, now),
-      lastSeenAt: s.lastSeenAt?.toISOString() ?? null,
+      state: screenState(lastSeen(s), now),
+      lastSeenAt: lastSeen(s)?.toISOString() ?? null,
     }
   })
 
