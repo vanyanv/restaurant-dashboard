@@ -12,7 +12,7 @@ import { checkThumbKey, deleteScreenMedia, screenFhdKey } from "@/lib/blob"
 import { rateLimitKey } from "@/lib/rate-limit"
 import { EVERY_DAY, IDENTIFY_MS, SLIDES_MAX, TIMES_MAX, clampSeconds, isPairCode, normalizeCode } from "@/lib/screens/core"
 import { logger } from "@/lib/logger"
-import { pingAccountTvs } from "@/lib/screens/push"
+import { pingAccountTvs, pingTvs } from "@/lib/screens/push"
 
 /**
  * The owner's write path for Screens. Every action starts from `ownerAccount`
@@ -145,7 +145,7 @@ export async function removeScreen(screenId: string): Promise<ScreensResult> {
     const accountId = await ownerAccount()
     const screen = await prisma.screen.findFirst({
       where: { id: id.parse(screenId), accountId },
-      select: { id: true, playlistId: true, times: { select: { playlistId: true } } },
+      select: { id: true, tokenHash: true, playlistId: true, times: { select: { playlistId: true } } },
     })
     if (!screen) return { ok: false, error: "That screen is gone. Reload the page." }
     const lists = [screen.playlistId, ...screen.times.map((t) => t.playlistId)].filter((x): x is string => x !== null)
@@ -153,7 +153,10 @@ export async function removeScreen(screenId: string): Promise<ScreensResult> {
       prisma.screen.delete({ where: { id: screen.id }, select: { id: true } }),
       prisma.screenPlaylist.deleteMany({ where: { id: { in: lists }, accountId, screens: { none: {} }, times: { none: {} } } }),
     ])
-    await refresh(accountId)
+    revalidatePath("/dashboard/screens")
+    revalidatePath("/m/screens")
+    // The row is gone, so an account-wide ping would miss it: tell this TV by name, and it goes back to its code.
+    await pingTvs([screen.tokenHash])
     return { ok: true }
   } catch (err) {
     return fail(err)

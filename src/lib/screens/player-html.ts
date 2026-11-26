@@ -1,4 +1,4 @@
-import { PLAYER_VERSION, TV_POLL_MS } from "./limits"
+import { PLAYER_VERSION, TV_POLL_MS, TV_PUSHED_POLL_MS } from "./limits"
 import { TV_LOGO } from "./tv-logo"
 
 /**
@@ -504,9 +504,9 @@ p b { color: #ede6e1; }
   /* ---- told the moment something changes ---- */
 
   // Pusher's socket protocol by hand: its library would not run on the oldest
-  // sets. While the socket is up the 30-second check slows to every 5 minutes,
+  // sets. While the socket is up the 30-second check slows to once a minute,
   // as a backstop; when it drops, the TV is back on 30 seconds.
-  var PUSHED_POLL = 300000, sock = null, sockFor = "", sockUp = false, sockWait = 5000, sockTimer = null, sockQuiet = null;
+  var PUSHED_POLL = ${TV_PUSHED_POLL_MS}, sock = null, sockFor = "", sockUp = false, sockWait = 5000, sockTimer = null, sockQuiet = null;
   function listen(p) {
     var want = p && p.key && p.cluster && p.channel ? p.key + "|" + p.cluster + "|" + p.channel : "";
     if (want === sockFor) return;

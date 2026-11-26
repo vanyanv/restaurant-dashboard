@@ -9,6 +9,13 @@ export const ONLINE_WINDOW_MS = 2 * 60_000
 /** How often the TV asks for its playlist. */
 export const TV_POLL_MS = 30_000
 
+/**
+ * How often it asks while Pusher's socket is up and tells it of changes. A
+ * backstop, so it can be slow, but it is also how the dashboard knows the TV
+ * is on: it must stay well inside ONLINE_WINDOW_MS or live TVs read "Off".
+ */
+export const TV_PUSHED_POLL_MS = 60_000
+
 /** lastSeenAt is written at most this often per screen, so polling is not a write per call. */
 export const SEEN_WRITE_EVERY_MS = 60_000
 

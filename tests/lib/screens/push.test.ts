@@ -4,6 +4,7 @@ vi.mock("@/lib/prisma", () => ({ prisma: { screen: { findMany: vi.fn(async () =>
 
 import { pingAccountTvs, pushConfig, signedEventsUrl, tvChannel, tvPush } from "@/lib/screens/push"
 import { prisma } from "@/lib/prisma"
+import { ONLINE_WINDOW_MS, TV_PUSHED_POLL_MS } from "@/lib/screens/limits"
 
 const ENV = { PUSHER_APP_ID: "3", PUSHER_KEY: "278d425bdf160c739803", PUSHER_SECRET: "7ad3773142a6692b25b8", PUSHER_CLUSTER: "us3" }
 
@@ -50,5 +51,10 @@ describe("TV push", () => {
     expect(sent).toEqual({ name: "change", channels: [tvChannel("h1"), tvChannel("h2")], data: "{}" })
     vi.stubGlobal("fetch", vi.fn(async () => { throw new Error("down") }))
     await expect(pingAccountTvs("acc1")).resolves.toBeUndefined()
+  })
+
+  it("still checks in often enough, with the socket up, for the dashboard to show the TV as on", () => {
+    // Two checks must fit in the window, so one lost call doesn't flip a live TV to "Off".
+    expect(TV_PUSHED_POLL_MS * 2).toBeLessThanOrEqual(ONLINE_WINDOW_MS)
   })
 })
