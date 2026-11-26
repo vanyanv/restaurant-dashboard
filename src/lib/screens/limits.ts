@@ -30,6 +30,12 @@ export const SCREEN_MEDIA_MAX_BYTES = 25 * 1024 * 1024
 /** Vercel refuses a request body over 4.5 MB, so a bigger picture travels in parts this size. */
 export const SCREEN_PART_BYTES = 4 * 1024 * 1024
 export const SCREEN_MAX_PARTS = Math.ceil(SCREEN_MEDIA_MAX_BYTES / SCREEN_PART_BYTES)
+/**
+ * The owner's own file, kept untouched whenever the TV gets a redrawn copy
+ * (a picture bigger than 4K, or over SCREEN_MEDIA_MAX_BYTES). Never sent to a TV.
+ */
+export const SCREEN_ORIGINAL_MAX_BYTES = 100 * 1024 * 1024
+export const SCREEN_ORIGINAL_MAX_PARTS = Math.ceil(SCREEN_ORIGINAL_MAX_BYTES / SCREEN_PART_BYTES)
 /** The small copy the dashboard shows. */
 export const SCREEN_THUMB_MAX_BYTES = 400 * 1024
 

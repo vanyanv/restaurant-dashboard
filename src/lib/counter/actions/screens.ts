@@ -347,12 +347,16 @@ export async function deleteMedia(mediaId: string): Promise<ScreensResult> {
     const accountId = await ownerAccount()
     const media = await prisma.screenMedia.findFirst({
       where: { id: id.parse(mediaId), accountId },
-      select: { id: true, blobKey: true },
+      select: { id: true, blobKey: true, originalKey: true },
     })
     if (!media) return { ok: false, error: "That picture is gone. Reload the page." }
     await prisma.screenMedia.delete({ where: { id: media.id } })
     try {
-      await Promise.all([deleteScreenMedia(media.blobKey), deleteScreenMedia(checkThumbKey(media.blobKey))])
+      await Promise.all([
+        deleteScreenMedia(media.blobKey),
+        deleteScreenMedia(checkThumbKey(media.blobKey)),
+        ...(media.originalKey ? [deleteScreenMedia(media.originalKey)] : []),
+      ])
     } catch (err) {
       logger.error("[screens] image delete from storage failed", { blobKey: media.blobKey, message: err instanceof Error ? err.message : String(err) })
     }
