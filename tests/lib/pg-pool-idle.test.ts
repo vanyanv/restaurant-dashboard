@@ -1,11 +1,25 @@
-import { afterEach, describe, expect, it, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { readFileSync } from "node:fs"
 import { join } from "node:path"
 import { Pool } from "pg"
 import { attachDatabasePool } from "@vercel/functions"
 import { DEFAULT_POOL_IDLE_MS, poolIdleMs } from "@/lib/pg-pool-idle"
 
+// `poolIdleMs(undefined)` falls back to the environment, so a machine that
+// sets the override must not change what "the default" means in these tests.
+beforeEach(() => {
+  vi.stubEnv("DATABASE_POOL_IDLE_MS", "")
+})
+afterEach(() => {
+  vi.unstubAllEnvs()
+})
+
 describe("poolIdleMs", () => {
+  it("reads DATABASE_POOL_IDLE_MS when called with nothing", () => {
+    vi.stubEnv("DATABASE_POOL_IDLE_MS", "5000")
+    expect(poolIdleMs()).toBe(5_000)
+  })
+
   it("is 2 seconds unless overridden", () => {
     expect(DEFAULT_POOL_IDLE_MS).toBe(2_000)
     expect(poolIdleMs(undefined)).toBe(2_000)

@@ -117,7 +117,10 @@ describe("runCogsSweepForStore", () => {
     runCogsSweepForStore({ storeId: "s1", lookbackDays: 3, force: false, triggeredBy: "github-actions", ...over })
 
   it("recomputes the window ending today (UTC midnight) and reports the rows", async () => {
-    const r = await run()
+    // A fixed clock: a run that straddled UTC midnight would otherwise
+    // compare against the next day.
+    vi.useFakeTimers({ toFake: ["Date"], now: new Date("2026-11-26T19:30:00Z") })
+    const r = await run().finally(() => vi.useRealTimers())
     expect(r).toEqual({
       storeId: "s1",
       storeName: "Hollywood",
@@ -134,10 +137,8 @@ describe("runCogsSweepForStore", () => {
     })
     const call = recompute.mock.calls[0][0]
     expect(call).toMatchObject({ storeId: "s1", accountId: "acct1" })
-    const end = new Date()
-    end.setUTCHours(0, 0, 0, 0)
-    expect(call.endDate.toISOString()).toBe(end.toISOString())
-    expect(end.getTime() - call.startDate.getTime()).toBe(3 * 86_400_000)
+    expect(call.endDate.toISOString()).toBe("2026-11-26T00:00:00.000Z")
+    expect(call.startDate.toISOString()).toBe("2026-11-23T00:00:00.000Z")
   })
 
   it("records a cogs.sweep run for the store with the caller's trigger", async () => {
