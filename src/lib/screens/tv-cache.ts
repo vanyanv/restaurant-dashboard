@@ -16,8 +16,10 @@ import { logger } from "@/lib/logger"
  * races a change saves its answer under the old number, and the next check-in
  * reads again.
  *
- * Without Redis, or when Redis fails, every call here does nothing and the
- * check-in goes to the database the way it always did.
+ * Without Redis, or when Redis fails or is slow, every call here does nothing
+ * and the check-in goes to the database the way it always did. A change saved
+ * while Redis is down cannot mark the TVs; they pick it up when their saved
+ * answer runs out (KEEP_S).
  */
 
 /** A backstop for a change that does not go through `forgetTvs` (a store renamed elsewhere). */
@@ -30,6 +32,20 @@ const genKey = (h: string) => `screens:gen:${h}`
 const seenKey = (h: string) => `screens:seen:${h}`
 
 type Saved<T> = { gen: number; device: string | null; body: T }
+
+/**
+ * Redis gets this long per call. The client retries on its own, so a slow
+ * Redis could otherwise hold a check-in far past the database it stands in for.
+ */
+const WAIT_MS = 800
+
+function within<T>(p: Promise<T>): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const late = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`Redis took over ${WAIT_MS} ms`)), WAIT_MS)
+  })
+  return Promise.race([p, late]).finally(() => clearTimeout(timer))
+}
 
 function warn(what: string, err: unknown) {
   logger.warn(`[screens.cache] ${what}`, { message: err instanceof Error ? err.message : String(err) })
@@ -44,7 +60,7 @@ export async function readTv<T>(tokenHash: string, device: string | null): Promi
   const redis = getRedis()
   if (!redis) return { hit: null, gen: null }
   try {
-    const [saved, gen] = await redis.mget<[Saved<T> | null, number | string | null]>(answerKey(tokenHash), genKey(tokenHash))
+    const [saved, gen] = await within(redis.mget<[Saved<T> | null, number | string | null]>(answerKey(tokenHash), genKey(tokenHash)))
     const now = Number(gen ?? 0)
     const good = saved && saved.gen === now && (!device || device === saved.device) ? saved.body : null
     return { hit: good, gen: now }
@@ -60,7 +76,7 @@ export async function saveTv<T>(tokenHash: string, gen: number | null, device: s
   if (!redis || gen === null || seconds < 1) return
   try {
     const saved: Saved<T> = { gen, device, body }
-    await redis.set(answerKey(tokenHash), saved, { ex: Math.min(Math.floor(seconds), KEEP_S) })
+    await within(redis.set(answerKey(tokenHash), saved, { ex: Math.min(Math.floor(seconds), KEEP_S) }))
   } catch (err) {
     warn("save failed", err)
   }
@@ -71,7 +87,7 @@ export async function noteSeen(tokenHash: string, at = Date.now()): Promise<void
   const redis = getRedis()
   if (!redis) return
   try {
-    await redis.set(seenKey(tokenHash), at, { ex: SEEN_KEEP_S })
+    await within(redis.set(seenKey(tokenHash), at, { ex: SEEN_KEEP_S }))
   } catch (err) {
     warn("seen write failed", err)
   }
@@ -83,7 +99,7 @@ export async function seenAt(tokenHashes: string[]): Promise<Map<string, Date>> 
   const redis = getRedis()
   if (!redis || tokenHashes.length === 0) return out
   try {
-    const values = await redis.mget<(number | string | null)[]>(...tokenHashes.map(seenKey))
+    const values = await within(redis.mget<(number | string | null)[]>(...tokenHashes.map(seenKey)))
     tokenHashes.forEach((h, i) => {
       const ms = Number(values[i])
       if (values[i] !== null && Number.isFinite(ms)) out.set(h, new Date(ms))
@@ -101,12 +117,12 @@ export async function forgetTvs(tokenHashes: string[]): Promise<void> {
   try {
     const p = redis.pipeline()
     for (const h of new Set(tokenHashes)) p.incr(genKey(h))
-    await p.exec()
+    await within(p.exec())
   } catch (err) {
     // The saved answers then last until KEEP_S. Drop them outright as a second try.
     warn("forget failed", err)
     try {
-      await redis.del(...tokenHashes.map(answerKey))
+      await within(redis.del(...tokenHashes.map(answerKey)))
     } catch (err2) {
       warn("drop failed", err2)
     }

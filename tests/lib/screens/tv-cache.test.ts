@@ -18,8 +18,10 @@ const redis = {
     }
     return structuredClone(e.v)
   },
+  slow: false,
   async mget(...keys: string[]) {
     this.check()
+    if (this.slow) await new Promise((r) => setTimeout(r, 5_000))
     return keys.map((k) => this.live(k))
   },
   async set(k: string, v: unknown, o?: { ex?: number }) {
@@ -86,6 +88,7 @@ beforeEach(() => {
   store.clear()
   redis.on = true
   redis.fail = false
+  redis.slow = false
   vi.clearAllMocks()
   vi.useRealTimers()
 })
@@ -175,5 +178,14 @@ describe("TV check-in without the database", () => {
     await expect(pingTvs(["h1"])).resolves.toBeUndefined()
     expect(await seenAt(["h1"])).toEqual(new Map())
     expect(dbReads()).toBe(3)
+  })
+
+  it("does not wait on a slow Redis: the check-in goes to the database", async () => {
+    redis.slow = true
+    const t = Date.now()
+    const c = await contentFor("h1", null)
+    expect(c.paired).toBe(true)
+    expect(Date.now() - t).toBeLessThan(2_000)
+    expect(dbReads()).toBe(1)
   })
 })
