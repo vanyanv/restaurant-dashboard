@@ -1,4 +1,4 @@
-import { getRedis } from "@/lib/cache/redis"
+import { getRedis, redisWithin as within } from "@/lib/cache/redis"
 import { logger } from "@/lib/logger"
 
 /**
@@ -33,19 +33,6 @@ const seenKey = (h: string) => `screens:seen:${h}`
 
 type Saved<T> = { gen: number; device: string | null; body: T }
 
-/**
- * Redis gets this long per call. The client retries on its own, so a slow
- * Redis could otherwise hold a check-in far past the database it stands in for.
- */
-const WAIT_MS = 800
-
-function within<T>(p: Promise<T>): Promise<T> {
-  let timer: ReturnType<typeof setTimeout> | undefined
-  const late = new Promise<never>((_, reject) => {
-    timer = setTimeout(() => reject(new Error(`Redis took over ${WAIT_MS} ms`)), WAIT_MS)
-  })
-  return Promise.race([p, late]).finally(() => clearTimeout(timer))
-}
 
 function warn(what: string, err: unknown) {
   logger.warn(`[screens.cache] ${what}`, { message: err instanceof Error ? err.message : String(err) })

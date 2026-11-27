@@ -41,3 +41,16 @@ export function warnIfNoRedis(script: string): boolean {
   console.warn(process.env.GITHUB_ACTIONS === "true" ? `::warning::${msg}` : `[cache] ${msg}`)
   return false
 }
+
+/**
+ * Give a Redis call at most `ms`, then reject. The client retries on its own,
+ * so on a path where Redis stands in for the database (and the database is the
+ * fallback), a slow Redis must not cost more than the database would.
+ */
+export function redisWithin<T>(p: Promise<T>, ms = 800): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const late = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`Redis took over ${ms} ms`)), ms)
+  })
+  return Promise.race([p, late]).finally(() => clearTimeout(timer))
+}

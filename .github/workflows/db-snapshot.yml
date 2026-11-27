@@ -1,9 +1,11 @@
 name: DB Snapshot
 on:
   schedule:
-    # Daily at 03:40 UTC — captures pg_database_size + top tables so storage
-    # growth and cost projections have real history.
-    - cron: '40 3 * * *'
+    # Daily at 04:00 UTC — captures pg_database_size + top tables so storage
+    # growth and cost projections have real history. On the hour, with the
+    # Otter hourly sync and r2-snapshot, so one database wake serves all three
+    # (was 03:40, a wake of its own; moved 2026-11-27).
+    - cron: '0 4 * * *'
   workflow_dispatch:
 
 concurrency:

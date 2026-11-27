@@ -21,6 +21,9 @@ vi.mock("@/lib/prisma", () => ({ prisma: db }))
 const loadCheckGrid = vi.hoisted(() => vi.fn())
 vi.mock("@/lib/checks/data", () => ({ loadCheckGrid }))
 
+const setChecksQuietUntil = vi.hoisted(() => vi.fn(async () => {}))
+vi.mock("@/lib/checks/quiet", () => ({ setChecksQuietUntil }))
+
 import { checkAlertAccountsDue, recordCheckAlerts, windowMovedSince } from "@/lib/checks/missed-alerts"
 import type { CheckWindow } from "@/lib/checks/time"
 
@@ -211,5 +214,48 @@ describe("recordCheckAlerts — one read, bulk writes", () => {
     await recordCheckAlerts({ accountId: "a1", now: new Date("2026-11-21T12:00Z") })
     expect(db.alert.findMany).not.toHaveBeenCalled()
     expect(db.alert.createMany).not.toHaveBeenCalled()
+  })
+})
+
+describe("checkAlertAccountsDue: how long a skip holds (saved for the cron in Redis)", () => {
+  const QUIET = { updatedAt: new Date("2026-01-01T00:00Z"), checkClosures: [], checkPauses: [] }
+  const lastRun = (iso: string) => db.jobRun.findFirst.mockResolvedValue({ startedAt: new Date(iso) })
+  const savedUntil = () => (setChecksQuietUntil.mock.calls.at(-1) as unknown as [Date | null])[0]
+
+  it("holds until the forced run when no window is due sooner", async () => {
+    lastRun("2026-11-20T19:30Z")
+    db.store.findMany.mockResolvedValue([{ ...QUIET, accountId: "a1", checkTemplates: [tpl(MORNING), tpl(NIGHT)] }])
+    expect(await checkAlertAccountsDue(new Date("2026-11-20T20:00Z"))).toEqual([])
+    expect(savedUntil()?.toISOString()).toBe("2026-11-20T21:30:00.000Z")
+  })
+
+  it("holds only until the next window goes past due", async () => {
+    // Morning on the 20th is due 01:30Z on the 21st.
+    lastRun("2026-11-21T00:00Z")
+    db.store.findMany.mockResolvedValue([{ ...QUIET, accountId: "a1", checkTemplates: [tpl(MORNING), tpl(NIGHT)] }])
+    expect(await checkAlertAccountsDue(new Date("2026-11-21T00:30Z"))).toEqual([])
+    expect(savedUntil()?.toISOString()).toBe("2026-11-21T01:30:00.000Z")
+  })
+
+  it("is right: the gate keeps skipping up to that moment, and runs once it passes", async () => {
+    lastRun("2026-11-21T00:00Z")
+    db.store.findMany.mockResolvedValue([{ ...QUIET, accountId: "a1", checkTemplates: [tpl(MORNING), tpl(NIGHT)] }])
+    await checkAlertAccountsDue(new Date("2026-11-21T00:30Z"))
+    const until = savedUntil()!.getTime()
+    for (let t = Date.parse("2026-11-21T00:30Z"); t < until; t += 5 * 60_000) {
+      expect(await checkAlertAccountsDue(new Date(t))).toEqual([])
+    }
+    expect(await checkAlertAccountsDue(new Date(until))).toEqual(["a1"])
+  })
+
+  it("ignores a switched-off check, and clears the saved moment when there is work", async () => {
+    lastRun("2026-11-21T00:00Z")
+    db.store.findMany.mockResolvedValue([{ ...QUIET, accountId: "a1", checkTemplates: [tpl(MORNING, { enabled: false })] }])
+    await checkAlertAccountsDue(new Date("2026-11-21T00:30Z"))
+    expect(savedUntil()?.toISOString()).toBe("2026-11-21T02:00:00.000Z")
+
+    db.store.findMany.mockResolvedValue([{ ...QUIET, accountId: "a1", checkTemplates: [] }])
+    expect(await checkAlertAccountsDue(new Date("2026-11-21T00:30Z"))).toEqual(["a1"])
+    expect(savedUntil()).toBeNull()
   })
 })
