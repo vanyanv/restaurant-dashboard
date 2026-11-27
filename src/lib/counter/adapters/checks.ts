@@ -87,6 +87,12 @@ export type CellView = {
   tasks: Array<{ section: string; items: Array<{ item: string; done: boolean; by: string | null; at: string | null; late: boolean; note: string | null; photo: boolean }> }>
   /** Each task's standing photo, with the owner's look at it. */
   markPhotos: Array<{ id: string; task: string; by: string; at: string; review: "ok" | "redo" | null; reviewNote: string | null }>
+  /**
+   * Photos this check had that the retention job has since deleted to save
+   * space, with the day it happened ("Nov 27"). Null when none. Their tasks
+   * still count as done with a photo; only the picture is gone.
+   */
+  photosRemoved: { count: number; on: string } | null
   /** Open now: crew can still tick and submit it. */
   live: boolean
   /** The Today tile, worked out here so the page never reads `status`. */
@@ -102,6 +108,8 @@ export type CellView = {
     note: string | null
     /** The mark's photo, served by /api/checks/mark-photo/<id>. */
     photo: boolean
+    /** It had a photo, since deleted to save space. */
+    photoGone: boolean
   }>
 }
 
@@ -119,13 +127,14 @@ function cellView(store: GridStore, cell: GridCell, now: Date): CellView {
     text: m.itemText,
     action: !m.done ? "undone" : m.note ? "note" : "done",
     note: m.note,
-    photo: m.hasPhoto,
+    photo: m.hasPhoto && !m.photoGoneAt,
+    photoGone: m.hasPhoto && Boolean(m.photoGoneAt),
   }))
   if (sub) {
     log.push(
       sub.autoClosed
-        ? { id: sub.id, at: clockLabel(sub.submittedAt), by: "", text: closedLine(sub), action: "closed", note: null, photo: false }
-        : { id: sub.id, at: clockLabel(sub.submittedAt), by: sub.crewName, text: "Submitted", action: "submitted", note: null, photo: false },
+        ? { id: sub.id, at: clockLabel(sub.submittedAt), by: "", text: closedLine(sub), action: "closed", note: null, photo: false, photoGone: false }
+        : { id: sub.id, at: clockLabel(sub.submittedAt), by: sub.crewName, text: "Submitted", action: "submitted", note: null, photo: false, photoGone: false },
     )
   }
   switch (cell.status) {
@@ -207,7 +216,7 @@ function cellView(store: GridStore, cell: GridCell, now: Date): CellView {
     status: cell.status,
     label,
     meta,
-    photos: sub?.photos.map((p) => ({ id: p.id, section: p.sectionName })) ?? [],
+    photos: sub?.photos.filter((p) => !p.purgedAt).map((p) => ({ id: p.id, section: p.sectionName })) ?? [],
     flags: sub?.flags ?? [],
     progress,
     started: !sub && cell.startedBy ? `${cell.startedBy.name} started ${clockLabel(cell.startedBy.at)}` : null,
@@ -226,12 +235,30 @@ function cellView(store: GridStore, cell: GridCell, now: Date): CellView {
     timeline: tickTimeline(cell.day, tpl, cell.marks),
     tasks: recordBySection(cell, b.due.getTime()),
     markPhotos: [...currentMarksOf(cell)]
-      .filter((m) => m.done && m.hasPhoto)
+      .filter((m) => m.done && m.hasPhoto && !m.photoGoneAt)
       .map((m) => ({ id: m.id, task: m.itemText, by: m.crewName, at: clockLabel(m.at), review: m.review, reviewNote: m.reviewNote })),
+    photosRemoved: removedPhotos(cell),
     live,
     tile,
     log,
   }
+}
+
+const REMOVED_DAY: Intl.DateTimeFormatOptions = { timeZone: "America/Los_Angeles", month: "short", day: "numeric" }
+
+/**
+ * The check's photos the retention job deleted: the standing task photos, or
+ * for a check from before per-task photos, its section photos.
+ */
+function removedPhotos(cell: GridCell): CellView["photosRemoved"] {
+  const fromMarks = [...currentMarksOf(cell)].filter((m) => m.done && m.hasPhoto && m.photoGoneAt).map((m) => m.photoGoneAt!)
+  const dates =
+    cell.marks.length > 0
+      ? fromMarks
+      : (cell.submission?.photos ?? []).filter((p) => p.purgedAt).map((p) => p.purgedAt!)
+  if (dates.length === 0) return null
+  const last = new Date(Math.max(...dates.map((d) => d.getTime())))
+  return { count: dates.length, on: last.toLocaleDateString("en-US", REMOVED_DAY) }
 }
 
 /** The latest mark per task, plus any photo the owner sent back since (so a redo stays visible). */
@@ -862,6 +889,8 @@ export type PosterData = {
   /** Where every submitted check is emailed. */
   reportEmails: string[]
   emailReady: boolean
+  /** Days crew photos are kept before the nightly cleanup deletes them; null keeps them forever. */
+  photoKeepDays: number | null
   stores: Array<{
     id: string
     name: string
@@ -889,7 +918,7 @@ export function getChecksPostersSectionPromises(opts: { accountId: string }): St
       classify(async () => {
         // The account's report emails do not depend on the stores: read them
         // beside the store reads instead of after them.
-        const accountP = prisma.account.findUnique({ where: { id: opts.accountId }, select: { checkReportEmails: true } })
+        const accountP = prisma.account.findUnique({ where: { id: opts.accountId }, select: { checkReportEmails: true, checkPhotoKeepDays: true } })
         accountP.catch(() => {})
         const stores = await accountStores(opts.accountId)
         await Promise.all(stores.map((s) => ensureCheckSetup(s.id)))
@@ -904,6 +933,7 @@ export function getChecksPostersSectionPromises(opts: { accountId: string }): St
         const account = await accountP
         return {
           reportEmails: account?.checkReportEmails ?? [],
+          photoKeepDays: account?.checkPhotoKeepDays ?? null,
           emailReady: emailConfigured(),
           stores: rows.filter((r) => r.checkCode).map((r) => {
             const link = checkLink(r.checkCode!)

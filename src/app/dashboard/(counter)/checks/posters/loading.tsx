@@ -12,6 +12,9 @@ export default function Loading() {
       <Section title="Check emails" data={loading()}>
         {() => null}
       </Section>
+      <Section title="Check photos" data={loading()}>
+        {() => null}
+      </Section>
       <Section title="Links & QR posters" data={loading()}>
         {() => null}
       </Section>

@@ -19,9 +19,11 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   const { id } = await params
   const photo = await prisma.checkPhoto.findFirst({
     where: { id, submission: { store: { accountId: session.user.accountId } } },
-    select: { storageKey: true, contentType: true },
+    select: { storageKey: true, contentType: true, purgedAt: true },
   })
   if (!photo) return NextResponse.json({ error: "Photo not found" }, { status: 404 })
+  // Deleted by the retention job to save space; the check record stays.
+  if (photo.purgedAt) return NextResponse.json({ error: "Photo removed to save space" }, { status: 410 })
 
   let result
   try {

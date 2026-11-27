@@ -5,7 +5,8 @@ import { shortStoreName } from "@/lib/checks/names"
 import { useEffect, useRef, useState } from "react"
 import { createPortal } from "react-dom"
 import { Section, useCounterTransition, usePageChrome } from "@/components/counter"
-import { rotateCheckLink, saveCheckReportEmails } from "@/lib/counter/actions/checks"
+import { rotateCheckLink, saveCheckPhotoKeepDays, saveCheckReportEmails } from "@/lib/counter/actions/checks"
+import { DEFAULT_PHOTO_KEEP_DAYS, MAX_PHOTO_KEEP_DAYS, MIN_PHOTO_KEEP_DAYS } from "@/lib/checks/photo-keep"
 import type { SectionSources } from "@/lib/counter/adapters/types"
 import type { PostersSections } from "@/lib/counter/adapters/checks"
 import { ChecksHead, OutcomeLine, type Outcome } from "../checks-ui"
@@ -41,6 +42,9 @@ export function ChecksPostersClient({ sections }: { sections: SectionSources<Pos
       <ChecksHead sub="Text crew the link, print the poster, and choose who gets each check by email" />
       <Section title="Check emails" data={sections.posters} pending={pending}>
         {(d) => <ReportEmails emails={d.reportEmails} ready={d.emailReady} />}
+      </Section>
+      <Section title="Check photos" data={sections.posters} pending={pending}>
+        {(d) => <PhotoKeep days={d.photoKeepDays} />}
       </Section>
       <Section title="Links & QR posters" meta={(d) => `${d.stores.length} stores`} data={sections.posters} pending={pending}>
         {(d) => (
@@ -213,6 +217,50 @@ function ReportEmails({ emails, ready }: { emails: string[]; ready: boolean }) {
           Until then nothing is sent.
         </span>
       )}
+    </div>
+  )
+}
+
+/** How long crew photos stay in storage before the nightly cleanup deletes them. */
+function PhotoKeep({ days }: { days: number | null }) {
+  const [text, setText] = useState(days === null ? "" : String(days))
+  const [outcome, setOutcome] = useState<Outcome>(null)
+  const { act, stateOf, busy } = useAct()
+  const saved = days === null ? "" : String(days)
+  const save = () =>
+    act("save", async () => {
+      const t = text.trim()
+      const r = await saveCheckPhotoKeepDays({ days: t === "" ? null : Number(t) })
+      setOutcome(r.ok ? { ok: true, text: r.message ?? "Saved." } : { ok: false, text: r.error })
+      return r
+    })
+  return (
+    <div style={{ display: "grid", gap: 10, maxWidth: 640 }}>
+      <span className="ck-meta">
+        {days === null
+          ? "Every crew photo is kept forever right now. Set a number of days to delete older ones each night and keep photo storage small."
+          : `Crew photos older than ${days} days are deleted each night to save storage. The check, its ticks and notes stay; the photo shows as removed.`}
+      </span>
+      <label className="ck-field">
+        <span className="ck-mono">Keep photos for (days, empty keeps forever)</span>
+        <input
+          className="ck-input"
+          type="number"
+          inputMode="numeric"
+          min={MIN_PHOTO_KEEP_DAYS}
+          max={MAX_PHOTO_KEEP_DAYS}
+          placeholder={String(DEFAULT_PHOTO_KEEP_DAYS)}
+          style={{ maxWidth: 120 }}
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+        />
+      </label>
+      <div className="ck-row">
+        <button {...actMarks(stateOf("save"))} type="button" className="btn btn--primary" disabled={busy || text.trim() === saved} onClick={save}>
+          Save
+        </button>
+        <OutcomeLine outcome={outcome} />
+      </div>
     </div>
   )
 }

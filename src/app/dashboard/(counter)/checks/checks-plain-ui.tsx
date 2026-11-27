@@ -119,13 +119,37 @@ export function RecordSections({ cell, open }: { cell: CellView; open?: boolean 
   )
 }
 
+/**
+ * Said in place of photos the nightly cleanup deleted to save space, so an
+ * old check reads "removed" rather than showing broken images.
+ */
+export function PhotosRemoved({ cell }: { cell: CellView }) {
+  const r = cell.photosRemoved
+  if (!r) return null
+  return (
+    <p className="ck-meta" style={{ margin: 0 }}>
+      {r.count === 1 ? "1 photo was" : `${r.count} photos were`} deleted on {r.on} to save space. Check photos are kept
+      for the days set on Links &amp; email; the ticks and notes stay.
+    </p>
+  )
+}
+
 /** Each task's photo, large enough to judge, with Looks good / Redo. */
 export function PhotoReview({ cell, caption }: { cell: CellView; caption: string }) {
   const [open, setOpen] = useState<{ id: string; task: string } | null>(null)
-  if (cell.markPhotos.length === 0) return null
+  if (cell.markPhotos.length === 0) {
+    if (!cell.photosRemoved) return null
+    return (
+      <div className="ck-prv">
+        <span className="ck-mono">Photos · removed</span>
+        <PhotosRemoved cell={cell} />
+      </div>
+    )
+  }
   return (
     <div className="ck-prv">
       <span className="ck-mono">Photos · {cell.markPhotos.length}</span>
+      <PhotosRemoved cell={cell} />
       <div className="ck-prv__grid">
         {cell.markPhotos.map((p) => (
           <PhotoCard key={p.id} p={p} onOpen={() => setOpen({ id: p.id, task: p.task })} />
@@ -260,6 +284,10 @@ export function CheckDetail({
               <button type="button" style={{ padding: 0, border: 0, background: "none", cursor: "zoom-in" }} onClick={() => setOpen({ id: l.id, section: l.text, mark: true })} aria-label={`Open ${l.text} photo`}>
                 <img src={markPhotoSrc(l.id, "thumb")} alt="" loading="lazy" />
               </button>
+            ) : l.photoGone ? (
+              <span className="ck-meta" title="Deleted to save space">
+                photo removed
+              </span>
             ) : (
               <span />
             )}
@@ -300,7 +328,7 @@ export function CheckDetail({
   const day = new Date(`${cell.day}T12:00:00Z`).toLocaleDateString("en-US", wide ? DAY_FMT_LONG : DAY_FMT)
 
   if (wide) {
-    const hasPhotos = cell.markPhotos.length > 0 || Boolean(sectionPhotos)
+    const hasPhotos = cell.markPhotos.length > 0 || Boolean(sectionPhotos) || Boolean(cell.photosRemoved)
     return (
       <article className="ck-wide" aria-label={`${store} ${label} ${day}`}>
         <header className="ck-wide__head">
@@ -328,10 +356,16 @@ export function CheckDetail({
           </section>
           {hasPhotos && (
             <section className="ck-wide__col" aria-label="Photos">
-              {cell.markPhotos.length > 0 ? <PhotoViewer cell={cell} caption={caption} /> : (
+              {cell.markPhotos.length > 0 ? (
                 <>
-                  <span className="ck-mono">Photos · {cell.photos.length}</span>
+                  <PhotoViewer cell={cell} caption={caption} />
+                  <PhotosRemoved cell={cell} />
+                </>
+              ) : (
+                <>
+                  <span className="ck-mono">Photos · {cell.photos.length > 0 ? cell.photos.length : "removed"}</span>
                   {sectionPhotos}
+                  <PhotosRemoved cell={cell} />
                 </>
               )}
             </section>

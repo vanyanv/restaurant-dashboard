@@ -19,6 +19,7 @@ import {
 import { dayToDb } from "@/lib/checks/time"
 import { setChecksQuietUntil } from "@/lib/checks/quiet"
 import { loadCheckGrid, type SubmissionContent } from "@/lib/checks/data"
+import { MAX_PHOTO_KEEP_DAYS, MIN_PHOTO_KEEP_DAYS } from "@/lib/checks/photo-keep"
 import { helpText, isHelpPhotoKey, MAX_HELP_CHARS, MAX_HELP_PHOTOS } from "@/lib/checks/help"
 
 /**
@@ -565,6 +566,34 @@ export async function saveCheckReportEmails(input: { emails: string[] }): Promis
     await prisma.account.update({ where: { id: session.user.accountId }, data: { checkReportEmails: emails } })
     await revalidateChecks()
     return { ok: true, message: emails.length === 0 ? "Check emails are off." : `Saved. ${emails.length} address${emails.length === 1 ? "" : "es"} get every check.` }
+  } catch (err) {
+    return fail(err)
+  }
+}
+
+const KeepDays = z
+  .number()
+  .int("Whole days only")
+  .min(MIN_PHOTO_KEEP_DAYS, `Keep photos at least ${MIN_PHOTO_KEEP_DAYS} days`)
+  .max(MAX_PHOTO_KEEP_DAYS, `At most ${MAX_PHOTO_KEEP_DAYS} days`)
+  .nullable()
+
+/**
+ * How many days crew check photos are kept before the nightly cleanup deletes
+ * them from storage, for the whole account. Null keeps them forever.
+ */
+export async function saveCheckPhotoKeepDays(input: { days: number | null }): Promise<ActionResult> {
+  try {
+    const session = await getSession()
+    if (!session?.user) throw new Error("Unauthorized")
+    if (!hasOwnerAccess(session.user.role)) throw new Error("Forbidden")
+    const days = KeepDays.parse(input.days)
+    await prisma.account.update({ where: { id: session.user.accountId }, data: { checkPhotoKeepDays: days } })
+    await revalidateChecks()
+    return {
+      ok: true,
+      message: days === null ? "Saved. Check photos are kept forever." : `Saved. Photos older than ${days} days are deleted each night.`,
+    }
   } catch (err) {
     return fail(err)
   }
