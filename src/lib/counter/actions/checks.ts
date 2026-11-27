@@ -17,6 +17,7 @@ import {
   syncCrewFromHarri,
 } from "@/lib/checks/setup"
 import { dayToDb } from "@/lib/checks/time"
+import { setChecksQuietUntil } from "@/lib/checks/quiet"
 import { loadCheckGrid, type SubmissionContent } from "@/lib/checks/data"
 import { helpText, isHelpPhotoKey, MAX_HELP_CHARS, MAX_HELP_PHOTOS } from "@/lib/checks/help"
 
@@ -82,9 +83,11 @@ const ChecklistInput = z.object({
     "Every section is off, so crew would see nothing. Switch one on, or turn the whole check off.",
   )
 
-function revalidateChecks() {
+/** The pages show the change, and the checks cron reads the database on its next run (checks/quiet.ts). */
+async function revalidateChecks() {
   revalidatePath("/dashboard/checks", "layout")
   revalidatePath("/m/checks", "layout")
+  await setChecksQuietUntil(null)
 }
 
 function fail(err: unknown): ActionResult {
@@ -182,7 +185,7 @@ export async function saveChecklist(
       }
       // One query per task over Neon; the 5 s default is too tight for a long list.
     }, { timeout: 20_000 })
-    revalidateChecks()
+    await revalidateChecks()
     return { ok: true, message: "Saved. Crew see the new list straight away.", saved }
   } catch (err) {
     return fail(err)
@@ -223,7 +226,7 @@ export async function removeChecklistSection(input: { storeId: string; kind: str
       prisma.checkSection.delete({ where: { id: sectionId } }),
       ...rest.map((s, position) => prisma.checkSection.update({ where: { id: s.id }, data: { position } })),
     ])
-    revalidateChecks()
+    await revalidateChecks()
     return { ok: true, message: "Section removed." }
   } catch (err) {
     return fail(err)
@@ -282,7 +285,7 @@ export async function copyChecklistToOtherStores(input: { storeId: string; kind:
       })
       if (!r.ok) return r
     }
-    revalidateChecks()
+    await revalidateChecks()
     return { ok: true, message: `Copied to ${targets.length} other store${targets.length === 1 ? "" : "s"}.` }
   } catch (err) {
     return fail(err)
@@ -310,7 +313,7 @@ export async function setStoreClosed(input: { storeId: string; day: string; clos
     } else {
       await prisma.checkClosure.deleteMany({ where: { storeId: input.storeId, businessDate } })
     }
-    revalidateChecks()
+    await revalidateChecks()
     return { ok: true }
   } catch (err) {
     return fail(err)
@@ -342,7 +345,7 @@ export async function setChecksPaused(input: { storeId: string; paused: boolean 
         prisma.checkStart.deleteMany({ where: { storeId: input.storeId, startedAt: { gte: open.pausedAt } } }),
       ])
     }
-    revalidateChecks()
+    await revalidateChecks()
     revalidatePath("/dashboard/stores", "layout")
     revalidatePath("/m/stores", "layout")
     return { ok: true, message: input.paused ? "Checks paused." : "Checks are back on." }
@@ -410,7 +413,7 @@ export async function addCrewMember(raw: { storeId: string } & z.input<typeof Cr
         pin,
       },
     })
-    revalidateChecks()
+    await revalidateChecks()
     return { ok: true, message: `Added. PIN ${pin}.` }
   } catch (err) {
     if (isUniqueViolation(err)) return { ok: false, error: "Someone at this store already has that PIN" }
@@ -437,7 +440,7 @@ export async function updateCrewMember(raw: { crewId: string } & z.input<typeof 
         ...(input.pin && crew.active ? { pin: input.pin } : {}),
       },
     })
-    revalidateChecks()
+    await revalidateChecks()
     return { ok: true, message: "Saved." }
   } catch (err) {
     if (isUniqueViolation(err)) return { ok: false, error: "Someone at this store already has that PIN" }
@@ -452,14 +455,14 @@ export async function setCrewActive(input: { crewId: string; active: boolean }):
     if (input.active) {
       const pin = pickPin(await takenPins(crew.storeId, crew.id))
       await prisma.crewMember.update({ where: { id: crew.id }, data: { active: true, inactiveReason: null, pin } })
-      revalidateChecks()
+      await revalidateChecks()
       return { ok: true, message: `Turned on with PIN ${pin}.` }
     }
     await prisma.crewMember.update({
       where: { id: crew.id },
       data: { active: false, inactiveReason: OWNER_OFF, pin: null },
     })
-    revalidateChecks()
+    await revalidateChecks()
     return { ok: true, message: "Turned off. Their PIN no longer works." }
   } catch (err) {
     return fail(err)
@@ -480,7 +483,7 @@ export async function emailCrewPin(input: { crewId: string }): Promise<ActionRes
     })
     if (!sent.ok) return { ok: false, error: sent.reason }
     await prisma.crewMember.update({ where: { id: crew.id }, data: { pinEmailedAt: new Date() } })
-    revalidateChecks()
+    await revalidateChecks()
     return { ok: true, message: `Sent to ${crew.email}.` }
   } catch (err) {
     return fail(err)
@@ -524,7 +527,7 @@ export async function syncStoreCrew(input: { storeId: string }): Promise<ActionR
       }
     }
     const r = await syncCrewFromHarri(input.storeId)
-    revalidateChecks()
+    await revalidateChecks()
     const parts = [
       r.added && `${r.added} added`,
       r.reactivated && `${r.reactivated} back`,
@@ -542,7 +545,7 @@ export async function rotateCheckLink(input: { storeId: string }): Promise<Actio
   try {
     const store = await requireOwnerStore(input.storeId)
     await prisma.store.update({ where: { id: store.id }, data: { checkCode: newCheckCode(store.name) } })
-    revalidateChecks()
+    await revalidateChecks()
     return { ok: true, message: "New link made. Print the new poster; the old one no longer works." }
   } catch (err) {
     return fail(err)
@@ -560,7 +563,7 @@ export async function saveCheckReportEmails(input: { emails: string[] }): Promis
     if (!hasOwnerAccess(session.user.role)) throw new Error("Forbidden")
     const emails = [...new Set(EmailList.parse(input.emails.filter((e) => e.trim())))]
     await prisma.account.update({ where: { id: session.user.accountId }, data: { checkReportEmails: emails } })
-    revalidateChecks()
+    await revalidateChecks()
     return { ok: true, message: emails.length === 0 ? "Check emails are off." : `Saved. ${emails.length} address${emails.length === 1 ? "" : "es"} get every check.` }
   } catch (err) {
     return fail(err)
@@ -642,7 +645,7 @@ export async function reviewCheckPhoto(raw: z.input<typeof ReviewInput>): Promis
         where: { id: mark.id },
         data: { review: "ok", reviewNote: null, reviewedBy: who, reviewedAt: now },
       })
-      revalidateChecks()
+      await revalidateChecks()
       return { ok: true, message: "Marked as looking good." }
     }
 
@@ -692,7 +695,7 @@ export async function reviewCheckPhoto(raw: z.input<typeof ReviewInput>): Promis
       }
       return sub
     })
-    revalidateChecks()
+    await revalidateChecks()
     return { ok: true, message: sub ? "Sent back. The task now counts as missed." : "Sent back. Crew see it open again with your note." }
   } catch (err) {
     return fail(err)
@@ -750,7 +753,7 @@ export async function reviewCheckPhotos(raw: z.input<typeof ReviewManyInput>): P
       where: { id: { in: ids }, OR: [{ review: null }, { review: { not: "redo" } }] },
       data: { review: "ok", reviewNote: null, reviewedBy: who, reviewedAt: new Date() },
     })
-    revalidateChecks()
+    await revalidateChecks()
     return { ok: true, message: `${ids.length} marked as looking good.` }
   } catch (err) {
     return fail(err)

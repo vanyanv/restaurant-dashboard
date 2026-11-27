@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma"
 import { JobStatus, type Prisma } from "@/generated/prisma/client"
 import { loadCheckGrid } from "./data"
+import { setChecksQuietUntil } from "./quiet"
 import {
   addDays,
   CHECK_LABEL,
@@ -291,6 +292,24 @@ export async function checkAlertAccountsDue(now: Date): Promise<string[] | null>
           (t.enabled && days.some((d) => windowMovedSince(d, t, since, now))),
       )
     if (moved) due.add(store.accountId)
+  }
+
+  // Nothing to do: until the next window goes past due (or the forced run),
+  // the answer stays "nothing", so the cron can take it from Redis (quiet.ts).
+  // Tomorrow is included for a run late in the day; the cap keeps it within 2 hours.
+  if (due.size === 0) {
+    let until = last.startedAt.getTime() + GATE_MAX_SKIP_MS
+    for (const store of stores)
+      for (const t of store.checkTemplates) {
+        if (!t.enabled) continue
+        for (const d of [...days, addDays(today, 1)]) {
+          const at = windowBounds(d, t).due.getTime()
+          if (at > now.getTime() && at < until) until = at
+        }
+      }
+    await setChecksQuietUntil(new Date(until), now)
+  } else {
+    await setChecksQuietUntil(null)
   }
   return [...due]
 }

@@ -75,7 +75,10 @@ const prisma = {
 }
 return { store, redis, screenRow, prisma }
 })
-vi.mock("@/lib/cache/redis", () => ({ getRedis: () => (redis.on ? redis : null) }))
+vi.mock("@/lib/cache/redis", async (orig) => ({
+  ...(await orig<typeof import("@/lib/cache/redis")>()),
+  getRedis: () => (redis.on ? redis : null),
+}))
 vi.mock("@/lib/prisma", () => ({ prisma }))
 
 import { contentFor } from "@/lib/screens/data"

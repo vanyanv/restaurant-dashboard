@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { withCronAuth } from "@/lib/cron-auth"
 import { withJobRun } from "@/lib/monitoring/job-run"
 import { CHECK_ALERTS_JOB, checkAlertAccountsDue, recordCheckAlerts } from "@/lib/checks/missed-alerts"
+import { checksQuiet } from "@/lib/checks/quiet"
 
 /**
  * Store checks — puts missed and late checks on Needs you, and closes any
@@ -13,10 +14,13 @@ import { CHECK_ALERTS_JOB, checkAlertAccountsDue, recordCheckAlerts } from "@/li
  * run, and then nothing can have changed: the run answers
  * `{ skipped: "no-check-window" }` without loading the grid or writing a
  * JobRun row. `checkAlertAccountsDue` decides, and says "run" whenever it is
- * unsure.
+ * unsure. When it last decided "skip" it also saved, in Redis, how long that
+ * answer holds (`checks/quiet.ts`); inside that time the run answers the same
+ * without touching the database, so the Neon compute can stay asleep.
  */
 export const POST = withCronAuth(async () => {
   const now = new Date()
+  if (await checksQuiet(now)) return NextResponse.json({ skipped: "no-check-window", from: "cache" })
   let accountIds: string[] | null = null
   const result = await withJobRun(
     CHECK_ALERTS_JOB,

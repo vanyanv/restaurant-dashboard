@@ -5,7 +5,9 @@ name: External Signals Sync (weather + events)
 # weather/event features go stale and the enriched-vs-baseline gate in
 # ml.run_nightly.should_promote_enriched silently falls back to baseline.
 #
-# Schedule: 05:30 UTC — 30 min before ml-nightly (06:00 UTC). Independent
+# Schedule: 06:00 UTC, well before ml-nightly (10:00 UTC), and on the hour
+# with the Otter hourly sync so they share one database wake (was 05:30,
+# moved 2026-11-27). Independent
 # workflow, not a step inside ml-nightly: a flaky provider should not
 # block training. The trainer joins zero-filled defaults when signals
 # are missing, so a failed run degrades gracefully to baseline.
@@ -17,7 +19,7 @@ name: External Signals Sync (weather + events)
 
 on:
   schedule:
-    - cron: '30 5 * * *'
+    - cron: '0 6 * * *'
   workflow_dispatch:
     inputs:
       provider:
