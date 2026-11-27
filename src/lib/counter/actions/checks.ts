@@ -124,8 +124,12 @@ export async function saveChecklist(
         return { ok: false, error: "The whole check, from when crew can see it to when Submit closes, has to be shorter than a day" }
       }
     }
+    if ((input.thanksgivingOpensMin === undefined) !== (input.thanksgivingDueMin === undefined)) {
+      return { ok: false, error: "Send both Thanksgiving times, or neither" }
+    }
     if (input.thanksgivingDueMin != null) {
       const opens = input.thanksgivingOpensMin ?? input.opensAtMin
+      if (opens >= 1440) return { ok: false, error: "Thanksgiving hours have to open before midnight" }
       if (input.thanksgivingDueMin <= opens) return { ok: false, error: "Thanksgiving hours have to close after they open" }
       if (input.thanksgivingDueMin - opens >= 1440) return { ok: false, error: "Thanksgiving hours have to be shorter than a day" }
     }

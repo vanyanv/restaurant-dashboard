@@ -71,6 +71,8 @@ export function windowPaused(day: string, window: CheckWindow, pauses: PauseSpan
 }
 
 export function cellStatus(input: CellInput): CellStatus {
+  // Off for the day (Thanksgiving): nothing to do, practice or not.
+  if (!input.submission && offOn(input.day, input.window)) return "off"
   if (windowPaused(input.day, input.window, input.pauses)) return "paused"
   if (input.submission) {
     const { done, total, lateMinutes } = input.submission

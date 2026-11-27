@@ -183,6 +183,7 @@ export async function loadCrewView(store: CrewStore, now: Date, opts: CrewViewOp
     const rest = templates.filter((t) => t.enabled && !visibleDay(t, now))
     for (const t of [...visible, ...rest]) {
       const day = visibleDay(t, now) ?? today
+      if (offOn(day, t)) continue
       const cell = cellFor(t.kind, day)
       if (cell && !cell.submission && cell.status !== "off" && cell.status !== "closed") {
         active = { kind: t.kind, day, cell }
