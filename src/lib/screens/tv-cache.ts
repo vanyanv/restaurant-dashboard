@@ -39,21 +39,28 @@ function warn(what: string, err: unknown) {
 }
 
 /**
- * The saved answer for this TV, if it is still good, and the counter to save a
- * new one under. Also notes that the TV checked in. `device`: a TV that now
+ * The saved answer for this TV, if it is still good, the counter to save a
+ * new one under, and when the TV last noted a check-in. `device`: a TV that now
  * says something different about itself is read again, so the new name is saved.
  */
-export async function readTv<T>(tokenHash: string, device: string | null): Promise<{ hit: T | null; gen: number | null }> {
+export async function readTv<T>(
+  tokenHash: string,
+  device: string | null,
+): Promise<{ hit: T | null; gen: number | null; seenAt: number | null }> {
   const redis = getRedis()
-  if (!redis) return { hit: null, gen: null }
+  if (!redis) return { hit: null, gen: null, seenAt: null }
   try {
-    const [saved, gen] = await within(redis.mget<[Saved<T> | null, number | string | null]>(answerKey(tokenHash), genKey(tokenHash)))
+    // One command for all three: the free plan counts commands, not keys.
+    const [saved, gen, seen] = await within(
+      redis.mget<[Saved<T> | null, number | string | null, number | string | null]>(answerKey(tokenHash), genKey(tokenHash), seenKey(tokenHash)),
+    )
     const now = Number(gen ?? 0)
     const good = saved && saved.gen === now && (!device || device === saved.device) ? saved.body : null
-    return { hit: good, gen: now }
+    const seenAt = seen === null ? null : Number(seen)
+    return { hit: good, gen: now, seenAt: Number.isFinite(seenAt) ? seenAt : null }
   } catch (err) {
     warn("read failed", err)
-    return { hit: null, gen: null }
+    return { hit: null, gen: null, seenAt: null }
   }
 }
 

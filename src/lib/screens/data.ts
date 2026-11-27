@@ -7,6 +7,7 @@ import {
   PAIR_CODE_TTL_MS,
   PLAYER_VERSION,
   SEEN_WRITE_EVERY_MS,
+  SEEN_NOTE_EVERY_MS,
   newPairCode,
   playlistVersion,
   drawsFullHd,
@@ -96,13 +97,25 @@ type SavedPaired = Omit<Paired, "clock">
  * otherwise, noting there that the TV was seen, at most once a minute.
  */
 export async function contentFor(tokenHash: string, device: string | null): Promise<TvContent> {
-  const { hit, gen } = await readTv<TvContent | SavedPaired>(tokenHash, device)
-  if (hit) {
-    if (!hit.paired) return hit
-    await noteSeen(tokenHash)
-    return serve(hit)
-  }
+  const saved = await savedContentFor(tokenHash, device)
+  return saved.content ?? freshContentFor(tokenHash, device, saved.gen)
+}
 
+/**
+ * The answer from Redis, or null when it must come from the database. Costs one
+ * Redis command, plus a "seen" note every SEEN_NOTE_EVERY_MS. `gen` goes to
+ * `freshContentFor` on a miss.
+ */
+export async function savedContentFor(tokenHash: string, device: string | null): Promise<{ content: TvContent | null; gen: number | null }> {
+  const { hit, gen, seenAt } = await readTv<TvContent | SavedPaired>(tokenHash, device)
+  if (!hit) return { content: null, gen }
+  if (!hit.paired) return { content: hit, gen }
+  if (seenAt === null || Date.now() - seenAt >= SEEN_NOTE_EVERY_MS) await noteSeen(tokenHash)
+  return { content: serve(hit), gen }
+}
+
+/** The answer from the database, saved to Redis under `gen` for the next check-in. */
+export async function freshContentFor(tokenHash: string, device: string | null, gen: number | null): Promise<TvContent> {
   const content = await readContent(tokenHash, device)
   if (content.paired) {
     await noteSeen(tokenHash)

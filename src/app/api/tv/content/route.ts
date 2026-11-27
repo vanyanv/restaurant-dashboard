@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { cleanDevice, hashToken, tokenFromHeader } from "@/lib/screens/core"
-import { contentFor } from "@/lib/screens/data"
-import { rateLimit, rateLimitKey } from "@/lib/rate-limit"
+import { freshContentFor, savedContentFor } from "@/lib/screens/data"
+import { rateLimit, rateLimitKey, rateLimitLocal } from "@/lib/rate-limit"
 
 /**
  * What a TV should show. The TV calls this every 30 to 60 seconds with its token; while nothing has
@@ -24,20 +24,32 @@ export function OPTIONS() {
 }
 
 export async function GET(request: NextRequest) {
-  // Per address too: a client sending a new token each time would otherwise make codes without limit.
-  // Generous, because every TV in a store shares one address.
-  const perIp = await rateLimit(request, { limit: 120, windowMs: 60_000, identifyBy: "ip" })
-  if (perIp) return withCors(perIp)
-
   const token = tokenFromHeader(request.headers.get("authorization"))
   if (!token) return NextResponse.json({ error: "Missing token" }, { status: 401, headers: CORS })
   const tokenHash = hashToken(token)
+  const tvKey = `tv:${tokenHash.slice(0, 24)}`
+  const device = cleanDevice(request.headers.get("x-screen-device"))
 
-  const limited = await rateLimitKey(`tv:${tokenHash.slice(0, 24)}`, { limit: 30, windowMs: 60_000 })
+  // Answered from Redis: one command, and nothing in the database. The limiter
+  // here is in memory, so a check-in does not spend four more Redis commands
+  // on counting itself (the free plan counts commands).
+  const saved = await savedContentFor(tokenHash, device)
+  if (saved.content) {
+    const limited = rateLimitLocal(tvKey, { limit: 30, windowMs: 60_000 })
+    if (limited) return withCors(limited)
+    return NextResponse.json(saved.content, { headers: { ...CORS, "Cache-Control": "no-store" } })
+  }
+
+  // To the database. Per address too: a client sending a new token each time
+  // would otherwise make codes without limit (a made-up token is never in
+  // Redis, so it always lands here). Generous, because every TV in a store
+  // shares one address.
+  const perIp = await rateLimit(request, { limit: 120, windowMs: 60_000, identifyBy: "ip" })
+  if (perIp) return withCors(perIp)
+  const limited = await rateLimitKey(tvKey, { limit: 30, windowMs: 60_000 })
   if (limited) return withCors(limited)
 
-  const device = cleanDevice(request.headers.get("x-screen-device"))
-  const content = await contentFor(tokenHash, device)
+  const content = await freshContentFor(tokenHash, device, saved.gen)
   return NextResponse.json(content, { headers: { ...CORS, "Cache-Control": "no-store" } })
 }
 

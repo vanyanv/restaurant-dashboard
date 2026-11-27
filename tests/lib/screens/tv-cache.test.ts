@@ -19,12 +19,15 @@ const redis = {
     return structuredClone(e.v)
   },
   slow: false,
+  calls: 0,
   async mget(...keys: string[]) {
+    this.calls++
     this.check()
     if (this.slow) await new Promise((r) => setTimeout(r, 5_000))
     return keys.map((k) => this.live(k))
   },
   async set(k: string, v: unknown, o?: { ex?: number }) {
+    this.calls++
     this.check()
     store.set(k, { v: structuredClone(v), until: o?.ex ? Date.now() + o.ex * 1000 : Infinity })
     return "OK"
@@ -84,6 +87,7 @@ vi.mock("@/lib/prisma", () => ({ prisma }))
 import { contentFor } from "@/lib/screens/data"
 import { forgetTvs, seenAt } from "@/lib/screens/tv-cache"
 import { pingAccountTvs, pingTvs } from "@/lib/screens/push"
+import { ONLINE_WINDOW_MS, SEEN_NOTE_EVERY_MS, TV_PUSHED_POLL_MS } from "@/lib/screens/limits"
 
 const dbReads = () => prisma.screen.findUnique.mock.calls.length
 
@@ -92,6 +96,7 @@ beforeEach(() => {
   redis.on = true
   redis.fail = false
   redis.slow = false
+  redis.calls = 0
   vi.clearAllMocks()
   vi.useRealTimers()
 })
@@ -190,5 +195,24 @@ describe("TV check-in without the database", () => {
     expect(c.paired).toBe(true)
     expect(Date.now() - t).toBeLessThan(2_000)
     expect(dbReads()).toBe(1)
+  })
+
+  it("costs one Redis command per check-in answered from Redis, plus a seen note every 90 s", async () => {
+    vi.useFakeTimers({ now: new Date("2026-11-26T20:00:00Z"), toFake: ["Date"] })
+    await contentFor("h1", null) // from the database: read, save, note
+    redis.calls = 0
+    vi.setSystemTime(new Date("2026-11-26T20:01:00Z"))
+    await contentFor("h1", null)
+    expect(redis.calls).toBe(1)
+    vi.setSystemTime(new Date("2026-11-26T20:02:00Z"))
+    await contentFor("h1", null)
+    expect(redis.calls).toBe(3) // 120 s since the note: read + note
+    const seen = await seenAt(["h1"])
+    expect(seen.get("h1")?.toISOString()).toBe("2026-11-26T20:02:00.000Z")
+  })
+
+  it("keeps a live TV On although it notes itself only every 90 s", () => {
+    // Worst case: the note is one interval plus one check-in old, and one more check-in is lost.
+    expect(SEEN_NOTE_EVERY_MS + 2 * TV_PUSHED_POLL_MS).toBeLessThanOrEqual(ONLINE_WINDOW_MS)
   })
 })
