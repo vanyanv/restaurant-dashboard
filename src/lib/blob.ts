@@ -2,7 +2,6 @@ import { randomUUID } from "node:crypto"
 import { Readable } from "node:stream"
 import {
   DeleteObjectCommand,
-  DeleteObjectsCommand,
   GetObjectCommand,
   NoSuchKey,
   PutObjectCommand,
@@ -311,37 +310,27 @@ export async function deleteCheckPhoto(pathname: string): Promise<void> {
 }
 
 /**
- * Delete many check photos (and small copies) in one request per 1,000 keys.
- * Returns the keys storage confirmed gone; a key that was already missing
- * counts as gone. Only keys under `checks/` are ever sent, so a bad row can't
- * reach invoices, backups or screen media.
+ * Delete many check photos (and small copies), a few at a time, with the
+ * same single-object delete the rest of the app already uses on R2. Returns
+ * the keys storage confirmed gone; a key that was already missing counts as
+ * gone, and a key that failed is left out. Only keys under `checks/` are ever
+ * sent, so a bad row can't reach invoices, backups or screen media.
  */
 export async function deleteCheckObjects(keys: string[]): Promise<Set<string>> {
   const safe = [...new Set(keys)].filter((k) => k.startsWith("checks/") && !k.includes(".."))
   const gone = new Set<string>()
-  if (safe.length === 0) return gone
-  const localDir = localCheckPhotoDir()
-  if (localDir) {
-    const { rm } = await import("node:fs/promises")
-    for (const k of safe) {
-      await rm(`${localDir}/${k}`, { force: true })
-      gone.add(k)
+  const queue = [...safe]
+  const worker = async () => {
+    for (let k = queue.shift(); k !== undefined; k = queue.shift()) {
+      try {
+        await deleteCheckPhoto(k)
+        gone.add(k)
+      } catch {
+        // Left out of `gone`: the row keeps its photo and the next night retries.
+      }
     }
-    return gone
   }
-  const { client, bucket } = getR2Client()
-  for (let i = 0; i < safe.length; i += 1000) {
-    const chunk = safe.slice(i, i + 1000)
-    const res = await client.send(
-      new DeleteObjectsCommand({
-        Bucket: bucket,
-        Delete: { Objects: chunk.map((Key) => ({ Key })), Quiet: true },
-      }),
-    )
-    // Quiet mode lists only failures; everything else in the chunk is gone.
-    const failed = new Set((res.Errors ?? []).filter((e) => e.Code !== "NoSuchKey").map((e) => e.Key))
-    for (const k of chunk) if (!failed.has(k)) gone.add(k)
-  }
+  await Promise.all(Array.from({ length: Math.min(8, safe.length) }, worker))
   return gone
 }
 

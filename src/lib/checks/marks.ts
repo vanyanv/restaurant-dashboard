@@ -1,3 +1,4 @@
+import { withoutPurgedPhotos } from "@/lib/checks/photo-keep"
 import { prisma } from "@/lib/prisma"
 import { currentMarks, shortName, type SubmissionContent } from "./data"
 import { readCrewPass } from "./crew-session"
@@ -43,10 +44,10 @@ export async function loadMarkRows(store: CrewStore, kind: ActiveCheck["kind"], 
     where: { storeId: store.id, kind, businessDate: dayToDb(day), store: { accountId: store.accountId } },
     select: {
       itemId: true, itemText: true, sectionName: true, done: true, note: true, crewName: true, at: true,
-      photoKey: true, photoType: true, photoSize: true,
+      photoKey: true, photoType: true, photoSize: true, photoPurgedAt: true,
     },
     orderBy: [{ at: "asc" }, { id: "asc" }],
-  })
+  }).then(withoutPurgedPhotos)
 }
 
 export type FormProblem = { error: string }

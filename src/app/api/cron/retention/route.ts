@@ -116,6 +116,9 @@ export const POST = withCronAuth(
             addRows(r.photos)
             outcomes.push({ table: "Check photos (storage)", deleted: r.photos, capped: r.capped })
             if (r.capped) logger.warn("[cron/retention] check photos hit batch cap; backlog remains for next run")
+            if (r.failed > 0 || r.error) {
+              logger.error("[cron/retention] some check photos could not be deleted", { failed: r.failed, error: r.error })
+            }
           }
 
           return outcomes

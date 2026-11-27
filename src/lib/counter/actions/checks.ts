@@ -647,7 +647,7 @@ export async function reviewCheckPhoto(raw: z.input<typeof ReviewInput>): Promis
     if (!session?.user) throw new Error("Unauthorized")
     if (!hasOwnerAccess(session.user.role)) throw new Error("Forbidden")
     const mark = await prisma.checkMark.findFirst({
-      where: { id: input.markId, photoKey: { not: null }, store: { accountId: session.user.accountId } },
+      where: { id: input.markId, photoKey: { not: null }, photoPurgedAt: null, store: { accountId: session.user.accountId } },
       select: {
         id: true, storeId: true, kind: true, businessDate: true, itemId: true, itemText: true, sectionName: true,
         photoKey: true, done: true, review: true,
@@ -752,7 +752,7 @@ export async function reviewCheckPhotos(raw: z.input<typeof ReviewManyInput>): P
     if (!session?.user) throw new Error("Unauthorized")
     if (!hasOwnerAccess(session.user.role)) throw new Error("Forbidden")
     const marks = await prisma.checkMark.findMany({
-      where: { id: { in: ids }, photoKey: { not: null }, store: { accountId: session.user.accountId } },
+      where: { id: { in: ids }, photoKey: { not: null }, photoPurgedAt: null, store: { accountId: session.user.accountId } },
       select: { id: true, storeId: true, kind: true, businessDate: true, itemId: true, done: true, review: true },
     })
     if (marks.length !== ids.length) return { ok: false, error: "A photo is no longer there. Refresh to see the latest." }

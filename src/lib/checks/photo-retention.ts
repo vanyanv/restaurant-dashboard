@@ -7,7 +7,16 @@ const BATCH = 500
 // pass over a backlog, which the next nights finish.
 const MAX_BATCHES = 10
 
-export type PhotoPurgeOutcome = { accountId: string; keepDays: number; photos: number; capped: boolean }
+export type PhotoPurgeOutcome = {
+  accountId: string
+  keepDays: number
+  /** Photos deleted and stamped this run. */
+  photos: number
+  /** Photos storage would not delete; they keep their rows and the next night retries. */
+  failed: number
+  capped: boolean
+  error?: string
+}
 
 /**
  * Delete crew check photos older than each account's `checkPhotoKeepDays`
@@ -32,50 +41,64 @@ export async function purgeOldCheckPhotos(opts: { now: Date; accountId: string |
   for (const a of accounts) {
     const keepDays = Math.max(MIN_PHOTO_KEEP_DAYS, a.checkPhotoKeepDays!)
     const cutoff = new Date(opts.now.getTime() - keepDays * 24 * 60 * 60 * 1000)
-    let photos = 0
-    let capped = true
-    for (let b = 0; b < MAX_BATCHES; b++) {
-      const [marks, sections] = await Promise.all([
-        prisma.checkMark.findMany({
-          where: { store: { accountId: a.id }, photoKey: { not: null }, photoPurgedAt: null, at: { lt: cutoff } },
-          select: { photoKey: true },
-          orderBy: { at: "asc" },
-          take: BATCH,
-        }),
-        prisma.checkPhoto.findMany({
-          where: { submission: { store: { accountId: a.id } }, purgedAt: null, createdAt: { lt: cutoff } },
-          select: { storageKey: true },
-          orderBy: { createdAt: "asc" },
-          take: BATCH,
-        }),
-      ])
-      const keys = [...new Set([...marks.map((m) => m.photoKey!), ...sections.map((s) => s.storageKey)])]
-      if (keys.length === 0) {
-        capped = false
-        break
+    const outcome: PhotoPurgeOutcome = { accountId: a.id, keepDays, photos: 0, failed: 0, capped: true }
+    // Keys storage refused this run, skipped by later batches so they can't
+    // hold up the rest.
+    const failed: string[] = []
+    try {
+      for (let b = 0; b < MAX_BATCHES; b++) {
+        const [marks, sections] = await Promise.all([
+          prisma.checkMark.findMany({
+            where: {
+              store: { accountId: a.id },
+              photoKey: { not: null, notIn: failed },
+              photoPurgedAt: null,
+              at: { lt: cutoff },
+            },
+            select: { photoKey: true },
+            orderBy: { at: "asc" },
+            take: BATCH,
+          }),
+          prisma.checkPhoto.findMany({
+            where: { submission: { store: { accountId: a.id } }, storageKey: { notIn: failed }, purgedAt: null, createdAt: { lt: cutoff } },
+            select: { storageKey: true },
+            orderBy: { createdAt: "asc" },
+            take: BATCH,
+          }),
+        ])
+        const keys = [...new Set([...marks.map((m) => m.photoKey!), ...sections.map((s) => s.storageKey)])]
+        if (keys.length === 0) {
+          outcome.capped = false
+          break
+        }
+        const gone = await deleteCheckObjects(keys.flatMap((k) => [k, checkThumbKey(k)]))
+        // Both copies must be gone before the row says so.
+        const done = keys.filter((k) => gone.has(k) && gone.has(checkThumbKey(k)))
+        for (const k of keys) if (!done.includes(k)) failed.push(k)
+        if (done.length > 0) {
+          await prisma.$transaction([
+            prisma.checkMark.updateMany({
+              where: { store: { accountId: a.id }, photoKey: { in: done }, photoPurgedAt: null },
+              data: { photoPurgedAt: opts.now },
+            }),
+            prisma.checkPhoto.updateMany({
+              where: { submission: { store: { accountId: a.id } }, storageKey: { in: done }, purgedAt: null },
+              data: { purgedAt: opts.now },
+            }),
+          ])
+        }
+        outcome.photos += done.length
+        if (marks.length < BATCH && sections.length < BATCH) {
+          outcome.capped = false
+          break
+        }
       }
-      const gone = await deleteCheckObjects(keys.flatMap((k) => [k, checkThumbKey(k)]))
-      // Both copies must be gone before the row says so.
-      const done = keys.filter((k) => gone.has(k) && gone.has(checkThumbKey(k)))
-      if (done.length === 0) throw new Error(`check photo delete failed for ${keys.length} photos`)
-      await prisma.$transaction([
-        prisma.checkMark.updateMany({
-          where: { store: { accountId: a.id }, photoKey: { in: done }, photoPurgedAt: null },
-          data: { photoPurgedAt: opts.now },
-        }),
-        prisma.checkPhoto.updateMany({
-          where: { submission: { store: { accountId: a.id } }, storageKey: { in: done }, purgedAt: null },
-          data: { purgedAt: opts.now },
-        }),
-      ])
-      photos += done.length
-      if (done.length < keys.length) throw new Error(`${keys.length - done.length} check photos could not be deleted`)
-      if (marks.length < BATCH && sections.length < BATCH) {
-        capped = false
-        break
-      }
+    } catch (err) {
+      // One account's trouble doesn't stop the others; the route reports it.
+      outcome.error = err instanceof Error ? err.message : String(err)
     }
-    out.push({ accountId: a.id, keepDays, photos, capped })
+    outcome.failed = failed.length
+    out.push(outcome)
   }
   return out
 }

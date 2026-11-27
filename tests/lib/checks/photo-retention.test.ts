@@ -86,7 +86,7 @@ beforeEach(() => {
 describe("purgeOldCheckPhotos", () => {
   it("deletes photos and small copies past the keep time, once per key, and stamps every row holding them", async () => {
     const out = await purgeOldCheckPhotos({ now, accountId: null })
-    expect(out).toEqual([{ accountId: "a1", keepDays: 7, photos: 2, capped: false }])
+    expect(out).toEqual([{ accountId: "a1", keepDays: 7, photos: 2, failed: 0, capped: false }])
     expect(deleted.flat().sort()).toEqual(
       ["checks/s1/old.jpg", "checks/s1/old.thumb.jpg", "checks/s1/sec.jpg", "checks/s1/sec.thumb.jpg"].sort(),
     )
@@ -114,9 +114,10 @@ describe("purgeOldCheckPhotos", () => {
     expect(db.marks.find((m) => m.id === "m-new")!.photoPurgedAt).toBeNull()
   })
 
-  it("does not stamp a row whose file storage would not delete, and reports the failure", async () => {
+  it("does not stamp a row whose file storage would not delete, counts it, and goes on with the rest", async () => {
     refuse.add("checks/s1/sec.thumb.jpg")
-    await expect(purgeOldCheckPhotos({ now, accountId: null })).rejects.toThrow(/could not be deleted/)
+    const [r] = await purgeOldCheckPhotos({ now, accountId: null })
+    expect(r).toMatchObject({ photos: 1, failed: 1, capped: false })
     expect(db.photos.find((p) => p.id === "p-section")!.purgedAt).toBeNull()
     expect(db.marks.find((m) => m.id === "m-old")!.photoPurgedAt).toEqual(now)
   })
@@ -124,7 +125,21 @@ describe("purgeOldCheckPhotos", () => {
   it("does nothing when nothing is old enough", async () => {
     db.marks = db.marks.filter((m) => m.id === "m-new")
     db.photos = []
-    expect(await purgeOldCheckPhotos({ now, accountId: null })).toEqual([{ accountId: "a1", keepDays: 7, photos: 0, capped: false }])
+    expect(await purgeOldCheckPhotos({ now, accountId: null })).toEqual([{ accountId: "a1", keepDays: 7, photos: 0, failed: 0, capped: false }])
     expect(deleted).toEqual([])
+  })
+})
+
+describe("withoutPurgedPhotos", () => {
+  it("treats a deleted photo as no photo, so a late close never copies a dead key", async () => {
+    const { withoutPurgedPhotos } = await import("@/lib/checks/photo-keep")
+    const rows = withoutPurgedPhotos([
+      { id: "a", photoKey: "checks/s/a.jpg", photoType: "image/jpeg", photoSize: 9, photoPurgedAt: now },
+      { id: "b", photoKey: "checks/s/b.jpg", photoType: "image/jpeg", photoSize: 9, photoPurgedAt: null },
+    ])
+    expect(rows).toEqual([
+      { id: "a", photoKey: null, photoType: null, photoSize: null },
+      { id: "b", photoKey: "checks/s/b.jpg", photoType: "image/jpeg", photoSize: 9 },
+    ])
   })
 })
