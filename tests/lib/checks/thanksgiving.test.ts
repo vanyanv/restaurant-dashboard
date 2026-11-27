@@ -5,7 +5,7 @@ import { acceptingDay, isThanksgiving, offOn, visibleDay, windowBounds, windowPh
 
 /**
  * Thanksgiving (owner 2026-11-26): every store runs only the Night check,
- * open from 9:00 am and closing itself at 6:00 pm. 2026-11-26 is Thanksgiving
+ * open from 5:00 pm and closing itself at 6:00 pm. 2026-11-26 is Thanksgiving
  * (PST, LA = UTC-8); 2026-11-25 is the Wednesday before.
  */
 const tpl = (kind: "MORNING" | "EVENING"): CheckWindow => {
@@ -28,13 +28,14 @@ describe("isThanksgiving", () => {
 })
 
 describe("Thanksgiving hours", () => {
-  it("Night opens at 9:00 am with Submit open, and closes at 6:00 pm", () => {
+  it("Night opens at 5:00 pm with Submit open, and closes at 6:00 pm", () => {
     const b = windowBounds("2026-11-26", NIGHT)
-    expect(b.opens.toISOString()).toBe("2026-11-26T17:00:00.000Z")
-    expect(b.submitFrom.toISOString()).toBe("2026-11-26T17:00:00.000Z")
+    expect(b.opens.toISOString()).toBe("2026-11-27T01:00:00.000Z")
+    expect(b.submitFrom.toISOString()).toBe("2026-11-27T01:00:00.000Z")
     expect(b.due.toISOString()).toBe("2026-11-27T02:00:00.000Z")
-    expect(windowPhase("2026-11-26", NIGHT, utc("2026-11-26T18:00:00Z"))).toBe("open")
-    expect(acceptingDay(NIGHT, utc("2026-11-26T18:00:00Z"))).toBe("2026-11-26")
+    expect(windowPhase("2026-11-26", NIGHT, utc("2026-11-26T18:00:00Z"))).toBe("upcoming")
+    expect(windowPhase("2026-11-26", NIGHT, utc("2026-11-27T01:30:00Z"))).toBe("open")
+    expect(acceptingDay(NIGHT, utc("2026-11-27T01:30:00Z"))).toBe("2026-11-26")
     expect(windowPhase("2026-11-26", NIGHT, utc("2026-11-27T02:01:00Z"))).toBe("closed")
   })
 

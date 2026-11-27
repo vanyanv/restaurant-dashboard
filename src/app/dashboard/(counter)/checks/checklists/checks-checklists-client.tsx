@@ -425,7 +425,7 @@ function Editor({ data }: { data: ChecklistsData }) {
                       const v = e.target.value
                       t.thanksgivingOff = v === "off"
                       if (v === "hours") {
-                        t.thanksgivingOpensMin ??= 9 * 60
+                        t.thanksgivingOpensMin ??= 17 * 60
                         t.thanksgivingDueMin ??= 18 * 60
                       } else {
                         t.thanksgivingOpensMin = null
