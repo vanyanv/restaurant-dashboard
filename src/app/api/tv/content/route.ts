@@ -30,13 +30,15 @@ export async function GET(request: NextRequest) {
   const tvKey = `tv:${tokenHash.slice(0, 24)}`
   const device = cleanDevice(request.headers.get("x-screen-device"))
 
-  // Answered from Redis: one command, and nothing in the database. The limiter
-  // here is in memory, so a check-in does not spend four more Redis commands
-  // on counting itself (the free plan counts commands).
+  // Counted in memory first, so a check-in spends no Redis command on counting
+  // itself, and one stuck in a loop spends none at all (the free plan counts
+  // commands).
+  const local = rateLimitLocal(tvKey, { limit: 30, windowMs: 60_000 })
+  if (local) return withCors(local)
+
+  // Answered from Redis: one command, and nothing in the database.
   const saved = await savedContentFor(tokenHash, device)
   if (saved.content) {
-    const limited = rateLimitLocal(tvKey, { limit: 30, windowMs: 60_000 })
-    if (limited) return withCors(limited)
     if (saved.afterwards) after(saved.afterwards)
     return NextResponse.json(saved.content, { headers: { ...CORS, "Cache-Control": "no-store" } })
   }
