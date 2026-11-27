@@ -28,8 +28,8 @@ import { checkAlertAccountsDue, recordCheckAlerts, windowMovedSince } from "@/li
 import type { CheckWindow } from "@/lib/checks/time"
 
 // Morning: submit by 5:30 pm, 30 min grace. Night: due 2:00 am, 30 min grace.
-const MORNING: CheckWindow & { dueByWeekday: number[] } = { opensAtMin: 9 * 60, submitFromMin: null, dueAtMin: 17 * 60 + 30, dueByWeekday: [], graceMin: 30 }
-const NIGHT: CheckWindow & { dueByWeekday: number[] } = { opensAtMin: 17 * 60 + 30, submitFromMin: 24 * 60 + 30, dueAtMin: 26 * 60, dueByWeekday: [], graceMin: 30 }
+const MORNING: CheckWindow & { dueByWeekday: number[] } = { opensAtMin: 9 * 60, submitFromMin: null, dueAtMin: 17 * 60 + 30, dueByWeekday: [], graceMin: 30, thanksgivingOff: false, thanksgivingOpensMin: null, thanksgivingDueMin: null }
+const NIGHT: CheckWindow & { dueByWeekday: number[] } = { opensAtMin: 17 * 60 + 30, submitFromMin: 24 * 60 + 30, dueAtMin: 26 * 60, dueByWeekday: [], graceMin: 30, thanksgivingOff: false, thanksgivingOpensMin: null, thanksgivingDueMin: null }
 
 const tpl = (w: typeof MORNING, extra: Partial<{ enabled: boolean; updatedAt: Date }> = {}) => ({
   ...w,

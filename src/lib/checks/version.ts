@@ -40,6 +40,9 @@ type Row = {
     dueAtMin: number
     dueByWeekday: number[] | null
     graceMin: number
+    thanksgivingOff: boolean
+    thanksgivingOpensMin: number | null
+    thanksgivingDueMin: number | null
     enabled: boolean
   }>
   db: string
@@ -59,7 +62,8 @@ async function fingerprintRow(storeWhere: Prisma.Sql, fromDay: string, toDay: st
       (SELECT coalesce(json_agg(json_build_object(
           'kind', t.kind, 'opensAtMin', t."opensAtMin", 'submitFromMin', t."submitFromMin",
           'dueAtMin', t."dueAtMin", 'dueByWeekday', t."dueByWeekday", 'graceMin', t."graceMin",
-          'enabled', t.enabled) ORDER BY t.kind), '[]'::json)
+          'thanksgivingOff', t."thanksgivingOff", 'thanksgivingOpensMin', t."thanksgivingOpensMin",
+          'thanksgivingDueMin', t."thanksgivingDueMin", 'enabled', t.enabled) ORDER BY t.kind), '[]'::json)
         FROM "CheckTemplate" t WHERE t."storeId" = st.id) AS templates,
       md5(concat_ws('#',
         concat('t:', (SELECT string_agg(t::text, '|' ORDER BY t.id) FROM "CheckTemplate" t WHERE t."storeId" = st.id)),

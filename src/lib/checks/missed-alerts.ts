@@ -11,6 +11,7 @@ import {
   clockLabel,
   todayLA,
   windowBounds,
+  WINDOW_SELECT,
   type CheckKindName,
   type CheckWindow,
 } from "./time"
@@ -264,11 +265,7 @@ export async function checkAlertAccountsDue(now: Date): Promise<string[] | null>
       },
       checkTemplates: {
         select: {
-          opensAtMin: true,
-          submitFromMin: true,
-          dueAtMin: true,
-          dueByWeekday: true,
-          graceMin: true,
+          ...WINDOW_SELECT,
           enabled: true,
           updatedAt: true,
         },

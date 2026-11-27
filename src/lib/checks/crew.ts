@@ -11,7 +11,9 @@ import {
   clockLabel,
   dueAtFor,
   minutesLabel,
-  submitFromFor,
+  offOn,
+  opensAtFor,
+  submitFromOn,
   todayLA,
   visibleDay,
   windowBounds,
@@ -181,6 +183,7 @@ export async function loadCrewView(store: CrewStore, now: Date, opts: CrewViewOp
     const rest = templates.filter((t) => t.enabled && !visibleDay(t, now))
     for (const t of [...visible, ...rest]) {
       const day = visibleDay(t, now) ?? today
+      if (offOn(day, t)) continue
       const cell = cellFor(t.kind, day)
       if (cell && !cell.submission && cell.status !== "off" && cell.status !== "closed") {
         active = { kind: t.kind, day, cell }
@@ -205,12 +208,14 @@ export async function loadCrewView(store: CrewStore, now: Date, opts: CrewViewOp
     if (!t || !t.enabled) return []
     // Before the morning opens, last night's row is the one still worth showing.
     const day = active?.kind === kind ? active.day : today
+    // Off for the day (Thanksgiving): crew don't see it at all.
+    if (offOn(day, t)) return []
     const cell = cellFor(kind, day)
     return [{
       kind,
       label: CHECK_LABEL[kind],
-      opensLabel: minutesLabel(t.opensAtMin),
-      submitLabel: `${minutesLabel(submitFromFor(t))} – ${minutesLabel(dueAtFor(day, t))}`,
+      opensLabel: minutesLabel(opensAtFor(day, t)),
+      submitLabel: `${minutesLabel(submitFromOn(day, t))} – ${minutesLabel(dueAtFor(day, t))}`,
       status: cell?.status ?? "upcoming",
       doneBy: cell?.submission?.crewName ?? null,
       doneAt: cell?.submission ? clockLabel(cell.submission.submittedAt) : null,
@@ -234,7 +239,7 @@ export async function loadCrewView(store: CrewStore, now: Date, opts: CrewViewOp
       dueAt: b.due.getTime(),
       closesAt: b.closes.getTime(),
       canSubmit: practice || phase === "open" || phase === "late",
-      submitFromLabel: minutesLabel(submitFromFor(t)),
+      submitFromLabel: minutesLabel(submitFromOn(active.day, t)),
       dueLabel: minutesLabel(dueAtFor(active.day, t)),
       sections: await loadSections(store.id, active.kind),
       marks: markStates(active.cell.marks),

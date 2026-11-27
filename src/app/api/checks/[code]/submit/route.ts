@@ -5,7 +5,7 @@ import { findStoreByCode, loadCrewView } from "@/lib/checks/crew"
 import { crewFromPass, loadMarkRows, snapshotForm } from "@/lib/checks/marks"
 import { sendCheckReport } from "@/lib/checks/report"
 import { isUniqueViolation } from "@/lib/checks/setup"
-import { clockLabel, dayToDb, lateMinutes } from "@/lib/checks/time"
+import { clockLabel, dayToDb, lateMinutes, WINDOW_SELECT } from "@/lib/checks/time"
 import { logger } from "@/lib/logger"
 
 /**
@@ -94,7 +94,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
   const tpl = await prisma.checkTemplate.findUnique({
     where: { storeId_kind: { storeId: store.id, kind: active.kind } },
-    select: { id: true, opensAtMin: true, submitFromMin: true, dueAtMin: true, dueByWeekday: true, graceMin: true },
+    select: { id: true, ...WINDOW_SELECT },
   })
   if (!tpl) return NextResponse.json({ error: "This check has closed." }, { status: 409 })
 

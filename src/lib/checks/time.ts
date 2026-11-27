@@ -40,7 +40,27 @@ export type CheckWindow = {
    * the window opens on, so "Friday, due 2:00 am" is Friday night's close.
    */
   dueByWeekday?: readonly number[]
+  /** Thanksgiving: the check is off that day (never missed, crew don't see it). */
+  thanksgivingOff: boolean
+  /**
+   * Thanksgiving hours, in the same minutes. Null `thanksgivingDueMin` means
+   * the usual hours. Submit is open from when crew can see the list.
+   */
+  thanksgivingOpensMin: number | null
+  thanksgivingDueMin: number | null
 }
+
+/** The window columns every check-template read must select. */
+export const WINDOW_SELECT = {
+  opensAtMin: true,
+  submitFromMin: true,
+  dueAtMin: true,
+  dueByWeekday: true,
+  graceMin: true,
+  thanksgivingOff: true,
+  thanksgivingOpensMin: true,
+  thanksgivingDueMin: true,
+} as const
 
 export const WEEKDAY_SHORT = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as const
 /** Spanish weekday shorts, for the bilingual poster. */
@@ -51,8 +71,37 @@ export function weekdayOf(day: string): number {
   return new Date(`${day}T12:00:00.000Z`).getUTCDay()
 }
 
-/** The due minute that applies on `day`, after any weekday override. */
+/** US Thanksgiving: the fourth Thursday of November, for a business day "YYYY-MM-DD". */
+export function isThanksgiving(day: string): boolean {
+  const [, m, d] = day.split("-").map(Number)
+  return m === 11 && weekdayOf(day) === 4 && d >= 22 && d <= 28
+}
+
+/** The check is switched off for `day` (Thanksgiving, when the owner set it so). */
+export function offOn(day: string, w: CheckWindow): boolean {
+  return w.thanksgivingOff === true && isThanksgiving(day)
+}
+
+/** Thanksgiving hours for `day`, or null when the usual hours apply. */
+function holidayHours(day: string, w: CheckWindow): { opens: number; due: number } | null {
+  if (w.thanksgivingDueMin == null || !isThanksgiving(day)) return null
+  return { opens: w.thanksgivingOpensMin ?? w.opensAtMin, due: w.thanksgivingDueMin }
+}
+
+/** When crew can see the list on `day`. */
+export function opensAtFor(day: string, w: CheckWindow): number {
+  return holidayHours(day, w)?.opens ?? w.opensAtMin
+}
+
+/** When Submit unlocks on `day`. Thanksgiving hours take submissions from the open. */
+export function submitFromOn(day: string, w: CheckWindow): number {
+  return holidayHours(day, w)?.opens ?? submitFromFor(w)
+}
+
+/** The due minute that applies on `day`, after any Thanksgiving or weekday override. */
 export function dueAtFor(day: string, w: CheckWindow): number {
+  const holiday = holidayHours(day, w)
+  if (holiday) return holiday.due
   const byDay = w.dueByWeekday
   return byDay && byDay.length === 7 ? byDay[weekdayOf(day)] : w.dueAtMin
 }
@@ -142,8 +191,8 @@ export type WindowBounds = { opens: Date; submitFrom: Date; due: Date; closes: D
 export function windowBounds(day: string, w: CheckWindow): WindowBounds {
   const dueAtMin = dueAtFor(day, w)
   return {
-    opens: laInstant(day, w.opensAtMin),
-    submitFrom: laInstant(day, submitFromFor(w)),
+    opens: laInstant(day, opensAtFor(day, w)),
+    submitFrom: laInstant(day, submitFromOn(day, w)),
     due: laInstant(day, dueAtMin),
     closes: laInstant(day, dueAtMin + w.graceMin),
   }
@@ -188,6 +237,7 @@ export function lateMinutes(day: string, w: CheckWindow, at: Date): number {
 export function acceptingDay(w: CheckWindow, now: Date): string | null {
   const today = todayLA(now)
   for (const day of [addDays(today, -1), today]) {
+    if (offOn(day, w)) continue
     const phase = windowPhase(day, w, now)
     if (phase === "open" || phase === "late") return day
   }
@@ -201,6 +251,7 @@ export function acceptingDay(w: CheckWindow, now: Date): string | null {
 export function visibleDay(w: CheckWindow, now: Date): string | null {
   const today = todayLA(now)
   for (const day of [addDays(today, -1), today]) {
+    if (offOn(day, w)) continue
     const phase = windowPhase(day, w, now)
     if (phase === "preview" || phase === "open" || phase === "late") return day
   }

@@ -24,6 +24,7 @@ import {
   todayLA,
   weekdayOf,
   windowBounds,
+  WINDOW_SELECT,
   type CheckKindName,
 } from "@/lib/checks/time"
 import { classify, guardSection, type StreamedSections } from "./types"
@@ -693,6 +694,11 @@ export type EditorTemplate = {
   dueByWeekday: number[]
   graceMin: number
   enabled: boolean
+  /** Thanksgiving: off that day. */
+  thanksgivingOff: boolean
+  /** Thanksgiving hours; null due means the usual hours. */
+  thanksgivingOpensMin: number | null
+  thanksgivingDueMin: number | null
   sections: EditorSection[]
 }
 export type ChecklistsData = { stores: StoreOption[]; store: StoreOption; templates: EditorTemplate[] }
@@ -733,6 +739,9 @@ export function getChecksChecklistsSectionPromises(opts: {
               dueByWeekday: t.dueByWeekday,
               graceMin: t.graceMin,
               enabled: t.enabled,
+              thanksgivingOff: t.thanksgivingOff,
+              thanksgivingOpensMin: t.thanksgivingOpensMin,
+              thanksgivingDueMin: t.thanksgivingDueMin,
               sections: t.sections.map((s) => ({
                 id: s.id,
                 nameEn: s.nameEn,
@@ -897,7 +906,7 @@ export function getChecksPostersSectionPromises(opts: { accountId: string }): St
           where: { accountId: opts.accountId, isActive: true },
           select: {
             id: true, name: true, checkCode: true,
-            checkTemplates: { select: { kind: true, opensAtMin: true, submitFromMin: true, dueAtMin: true, dueByWeekday: true, graceMin: true, enabled: true } },
+            checkTemplates: { select: { kind: true, ...WINDOW_SELECT, enabled: true } },
           },
           orderBy: { name: "asc" },
         })

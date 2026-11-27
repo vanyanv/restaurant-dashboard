@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma"
 import { cellStatus, type CellStatus, type PauseSpan } from "./status"
-import { addDays, CHECK_KINDS, dayToDb, dbToDay, windowBounds, type CheckKindName, type CheckWindow } from "./time"
+import { addDays, CHECK_KINDS, dayToDb, dbToDay, windowBounds, WINDOW_SELECT, type CheckKindName, type CheckWindow } from "./time"
 import { ensureCheckSetup } from "./setup"
 import { AUTO_CLOSE_LOOKBACK_MS, autoCloseChecks, type AutoCloseCandidate } from "./close"
 
@@ -178,8 +178,7 @@ export async function loadCheckGrid(opts: {
     prisma.checkTemplate.findMany({
       where: { storeId: { in: storeIds }, store: { accountId: opts.accountId } },
       select: {
-        id: true, storeId: true, kind: true, opensAtMin: true, submitFromMin: true, dueAtMin: true, dueByWeekday: true,
-        graceMin: true, enabled: true, createdAt: true,
+        id: true, storeId: true, kind: true, ...WINDOW_SELECT, enabled: true, createdAt: true,
         sections: { where: { enabled: true }, select: { _count: { select: { items: true } } } },
       },
     }),
@@ -238,6 +237,9 @@ export async function loadCheckGrid(opts: {
         dueAtMin: t.dueAtMin,
         dueByWeekday: t.dueByWeekday,
         graceMin: t.graceMin,
+        thanksgivingOff: t.thanksgivingOff,
+        thanksgivingOpensMin: t.thanksgivingOpensMin,
+        thanksgivingDueMin: t.thanksgivingDueMin,
         enabled: t.enabled,
         createdAt: t.createdAt,
         itemCount: t.sections.reduce((n, s) => n + s._count.items, 0),

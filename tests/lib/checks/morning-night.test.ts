@@ -17,7 +17,7 @@ import type { ActiveCheck } from "@/lib/checks/crew"
 
 const tpl = (kind: "MORNING" | "EVENING"): CheckWindow => {
   const t = DEFAULT_TEMPLATES.find((x) => x.kind === kind)!
-  return { opensAtMin: t.opensAtMin, submitFromMin: t.submitFromMin, dueAtMin: t.dueAtMin, dueByWeekday: [...t.dueByWeekday], graceMin: t.graceMin }
+  return { opensAtMin: t.opensAtMin, submitFromMin: t.submitFromMin, dueAtMin: t.dueAtMin, dueByWeekday: [...t.dueByWeekday], graceMin: t.graceMin, thanksgivingOff: t.thanksgivingOff, thanksgivingOpensMin: t.thanksgivingOpensMin, thanksgivingDueMin: t.thanksgivingDueMin }
 }
 const MORNING = tpl("MORNING")
 const NIGHT = tpl("EVENING")

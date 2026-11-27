@@ -2,7 +2,7 @@ import { prisma } from "@/lib/prisma"
 import { logger } from "@/lib/logger"
 import type { SubmissionContent } from "./data"
 import { escapeEmailHtml as esc, sendEmail } from "./email"
-import { CHECK_LABEL, clockLabel, dayLabel, dbToDay, windowBounds, type CheckKindName } from "./time"
+import { CHECK_LABEL, clockLabel, dayLabel, dbToDay, windowBounds, WINDOW_SELECT, type CheckKindName } from "./time"
 import { EMAIL } from "@/lib/email-colors"
 
 /**
@@ -122,7 +122,7 @@ export async function sendCheckReport(submissionId: string): Promise<void> {
     select: {
       storeId: true, kind: true, businessDate: true, crewName: true, submittedAt: true, lateMinutes: true, content: true,
       autoClosed: true,
-      template: { select: { opensAtMin: true, submitFromMin: true, dueAtMin: true, dueByWeekday: true, graceMin: true } },
+      template: { select: WINDOW_SELECT },
       _count: { select: { photos: true } },
       store: { select: { name: true, account: { select: { checkReportEmails: true } } } },
     },

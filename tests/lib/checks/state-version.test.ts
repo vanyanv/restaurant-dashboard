@@ -39,7 +39,7 @@ const MORNING = {
   submitFromMin: 990,
   dueAtMin: 1050,
   dueByWeekday: [],
-  graceMin: 30,
+  graceMin: 30, thanksgivingOff: false, thanksgivingOpensMin: null, thanksgivingDueMin: null,
   enabled: true,
 }
 const STORE = { id: "s1", name: "Van Nuys", accountId: "acc1" }

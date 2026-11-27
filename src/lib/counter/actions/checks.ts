@@ -50,6 +50,10 @@ const ChecklistInput = z.object({
   dueByWeekday: z.array(z.number().int().min(1).max(MAX_MIN)).refine((a) => a.length === 0 || a.length === 7, "Set a time for every day").optional(),
   graceMin: z.number().int().min(0).max(240).default(0),
   enabled: z.boolean(),
+  /** Thanksgiving: off that day, or its own hours (`thanksgivingDueMin` set), or the usual hours. Left out keeps what is saved. */
+  thanksgivingOff: z.boolean().optional(),
+  thanksgivingOpensMin: z.number().int().min(0).max(1439).nullable().optional(),
+  thanksgivingDueMin: z.number().int().min(1).max(MAX_MIN).nullable().optional(),
   sections: z
     .array(
       z.object({
@@ -120,6 +124,15 @@ export async function saveChecklist(
         return { ok: false, error: "The whole check, from when crew can see it to when Submit closes, has to be shorter than a day" }
       }
     }
+    if ((input.thanksgivingOpensMin === undefined) !== (input.thanksgivingDueMin === undefined)) {
+      return { ok: false, error: "Send both Thanksgiving times, or neither" }
+    }
+    if (input.thanksgivingDueMin != null) {
+      const opens = input.thanksgivingOpensMin ?? input.opensAtMin
+      if (opens >= 1440) return { ok: false, error: "Thanksgiving hours have to open before midnight" }
+      if (input.thanksgivingDueMin <= opens) return { ok: false, error: "Thanksgiving hours have to close after they open" }
+      if (input.thanksgivingDueMin - opens >= 1440) return { ok: false, error: "Thanksgiving hours have to be shorter than a day" }
+    }
     await requireOwnerStore(input.storeId)
     // A how-to photo must be one this account uploaded, never a key typed in.
     const helpKeys = input.sections.flatMap((s) => s.items.flatMap((i) => i.helpPhotos))
@@ -155,6 +168,9 @@ export async function saveChecklist(
           dueByWeekday,
           graceMin: input.graceMin,
           enabled: input.enabled,
+          thanksgivingOff: input.thanksgivingOff,
+          thanksgivingOpensMin: input.thanksgivingDueMin === null ? null : input.thanksgivingOpensMin,
+          thanksgivingDueMin: input.thanksgivingDueMin,
         },
       })
       await tx.checkItem.deleteMany({ where: { section: { templateId: tpl.id }, id: { notIn: [...keptItems] } } })
@@ -279,6 +295,9 @@ export async function copyChecklistToOtherStores(input: { storeId: string; kind:
         dueAtMin: source.dueAtMin,
         dueByWeekday: source.dueByWeekday,
         graceMin: source.graceMin,
+        thanksgivingOff: source.thanksgivingOff,
+        thanksgivingOpensMin: source.thanksgivingOpensMin,
+        thanksgivingDueMin: source.thanksgivingDueMin,
         // Copying a list never switches the check on or off at another store.
         enabled: existing ? existing.enabled : source.enabled,
         sections,

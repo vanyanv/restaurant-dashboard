@@ -58,6 +58,9 @@ export async function ensureCheckSetup(storeId: string): Promise<void> {
             dueAtMin: t.dueAtMin,
             dueByWeekday: t.dueByWeekday,
             graceMin: t.graceMin,
+            thanksgivingOff: t.thanksgivingOff,
+            thanksgivingOpensMin: t.thanksgivingOpensMin,
+            thanksgivingDueMin: t.thanksgivingDueMin,
             sections: {
               create: t.sections.map((s, si) => ({
                 position: si,
