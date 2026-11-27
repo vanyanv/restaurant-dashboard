@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest"
 
 vi.mock("@/lib/prisma", () => ({ prisma: { screen: { findMany: vi.fn(async () => [{ tokenHash: "h1" }, { tokenHash: "h2" }]) } } }))
 
-import { pingAccountTvs, pushConfig, signedEventsUrl, tvChannel, tvPush } from "@/lib/screens/push"
+import { liveTvs, pingAccountTvs, pushConfig, signedEventsUrl, tvChannel, tvIsLive, tvPush } from "@/lib/screens/push"
 import { prisma } from "@/lib/prisma"
 import { ONLINE_WINDOW_MS, TV_PUSHED_POLL_MS } from "@/lib/screens/limits"
 
@@ -59,5 +59,22 @@ describe("TV push", () => {
   it("still checks in often enough, with the socket up, for the dashboard to show the TV as on", () => {
     // Two checks must fit in the window, so one lost call doesn't flip a live TV to "Off".
     expect(TV_PUSHED_POLL_MS * 2).toBeLessThanOrEqual(ONLINE_WINDOW_MS)
+  })
+
+  it("lists which TVs have their socket open, in one signed call, and says null when it cannot tell", async () => {
+    expect(await liveTvs(["h1"])).toBeNull() // push off
+    for (const [k, v] of Object.entries(ENV)) vi.stubEnv(k, v)
+    const f = vi.fn(async () => new Response(JSON.stringify({ channels: { [tvChannel("h2")]: {}, "tv-other": {} } }), { status: 200 }))
+    vi.stubGlobal("fetch", f)
+    expect(await liveTvs(["h1", "h2"])).toEqual(new Set(["h2"]))
+    const url = new URL((f.mock.calls[0] as unknown as [string])[0])
+    expect(url.pathname).toBe("/apps/3/channels")
+    expect(url.searchParams.get("filter_by_prefix")).toBe("tv-")
+    expect(url.searchParams.get("auth_signature")).toMatch(/^[0-9a-f]{64}$/)
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("no", { status: 500 })))
+    expect(await liveTvs(["h1"])).toBeNull()
+    expect(await tvIsLive("h1")).toBeNull()
+    vi.stubGlobal("fetch", vi.fn(async () => { throw new Error("down") }))
+    expect(await liveTvs(["h1"])).toBeNull()
   })
 })

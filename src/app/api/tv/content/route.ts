@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server"
+import { after, NextRequest, NextResponse } from "next/server"
 import { cleanDevice, hashToken, tokenFromHeader } from "@/lib/screens/core"
 import { freshContentFor, savedContentFor } from "@/lib/screens/data"
 import { rateLimit, rateLimitKey, rateLimitLocal } from "@/lib/rate-limit"
@@ -37,6 +37,7 @@ export async function GET(request: NextRequest) {
   if (saved.content) {
     const limited = rateLimitLocal(tvKey, { limit: 30, windowMs: 60_000 })
     if (limited) return withCors(limited)
+    if (saved.afterwards) after(saved.afterwards)
     return NextResponse.json(saved.content, { headers: { ...CORS, "Cache-Control": "no-store" } })
   }
 

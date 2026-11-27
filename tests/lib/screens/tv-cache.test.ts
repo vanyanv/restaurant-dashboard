@@ -86,7 +86,7 @@ vi.mock("@/lib/prisma", () => ({ prisma }))
 
 import { contentFor } from "@/lib/screens/data"
 import { forgetTvs, seenAt } from "@/lib/screens/tv-cache"
-import { pingAccountTvs, pingTvs } from "@/lib/screens/push"
+import { pingAccountTvs, pingTvs, tvChannel } from "@/lib/screens/push"
 import { ONLINE_WINDOW_MS, SEEN_NOTE_EVERY_MS, TV_PUSHED_POLL_MS } from "@/lib/screens/limits"
 
 const dbReads = () => prisma.screen.findUnique.mock.calls.length
@@ -214,5 +214,35 @@ describe("TV check-in without the database", () => {
   it("keeps a live TV On although it notes itself only every 90 s", () => {
     // Worst case: the note is one interval plus one check-in old, and one more check-in is lost.
     expect(SEEN_NOTE_EVERY_MS + 2 * TV_PUSHED_POLL_MS).toBeLessThanOrEqual(ONLINE_WINDOW_MS)
+  })
+
+  it("writes no check-in time for a TV whose Pusher socket is open, and does for one without", async () => {
+    vi.stubEnv("PUSHER_APP_ID", "3")
+    vi.stubEnv("PUSHER_KEY", "k")
+    vi.stubEnv("PUSHER_SECRET", "s")
+    vi.stubEnv("PUSHER_CLUSTER", "us3")
+    try {
+      const occupied = { value: true }
+      const f = vi.fn(async (url: string) => {
+        expect(url).toContain(`/apps/3/channels/${tvChannel("h1")}?`)
+        return new Response(JSON.stringify({ occupied: occupied.value }), { status: 200 })
+      })
+      vi.stubGlobal("fetch", f)
+      vi.useFakeTimers({ now: new Date("2026-11-26T20:00:00Z"), toFake: ["Date"] })
+      await contentFor("h1", null) // from the database: notes seen, as every database read does
+      vi.setSystemTime(new Date("2026-11-26T20:02:00Z"))
+      redis.calls = 0
+      await contentFor("h1", null)
+      expect(f).toHaveBeenCalledTimes(1)
+      expect(redis.calls).toBe(1) // the read only
+      occupied.value = false
+      vi.setSystemTime(new Date("2026-11-26T20:03:00Z"))
+      redis.calls = 0
+      await contentFor("h1", null)
+      expect(redis.calls).toBe(2) // read + note
+    } finally {
+      vi.unstubAllEnvs()
+      vi.unstubAllGlobals()
+    }
   })
 })
