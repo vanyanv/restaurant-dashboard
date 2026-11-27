@@ -1,6 +1,8 @@
 import { createHash, createHmac } from "node:crypto"
 import { prisma } from "@/lib/prisma"
 import { logger } from "@/lib/logger"
+import { getRedis } from "@/lib/cache/redis"
+import { forgetTvs } from "./tv-cache"
 
 /**
  * Tells TVs the moment something they show changes, so they don't wait for
@@ -52,10 +54,12 @@ export function signedEventsUrl(c: PushConfig, body: string, now = Date.now()): 
 }
 
 /**
- * Ping these TVs. Never throws and gives up after 3 seconds: a missed ping
- * only means the TV finds the change on its next check.
+ * These TVs' content changed: drop their saved answers (tv-cache.ts), then
+ * ping them. Call after the change is saved. Never throws and gives up after
+ * 3 seconds: a missed ping only means the TV finds the change on its next check.
  */
 export async function pingTvs(tokenHashes: string[]): Promise<void> {
+  await forgetTvs(tokenHashes)
   const c = pushConfig()
   if (!c || tokenHashes.length === 0) return
   const channels = [...new Set(tokenHashes.map(tvChannel))]
@@ -78,7 +82,7 @@ export async function pingTvs(tokenHashes: string[]): Promise<void> {
 
 /** Ping every TV in the account. */
 export async function pingAccountTvs(accountId: string): Promise<void> {
-  if (!pushConfig()) return
+  if (!pushConfig() && !getRedis()) return
   try {
     const screens = await prisma.screen.findMany({ where: { accountId }, select: { tokenHash: true } })
     await pingTvs(screens.map((s) => s.tokenHash))

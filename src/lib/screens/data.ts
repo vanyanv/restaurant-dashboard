@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma"
 import { pairLink, qrRows } from "./pair-link"
 import { tvPush } from "./push"
 import { noteCodeShown } from "./events"
+import { noteSeen, readTv, saveTv } from "./tv-cache"
 import {
   PAIR_CODE_TTL_MS,
   PLAYER_VERSION,
@@ -85,8 +86,44 @@ export async function pairingFor(tokenHash: string, device: string | null): Prom
   throw new Error("Could not make a pairing code")
 }
 
-/** What a TV should show now. Notes that the TV was seen, at most once a minute. */
+type Paired = Extract<TvContent, { paired: true }>
+/** A paired answer as saved: the clock is added when it is served, and identifyUntil is checked then. */
+type SavedPaired = Omit<Paired, "clock">
+
+/**
+ * What a TV should show now. From the saved answer while nothing has changed
+ * (tv-cache.ts), so a check-in does not wake the database; from the database
+ * otherwise, noting there that the TV was seen, at most once a minute.
+ */
 export async function contentFor(tokenHash: string, device: string | null): Promise<TvContent> {
+  const { hit, gen } = await readTv<TvContent | SavedPaired>(tokenHash, device)
+  if (hit) {
+    if (!hit.paired) return hit
+    await noteSeen(tokenHash)
+    return serve(hit)
+  }
+
+  const content = await readContent(tokenHash, device)
+  if (content.paired) {
+    await noteSeen(tokenHash)
+    const { clock: _clock, ...saved } = content
+    await saveTv(tokenHash, gen, device, saved)
+  } else {
+    // Until the code runs out; claiming the TV forgets it sooner.
+    await saveTv(tokenHash, gen, device, content, (Date.parse(content.expiresAt) - Date.now()) / 1000)
+  }
+  return content
+}
+
+function serve(saved: SavedPaired, now = new Date()): Paired {
+  return {
+    ...saved,
+    clock: { now: now.toISOString(), offsetMinutes: storeOffsetMinutes(now) },
+    identifyUntil: saved.identifyUntil && Date.parse(saved.identifyUntil) > now.getTime() ? saved.identifyUntil : null,
+  }
+}
+
+async function readContent(tokenHash: string, device: string | null): Promise<TvContent> {
   const screen = await prisma.screen.findUnique({
     where: { tokenHash },
     select: {

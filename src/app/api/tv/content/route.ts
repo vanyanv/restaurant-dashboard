@@ -4,7 +4,8 @@ import { contentFor } from "@/lib/screens/data"
 import { rateLimit, rateLimitKey } from "@/lib/rate-limit"
 
 /**
- * What a TV should show. The TV calls this every 30 seconds with its token.
+ * What a TV should show. The TV calls this every 30 to 60 seconds with its token; while nothing has
+ * changed the answer comes from Redis, not the database (tv-cache.ts).
  * Before it is paired the answer is its code; after, its playlist.
  *
  * Open to any origin: the Samsung app runs from its own package, not from
