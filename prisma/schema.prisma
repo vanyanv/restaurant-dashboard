@@ -2430,6 +2430,15 @@ model CheckTemplate {
   /// Past that the check is missed.
   graceMin     Int       @default(30)
   enabled      Boolean   @default(true)
+  /// Thanksgiving (fourth Thursday of November): the check is off that day.
+  /// The owner sets it per store and check in Store checks > Checklists.
+  thanksgivingOff      Boolean @default(false)
+  /// Thanksgiving hours: crew can see the list (and submit) from here.
+  /// Null means the usual open time.
+  thanksgivingOpensMin Int?
+  /// Thanksgiving hours: the check closes itself here. Null means the usual
+  /// hours apply on Thanksgiving.
+  thanksgivingDueMin   Int?
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
 

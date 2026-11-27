@@ -151,6 +151,9 @@ function Editor({ data }: { data: ChecklistsData }) {
         dueByWeekday: t.dueByWeekday,
         graceMin: 0,
         enabled: t.enabled,
+        thanksgivingOff: t.thanksgivingOff,
+        thanksgivingOpensMin: t.thanksgivingOpensMin,
+        thanksgivingDueMin: t.thanksgivingDueMin,
         sections: sent.sections.map((s) => ({
           id: isNew(s.id) ? undefined : s.id,
           nameEn: s.nameEn,
@@ -407,6 +410,73 @@ function Editor({ data }: { data: ChecklistsData }) {
                 ))}
               </div>
             )}
+          </div>
+          <div className="ck-esect">
+            <span className="ck-mono">Thanksgiving</span>
+            <div className="ck-days">
+              <label className="ck-field">
+                <span className="ck-mono">On Thanksgiving</span>
+                <select
+                  className="ck-input"
+                  aria-label={`${t.label} on Thanksgiving`}
+                  value={t.thanksgivingOff ? "off" : t.thanksgivingDueMin != null ? "hours" : "usual"}
+                  onChange={(e) =>
+                    update((t) => {
+                      const v = e.target.value
+                      t.thanksgivingOff = v === "off"
+                      if (v === "hours") {
+                        t.thanksgivingOpensMin ??= 9 * 60
+                        t.thanksgivingDueMin ??= 18 * 60
+                      } else {
+                        t.thanksgivingOpensMin = null
+                        t.thanksgivingDueMin = null
+                      }
+                    })
+                  }
+                >
+                  <option value="usual">Usual hours</option>
+                  <option value="hours">Different hours</option>
+                  <option value="off">Off for the day</option>
+                </select>
+              </label>
+              {!t.thanksgivingOff && t.thanksgivingDueMin != null && (
+                <>
+                  <label className="ck-field">
+                    <span className="ck-mono">Crew can see and submit from</span>
+                    <input
+                      className="ck-input"
+                      type="time"
+                      value={toTime(t.thanksgivingOpensMin ?? t.opensAtMin)}
+                      onChange={(e) =>
+                        update((t) => {
+                          const o = fromTime(e.target.value)
+                          t.thanksgivingOpensMin = o
+                          t.thanksgivingDueMin = afterOpen((t.thanksgivingDueMin ?? 0) % 1440, o)
+                        })
+                      }
+                    />
+                  </label>
+                  <label className="ck-field">
+                    <span className="ck-mono">Closes itself at</span>
+                    <input
+                      className="ck-input"
+                      type="time"
+                      value={toTime(t.thanksgivingDueMin)}
+                      onChange={(e) =>
+                        update((t) => void (t.thanksgivingDueMin = afterOpen(fromTime(e.target.value), t.thanksgivingOpensMin ?? t.opensAtMin)))
+                      }
+                    />
+                  </label>
+                </>
+              )}
+            </div>
+            <p className="ck-meta">
+              {t.thanksgivingOff
+                ? `The ${t.label} check doesn't run on Thanksgiving. Crew don't see it and it never counts as missed.`
+                : t.thanksgivingDueMin != null
+                  ? `On Thanksgiving crew can see and submit ${t.label} from ${label12(t.thanksgivingOpensMin ?? t.opensAtMin)}, and it closes itself at ${label12(t.thanksgivingDueMin)}.`
+                  : `On Thanksgiving ${t.label} keeps its usual hours.`}
+            </p>
           </div>
           {t.sections.map((s, si) => (
             <div className={`ck-esect${s.enabled ? "" : " ck-esect--off"}`} key={`${kind}-${si}`}>

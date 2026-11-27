@@ -26,7 +26,7 @@ import type { CheckWindow } from "@/lib/checks/time"
  * Tuesday; its Night check is due 1:30 am and closes at 2:00 am Wednesday.
  */
 
-const NIGHT: CheckWindow = { opensAtMin: 1050, submitFromMin: 1470, dueAtMin: 1530, dueByWeekday: [], graceMin: 30 }
+const NIGHT: CheckWindow = { opensAtMin: 1050, submitFromMin: 1470, dueAtMin: 1530, dueByWeekday: [], graceMin: 30, thanksgivingOff: false, thanksgivingOpensMin: null, thanksgivingDueMin: null }
 const DAY = "2026-11-10"
 const DUE = new Date("2026-11-11T09:30:00Z") // 1:30 am
 const CLOSES = new Date("2026-11-11T10:00:00Z") // 2:00 am

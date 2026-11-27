@@ -1,4 +1,4 @@
-import { windowBounds, windowPhase, type CheckWindow } from "./time"
+import { offOn, windowBounds, windowPhase, type CheckWindow } from "./time"
 
 /**
  * What one store's one check was on one business day. The single function
@@ -15,7 +15,7 @@ import { windowBounds, windowPhase, type CheckWindow } from "./time"
  *   open      crew can work on it now: ticking before Submit unlocks, or
  *             taking submissions (past due counts while grace lasts)
  *   upcoming  not open yet
- *   off       the owner switched this check off
+ *   off       the owner switched this check off (or off for Thanksgiving)
  *   before    the window closed before checks were set up for the store
  *   paused    the window closes inside a pause (the owner is training crew):
  *             practice only, never on time, late or missed
@@ -78,7 +78,7 @@ export function cellStatus(input: CellInput): CellStatus {
     return lateMinutes > 0 ? "late" : "on_time"
   }
   if (input.closed) return "closed"
-  if (!input.enabled) return "off"
+  if (!input.enabled || offOn(input.day, input.window)) return "off"
   if (input.since && windowBounds(input.day, input.window).closes.getTime() < input.since.getTime()) return "before"
   const phase = windowPhase(input.day, input.window, input.now)
   if (phase === "upcoming") return "upcoming"

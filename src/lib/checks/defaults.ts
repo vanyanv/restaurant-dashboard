@@ -22,6 +22,10 @@ export type DefaultTemplate = {
   /** Empty, or seven submit-until times, Sunday first. */
   dueByWeekday: number[]
   graceMin: number
+  /** Thanksgiving (owner 2026-11-26): Night only, open 9:00 am to 6:00 pm. */
+  thanksgivingOff: boolean
+  thanksgivingOpensMin: number | null
+  thanksgivingDueMin: number | null
   sections: DefaultSection[]
 }
 
@@ -38,6 +42,9 @@ export const DEFAULT_TEMPLATES: readonly DefaultTemplate[] = [
     dueAtMin: 17 * H + 30,
     dueByWeekday: [],
     graceMin: 0,
+    thanksgivingOff: true,
+    thanksgivingOpensMin: null,
+    thanksgivingDueMin: null,
     sections: [
       {
         nameEn: "Morning tasks",
@@ -62,6 +69,9 @@ export const DEFAULT_TEMPLATES: readonly DefaultTemplate[] = [
     dueAtMin: NIGHT_SHORT,
     dueByWeekday: [NIGHT_LONG, NIGHT_SHORT, NIGHT_SHORT, NIGHT_SHORT, NIGHT_SHORT, NIGHT_LONG, NIGHT_LONG],
     graceMin: 0,
+    thanksgivingOff: false,
+    thanksgivingOpensMin: 9 * H,
+    thanksgivingDueMin: 18 * H,
     sections: [
       {
         nameEn: "Kitchen",

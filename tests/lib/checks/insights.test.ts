@@ -5,7 +5,7 @@ vi.mock("@/lib/prisma", () => ({ prisma: {} }))
 import type { GridCell, GridMark, GridStore, RecordTask } from "@/lib/checks/data"
 import { BURST_MIN, checkReport, taskShare, tickBurst, tickTimeline } from "@/lib/checks/insights"
 
-const NIGHT = { opensAtMin: 21 * 60, submitFromMin: 23 * 60, dueAtMin: 25 * 60, graceMin: 30 }
+const NIGHT = { opensAtMin: 21 * 60, submitFromMin: 23 * 60, dueAtMin: 25 * 60, graceMin: 30, thanksgivingOff: false, thanksgivingOpensMin: null, thanksgivingDueMin: null }
 // 2026-11-10 is a Tuesday. 1:00 am LA on the 11th is 09:00 UTC (PST, -8).
 const at = (iso: string) => new Date(iso)
 

@@ -13,8 +13,8 @@ import { issueCrewPass, readCrewPass } from "@/lib/checks/crew-session"
  * minutes; an evening window may run past 1440 and still belongs to the day
  * it opened.
  */
-const MORNING: CheckWindow = { opensAtMin: 6 * 60, dueAtMin: 10 * 60, graceMin: 30 }
-const EVENING: CheckWindow = { opensAtMin: 21 * 60, dueAtMin: 24 * 60 + 30, graceMin: 30 }
+const MORNING: CheckWindow = { opensAtMin: 6 * 60, dueAtMin: 10 * 60, graceMin: 30, thanksgivingOff: false, thanksgivingOpensMin: null, thanksgivingDueMin: null }
+const EVENING: CheckWindow = { opensAtMin: 21 * 60, dueAtMin: 24 * 60 + 30, graceMin: 30, thanksgivingOff: false, thanksgivingOpensMin: null, thanksgivingDueMin: null }
 
 describe("laInstant", () => {
   it("reads LA wall-clock on both sides of DST", () => {
@@ -62,7 +62,7 @@ describe("due time by weekday", () => {
   const LATE_WEEKEND: CheckWindow = {
     opensAtMin: 21 * 60,
     dueAtMin: ONE,
-    graceMin: 30,
+    graceMin: 30, thanksgivingOff: false, thanksgivingOpensMin: null, thanksgivingDueMin: null,
     dueByWeekday: [TWO, ONE, ONE, ONE, ONE, TWO, TWO],
   }
 
@@ -91,7 +91,7 @@ describe("due time by weekday", () => {
     const AFTER_MIDNIGHT: CheckWindow = {
       opensAtMin: 24 * 60 + 30,
       dueAtMin: 24 * 60 + 120,
-      graceMin: 30,
+      graceMin: 30, thanksgivingOff: false, thanksgivingOpensMin: null, thanksgivingDueMin: null,
       dueByWeekday: [1620, 1560, 1560, 1560, 1560, 1620, 1620],
     }
     // Monday 2026-10-26 night: 12:45 am Tuesday PDT is 07:45Z Tuesday.
