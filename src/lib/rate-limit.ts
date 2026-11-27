@@ -160,6 +160,15 @@ async function redisRateLimit(
   }
 }
 
+/**
+ * The limiter in this instance's memory only, never Redis. For a path whose
+ * whole point is to spend nothing (a TV check-in answered from the Redis cache):
+ * it stops one client looping against one instance, which is what it is for.
+ */
+export function rateLimitLocal(key: string, config: RateLimitConfig): NextResponse | null {
+  return memoryRateLimit(key, config)
+}
+
 function memoryRateLimit(key: string, config: RateLimitConfig): NextResponse | null {
   ensureCleanup()
 

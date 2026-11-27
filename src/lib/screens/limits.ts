@@ -3,8 +3,12 @@
 /** How long a code on the TV stays good before the TV asks for a new one. */
 export const PAIR_CODE_TTL_MS = 10 * 60_000
 
-/** A screen heard from within this long is "On". The TV checks in every 30 s. */
-export const ONLINE_WINDOW_MS = 2 * 60_000
+/**
+ * A screen heard from within this long is "On". The TV checks in every 30 to
+ * 60 s, but a check-in answered from Redis notes itself only every
+ * SEEN_NOTE_EVERY_MS, so the newest note can be that plus one check-in old.
+ */
+export const ONLINE_WINDOW_MS = 4 * 60_000
 
 /** How often the TV asks for its playlist. */
 export const TV_POLL_MS = 30_000
@@ -15,6 +19,13 @@ export const TV_POLL_MS = 30_000
  * is on: it must stay well inside ONLINE_WINDOW_MS or live TVs read "Off".
  */
 export const TV_PUSHED_POLL_MS = 60_000
+
+/**
+ * A check-in answered from Redis notes "seen" there at most this often: one
+ * Redis write every other check-in instead of every one (the free plan counts
+ * commands).
+ */
+export const SEEN_NOTE_EVERY_MS = 90_000
 
 /** lastSeenAt is written at most this often per screen, so polling is not a write per call. */
 export const SEEN_WRITE_EVERY_MS = 60_000

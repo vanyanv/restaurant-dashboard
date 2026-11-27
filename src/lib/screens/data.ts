@@ -1,12 +1,13 @@
 import { prisma } from "@/lib/prisma"
 import { pairLink, qrRows } from "./pair-link"
-import { tvPush } from "./push"
+import { tvIsLive, tvPush } from "./push"
 import { noteCodeShown } from "./events"
 import { noteSeen, readTv, saveTv } from "./tv-cache"
 import {
   PAIR_CODE_TTL_MS,
   PLAYER_VERSION,
   SEEN_WRITE_EVERY_MS,
+  SEEN_NOTE_EVERY_MS,
   newPairCode,
   playlistVersion,
   drawsFullHd,
@@ -96,13 +97,39 @@ type SavedPaired = Omit<Paired, "clock">
  * otherwise, noting there that the TV was seen, at most once a minute.
  */
 export async function contentFor(tokenHash: string, device: string | null): Promise<TvContent> {
-  const { hit, gen } = await readTv<TvContent | SavedPaired>(tokenHash, device)
-  if (hit) {
-    if (!hit.paired) return hit
-    await noteSeen(tokenHash)
-    return serve(hit)
-  }
+  const saved = await savedContentFor(tokenHash, device)
+  if (!saved.content) return freshContentFor(tokenHash, device, saved.gen)
+  await saved.afterwards?.()
+  return saved.content
+}
 
+/**
+ * The answer from Redis, or null when it must come from the database. Costs one
+ * Redis command. `gen` goes to `freshContentFor` on a miss.
+ *
+ * Every SEEN_NOTE_EVERY_MS it also asks Pusher whether the TV's socket is open.
+ * If it is, the dashboard reads it as On from Pusher (`liveTvs`) and nothing is
+ * written; only a TV without a socket notes "seen" in Redis. That runs after
+ * the answer is sent (`after` in the route), so the TV never waits on Pusher.
+ */
+export async function savedContentFor(
+  tokenHash: string,
+  device: string | null,
+): Promise<{ content: TvContent | null; gen: number | null; afterwards?: () => Promise<void> }> {
+  const { hit, gen, seenAt } = await readTv<TvContent | SavedPaired>(tokenHash, device)
+  if (!hit) return { content: null, gen }
+  if (!hit.paired) return { content: hit, gen }
+  const due = seenAt === null || Date.now() - seenAt >= SEEN_NOTE_EVERY_MS
+  const afterwards = due ? () => noteUnlessLive(tokenHash) : undefined
+  return { content: serve(hit), gen, afterwards }
+}
+
+async function noteUnlessLive(tokenHash: string): Promise<void> {
+  if ((await tvIsLive(tokenHash)) !== true) await noteSeen(tokenHash)
+}
+
+/** The answer from the database, saved to Redis under `gen` for the next check-in. */
+export async function freshContentFor(tokenHash: string, device: string | null, gen: number | null): Promise<TvContent> {
   const content = await readContent(tokenHash, device)
   if (content.paired) {
     await noteSeen(tokenHash)

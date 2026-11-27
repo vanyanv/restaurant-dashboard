@@ -1,6 +1,7 @@
 import { getAccountStores } from "@/lib/account-stores"
 import { prisma } from "@/lib/prisma"
 import { seenAt } from "@/lib/screens/tv-cache"
+import { liveTvs } from "@/lib/screens/push"
 import { activeTime, screenMediaUrl, screenState, storeOffsetMinutes, type ScreenState } from "@/lib/screens/core"
 import { classify, guardSection, lazy, type StreamedSections } from "./types"
 import type { SectionData } from "@/lib/counter/section-data"
@@ -87,13 +88,18 @@ export async function loadScreens(accountId: string): Promise<ScreensData> {
   ])
 
   // A TV served from Redis notes its check-in there, not on the row; take the later of the two.
-  const seen = await seenAt(screens.map((s) => s.tokenHash))
+  // On: its Pusher socket is open now (the player is running and online), or
+  // failing that it checked in lately. A TV with a socket writes no check-in
+  // time (see savedContentFor), so the socket is read first.
+  const hashes = screens.map((s) => s.tokenHash)
+  const [seen, live] = await Promise.all([seenAt(hashes), liveTvs(hashes)])
+  const now = new Date()
   const lastSeen = (s: { tokenHash: string; lastSeenAt: Date | null }) => {
+    if (live?.has(s.tokenHash)) return now
     const r = seen.get(s.tokenHash)
     return r && (!s.lastSeenAt || r > s.lastSeenAt) ? r : s.lastSeenAt
   }
 
-  const now = new Date()
   const local = new Date(now.getTime() + storeOffsetMinutes(now) * 60_000)
   const day = local.getUTCDay()
   const minute = local.getUTCHours() * 60 + local.getUTCMinutes()
