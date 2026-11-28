@@ -309,11 +309,11 @@ function setupOf(): DeveloperSetup {
     steps: [
       { command: "npm ci", explain: "Installs the exact packages the live site runs on." },
       {
-        command: "vercel link",
+        command: "npx vercel link",
         explain: "Ties this folder to the project on Vercel. Asks you to sign in the first time.",
       },
       {
-        command: "vercel env pull .env.local",
+        command: "npx vercel env pull .env.local",
         explain:
           "Downloads the keys into .env.local. Vercel leaves out the ones marked Sensitive; copy those from the Keys tab.",
       },

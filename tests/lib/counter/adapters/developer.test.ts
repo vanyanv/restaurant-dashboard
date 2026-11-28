@@ -362,8 +362,9 @@ describe("stack and setup", () => {
     const { setup } = await load()
     expect(setup.steps.map((s) => s.command)).toEqual([
       "npm ci",
-      "vercel link",
-      "vercel env pull .env.local",
+      // `npx`: a new computer has no Vercel command installed yet.
+      "npx vercel link",
+      "npx vercel env pull .env.local",
       "npx prisma generate",
       "npm run dev",
     ])

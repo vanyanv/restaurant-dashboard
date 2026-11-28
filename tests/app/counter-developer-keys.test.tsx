@@ -375,6 +375,110 @@ describe("Keys tab: when something is not available", () => {
   })
 })
 
+describe("Keys tab: an answer that arrives too late is dropped", () => {
+  /** A promise the test settles by hand. */
+  function held<T>() {
+    let settle!: (v: T) => void
+    const promise = new Promise<T>((r) => (settle = r))
+    return { promise, settle }
+  }
+  const tick = () => new Promise((r) => setTimeout(r, 30))
+
+  async function unlocked() {
+    render(<KeysPanel keys={keysOf([row("OPENAI_API_KEY"), row("OTHER_KEY")])} />)
+    fireEvent.click(screen.getByRole("button", { name: "Reveal OTHER_KEY" }))
+    unlockWith(PASSWORD)
+    await waitFor(() => expect(rowOf("OTHER_KEY").textContent).toContain(SECRET))
+  }
+
+  it("cancelling the dialog while the password is being checked unlocks nothing", async () => {
+    const gate = held<{ ok: true; expiresAt: string }>()
+    asMock(unlockKeys).mockReturnValue(gate.promise)
+    render(<KeysPanel keys={keysOf(BASIC)} />)
+    fireEvent.click(screen.getByRole("button", { name: "Reveal OPENAI_API_KEY" }))
+    unlockWith(PASSWORD)
+    fireEvent.click(within(dialog()!).getByRole("button", { name: "Cancel" }))
+    expect(dialog()).toBeNull()
+
+    gate.settle({ ok: true, expiresAt: inAnHour() })
+    await tick()
+    expect(revealKey).not.toHaveBeenCalled()
+    expect(screen.queryByText(/Unlocked until/)).toBeNull()
+    expect(document.body.textContent).not.toContain(SECRET)
+  })
+
+  it("Lock now while a reveal is on its way: the value never appears", async () => {
+    await unlocked()
+    const gate = held<{ ok: true; value: string }>()
+    asMock(revealKey).mockReturnValue(gate.promise)
+    fireEvent.click(screen.getByRole("button", { name: "Reveal OPENAI_API_KEY" }))
+    fireEvent.click(screen.getByRole("button", { name: "Lock now" }))
+
+    gate.settle({ ok: true, value: "LATE-VALUE-456" })
+    await tick()
+    expect(document.body.textContent).not.toContain("LATE-VALUE-456")
+    expect(document.body.textContent).not.toContain(SECRET)
+    expect(screen.queryByText(/Unlocked until/)).toBeNull()
+  })
+
+  it("Lock now while a copy is on its way: nothing is copied or shown", async () => {
+    await unlocked()
+    const gate = held<{ ok: true; value: string }>()
+    asMock(revealKey).mockReturnValue(gate.promise)
+    writeText.mockRejectedValue(new Error("denied"))
+    fireEvent.click(screen.getByRole("button", { name: "Copy OPENAI_API_KEY" }))
+    fireEvent.click(screen.getByRole("button", { name: "Lock now" }))
+
+    gate.settle({ ok: true, value: "LATE-VALUE-456" })
+    await tick()
+    expect(writeText).not.toHaveBeenCalled()
+    expect(document.body.textContent).not.toContain("LATE-VALUE-456")
+  })
+
+  it("the time running out while an export is on its way: no file text is kept and Download stays off", async () => {
+    asMock(unlockKeys).mockImplementation(async () => ({ ok: true, expiresAt: new Date(Date.now() + 200).toISOString() }))
+    const gate = held<unknown>()
+    asMock(exportEnvFile).mockReturnValue(gate.promise)
+    render(<KeysPanel keys={keysOf(BASIC)} />)
+    fireEvent.click(screen.getByRole("button", { name: "Copy all as .env.local" }))
+    unlockWith(PASSWORD)
+    await waitFor(() => expect(exportEnvFile).toHaveBeenCalled())
+    await waitFor(() => expect(screen.getByRole("status").textContent).toMatch(/Locked again/), { timeout: 3000 })
+
+    gate.settle({ ok: true, filename: ".env.local", text: `OPENAI_API_KEY=${SECRET}\n`, count: 1, skipped: ["ODD_ONE"] })
+    await tick()
+    expect(writeText).not.toHaveBeenCalled()
+    expect(screen.queryByRole("button", { name: /Download/ })).toBeNull()
+    expect(screen.queryByText(/couldn't be written to the file/)).toBeNull()
+    expect(screen.getByRole("status").textContent).toMatch(/Locked again/)
+  })
+
+  it("a late answer from an old unlock does not land in a new one", async () => {
+    await unlocked()
+    const gate = held<{ ok: true; value: string }>()
+    asMock(revealKey).mockReturnValueOnce(gate.promise)
+    fireEvent.click(screen.getByRole("button", { name: "Reveal OPENAI_API_KEY" }))
+    fireEvent.click(screen.getByRole("button", { name: "Lock now" }))
+    // Unlock again, then let the old answer arrive.
+    fireEvent.click(screen.getByRole("button", { name: "Reveal OTHER_KEY" }))
+    unlockWith(PASSWORD)
+    await waitFor(() => expect(rowOf("OTHER_KEY").textContent).toContain(SECRET))
+    gate.settle({ ok: true, value: "LATE-VALUE-456" })
+    await tick()
+    expect(document.body.textContent).not.toContain("LATE-VALUE-456")
+  })
+})
+
+describe("Keys tab: what it says is logged is what is logged", () => {
+  it("promises a log line for reveals and Copy all, not for every copy", () => {
+    render(<KeysPanel keys={keysOf(BASIC)} />)
+    expect(screen.getByText("Asks for your password · every reveal is logged")).toBeTruthy()
+    fireEvent.click(screen.getByRole("button", { name: "Reveal OPENAI_API_KEY" }))
+    expect(dialog()!.textContent).toContain('every reveal and every "Copy all" is logged')
+    expect(document.body.textContent).not.toMatch(/every copy is logged|reveal and copy is logged/)
+  })
+})
+
 describe("Keys tab: another account", () => {
   it("says values can't be shown, without naming the setting", () => {
     const off = BASIC.map((r) => ({ ...r, canReveal: false }))

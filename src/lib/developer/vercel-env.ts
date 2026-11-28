@@ -31,9 +31,19 @@ export type VercelEnvResult =
 const TIMEOUT_MS = 3_000
 const TARGET_ORDER: VercelEnvTarget[] = ["production", "preview", "development"]
 
-/** Vercel's five types folded to the three the page shows. `secret` is the older encrypted kind. */
-function typeOf(raw: unknown): VercelEnvType {
-  if (raw === "sensitive") return "sensitive"
+/**
+ * Vercel's five types folded to the three the page shows.
+ *
+ * `secret` is the older kind Vercel has been moving to `sensitive` (its
+ * reference describes `sunsetSecretId` as marking "variables that have been
+ * migrated from type secret to sensitive"), so it reads as sensitive here.
+ * `visibility` is Vercel's newer config/secret mark and, in its words, is
+ * "authoritative" when set: `secret` there means sensitive whatever `type`
+ * says. `config`, or no mark at all, falls back to the type.
+ */
+function typeOf(raw: unknown, visibility: unknown): VercelEnvType {
+  if (visibility === "secret") return "sensitive"
+  if (raw === "sensitive" || raw === "secret") return "sensitive"
   if (raw === "plain" || raw === "system") return "plain"
   return "encrypted"
 }
@@ -77,7 +87,7 @@ export async function listVercelEnv(
       if (entry === null || typeof entry !== "object") continue
       const e = entry as Record<string, unknown>
       if (typeof e.key !== "string" || e.key === "") continue
-      const type = typeOf(e.type)
+      const type = typeOf(e.type, e.visibility)
       const targets = targetsOf(e.target)
       const seen = byName.get(e.key)
       if (!seen) {

@@ -105,6 +105,15 @@ function UnlockDialog({
 }) {
   const [busy, setBusy] = useState(false)
   const [failed, setFailed] = useState(false)
+  // False once the dialog is closed. An answer to a password that was typed
+  // and then walked away from must not unlock anything.
+  const open = useRef(true)
+  useEffect(() => {
+    open.current = true
+    return () => {
+      open.current = false
+    }
+  }, [])
 
   async function submit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault()
@@ -120,6 +129,7 @@ function UnlockDialog({
     } catch {
       result = { ok: false }
     }
+    if (!open.current) return
     form.reset()
     setBusy(false)
     if (result.ok) {
@@ -135,7 +145,7 @@ function UnlockDialog({
     <ModalDialog className="dv-scrim" onClose={onClose} aria-labelledby="dv-unlock-title">
       <form className="dv-dialog" onSubmit={submit}>
         <h1 id="dv-unlock-title">Type your password</h1>
-        <p>Key values stay hidden until you do. They open for five minutes, and every reveal and copy is logged.</p>
+        <p>Key values stay hidden until you do. They open for five minutes, and every reveal and every "Copy all" is logged.</p>
         <label>
           Your password
           <input
@@ -255,8 +265,23 @@ export function KeysPanel({ keys }: { keys: DeveloperKeys }) {
   const unlocked = expiresAt !== null
   const canAsk = keys.valuesAvailable
 
+  // Which unlock we are in. It moves on every time an unlock ends (the time
+  // runs out, "Lock now", the server says locked, the panel goes away), and
+  // an answer that was asked for under an earlier number is thrown away
+  // unread: a value must never land on screen after "Locked".
+  const unlockRun = useRef(0)
+  useEffect(
+    () => () => {
+      unlockRun.current++
+    },
+    [],
+  )
+  /** Marks an answer that came back after its unlock ended. Never shown, never worded. */
+  const LATE = "late"
+
   /** Drops everything that came from behind the password. */
   const forget = () => {
+    unlockRun.current++
     setValues({})
     setExported(null)
     setExpiresAt(null)
@@ -266,6 +291,7 @@ export function KeysPanel({ keys }: { keys: DeveloperKeys }) {
   useEffect(() => {
     if (expiresAt === null) return
     const t = setTimeout(() => {
+      unlockRun.current++
       setValues({})
       setExported(null)
       setExpiresAt(null)
@@ -281,6 +307,7 @@ export function KeysPanel({ keys }: { keys: DeveloperKeys }) {
   }
 
   const refused = (code: string, then: Pending) => {
+    if (code === LATE) return
     if (code === "locked") relock(then)
     else setSaid({ tone: "bad", text: refusedWords(code) })
   }
@@ -299,7 +326,9 @@ export function KeysPanel({ keys }: { keys: DeveloperKeys }) {
     act(
       `reveal:${name}`,
       async (): Promise<ActResult> => {
+        const run = unlockRun.current
         const r = await revealKey(name)
+        if (run !== unlockRun.current) return { ok: false, error: LATE }
         if (!r.ok) return { ok: false, error: r.code }
         setValues((v) => ({ ...v, [name]: r.value }))
         return { ok: true }
@@ -314,13 +343,16 @@ export function KeysPanel({ keys }: { keys: DeveloperKeys }) {
     act(
       `copy:${name}`,
       async (): Promise<ActResult> => {
+        const run = unlockRun.current
         let value = values[name]
         if (value === undefined) {
           const r = await revealKey(name)
+          if (run !== unlockRun.current) return { ok: false, error: LATE }
           if (!r.ok) return { ok: false, error: r.code }
           value = r.value
         }
         if (await copyText(value)) return { ok: true }
+        if (run !== unlockRun.current) return { ok: false, error: LATE }
         showSelected(name, value)
         return { ok: false, error: "clipboard" }
       },
@@ -338,14 +370,17 @@ export function KeysPanel({ keys }: { keys: DeveloperKeys }) {
     act(
       "export",
       async (): Promise<ActResult> => {
+        const run = unlockRun.current
         const r = await exportEnvFile()
+        if (run !== unlockRun.current) return { ok: false, error: LATE }
         if (!r.ok) return { ok: false, error: r.code }
         setExported({ filename: r.filename, text: r.text, count: r.count, skipped: r.skipped })
         if (await copyText(r.text)) {
+          if (run !== unlockRun.current) return { ok: false, error: LATE }
           setSaid({ tone: "good", text: `Copied ${r.count} ${plural(r.count, "key", "keys")} as ${r.filename}.` })
           return { ok: true }
         }
-        return { ok: false, error: "clipboard" }
+        return { ok: false, error: run !== unlockRun.current ? LATE : "clipboard" }
       },
       {
         onFailed: (code) =>
@@ -428,7 +463,7 @@ export function KeysPanel({ keys }: { keys: DeveloperKeys }) {
               </button>
             </>
           ) : (
-            <span className="dv-mono">Asks for your password · every copy is logged</span>
+            <span className="dv-mono">Asks for your password · every reveal is logged</span>
           )}
         </div>
       ) : (

@@ -36,9 +36,31 @@ describe("listVercelEnv", () => {
         { name: "A_SENSITIVE", type: "sensitive", targets: ["production"] },
         { name: "B_PLAIN", type: "plain", targets: ["production", "preview", "development"] },
         { name: "C_ENCRYPTED", type: "encrypted", targets: ["preview"] },
-        { name: "D_OLD_SECRET", type: "encrypted", targets: ["development"] },
+        { name: "D_OLD_SECRET", type: "sensitive", targets: ["development"] },
       ],
     })
+  })
+
+  it("reads the older write-only kind, and Vercel's own secret mark, as sensitive", async () => {
+    answer({
+      envs: [
+        // `visibility` is authoritative when present, whatever `type` says.
+        { key: "A_MARKED", type: "encrypted", visibility: "secret", target: ["production"] },
+        { key: "B_MARKED_PLAIN", type: "plain", visibility: "secret", target: ["production"] },
+        // `config`, or no mark at all, falls back to the type.
+        { key: "C_CONFIG", type: "encrypted", visibility: "config", target: ["production"] },
+        { key: "D_CONFIG_PLAIN", type: "plain", visibility: "config", target: ["production"] },
+        { key: "E_LEGACY", type: "secret", target: ["production"] },
+      ],
+    })
+    const r = await listVercelEnv(ENV)
+    expect(r.ok && r.rows.map((x) => [x.name, x.type])).toEqual([
+      ["A_MARKED", "sensitive"],
+      ["B_MARKED_PLAIN", "sensitive"],
+      ["C_CONFIG", "encrypted"],
+      ["D_CONFIG_PLAIN", "plain"],
+      ["E_LEGACY", "sensitive"],
+    ])
   })
 
   it("lets no value through, whatever field Vercel puts it in", async () => {
