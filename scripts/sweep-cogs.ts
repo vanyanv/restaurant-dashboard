@@ -16,6 +16,7 @@
 // rest; the script exits 1 at the end if any did, so the workflow goes red
 // and opens its incident issue.
 
+import "../src/lib/usage/script-meter-register" // usage counts; keep first
 import fs from "fs"
 import path from "path"
 import { fileURLToPath } from "url"

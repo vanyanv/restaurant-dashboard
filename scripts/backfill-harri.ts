@@ -6,6 +6,7 @@
 //   pnpm tsx scripts/backfill-harri.ts --store=<storeId> --days=90
 //   pnpm tsx scripts/backfill-harri.ts --store=<storeId> --start=2026-01-01 --end=2026-05-08
 
+import "../src/lib/usage/script-meter-register" // usage counts; keep first
 import fs from "fs"
 import path from "path"
 

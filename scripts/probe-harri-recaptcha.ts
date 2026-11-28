@@ -19,6 +19,7 @@
 // Exit 0 = obtained a refresh token head-less (automatable). Exit 1 = blocked;
 // the captured diagnostics explain why.
 
+import "../src/lib/usage/script-meter-register" // usage counts; keep first
 import fs from "fs"
 import path from "path"
 import { chromium, type Page, type Request } from "playwright"

@@ -8,6 +8,7 @@ import {
   S3Client,
 } from "@aws-sdk/client-s3"
 import { helpPhotoPrefix } from "@/lib/checks/help"
+import { countS3 } from "@/lib/usage/s3-count"
 
 export type InvoicePdfUpload = {
   pathname: string
@@ -58,6 +59,7 @@ function getR2Client(): { client: S3Client; bucket: string; endpoint: string } {
         throwOnRequestTimeout: true,
       },
     })
+    countS3(client)
   }
 
   return { client, bucket, endpoint }

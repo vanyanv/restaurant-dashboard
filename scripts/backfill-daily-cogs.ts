@@ -9,6 +9,7 @@
 //   npx tsx scripts/backfill-daily-cogs.ts 90                      # 90 days
 //   npx tsx scripts/backfill-daily-cogs.ts 90 --stores=2 --days=4  # tune concurrency
 
+import "../src/lib/usage/script-meter-register" // usage counts; keep first
 import fs from "fs"
 import path from "path"
 

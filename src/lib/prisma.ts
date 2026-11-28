@@ -10,6 +10,7 @@ import {
   isFigureWrite,
   wroteNoRows,
 } from '@/lib/cache/closed-range'
+import { withUsageCount } from '@/lib/usage/prisma-count'
 
 const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined
@@ -183,7 +184,7 @@ const withClosedRangeBust = (client: PrismaClient): PrismaClient =>
   }) as unknown as PrismaClient
 
 export const prisma =
-  globalForPrisma.prisma ?? withTrace(withClosedRangeBust(createPrismaClient()))
+  globalForPrisma.prisma ?? withTrace(withClosedRangeBust(withUsageCount(createPrismaClient())))
 
 if (process.env.NODE_ENV !== 'production') {
   globalForPrisma.prisma = prisma

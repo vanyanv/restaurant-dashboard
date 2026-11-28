@@ -15,6 +15,7 @@
 // Each (store, chunk) call records its own JobRun row via the runner's
 // withJobRun wrapping, so the GitHub Actions workflow gets per-store telemetry.
 
+import "../src/lib/usage/script-meter-register" // usage counts; keep first
 import fs from "fs"
 import path from "path"
 import { fileURLToPath } from "url"

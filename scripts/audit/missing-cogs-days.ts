@@ -12,6 +12,7 @@
 //
 // In CI: cogs-audit.yml pipes the output to $GITHUB_STEP_SUMMARY.
 
+import "../../src/lib/usage/script-meter-register" // usage counts; keep first
 import { loadEnvLocal } from "./lib"
 
 loadEnvLocal()

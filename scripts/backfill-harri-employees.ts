@@ -10,6 +10,7 @@
 //   pnpm tsx scripts/backfill-harri-employees.ts              # all active brands
 //   pnpm tsx scripts/backfill-harri-employees.ts --store=<id> # one brand only
 
+import "../src/lib/usage/script-meter-register" // usage counts; keep first
 import fs from "fs"
 import path from "path"
 

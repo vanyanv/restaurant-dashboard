@@ -24,6 +24,7 @@
 // This is the same bug fixed for the Harri rotation a day earlier (PR #55); the
 // shared rules now live in src/lib/rotation-health.ts.
 
+import "../src/lib/usage/script-meter-register" // usage counts; keep first
 import fs from "fs"
 import path from "path"
 import { fileURLToPath } from "url"

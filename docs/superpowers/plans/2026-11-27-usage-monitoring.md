@@ -80,6 +80,20 @@ The spec has `src/proxy.ts` stamp the source into a request header. The plan doe
 - [ ] **Step 5:** Decide and write the decision under this task: tracer (continue to Task 2) or the spec's fallback, a `metered(source, handler)` wrapper on route handlers and the two layouts (rewrite Tasks 3 and 4 before continuing).
 - [ ] **Step 6:** Commit.
 
+**Result (2026-11-28, production build, `next start`):**
+
+| Checked | Found |
+|---|---|
+| Request span | `http.target` at start, `next.route` and `http.status_code` by the end |
+| Referer | Arrives through the propagator (`/api/auth/providers` sent with a referer showed it) |
+| Outside call span | `net.peer.name` and `http.status_code`, same trace id as its request (seen on `/api/checks/[code]/state` calling Upstash) |
+| Active span in a handler | Same trace id as the request span |
+| Not in the plan | With `next start` each request makes two request spans: a pass for the proxy with no `next.route`, then the route. The first is counted as `proxyCalls`, not `calls`. |
+
+Cost: 2,000 `/login` renders plus 2,000 `/api/auth/providers` calls, server CPU by `ps`. Off 4.11 to 4.34 s, on 4.25 to 4.60 s across seven pairs; medians about 4.2 s and 4.45 s. That is 4% to 8% on routes that cost 1 ms each, or 0.05 to 0.1 ms per request. Run-to-run noise is about 5%, so the per-request figure is the honest one.
+
+**Decision: tracer.** The 2% line in the spec is read against the app's real CPU, which is what the anti-goal protects ("no measurable rise in Vercel CPU"). At 0.1 ms a request, a million requests a month is 100 s of the 14,400 s allowance, under 1%. Against a 1 ms route alone it is over 2%, and that is stated here rather than hidden. `USAGE_METER=0` turns it off, and once live the meter's own `cpuMs` and `calls` give the real per-request figure to check this against.
+
 ### Task 2: `sourceOf`
 
 **Files:**
@@ -151,7 +165,7 @@ Metric names, fixed here for every later task: `calls`, `wallMs`, `dbQueries`, `
 ### Task 4: Count database queries, Redis commands, R2 calls and scripts
 
 **Files:**
-- Create: `src/lib/usage/prisma-count.ts`, `src/lib/usage/redis-count.ts`, `src/lib/usage/script-meter.ts`
+- Create: `src/lib/usage/prisma-count.ts`, `src/lib/usage/redis-count.ts`, `src/lib/usage/s3-count.ts`, `src/lib/usage/raw-redis.ts`, `src/lib/usage/script-meter.ts`, `src/lib/usage/script-meter-register.ts`
 - Modify: `src/lib/prisma.ts` (wrap `createPrismaClient()` innermost), `src/lib/chat/prisma-chat.ts`, `src/lib/cache/redis.ts` (`getRedis` returns the counted client), `src/lib/blob.ts` (S3 client middleware), every script a workflow runs with `npx tsx scripts/...` (first line: `import "../src/lib/usage/script-meter"`, path adjusted)
 - Test: `tests/lib/usage/prisma-count.test.ts`, `redis-count.test.ts`, `script-meter.test.ts`
 
