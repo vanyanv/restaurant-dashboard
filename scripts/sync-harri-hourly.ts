@@ -9,6 +9,7 @@
 //   pnpm tsx scripts/sync-harri-hourly.ts --store=<id>
 //   pnpm tsx scripts/sync-harri-hourly.ts --days=7
 
+import "../src/lib/usage/script-meter-register" // usage counts; keep first
 import fs from "fs"
 import path from "path"
 

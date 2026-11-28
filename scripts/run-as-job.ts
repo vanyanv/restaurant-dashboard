@@ -10,6 +10,7 @@
 // code as the error) otherwise. Exits with the command's own code. The
 // command's output streams straight through; nothing from it is stored.
 
+import "../src/lib/usage/script-meter-register" // usage counts; keep first
 import { spawn } from "node:child_process"
 
 export function parseArgs(argv: string[]): { jobName: string; command: string[] } {

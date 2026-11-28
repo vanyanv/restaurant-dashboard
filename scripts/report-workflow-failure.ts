@@ -1,3 +1,4 @@
+import "../src/lib/usage/script-meter-register" // usage counts; keep first
 import { execFileSync } from "node:child_process"
 import { existsSync, readFileSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"

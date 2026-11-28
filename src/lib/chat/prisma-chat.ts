@@ -1,3 +1,4 @@
+import { withUsageCount } from "@/lib/usage/prisma-count"
 import { PrismaClient } from "@/generated/prisma/client"
 import { PrismaPg } from "@prisma/adapter-pg"
 import { getPgPool } from "@/lib/prisma"
@@ -27,7 +28,7 @@ const createChatPrismaClient = () => {
 }
 
 export const chatPrisma =
-  globalForChatPrisma.chatPrisma ?? createChatPrismaClient()
+  globalForChatPrisma.chatPrisma ?? withUsageCount(createChatPrismaClient())
 
 if (process.env.NODE_ENV !== "production") {
   globalForChatPrisma.chatPrisma = chatPrisma

@@ -1,4 +1,6 @@
-import { Redis } from "@upstash/redis"
+import type { Redis } from "@upstash/redis"
+import { countedRedis } from "@/lib/usage/redis-count"
+import { rawRedis } from "@/lib/usage/raw-redis"
 
 /**
  * Singleton Upstash Redis client. Reads `UPSTASH_REDIS_REST_URL` and
@@ -16,13 +18,10 @@ let cachedClientResolved = false
 export function getRedis(): Redis | null {
   if (cachedClientResolved) return cachedClient
   cachedClientResolved = true
-  if (
-    !process.env.UPSTASH_REDIS_REST_URL ||
-    !process.env.UPSTASH_REDIS_REST_TOKEN
-  ) {
-    return null
-  }
-  cachedClient = Redis.fromEnv()
+  // Built in `@/lib/usage/raw-redis`; every command through this wrapper is
+  // counted for the Usage page.
+  const raw = rawRedis()
+  cachedClient = raw ? countedRedis(raw) : null
   return cachedClient
 }
 

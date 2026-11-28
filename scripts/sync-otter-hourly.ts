@@ -2,6 +2,7 @@
 // Hourly precompute job. Run with: npx tsx scripts/sync-otter-hourly.ts
 // GH Actions cron (otter-hourly-sync.yml) executes this every hour.
 
+import "../src/lib/usage/script-meter-register" // usage counts; keep first
 import fs from "fs"
 import path from "path"
 

@@ -20,6 +20,7 @@
 // itself stays manual via scripts/refresh-harri-jwt.ts because Harri's Cognito
 // pool requires a Google reCAPTCHA token on every login.
 
+import "../src/lib/usage/script-meter-register" // usage counts; keep first
 import fs from "fs"
 import path from "path"
 

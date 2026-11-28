@@ -1,6 +1,7 @@
 import { ListObjectsV2Command, S3Client } from "@aws-sdk/client-s3"
 import { unstable_cache } from "next/cache"
 import { prisma } from "@/lib/prisma"
+import { countS3 } from "@/lib/usage/s3-count"
 
 let client: S3Client | null = null
 
@@ -23,6 +24,7 @@ function getClient(): { client: S3Client; bucket: string } {
     endpoint,
     credentials: { accessKeyId, secretAccessKey },
   })
+  countS3(client)
   return { client, bucket }
 }
 

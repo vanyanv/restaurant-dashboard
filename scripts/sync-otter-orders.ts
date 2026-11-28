@@ -1,6 +1,7 @@
 // scripts/sync-otter-orders.ts
 // Scheduled Otter order-header + order-detail sync used by GitHub Actions.
 
+import "../src/lib/usage/script-meter-register" // usage counts; keep first
 import fs from "fs"
 import path from "path"
 

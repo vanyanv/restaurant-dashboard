@@ -11,6 +11,7 @@
 //   npx tsx scripts/drain-otter-order-details.ts --store-id=<cuid> --limit=500
 //   npx tsx scripts/drain-otter-order-details.ts --store-id=<cuid> --older-than-days=7
 
+import "../src/lib/usage/script-meter-register" // usage counts; keep first
 import fs from "fs"
 import path from "path"
 

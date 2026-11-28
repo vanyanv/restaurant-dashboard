@@ -7,6 +7,7 @@
 // "recovered" and closes it. No-ops (exit 0) when there's nothing to close, so
 // it's safe to wire into every cron workflow's `if: success()` path.
 
+import "../src/lib/usage/script-meter-register" // usage counts; keep first
 import { execFileSync } from "node:child_process"
 import {
   findExistingIncidentIssue,
