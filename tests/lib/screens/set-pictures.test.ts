@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
-const { prisma, tx, session } = vi.hoisted(() => {
+const { prisma, tx, session, tvsChanged } = vi.hoisted(() => {
   const tx = {
     screen: { findMany: vi.fn() },
     screenPlaylist: { createMany: vi.fn(), deleteMany: vi.fn() },
@@ -10,6 +10,7 @@ const { prisma, tx, session } = vi.hoisted(() => {
   }
   return {
     tx,
+    tvsChanged: vi.fn(async (_accountId: string) => {}),
     session: { current: { user: { accountId: "acc1", role: "OWNER" } } as unknown },
     prisma: {
       screen: { findFirst: vi.fn(), updateMany: vi.fn() },
@@ -24,6 +25,7 @@ vi.mock("@/lib/auth-scope", () => ({ getSession: async () => session.current }))
 vi.mock("@/lib/auth", () => ({ hasOwnerAccess: (r: string) => r === "OWNER" }))
 vi.mock("@/lib/blob", () => ({ deleteScreenMedia: vi.fn(), checkThumbKey: (k: string) => k }))
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }))
+vi.mock("@/lib/screens/push", () => ({ tvsChanged }))
 vi.mock("next/headers", () => ({ headers: async () => new Headers() }))
 
 import { addTime, identifyScreens, setPictures, updateTime } from "@/lib/counter/actions/screens"

@@ -17,6 +17,7 @@ import { z } from "zod"
 import { invalidateOwnerStoreCache } from "@/lib/chat/owner-scope"
 import { cache } from "react"
 import { bustTags } from "@/lib/cache/cached"
+import { tvsChanged } from "@/lib/screens/push"
 
 const createStoreSchema = z.object({
   name: z.string().min(1, "Store name is required").max(100),
@@ -238,6 +239,9 @@ export async function updateStore(storeId: string, formData: FormData) {
     // `harri` too: the employer payroll tax is folded into the labor dollars
     // the Labor page and SPLH cache under that tag.
     void bustTags(["pnl", "harri"])
+    // A menu-board TV shows its store's name, and its answer is cached on the
+    // CDN: tell the account's TVs when the name changes. Never throws.
+    if (updatedStore.name !== existingStore.name) await tvsChanged(session.user.accountId)
     return { success: true, store: updatedStore }
   } catch (error) {
     if (error instanceof z.ZodError) {

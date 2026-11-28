@@ -3,7 +3,10 @@
 The TV side of the dashboard's **Screens** page, as an installed Samsung app
 (Tizen). The player is inside the app: it shows a square to scan, plays the
 pictures put on that TV, and keeps them for when the internet drops. It talks
-to `https://dashboard.chrisneddys.com` only, for its code, pictures and times.
+to `https://dashboard.chrisneddys.com` for its code, pictures and times, and
+listens to `https://realtime.ably.io` to hear at once when they change (both
+are named in `config.xml`; without the second it still works, by asking the
+dashboard every 15 seconds).
 
 `index.html` is generated, not hand-edited: it is the same player as the
 dashboard's `/tv` page (`src/lib/screens/player-html.ts`), written out by

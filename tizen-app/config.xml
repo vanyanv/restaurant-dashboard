@@ -2,12 +2,15 @@
 <!--
   ChrisnEddysTV: the menu board app for Samsung TVs and Samsung business displays (Tizen).
   The player is inside the app (index.html, written by scripts/tizen-player.ts);
-  it talks to https://dashboard.chrisneddys.com for its pairing code, pictures and times.
+  it talks to https://dashboard.chrisneddys.com for its pairing code, pictures and times,
+  and listens to https://realtime.ably.io to hear when they change.
   See README.md for how to install it.
 -->
 <widget xmlns="http://www.w3.org/ns/widgets" xmlns:tizen="http://tizen.org/ns/widgets"
-        id="https://dashboard.chrisneddys.com/tv" version="3.1.0" viewmodes="maximized">
+        id="https://dashboard.chrisneddys.com/tv" version="3.2.0" viewmodes="maximized">
     <access origin="https://dashboard.chrisneddys.com" subdomains="false"/>
+    <!-- The push line: the dashboard says "changed" through Ably, so the TV need not keep asking. -->
+    <access origin="https://realtime.ably.io" subdomains="true"/>
     <tizen:application id="ChrisnEddy.ChrisnEddysTV" package="ChrisnEddy" required_version="2.3"/>
     <content src="index.html"/>
     <feature name="http://tizen.org/feature/screen.size.normal.1080.1920"/>
@@ -16,6 +19,8 @@
     <tizen:privilege name="http://tizen.org/privilege/internet"/>
     <!-- For the Samsung TV API that turns the screen saver off while the menu shows. -->
     <tizen:privilege name="http://developer.samsung.com/privilege/productinfo"/>
+    <!-- Lets the app set the business display's Custom App address (b2bapis.b2bcontrol). -->
+    <tizen:privilege name="http://developer.samsung.com/privilege/b2bcontrol"/>
     <tizen:profile name="tv"/>
     <tizen:setting screen-orientation="landscape" context-menu="disable" background-support="disable" encryption="disable" install-location="auto" hwkey-event="enable"/>
 </widget>

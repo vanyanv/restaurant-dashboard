@@ -1,4 +1,4 @@
-import { PLAYER_VERSION, TV_POLL_MS } from "./limits"
+import { PLAYER_VERSION, TV_BEAT_MS, TV_NUDGE_RETRY_MS, TV_POLL_DOWN_MS, TV_POLL_FAST_FOR_MS, TV_POLL_FAST_MS, TV_POLL_SLOW_MS } from "./limits"
 import { TV_LOGO } from "./tv-logo"
 
 /**
@@ -24,8 +24,35 @@ import { TV_LOGO } from "./tv-logo"
  * - First run: makes a random token and keeps it in localStorage (in memory
  *   if storage is full or blocked). That token is the TV's only identity; the
  *   server stores its hash.
- * - Asks /api/tv/content every 5 s while it shows a code (so pairing feels
- *   instant), every 30 s once paired. A call that hangs is given up on.
+ * - While it shows a code it asks /api/tv/content every 5 s, with its token
+ *   in a header, so pairing feels instant. That address makes the code.
+ * - Once paired it asks /api/tv/c/<token> instead, with no headers at all, so
+ *   Vercel's CDN can answer without running the server. The dashboard clears
+ *   that copy when anything changes. The answer can be up to an hour old, so
+ *   its clock is never used to set the time, and a copy older than the one
+ *   already showing is not put back. If it says "not paired" the TV goes back
+ *   to /api/tv/content for a code. A call that hangs is given up on. An answer
+ *   that is not the shape expected is a failed call, never shown. When that
+ *   address answers wrongly four times running (not when the internet is
+ *   down), the TV asks /api/tv/content once, at most every 5 minutes, so it
+ *   still gets its pictures, the time, and is seen to be on. "No internet"
+ *   shows only when the network itself failed.
+ * - A push line (EventSource to Ably, at the address the answer gives) says
+ *   "changed": the TV asks at once, then again after 3 s and 10 s in case the
+ *   CDN was still clearing; a burst of messages restarts those two, it does
+ *   not add more, and one that lands while a slow call is out is followed
+ *   by one more call when it ends. While the line is open the TV asks every
+ *   2 minutes. Without it (not open yet, down, or a set with no EventSource)
+ *   it asks every 15 s for the first ten minutes, then every 60 s; only a
+ *   line that opens starts those ten minutes over. Each wait is plus up to a
+ *   tenth so TVs do not ask in step. Never two calls at once. A line closed
+ *   for good is opened again after 15 s, then twice as long each time, up to
+ *   5 minutes; coming back from standby or offline opens a new one, and so
+ *   does a jump in the TV's clock (it slept, or its clock was set). One line
+ *   at most.
+ * - Every 3 minutes, and when the screen comes back, it calls /api/tv/beat:
+ *   that tells the dashboard the TV is on, and its answer is the only live
+ *   clock once paired (server time, minutes from UTC, player version).
  * - One picture stays up with no timer. Nothing redraws unless the pictures
  *   themselves change, and a new one is fully loaded before it fades in over
  *   the old one, so the screen never goes dark between them.
@@ -36,7 +63,9 @@ import { TV_LOGO } from "./tv-logo"
  *   answer replaced, only once everything in the new one is on the TV, so a
  *   power cut half way through a change comes back to a full board.
  * - Back on the remote opens a small panel: keep playing, check now, close.
- * - The hosted page (not the app) reloads itself once when PLAYER_VERSION moves.
+ * - The hosted page (not the app) reloads itself once when PLAYER_VERSION moves,
+ *   whichever answer says so: never twice for one version, never twice in 10
+ *   minutes, and not at all if the TV cannot write that down.
  */
 export const DASHBOARD_ORIGIN = "https://dashboard.chrisneddys.com"
 
@@ -105,7 +134,9 @@ p b { color: #ede6e1; }
   "use strict";
   var BASE = "${base}", APP = ${app}, PLAYER = "${PLAYER_VERSION}";
   var TOKEN_KEY = "screens.token", LAST_KEY = "screens.last", CACHE = "screens-media-v1";
-  var PAIRED_POLL = ${TV_POLL_MS}, UNPAIRED_POLL = 5000, TIMEOUT = 20000, FADE = 900;
+  var FAST_POLL = ${TV_POLL_FAST_MS}, SLOW_POLL = ${TV_POLL_SLOW_MS}, DOWN_POLL = ${TV_POLL_DOWN_MS}, FAST_FOR = ${TV_POLL_FAST_FOR_MS}, BEAT = ${TV_BEAT_MS}, NUDGE = ${JSON.stringify(TV_NUDGE_RETRY_MS)};
+  var UNPAIRED_POLL = 5000, TIMEOUT = 20000, FADE = 900, LINE_WAIT = 15000, LINE_WAIT_MAX = 300000;
+  var MISSES = 4, RESCUE_EVERY = 300000, HURRY = 1500, HURRY_EVERY = 60000, OLDER_MAX = 7200000, IDENT_MAX = 120000, RELOAD_EVERY = 600000;
   var stage = el("stage"), badge = el("badge"), menu = el("menu"), msg = el("msg"), ident = el("ident");
   var memory = {}, LOGO = document.querySelector("#pair .wm").src;
   var URLS = window.URL || window.webkitURL;
@@ -172,6 +203,8 @@ p b { color: #ede6e1; }
   /* ---- the network ---- */
 
   // XMLHttpRequest, not fetch: every Samsung TV has it, and it can be given up on.
+  // A failure with .net is the network's (nothing came back). Any other is an answer that was wrong.
+  function netError(m) { var e = new Error(m); e.net = true; return e; }
   function ask(url, as, headers, ms) {
     return new P(function (ok, no) {
       var x = new XMLHttpRequest(), k;
@@ -179,14 +212,14 @@ p b { color: #ede6e1; }
       if (as === "blob") x.responseType = "blob";
       x.timeout = ms;
       for (k in headers) x.setRequestHeader(k, headers[k]);
-      var guard = setTimeout(function () { try { x.abort(); } catch (e) {} no(new Error("timeout")); }, ms + 1000);
+      var guard = setTimeout(function () { try { x.abort(); } catch (e) {} no(netError("timeout")); }, ms + 1000);
       x.onload = function () {
         clearTimeout(guard);
         if (x.status < 200 || x.status > 299) { no(new Error(String(x.status))); return; }
         if (as === "blob") { if (x.response && x.response.size) ok(x.response); else no(new Error("empty")); return; }
         try { ok(JSON.parse(x.responseText)); } catch (e) { no(e); }
       };
-      x.onerror = x.ontimeout = x.onabort = function () { clearTimeout(guard); no(new Error("network")); };
+      x.onerror = x.ontimeout = x.onabort = function () { clearTimeout(guard); no(netError("network")); };
       x.send();
     });
   }
@@ -323,6 +356,25 @@ p b { color: #ede6e1; }
   var slideTimer = null, codeTimer = null, identTimer = null, holdTimer = null, holdUntil = 0, seenAt = 0;
   // The server's clock less the TV's, kept so a restart with no internet still knows the time.
   var skew = Number(get("screens.skew")) || 0;
+  // Minutes from UTC to store time, from the last live clock, and the server time that clock gave.
+  var zone = null;
+  // True while this TV takes itself to be paired: it then asks the address the CDN answers.
+  var cached = false;
+
+  // A live clock: from /api/tv/beat, or from /api/tv/content. Never from the CDN's copy, which can be an hour old.
+  // True when the time or the zone moved enough to matter.
+  function setClock(k) {
+    var at = k ? new Date(k.now).getTime() : NaN, moved = false;
+    if (at !== at) return false;
+    var off = at - Date.now();
+    if (Math.abs(off - skew) > 5000 || get("screens.skew") === null) { put("screens.skew", String(Math.round(off))); moved = true; }
+    skew = off;
+    if (typeof k.offsetMinutes === "number") {
+      if (!zone || zone.minutes !== k.offsetMinutes) moved = true;
+      zone = { at: at, minutes: k.offsetMinutes };
+    }
+    return moved;
+  }
 
   function only(id) {
     ["msg", "pair"].forEach(function (k) { el(k).className = el(k).className.replace(/ on$/, "") + (k === id ? " on" : ""); });
@@ -358,7 +410,7 @@ p b { color: #ede6e1; }
       index = (index + 1) % set.length;
       bring(live[set[index].url]);
       step();
-    }, Math.max(3, set[index].seconds) * 1000);
+    }, Math.max(3, Number(set[index].seconds) || 10) * 1000);
   }
   function signature(slides) { return slides.map(function (s) { return s.url + ":" + s.seconds; }).join("|"); }
 
@@ -374,6 +426,19 @@ p b { color: #ede6e1; }
     loading = want;
     slides.forEach(function (s) { if (!want1[s.url]) want1[s.url] = live[s.url] ? P.resolve(live[s.url]) : picture(s); });
     var urls = Object.keys(want1);
+    // The first slide goes up as soon as it is here; the rest join it when all are.
+    // retry stays set so a draw meanwhile neither restarts nor cancels this load.
+    if (urls.length > 1) want1[slides[0].url].then(function (it) {
+      if (!it || mine !== gen || loading !== want) return;
+      if (slideTimer) clearTimeout(slideTimer);
+      slideTimer = null;
+      var was = live;
+      live = {}; live[it.url] = it; set = [slides[0]]; sig = want; retry = true; index = 0;
+      bring(it);
+      only(null);
+      // What this load reuses stays: the full set below takes it over.
+      setTimeout(function () { Object.keys(was).forEach(function (u) { if (!want1[u] && live[u] !== was[u]) drop(was[u]); }); }, FADE + 100);
+    });
     P.all(urls.map(function (u) { return want1[u]; })).then(function (items) {
       var got = {};
       items.forEach(function (it) { if (it) got[it.url] = it; });
@@ -413,26 +478,48 @@ p b { color: #ede6e1; }
   }
   // END pickTime
 
-  function draw() {
+  // Nothing thrown in here may stop the timers that call it.
+  function draw() { try { drawNow(); } catch (e) {} }
+  function drawNow() {
     if (!now || !now.paired) return;
     var wait = holdUntil - Date.now();
     if (wait > 0) { if (holdTimer) clearTimeout(holdTimer); holdTimer = setTimeout(draw, wait + 20); return; }
     var utc = Date.now() + skew;
-    var known = now.clock && utc >= new Date(now.clock.now).getTime() - 60000;
+    var said = now.clock ? new Date(now.clock.now).getTime() : 0;
+    var known = now.clock && utc >= said - 60000;
+    // The zone from the live clock, unless this answer was made after it.
+    var offset = zone && zone.at >= said ? zone.minutes : now.clock ? now.clock.offsetMinutes : 0;
     // A window with no pictures yet changes nothing. A clock earlier than the last answer is wrong: show the usual pictures.
-    var t = known ? pickTime((now.times || []).filter(function (x) { return x.slides.length; }), utc, now.clock.offsetMinutes) : null;
+    var t = known ? pickTime((now.times || []).filter(function (x) { return x.slides.length; }), utc, offset) : null;
     var slides = t ? t.slides : now.playlist ? now.playlist.slides : [];
     if (slides.length) show(slides);
     else { gen++; clearStage(); say("Ready for a picture", now.screen.store + ", " + now.screen.name + ". Open Screens on your phone and put one on this TV."); }
 
-    if (identTimer) clearTimeout(identTimer);
-    var left = now.identifyUntil ? new Date(now.identifyUntil).getTime() - utc : 0;
-    ident.className = left > 0 ? "screen mid on" : "screen mid";
-    if (left > 0) {
+    if (identTimer) { clearTimeout(identTimer); identTimer = null; }
+    // The name goes up only when the time is known and it has under two minutes to run (the dashboard asks for 90 s).
+    // A wrong clock must not leave it over the menu, and a wait too long for a timer would fire at once, over and over.
+    var left = known && now.identifyUntil ? new Date(now.identifyUntil).getTime() - utc : 0;
+    var naming = left > 0 && left <= IDENT_MAX;
+    ident.className = naming ? "screen mid on" : "screen mid";
+    if (naming) {
       ident.querySelector("h1").textContent = now.screen.name;
       ident.querySelector("p").textContent = now.screen.store;
       identTimer = setTimeout(draw, left + 50);
     }
+  }
+
+  // Is this answer the shape the page draws from? One that is not is a failed call, never shown.
+  function slidesOk(list) {
+    return Array.isArray(list) && list.every(function (x) { return !!x && typeof x.url === "string"; });
+  }
+  function sound(c, needsCode) {
+    if (!c || typeof c !== "object" || typeof c.paired !== "boolean") return false;
+    if (!c.paired) return !needsCode || typeof c.code === "string";
+    var sc = c.screen, pl = c.playlist, ti = c.times;
+    if (!sc || typeof sc.name !== "string" || typeof sc.store !== "string") return false;
+    if (pl !== null && pl !== undefined && (typeof pl !== "object" || !slidesOk(pl.slides))) return false;
+    if (ti === null || ti === undefined) return true;
+    return Array.isArray(ti) && ti.every(function (x) { return !!x && slidesOk(x.slides); });
   }
 
   function showPair(c) {
@@ -460,7 +547,8 @@ p b { color: #ede6e1; }
     only("pair");
   }
 
-  function apply(c, fresh) {
+  // fresh: from the network, not from storage. liveClock: from /api/tv/content, whose clock is the time now.
+  function apply(c, fresh, liveClock) {
     var was = now;
     now = c;
     if (!c.paired) {
@@ -468,17 +556,14 @@ p b { color: #ede6e1; }
       return;
     }
     if (codeTimer) { clearInterval(codeTimer); codeTimer = null; }
-    if (fresh && c.clock) {
-      var off = new Date(c.clock.now).getTime() - Date.now();
-      if (Math.abs(off - skew) > 5000 || get("screens.skew") === null) put("screens.skew", String(Math.round(off)));
-      skew = off;
-    }
+    if (fresh && liveClock && c.clock) setClock(c.clock);
     if (was && !was.paired) {
       say(c.screen.store + ", " + c.screen.name, "Connected. Pick a picture on your phone.", true);
       holdUntil = Date.now() + 3500;
     }
-    if (fresh) store(c);
+    // Draw first: downloads go one at a time, so the pictures for now get in line before every other window's.
     draw();
+    if (fresh) store(c);
   }
 
   /* ---- talking to the dashboard ---- */
@@ -487,32 +572,174 @@ p b { color: #ede6e1; }
     badge.textContent = on ? (paired ? "No internet. Still showing your menu." : "No internet. Waiting to connect.") : "";
     badge.style.display = on ? "block" : "none";
   }
-  var pollTimer = null, polling = false;
-  function poll() {
-    if (polling) return;
-    polling = true;
-    if (pollTimer) clearTimeout(pollTimer);
-    var paired = now ? now.paired : true;
-    ask(BASE + "/api/tv/content", "json", { authorization: "Bearer " + token, "x-screen-device": device }, TIMEOUT).then(function (c) {
-      paired = c.paired;
-      seenAt = Date.now();
-      if (!c.paired) { keepAnswer(c); storing = stored = null; }
-      setOffline(false, paired);
-      if (!APP && c.player && c.player !== PLAYER && reloadOnce(c.player)) return;
-      apply(c, true);
-    }).then(null, function () {
-      setOffline(true, paired && !!now);
-    }).then(function () {
-      polling = false;
-      if (menu.className === "on") drawMenu();
-      pollTimer = setTimeout(poll, paired ? PAIRED_POLL : UNPAIRED_POLL);
+  /* The push line: the dashboard says "changed" down it, so the TV need not ask often. */
+
+  var es = null, esUrl = "", esTimer = null, esWait = LINE_WAIT, nudges = [];
+  function closeLine() {
+    if (esTimer) { clearTimeout(esTimer); esTimer = null; }
+    if (!es) return;
+    var old = es;
+    es = null;
+    try { old.onopen = old.onmessage = old.onerror = null; old.close(); } catch (e) {}
+  }
+  // Only ever one line: whatever was open or waiting is closed first.
+  function openLine(url) {
+    closeLine();
+    esUrl = url;
+    if (!url || !window.EventSource) return;
+    var s;
+    try { s = new window.EventSource(url); } catch (e) { lineLater(); return; }
+    es = s;
+    s.onopen = function () { if (es === s) { esWait = LINE_WAIT; downAt = 0; } };
+    // Any message means something changed; what it says is not read.
+    s.onmessage = function () { if (es === s) nudge(); };
+    // Closed for good is ours to open again, after a growing pause. Still trying is the browser's.
+    s.onerror = function () { if (es === s && s.readyState === 2) { closeLine(); lineLater(); } };
+  }
+  function lineLater() {
+    if (esTimer) clearTimeout(esTimer);
+    var wait = esWait;
+    esWait = Math.min(esWait * 2, LINE_WAIT_MAX);
+    esTimer = setTimeout(function () { esTimer = null; if (cached && esUrl) openLine(esUrl); }, wait);
+  }
+  // After each answer from the CDN: the line it names, opened only if new or closed.
+  function pushTo(c) {
+    var url = c.push && c.push.url && window.EventSource ? String(c.push.url) : "";
+    if (!url) { closeLine(); esUrl = ""; return; }
+    if (url === esUrl && (esTimer || (es && es.readyState !== 2))) return;
+    esWait = LINE_WAIT;
+    openLine(url);
+  }
+  function clearNudges() { nudges.forEach(function (t) { clearTimeout(t); }); nudges = []; }
+  // Ask now, and twice more in case the CDN was still clearing. A burst starts the two over; it adds none.
+  function nudge() {
+    clearNudges();
+    NUDGE.forEach(function (ms) { nudges.push(setTimeout(poll, ms)); });
+    poll();
+  }
+
+  /* The beat: tells the dashboard this TV is on, and brings back the time now. */
+
+  var beatTimer = null, beating = false;
+  function beat() {
+    if (beating || !cached || !now || !now.paired || !now.beat) return;
+    beating = true;
+    if (beatTimer) { clearTimeout(beatTimer); beatTimer = null; }
+    ask(BASE + "/api/tv/beat/" + token + "?k=" + encodeURIComponent(now.beat) + "&d=" + encodeURIComponent(device), "json", {}, TIMEOUT).then(function (b) {
+      if (!cached) return;
+      if (!APP && b.player && b.player !== PLAYER && reloadOnce(b.player)) return;
+      if (setClock(b.clock)) draw();
+    }).then(null, nothing).then(function () {
+      beating = false;
+      if (cached) beatTimer = setTimeout(function () { beatTimer = null; beat(); }, BEAT);
     });
   }
-  // Once per version, so a page that can't be replaced never reloads in a circle.
+  function startBeat() { if (!beatTimer && !beating) beat(); }
+  // Not paired: no line, no beat, nothing left waiting to ask.
+  function hush() {
+    cached = false;
+    downAt = 0;
+    misses = 0;
+    newest = 0;
+    closeLine();
+    esUrl = "";
+    clearNudges();
+    if (beatTimer) { clearTimeout(beatTimer); beatTimer = null; }
+  }
+
+  var pollTimer = null, polling = false, again = false, askedAt = 0;
+  // Wrong answers running from the CDN's address, and when the other address was last asked because of them.
+  var misses = 0, rescuedAt = 0;
+  // When the short wait after pairing was last used, and the server time of the newest answer shown.
+  var hurriedAt = 0, newest = 0;
+  // When this TV was first seen paired with no open line. 0 while the line is open, and before that is known.
+  var downAt = 0;
+  // With the line open the dashboard says when to ask, so every two minutes is enough. With none (not yet
+  // open, down, or a set with no EventSource) the TV asks every 15 s for the first ten minutes, then every
+  // 60 s. Only a line that opens starts the ten minutes over: opening one that then fails does not, so
+  // coming back on screen or online again and again through a long outage cannot keep the TV asking fast.
+  function pairedPoll() {
+    var ms = SLOW_POLL, t = Date.now();
+    if (es && es.readyState === 1) downAt = 0;
+    else {
+      // A clock set back must not read as a wait below zero: the ten minutes start from now.
+      if (!downAt || t < downAt) downAt = t;
+      ms = t - downAt < FAST_FOR ? FAST_POLL : DOWN_POLL;
+    }
+    return ms + Math.floor(Math.random() * ms / 10);
+  }
+  function poll() {
+    // One at a time. Asked for while one that is not just gone out is still out (a push, the remote): one more when it ends.
+    if (polling) { if (Math.abs(Date.now() - askedAt) > 1000) again = true; return; }
+    polling = true;
+    askedAt = Date.now();
+    if (pollTimer) clearTimeout(pollTimer);
+    var paired = now ? now.paired : true, quiet = cached, soon = false, hurry = false;
+    // The CDN's address keeps answering wrongly: ask the other one, once, and not again for five minutes. It costs the server.
+    if (quiet && misses >= MISSES && Math.abs(Date.now() - rescuedAt) >= RESCUE_EVERY) { quiet = false; rescuedAt = Date.now(); }
+    // The quiet address takes no headers: one would force a second call first, and stop the CDN keeping the answer.
+    (quiet ? ask(BASE + "/api/tv/c/" + token, "json", {}, TIMEOUT)
+      : ask(BASE + "/api/tv/content", "json", { authorization: "Bearer " + token, "x-screen-device": device }, TIMEOUT)).then(function (c) {
+      if (!sound(c, !quiet)) throw new Error("answer");
+      seenAt = Date.now();
+      setOffline(false, c.paired);
+      if (quiet) misses = 0;
+      if (!c.paired) { keepAnswer(c); storing = stored = null; hush(); }
+      // No screen for this TV any more, and no code in this answer: the other address makes one, so ask it now.
+      if (quiet && !c.paired) { soon = true; return; }
+      paired = c.paired;
+      var at = c.paired && c.clock ? new Date(c.clock.now).getTime() : 0, mine = now && now.paired ? now : null;
+      if (at !== at) at = 0;
+      // A copy made before the answer already showing (the CDN can hand out an old one after a new one) is not put back.
+      // Unless it is hours behind: then what is showing has a wrong time on it, and must not shut out every answer.
+      if (quiet && mine && at < newest && newest - at <= OLDER_MAX) {
+        if (!mine.beat) mine.beat = c.beat;
+        if (!mine.push) mine.push = c.push;
+        pushTo(mine);
+        startBeat();
+        return;
+      }
+      // Only a live answer says which player is current: the CDN's copy can be up to an hour old. The beat checks it too.
+      if (!quiet && !APP && c.player && c.player !== PLAYER && reloadOnce(c.player)) return;
+      // The other address knows nothing of the line or the beat: keep the ones this TV has.
+      if (!quiet && c.paired && mine) {
+        if (!c.beat) c.beat = mine.beat;
+        if (!c.push) c.push = mine.push;
+      }
+      apply(c, true, !quiet);
+      if (!c.paired) return;
+      newest = at;
+      // Just paired: the line, the beat and the first picture should not wait a whole turn.
+      // Only once a minute, so two addresses that disagree cannot make the TV ask in a tight circle.
+      if (!cached && Math.abs(Date.now() - hurriedAt) > HURRY_EVERY) { hurriedAt = Date.now(); hurry = true; }
+      cached = true;
+      if (quiet) pushTo(c);
+      startBeat();
+    }).then(null, function (e) {
+      // Only a call that got no answer means no internet. A wrong answer leaves the menu up and says nothing.
+      if (e && e.net) setOffline(true, paired && !!now);
+      else { setOffline(false, paired); if (quiet) misses += 1; }
+    }).then(function () {
+      polling = false;
+      var next = again || soon ? 0 : hurry ? HURRY : paired ? pairedPoll() : UNPAIRED_POLL;
+      again = false;
+      // The next one is set before anything else here can go wrong.
+      pollTimer = setTimeout(poll, next);
+      if (menu.className === "on") try { drawMenu(); } catch (e) {}
+    });
+  }
+  // Once per version and never twice in ten minutes, so a page that can't be replaced, or answers that
+  // disagree about the version, never reload in a circle. Read back from the TV's own storage, not from
+  // memory: if it cannot be written down, the next page would not know, so there is no reload at all.
   function reloadOnce(version) {
-    if (get("screens.reloaded") === version) return false;
-    put("screens.reloaded", version);
-    if (get("screens.reloaded") !== version) return false;
+    try {
+      var ls = window.localStorage, t = String(Date.now());
+      if (ls.getItem("screens.reloaded") === version) return false;
+      if (Math.abs(Number(t) - (Number(ls.getItem("screens.reloadedAt")) || 0)) < RELOAD_EVERY) return false;
+      ls.setItem("screens.reloadedAt", t);
+      ls.setItem("screens.reloaded", version);
+      if (ls.getItem("screens.reloaded") !== version || ls.getItem("screens.reloadedAt") !== t) return false;
+    } catch (e) { return false; }
     window.location.reload();
     return true;
   }
@@ -560,12 +787,27 @@ p b { color: #ede6e1; }
     try { if (navigator.wakeLock) navigator.wakeLock.request("screen").then(null, nothing); } catch (e) {}
   }
   wake();
-  document.addEventListener("visibilitychange", function () { if (document.visibilityState === "visible") { wake(); poll(); } });
-  window.addEventListener("online", function () { poll(); });
+  // Back from standby or from no internet: a line that slept through it can be dead and not say so. Open a new one.
+  function back() {
+    wake();
+    if (cached && esUrl) { esWait = LINE_WAIT; openLine(esUrl); }
+    poll();
+  }
+  document.addEventListener("visibilitychange", function () { if (document.visibilityState === "visible") { back(); beat(); } });
+  window.addEventListener("online", function () { back(); });
 
   var last = readLast();
-  if (last && last.paired) apply(last, false);
-  setInterval(draw, 10000);
+  // What was showing before the restart, and the beat with it: the TV is on whether or not the CDN's address answers.
+  if (last && last.paired && sound(last, false)) { apply(last, false, false); cached = true; startBeat(); }
+  var tickAt = Date.now();
+  setInterval(function () {
+    var t = Date.now(), gap = t - tickAt;
+    tickAt = t;
+    draw();
+    // Ten seconds were due. Over a minute more: the TV slept, and the line can be dead and not say so.
+    // A minute less: its clock was set back. Either way open a new line, check in, and get the time again.
+    if (gap > 70000 || gap < -50000) { back(); beat(); }
+  }, 10000);
   poll();
 })();
 </script>

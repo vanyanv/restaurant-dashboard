@@ -11,6 +11,7 @@ import { getSession } from "@/lib/auth-scope"
 import { checkThumbKey, deleteScreenMedia } from "@/lib/blob"
 import { rateLimitKey } from "@/lib/rate-limit"
 import { EVERY_DAY, IDENTIFY_MS, SLIDES_MAX, TIMES_MAX, clampSeconds, isPairCode, normalizeCode } from "@/lib/screens/core"
+import { tvsChanged } from "@/lib/screens/push"
 import { logger } from "@/lib/logger"
 
 /**
@@ -34,6 +35,16 @@ async function ownerAccount(): Promise<string> {
 function refresh() {
   revalidatePath("/dashboard/screens")
   revalidatePath("/m/screens")
+}
+
+/**
+ * After a save: the pages reload, and the account's TVs are told to ask again
+ * (their cached answer is cleared first). Only ever called once the write is
+ * in; telling the TVs never fails the save.
+ */
+async function saved(accountId: string) {
+  refresh()
+  await tvsChanged(accountId).catch(() => {})
 }
 
 function fail(err: unknown): ScreensResult {
@@ -109,7 +120,7 @@ export async function claimScreen(raw: z.input<typeof ClaimInput>): Promise<Scre
       })
     })
 
-    refresh()
+    await saved(accountId)
     return { ok: true, id: screen.id }
   } catch (err) {
     return fail(err)
@@ -129,7 +140,7 @@ export async function updateScreen(raw: z.input<typeof ScreenInput>): Promise<Sc
       data: { name: input.name, storeId: input.storeId },
     })
     if (count === 0) return { ok: false, error: "That screen is gone. Reload the page." }
-    refresh()
+    await saved(accountId)
     return { ok: true }
   } catch (err) {
     return fail(err)
@@ -150,7 +161,7 @@ export async function removeScreen(screenId: string): Promise<ScreensResult> {
       prisma.screen.delete({ where: { id: screen.id }, select: { id: true } }),
       prisma.screenPlaylist.deleteMany({ where: { id: { in: lists }, accountId, screens: { none: {} }, times: { none: {} } } }),
     ])
-    refresh()
+    await saved(accountId)
     return { ok: true }
   } catch (err) {
     return fail(err)
@@ -249,7 +260,7 @@ export async function setPictures(raw: z.input<typeof SetInput>): Promise<Screen
         ),
       })
     })
-    refresh()
+    await saved(accountId)
     return { ok: true }
   } catch (err) {
     return fail(err)
@@ -282,7 +293,7 @@ export async function addTime(raw: z.input<typeof AddTimeInput>): Promise<Screen
       },
       select: { id: true },
     })
-    refresh()
+    await saved(accountId)
     return { ok: true, id: time.id }
   } catch (err) {
     return fail(err)
@@ -300,7 +311,7 @@ export async function updateTime(raw: z.input<typeof UpdateTimeInput>): Promise<
       data: { name: input.name, days: input.days, startMinute: input.start, endMinute: input.end },
     })
     if (count === 0) return { ok: false, error: "That time is gone. Reload the page." }
-    refresh()
+    await saved(accountId)
     return { ok: true }
   } catch (err) {
     return fail(err)
@@ -320,7 +331,7 @@ export async function removeTime(timeId: string): Promise<ScreensResult> {
       prisma.screenTime.delete({ where: { id: time.id }, select: { id: true } }),
       prisma.screenPlaylist.deleteMany({ where: { id: time.playlistId, accountId, screens: { none: {} }, times: { none: {} } } }),
     ])
-    refresh()
+    await saved(accountId)
     return { ok: true }
   } catch (err) {
     return fail(err)
@@ -335,6 +346,8 @@ export async function identifyScreens(on: boolean): Promise<ScreensResult> {
       where: { accountId },
       data: { identifyUntil: on ? new Date(Date.now() + IDENTIFY_MS) : null },
     })
+    // No page reload: the dashboard keeps its own count. The TVs must hear, though.
+    await tvsChanged(accountId).catch(() => {})
     return { ok: true }
   } catch (err) {
     return fail(err)
@@ -356,7 +369,7 @@ export async function deleteMedia(mediaId: string): Promise<ScreensResult> {
     } catch (err) {
       logger.error("[screens] image delete from storage failed", { blobKey: media.blobKey, message: err instanceof Error ? err.message : String(err) })
     }
-    refresh()
+    await saved(accountId)
     return { ok: true }
   } catch (err) {
     return fail(err)

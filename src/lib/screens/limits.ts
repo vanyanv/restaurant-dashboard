@@ -3,11 +3,35 @@
 /** How long a code on the TV stays good before the TV asks for a new one. */
 export const PAIR_CODE_TTL_MS = 10 * 60_000
 
-/** A screen heard from within this long is "On". The TV checks in every 30 s. */
-export const ONLINE_WINDOW_MS = 2 * 60_000
+/** A screen heard from within this long is "On". A TV says it is on every TV_BEAT_MS (3 min); two beats in a row can fail (a 9 min gap) before it reads "Off". */
+export const ONLINE_WINDOW_MS = 10 * 60_000
 
-/** How often the TV asks for its playlist. */
+/** How often a TV on the old player (before version 4) asks /api/tv/content for its playlist. */
 export const TV_POLL_MS = 30_000
+
+/**
+ * The player from version 4 on asks /api/tv/c/<token>, which Vercel's CDN answers
+ * without running the server, Redis or the database until something changes.
+ * It asks every TV_POLL_FAST_MS while it has no push line open, and every
+ * TV_POLL_SLOW_MS while it has: the push says "changed" at once, so the slow
+ * ask is only there in case the line has died without saying so.
+ */
+export const TV_POLL_FAST_MS = 15_000
+export const TV_POLL_SLOW_MS = 120_000
+/**
+ * With no push line for longer than TV_POLL_FAST_FOR_MS (Ably is down, or not
+ * set up) the TV stops asking every 15 s and asks this often instead. Every
+ * ask is a request Vercel counts, and a month of 15 s asks from every TV does
+ * not fit in the plan's allowance.
+ */
+export const TV_POLL_DOWN_MS = 60_000
+export const TV_POLL_FAST_FOR_MS = 10 * 60_000
+
+/** How often a TV tells /api/tv/beat it is on, and sets its clock from the answer. */
+export const TV_BEAT_MS = 3 * 60_000
+
+/** After a push says "changed" the TV asks at once, then again after each of these, in case the CDN was still clearing. */
+export const TV_NUDGE_RETRY_MS = [3_000, 10_000] as const
 
 /** lastSeenAt is written at most this often per screen, so polling is not a write per call. */
 export const SEEN_WRITE_EVERY_MS = 60_000
@@ -34,7 +58,7 @@ export const SCREEN_MAX_PARTS = Math.ceil(SCREEN_MEDIA_MAX_BYTES / SCREEN_PART_B
 export const SCREEN_THUMB_MAX_BYTES = 400 * 1024
 
 /** Bump when the hosted /tv page must be picked up by TVs already showing it. */
-export const PLAYER_VERSION = "2"
+export const PLAYER_VERSION = "4"
 
 /** Every store is in Los Angeles; windows of the week are in store time. */
 export const SCREEN_TZ = "America/Los_Angeles"

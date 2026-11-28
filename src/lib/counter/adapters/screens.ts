@@ -1,6 +1,7 @@
 import { getAccountStores } from "@/lib/account-stores"
 import { prisma } from "@/lib/prisma"
 import { activeTime, screenMediaUrl, screenState, storeOffsetMinutes, type ScreenState } from "@/lib/screens/core"
+import { latestSeen, seenFor } from "@/lib/screens/push"
 import { classify, guardSection, lazy, type StreamedSections } from "./types"
 import type { SectionData } from "@/lib/counter/section-data"
 
@@ -59,7 +60,7 @@ export type ScreensSections = { screens: SectionData<ScreensData> }
 const SLIDES = { orderBy: { position: "asc" }, select: { mediaId: true, seconds: true } } as const
 
 export async function loadScreens(accountId: string): Promise<ScreensData> {
-  const [stores, screens, media] = await Promise.all([
+  const [stores, { screens, seen }, media] = await Promise.all([
     getAccountStores(accountId),
     prisma.screen.findMany({
       where: { accountId },
@@ -68,6 +69,10 @@ export async function loadScreens(accountId: string): Promise<ScreensData> {
         id: true,
         name: true,
         storeId: true,
+        // For the beat lookup only. Never put on a row the page gets.
+        tokenHash: true,
+        // A beat older than this is from the TV's last pairing; see latestSeen.
+        pairedAt: true,
         device: true,
         lastSeenAt: true,
         playlist: { select: { slides: SLIDES } },
@@ -76,7 +81,9 @@ export async function loadScreens(accountId: string): Promise<ScreensData> {
           select: { id: true, name: true, days: true, startMinute: true, endMinute: true, playlist: { select: { slides: SLIDES } } },
         },
       },
-    }),
+    })
+      // A TV on the new player says it is on to Redis, not the database: one MGET for every screen, no query.
+      .then(async (screens) => ({ screens, seen: await seenFor(screens.map((s) => s.tokenHash)) })),
     prisma.screenMedia.findMany({
       where: { accountId },
       orderBy: { createdAt: "desc" },
@@ -93,6 +100,7 @@ export async function loadScreens(accountId: string): Promise<ScreensData> {
     const slides = s.playlist?.slides ?? []
     const times = s.times.map((t) => ({ id: t.id, name: t.name, days: t.days, start: t.startMinute, end: t.endMinute, slides: t.playlist.slides }))
     for (const m of new Set([slides, ...times.map((t) => t.slides)].flat().map((x) => x.mediaId))) used.set(m, (used.get(m) ?? 0) + 1)
+    const last = latestSeen(s.lastSeenAt, s.device, seen.get(s.tokenHash), s.pairedAt)
     return {
       id: s.id,
       name: s.name,
@@ -100,9 +108,9 @@ export async function loadScreens(accountId: string): Promise<ScreensData> {
       slides,
       times,
       onNow: activeTime(times.filter((t) => t.slides.length > 0), day, minute)?.id ?? null,
-      device: s.device,
-      state: screenState(s.lastSeenAt, now),
-      lastSeenAt: s.lastSeenAt?.toISOString() ?? null,
+      device: last.device,
+      state: screenState(last.at, now),
+      lastSeenAt: last.at?.toISOString() ?? null,
     }
   })
 

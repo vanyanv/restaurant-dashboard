@@ -46,7 +46,8 @@ export const onRequestError: Instrumentation.onRequestError = async (error, requ
   const err = error instanceof Error ? error : new Error(String(error))
   await reportServerError({
     source: ROUTE_SOURCE[context.routeType] ?? "render",
-    route: request.path.split("?")[0] ?? request.path,
+    // A TV's token is in these two paths and is its only credential: keep it out of the error log.
+    route: (request.path.split("?")[0] ?? request.path).replace(/^\/api\/tv\/(c|beat)\/[^/]+/, "/api/tv/$1/:token"),
     method: request.method,
     message: err.message,
     stack: err.stack ?? null,

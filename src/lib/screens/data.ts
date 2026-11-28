@@ -75,12 +75,32 @@ export async function pairingFor(tokenHash: string, device: string | null): Prom
   throw new Error("Could not make a pairing code")
 }
 
-/** What a TV should show now. Notes that the TV was seen, at most once a minute. */
-export async function contentFor(tokenHash: string, device: string | null): Promise<TvContent> {
+export type TvPaired = Extract<TvContent, { paired: true }>
+
+/** The paired answer of /api/tv/c/<token>, which the CDN keeps. The old endpoint never sends the two extra fields. */
+export type TvCached = TvPaired & {
+  /** Sent back with every beat, so the beat can trust the caller without a query. */
+  beat: string
+  /** Where to listen for "changed"; null when push is not set up. */
+  push: { url: string } | null
+}
+
+/**
+ * What a paired TV should show now, with the account it belongs to; null when
+ * no screen has this token. Notes that the TV was seen, at most once a minute,
+ * unless `note` is false (the cached path, where the beat does that instead).
+ * Never makes a pairing code.
+ */
+export async function screenContent(
+  tokenHash: string,
+  device: string | null,
+  { note = true }: { note?: boolean } = {},
+): Promise<{ accountId: string; content: TvPaired } | null> {
   const screen = await prisma.screen.findUnique({
     where: { tokenHash },
     select: {
       id: true,
+      accountId: true,
       name: true,
       lastSeenAt: true,
       device: true,
@@ -99,13 +119,10 @@ export async function contentFor(tokenHash: string, device: string | null): Prom
     },
   })
 
-  if (!screen) {
-    const p = await pairingFor(tokenHash, device)
-    return { paired: false, code: p.code, expiresAt: p.expiresAt.toISOString(), player: PLAYER_VERSION, qr: qrRows(pairLink(p.code)) }
-  }
+  if (!screen) return null
 
   const now = new Date()
-  if (!screen.lastSeenAt || now.getTime() - screen.lastSeenAt.getTime() >= SEEN_WRITE_EVERY_MS || (device && device !== screen.device)) {
+  if (note && (!screen.lastSeenAt || now.getTime() - screen.lastSeenAt.getTime() >= SEEN_WRITE_EVERY_MS || (device && device !== screen.device))) {
     await prisma.$transaction([
       prisma.screen.update({
         where: { id: screen.id },
@@ -118,7 +135,7 @@ export async function contentFor(tokenHash: string, device: string | null): Prom
   }
 
   const pl = screen.playlist
-  return {
+  const content: TvPaired = {
     paired: true,
     player: PLAYER_VERSION,
     screen: { name: screen.name, store: screen.store.name },
@@ -136,4 +153,13 @@ export async function contentFor(tokenHash: string, device: string | null): Prom
     clock: { now: now.toISOString(), offsetMinutes: storeOffsetMinutes(now) },
     identifyUntil: screen.identifyUntil && screen.identifyUntil > now ? screen.identifyUntil.toISOString() : null,
   }
+  return { accountId: screen.accountId, content }
+}
+
+/** What a TV should show now: its pictures once paired, its code before. This is the old player's answer; it does not change. */
+export async function contentFor(tokenHash: string, device: string | null): Promise<TvContent> {
+  const paired = await screenContent(tokenHash, device)
+  if (paired) return paired.content
+  const p = await pairingFor(tokenHash, device)
+  return { paired: false, code: p.code, expiresAt: p.expiresAt.toISOString(), player: PLAYER_VERSION, qr: qrRows(pairLink(p.code)) }
 }
