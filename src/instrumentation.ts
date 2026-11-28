@@ -31,6 +31,17 @@ export async function register() {
     if (!shouldRecord(`${report.source}|${where}|${report.message}|${digest}`)) return
     return recordError(report)
   })
+
+  // Usage counting (docs/superpowers/specs/2026-11-27-usage-monitoring-design.md).
+  // Last, and unable to stop the server starting: `USAGE_METER=0` turns it off.
+  if (process.env.USAGE_METER !== "0") {
+    try {
+      const { registerUsageTracer } = await import("@/lib/usage/tracer")
+      registerUsageTracer()
+    } catch (error) {
+      console.warn("[usage] tracer not registered", error)
+    }
+  }
 }
 
 const ROUTE_SOURCE = {
