@@ -4,7 +4,7 @@ import { freshContentFor, savedContentFor } from "@/lib/screens/data"
 import { rateLimit, rateLimitKey, rateLimitLocal } from "@/lib/rate-limit"
 
 /**
- * What a TV should show. The TV calls this every 30 to 60 seconds with its token; while nothing has
+ * What a TV should show. The TV calls this every 30 seconds (every 3 minutes while Pusher's socket is up) with its token; while nothing has
  * changed the answer comes from Redis, not the database (tv-cache.ts).
  * Before it is paired the answer is its code; after, its playlist.
  *
