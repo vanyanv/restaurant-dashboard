@@ -15,12 +15,21 @@ export const PENDING_KEY = "usage:pending"
 export const FLUSH_AFTER_MS = 300_000
 const REDIS_WAIT_MS = 800
 
+/**
+ * A preview deploy flushes after 15 seconds and logs one line per flush, so a
+ * change to this file can be proved on a preview without waiting five minutes
+ * or guessing. Production never logs and keeps the five minutes.
+ */
+const PREVIEW = process.env.VERCEL_ENV === "preview"
+const flushAfterMs = PREVIEW ? 15_000 : FLUSH_AFTER_MS
+
 let flushing = false
 
 export async function flushNow(): Promise<void> {
   try {
     const redis = rawRedis()
     const payload = takePending()
+    if (PREVIEW) console.log(`[usage] flush redis=${Boolean(redis)} rows=${payload?.rows.length ?? 0}`)
     if (!redis || !payload) return
     let timer: ReturnType<typeof setTimeout> | undefined
     const late = new Promise<never>((_, reject) => {
@@ -29,11 +38,13 @@ export async function flushNow(): Promise<void> {
     try {
       await Promise.race([redis.rpush(PENDING_KEY, JSON.stringify(payload)), late])
       count("other", "redisCommands")
+      if (PREVIEW) console.log("[usage] flush sent")
     } finally {
       clearTimeout(timer)
     }
-  } catch {
+  } catch (error) {
     // Dropped. Counting never fails a request.
+    if (PREVIEW) console.log(`[usage] flush dropped: ${error instanceof Error ? error.message : error}`)
   }
 }
 
@@ -43,7 +54,7 @@ export async function flushNow(): Promise<void> {
  */
 export function maybeFlush(now = Date.now()): void {
   try {
-    if (flushing || oldestAgeMs(now) <= FLUSH_AFTER_MS) return
+    if (flushing || oldestAgeMs(now) <= flushAfterMs) return
     flushing = true
     const done = flushNow().finally(() => {
       flushing = false

@@ -131,4 +131,5 @@ export function registerUsageTracer(): void {
   trace.setGlobalTracerProvider(
     new BasicTracerProvider({ sampler: usageSampler, spanProcessors: [usageProcessor] }),
   )
+  if (process.env.VERCEL_ENV === "preview") console.log("[usage] tracer registered")
 }
