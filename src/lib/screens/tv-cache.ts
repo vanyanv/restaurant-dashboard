@@ -4,7 +4,7 @@ import { logger } from "@/lib/logger"
 /**
  * The TV's answer, kept in Redis so a check-in does not touch the database.
  *
- * Each TV checks in every 30 to 60 seconds all day. When every check-in ran a
+ * Each TV checks in all day: every 30 seconds, or every 3 minutes while Pusher's socket is up. When every check-in ran a
  * query, the Neon database never went to sleep and used up the month's compute
  * on 2026-11-26. Now a check-in reads Redis, and only goes to the database when
  * something changed.

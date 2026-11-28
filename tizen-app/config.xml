@@ -6,7 +6,7 @@
   See README.md for how to install it.
 -->
 <widget xmlns="http://www.w3.org/ns/widgets" xmlns:tizen="http://tizen.org/ns/widgets"
-        id="https://dashboard.chrisneddys.com/tv" version="3.2.0" viewmodes="maximized">
+        id="https://dashboard.chrisneddys.com/tv" version="3.2.1" viewmodes="maximized">
     <access origin="https://dashboard.chrisneddys.com" subdomains="false"/>
     <!-- Pusher's socket, which tells the TV the moment a picture changes (ws-<cluster>.pusher.com). -->
     <access origin="wss://pusher.com" subdomains="true"/>

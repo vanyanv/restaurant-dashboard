@@ -4,11 +4,13 @@
 export const PAIR_CODE_TTL_MS = 10 * 60_000
 
 /**
- * A screen heard from within this long is "On". The TV checks in every 30 to
- * 60 s, but a check-in answered from Redis notes itself only every
- * SEEN_NOTE_EVERY_MS, so the newest note can be that plus one check-in old.
+ * A screen heard from within this long is "On". The TV checks in every 30 s
+ * without Pusher's socket and every 3 min with it, and a check-in answered
+ * from Redis notes itself only every SEEN_NOTE_EVERY_MS, so the newest note
+ * can be that plus two check-ins old. (A TV whose socket is open reads "On"
+ * from Pusher itself; this window is for the ones without.)
  */
-export const ONLINE_WINDOW_MS = 4 * 60_000
+export const ONLINE_WINDOW_MS = 8 * 60_000
 
 /** How often the TV asks for its playlist. */
 export const TV_POLL_MS = 30_000
@@ -17,13 +19,20 @@ export const TV_POLL_MS = 30_000
  * How often it asks while Pusher's socket is up and tells it of changes. A
  * backstop, so it can be slow, but it is also how the dashboard knows the TV
  * is on: it must stay well inside ONLINE_WINDOW_MS or live TVs read "Off".
+ *
+ * 3 min, not 1: every check-in runs a function and spends a Redis command, and
+ * at 60 s seven TVs open 16 hours a day made about 200,000 of each a month,
+ * against a Vercel function-time allowance already 91% used (2026-11-27).
+ * Pusher still tells the TV of a change at once; this only bounds how long a
+ * socket that has died without saying so can hide one.
  */
-export const TV_PUSHED_POLL_MS = 60_000
+export const TV_PUSHED_POLL_MS = 180_000
 
 /**
- * A check-in answered from Redis notes "seen" there at most this often: one
- * Redis write every other check-in instead of every one (the free plan counts
- * commands).
+ * A check-in answered from Redis notes "seen" there at most this often (the
+ * free plan counts commands). Without the socket that is one write every third
+ * check-in; with it, check-ins are further apart than this, and a TV whose
+ * socket is open writes nothing at all.
  */
 export const SEEN_NOTE_EVERY_MS = 90_000
 
@@ -58,7 +67,7 @@ export const SCREEN_ORIGINAL_MAX_PARTS = Math.ceil(SCREEN_ORIGINAL_MAX_BYTES / S
 export const SCREEN_THUMB_MAX_BYTES = 400 * 1024
 
 /** Bump when the hosted /tv page must be picked up by TVs already showing it. */
-export const PLAYER_VERSION = "3"
+export const PLAYER_VERSION = "4"
 
 /** Every store is in Los Angeles; windows of the week are in store time. */
 export const SCREEN_TZ = "America/Los_Angeles"

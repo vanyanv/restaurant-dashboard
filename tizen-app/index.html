@@ -57,7 +57,7 @@ p b { color: #ede6e1; }
 <script>
 (function () {
   "use strict";
-  var BASE = "https://dashboard.chrisneddys.com", APP = true, PLAYER = "3";
+  var BASE = "https://dashboard.chrisneddys.com", APP = true, PLAYER = "4";
   var TOKEN_KEY = "screens.token", LAST_KEY = "screens.last", CACHE = "screens-media-v1";
   var PAIRED_POLL = 30000, UNPAIRED_POLL = 5000, TIMEOUT = 20000, FADE = 900;
   var stage = el("stage"), badge = el("badge"), menu = el("menu"), msg = el("msg"), ident = el("ident");
@@ -458,9 +458,9 @@ p b { color: #ede6e1; }
   /* ---- told the moment something changes ---- */
 
   // Pusher's socket protocol by hand: its library would not run on the oldest
-  // sets. While the socket is up the 30-second check slows to once a minute,
+  // sets. While the socket is up the 30-second check slows to once every 3 minutes,
   // as a backstop; when it drops, the TV is back on 30 seconds.
-  var PUSHED_POLL = 60000, sock = null, sockFor = "", sockUp = false, sockWait = 5000, sockTimer = null, sockQuiet = null;
+  var PUSHED_POLL = 180000, sock = null, sockFor = "", sockUp = false, sockWait = 5000, sockTimer = null, sockQuiet = null;
   function listen(p) {
     var want = p && p.key && p.cluster && p.channel ? p.key + "|" + p.cluster + "|" + p.channel : "";
     if (want === sockFor) return;

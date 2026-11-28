@@ -504,7 +504,7 @@ p b { color: #ede6e1; }
   /* ---- told the moment something changes ---- */
 
   // Pusher's socket protocol by hand: its library would not run on the oldest
-  // sets. While the socket is up the 30-second check slows to once a minute,
+  // sets. While the socket is up the 30-second check slows to once every 3 minutes,
   // as a backstop; when it drops, the TV is back on 30 seconds.
   var PUSHED_POLL = ${TV_PUSHED_POLL_MS}, sock = null, sockFor = "", sockUp = false, sockWait = 5000, sockTimer = null, sockQuiet = null;
   function listen(p) {
