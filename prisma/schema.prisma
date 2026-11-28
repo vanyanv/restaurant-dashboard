@@ -41,6 +41,10 @@ model Account {
   /// Where a summary of every submitted store check is emailed. Edited on
   /// Store checks > Links & email.
   checkReportEmails String[] @default([])
+  /// Days a crew check photo (and its small copy) is kept in storage before
+  /// the nightly retention job deletes it; the check record stays. Null keeps
+  /// photos forever. Edited on Store checks > Links & email.
+  checkPhotoKeepDays Int? @default(7)
 
   users                         User[]
   stores                        Store[]
@@ -2561,6 +2565,8 @@ model CheckPhoto {
   contentType  String
   size         Int
   createdAt    DateTime @default(now())
+  /// When the retention job deleted the file to save space. The row stays.
+  purgedAt     DateTime?
 
   submission CheckSubmission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
 
@@ -2607,6 +2613,9 @@ model CheckMark {
   photoKey     String?
   photoType    String?
   photoSize    Int?
+  /// When the retention job deleted the photo file to save space. The key
+  /// stays, so the task still reads "had a photo".
+  photoPurgedAt DateTime?
   /// The owner looked at this mark's photo: "ok" (looks good) or "redo"
   /// (sent back; the task was unticked, or marked missed if the check had
   /// already closed). Null until someone looks.

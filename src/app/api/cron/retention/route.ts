@@ -5,6 +5,7 @@ import { withCronAuth } from "@/lib/cron-auth"
 import { withJobRun } from "@/lib/monitoring/job-run"
 import { logger } from "@/lib/logger"
 import { anomalyHorizon } from "@/lib/anomaly-window"
+import { purgeOldCheckPhotos } from "@/lib/checks/photo-retention"
 
 export const maxDuration = 60
 
@@ -60,7 +61,7 @@ async function purgeOldRows(
  * `.github/workflows/retention.yml` schedule (or a manual owner request).
  */
 export const POST = withCronAuth(
-  async (_request, { fromCron }) => {
+  async (_request, { fromCron, accountId }) => {
     const startedAt = Date.now()
     try {
       const result = await withJobRun(
@@ -106,6 +107,19 @@ export const POST = withCronAuth(
             deleted: expired.count,
             capped: false,
           })
+
+          // Crew check photos past the account's keep time (Store checks >
+          // Links & email): files leave storage, the check records stay. An
+          // owner running this by hand sweeps only their own account.
+          const photoRuns = await purgeOldCheckPhotos({ now: new Date(now), accountId })
+          for (const r of photoRuns) {
+            addRows(r.photos)
+            outcomes.push({ table: "Check photos (storage)", deleted: r.photos, capped: r.capped })
+            if (r.capped) logger.warn("[cron/retention] check photos hit batch cap; backlog remains for next run")
+            if (r.failed > 0 || r.error) {
+              logger.error("[cron/retention] some check photos could not be deleted", { failed: r.failed, error: r.error })
+            }
+          }
 
           return outcomes
         },

@@ -1,3 +1,4 @@
+import { withoutPurgedPhotos } from "@/lib/checks/photo-keep"
 import { after } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { logger } from "@/lib/logger"
@@ -117,9 +118,9 @@ export async function autoCloseChecks(opts: {
     const sections = await loadSections(opts.store.id, c.kind)
     const rows = await prisma.checkMark.findMany({
       where: { storeId: opts.store.id, kind: c.kind, businessDate: dayToDb(c.day), store: { accountId: opts.store.accountId } },
-      select: { itemId: true, done: true, note: true, crewName: true, at: true, photoKey: true, photoType: true, photoSize: true },
+      select: { itemId: true, done: true, note: true, crewName: true, at: true, photoKey: true, photoType: true, photoSize: true, photoPurgedAt: true },
       orderBy: [{ at: "asc" }, { id: "asc" }],
-    })
+    }).then(withoutPurgedPhotos)
     // A mark made after the window ended (a phone that was offline) never counts.
     const inWindow = rows.filter((r) => r.at.getTime() <= closes.getTime())
     const form = closedForm(sections, inWindow)

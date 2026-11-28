@@ -19,6 +19,7 @@ import {
 import { dayToDb } from "@/lib/checks/time"
 import { setChecksQuietUntil } from "@/lib/checks/quiet"
 import { loadCheckGrid, type SubmissionContent } from "@/lib/checks/data"
+import { MAX_PHOTO_KEEP_DAYS, MIN_PHOTO_KEEP_DAYS } from "@/lib/checks/photo-keep"
 import { helpText, isHelpPhotoKey, MAX_HELP_CHARS, MAX_HELP_PHOTOS } from "@/lib/checks/help"
 
 /**
@@ -589,6 +590,34 @@ export async function saveCheckReportEmails(input: { emails: string[] }): Promis
   }
 }
 
+const KeepDays = z
+  .number()
+  .int("Whole days only")
+  .min(MIN_PHOTO_KEEP_DAYS, `Keep photos at least ${MIN_PHOTO_KEEP_DAYS} days`)
+  .max(MAX_PHOTO_KEEP_DAYS, `At most ${MAX_PHOTO_KEEP_DAYS} days`)
+  .nullable()
+
+/**
+ * How many days crew check photos are kept before the nightly cleanup deletes
+ * them from storage, for the whole account. Null keeps them forever.
+ */
+export async function saveCheckPhotoKeepDays(input: { days: number | null }): Promise<ActionResult> {
+  try {
+    const session = await getSession()
+    if (!session?.user) throw new Error("Unauthorized")
+    if (!hasOwnerAccess(session.user.role)) throw new Error("Forbidden")
+    const days = KeepDays.parse(input.days)
+    await prisma.account.update({ where: { id: session.user.accountId }, data: { checkPhotoKeepDays: days } })
+    await revalidateChecks()
+    return {
+      ok: true,
+      message: days === null ? "Saved. Check photos are kept forever." : `Saved. Photos older than ${days} days are deleted each night.`,
+    }
+  } catch (err) {
+    return fail(err)
+  }
+}
+
 const ReviewInput = z.object({
   markId: z.string().min(1).max(40),
   verdict: z.enum(["ok", "redo"]),
@@ -637,7 +666,7 @@ export async function reviewCheckPhoto(raw: z.input<typeof ReviewInput>): Promis
     if (!session?.user) throw new Error("Unauthorized")
     if (!hasOwnerAccess(session.user.role)) throw new Error("Forbidden")
     const mark = await prisma.checkMark.findFirst({
-      where: { id: input.markId, photoKey: { not: null }, store: { accountId: session.user.accountId } },
+      where: { id: input.markId, photoKey: { not: null }, photoPurgedAt: null, store: { accountId: session.user.accountId } },
       select: {
         id: true, storeId: true, kind: true, businessDate: true, itemId: true, itemText: true, sectionName: true,
         photoKey: true, done: true, review: true,
@@ -742,7 +771,7 @@ export async function reviewCheckPhotos(raw: z.input<typeof ReviewManyInput>): P
     if (!session?.user) throw new Error("Unauthorized")
     if (!hasOwnerAccess(session.user.role)) throw new Error("Forbidden")
     const marks = await prisma.checkMark.findMany({
-      where: { id: { in: ids }, photoKey: { not: null }, store: { accountId: session.user.accountId } },
+      where: { id: { in: ids }, photoKey: { not: null }, photoPurgedAt: null, store: { accountId: session.user.accountId } },
       select: { id: true, storeId: true, kind: true, businessDate: true, itemId: true, done: true, review: true },
     })
     if (marks.length !== ids.length) return { ok: false, error: "A photo is no longer there. Refresh to see the latest." }

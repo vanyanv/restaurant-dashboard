@@ -28,7 +28,8 @@ export type GridSubmission = {
   lateMinutes: number
   flaggedCount: number
   flags: Array<{ section: string; item: string; note: string }>
-  photos: Array<{ id: string; sectionName: string }>
+  /** `purgedAt` is set once the retention job deleted the file. */
+  photos: Array<{ id: string; sectionName: string; purgedAt?: Date | null }>
 }
 
 /** One task on a check's record. `at` and `by` are on records from 2026-10-29 on. */
@@ -45,6 +46,8 @@ export type GridMark = {
   crewName: string
   at: Date
   hasPhoto: boolean
+  /** When the retention job deleted this mark's photo file (the task keeps "had a photo"). */
+  photoGoneAt?: Date | null
   /** The owner's look at this mark's photo. */
   review: "ok" | "redo" | null
   reviewNote: string | null
@@ -187,7 +190,7 @@ export async function loadCheckGrid(opts: {
       select: {
         id: true, storeId: true, kind: true, businessDate: true, crewName: true,
         submittedAt: true, startedAt: true, lateMinutes: true, flaggedCount: true, autoClosed: true, content: true,
-        photos: { select: { id: true, sectionName: true }, orderBy: { createdAt: "asc" } },
+        photos: { select: { id: true, sectionName: true, purgedAt: true }, orderBy: { createdAt: "asc" } },
       },
     }),
     prisma.checkClosure.findMany({
@@ -206,7 +209,7 @@ export async function loadCheckGrid(opts: {
       where: { storeId: { in: storeIds }, businessDate: range, store: { accountId: opts.accountId } },
       select: {
         id: true, storeId: true, kind: true, businessDate: true, itemId: true, itemText: true, sectionName: true,
-        done: true, note: true, crewName: true, at: true, photoKey: true, review: true, reviewNote: true,
+        done: true, note: true, crewName: true, at: true, photoKey: true, photoPurgedAt: true, review: true, reviewNote: true,
       },
       orderBy: [{ at: "asc" }, { id: "asc" }],
     }),
@@ -271,6 +274,7 @@ export async function loadCheckGrid(opts: {
             crewName: m.crewName,
             at: m.at,
             hasPhoto: Boolean(m.photoKey),
+            photoGoneAt: m.photoPurgedAt,
             review: m.review === "ok" || m.review === "redo" ? m.review : null,
             reviewNote: m.reviewNote,
           }))

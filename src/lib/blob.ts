@@ -309,6 +309,31 @@ export async function deleteCheckPhoto(pathname: string): Promise<void> {
   await deleteProductPhoto(pathname)
 }
 
+/**
+ * Delete many check photos (and small copies), a few at a time, with the
+ * same single-object delete the rest of the app already uses on R2. Returns
+ * the keys storage confirmed gone; a key that was already missing counts as
+ * gone, and a key that failed is left out. Only keys under `checks/` are ever
+ * sent, so a bad row can't reach invoices, backups or screen media.
+ */
+export async function deleteCheckObjects(keys: string[]): Promise<Set<string>> {
+  const safe = [...new Set(keys)].filter((k) => k.startsWith("checks/") && !k.includes(".."))
+  const gone = new Set<string>()
+  const queue = [...safe]
+  const worker = async () => {
+    for (let k = queue.shift(); k !== undefined; k = queue.shift()) {
+      try {
+        await deleteCheckPhoto(k)
+        gone.add(k)
+      } catch {
+        // Left out of `gone`: the row keeps its photo and the next night retries.
+      }
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(8, safe.length) }, worker))
+  return gone
+}
+
 export async function getCheckPhotoStream(pathname: string): Promise<ProductPhotoFetch> {
   const localDir = localCheckPhotoDir()
   if (localDir) {
