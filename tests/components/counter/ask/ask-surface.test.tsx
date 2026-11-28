@@ -173,6 +173,10 @@ describe("AskSurface", () => {
     expect(hrefsFor(true)).toContain("/dashboard/admin/monitoring")
     expect(hrefsFor(false)).not.toContain("/dashboard/admin/monitoring")
     expect(hrefsFor(undefined)).not.toContain("/dashboard/admin/monitoring")
+    // The developer portal sits behind the same gate and follows the same rule.
+    expect(hrefsFor(true)).toContain("/dashboard/admin/developer")
+    expect(hrefsFor(false)).not.toContain("/dashboard/admin/developer")
+    expect(hrefsFor(undefined)).not.toContain("/dashboard/admin/developer")
   })
 
   it("draws Switch store from the same list the rail's switcher gets", () => {

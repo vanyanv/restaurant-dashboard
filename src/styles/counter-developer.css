@@ -1,0 +1,168 @@
+/*
+ * Developer portal (/dashboard/admin/developer, /m/developer): what the app
+ * is connected to, what it is built with, where its keys are, and how to set
+ * up a new computer.
+ *
+ * One markup for the desk and the phone. `.dv` is a size container and the
+ * page rearranges from ITS width: under 620px the map becomes stacked cards
+ * and each key becomes a card. Counter tokens only; prefix `dv-`.
+ *
+ * Motion follows DESIGN.md "Motion rules": every duration is a --ct-dur-*
+ * token or a multiple of one (so the one reduced-motion rule in counter.css
+ * stops all of it), every :hover sits inside (hover:hover), and the two
+ * things that loop (the dots on the wires, the ring on a missing key) are
+ * only in the page while motion is on: the page leaves them out under
+ * reduced motion and when "Pause motion" is pressed.
+ */
+.dv{container:dv / inline-size;display:grid;gap:16px;min-width:0}
+.dv-panel{display:grid;gap:16px;min-width:0}
+.dv-mono{font-family:var(--mono);font-size:var(--t-cap);letter-spacing:.02em;color:var(--ink-3)}
+.dv-head{display:grid;gap:10px;min-width:0}
+.dv-fresh{display:flex;flex-wrap:wrap;gap:6px 14px;align-items:center}
+.dv-fresh>.cu-fresh{margin:0}
+.dv-link{padding:0;border:0;background:none;font:inherit;font-size:var(--t-cap);color:var(--ink-2);text-decoration:underline;text-underline-offset:3px;cursor:pointer}
+.dv-link:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:2px}
+@media (pointer:coarse){.dv-link{min-height:44px}}
+
+/* ---- A plain block: a head line, then rows ---- */
+.dv-block{min-width:0;border:1px solid var(--line);border-radius:var(--r);background:var(--surface)}
+.dv-block__h{display:flex;justify-content:space-between;align-items:baseline;gap:10px;padding:10px 14px;border-bottom:1px solid var(--line)}
+.dv-block__h strong{font-weight:600;font-size:var(--t-body)}
+.dv-withico{display:inline-flex;align-items:center;gap:8px}
+.dv-withico svg{flex:none;color:var(--ink-3)}
+.dv-list{list-style:none;margin:0;padding:0}
+.dv-row{display:flex;align-items:center;gap:10px;min-width:0;padding:9px 14px;border-top:1px solid var(--line)}
+.dv-row:first-child{border-top:0}
+.dv-grow{flex:1;min-width:0}
+.dv-name{font-weight:500;overflow-wrap:anywhere}
+.dv-sub{color:var(--ink-3);font-size:var(--t-cap);overflow-wrap:anywhere}
+.dv-sub--bad{color:var(--bad)}
+.dv-tile{display:grid;place-items:center;flex:none;width:28px;height:28px;border-radius:var(--r-sm);background:var(--chrome);color:var(--ink)}
+.dv-ver{font-family:var(--mono);font-size:var(--t-cap);color:var(--ink-2);font-variant-numeric:tabular-nums;white-space:nowrap}
+.dv-ver--none{color:var(--ink-3)}
+.dv-note{margin:0;padding:10px 14px;border-radius:var(--r);background:var(--warn-wash);color:var(--ink);font-size:var(--t-body)}
+.dv-note--bad{background:var(--bad-wash)}
+.dv-note b{font-weight:600}
+
+/* ---- Status dots (always beside the same thing in words) ---- */
+.dv-dot{position:relative;display:inline-block;flex:none;width:8px;height:8px;border-radius:50%;background:var(--ink-3)}
+.dv-dot[data-status="ready"]{background:var(--good)}
+.dv-dot[data-status="missing"]{background:var(--bad)}
+.dv-dot__ring{position:absolute;inset:0;border-radius:50%;border:1px solid var(--bad);opacity:0;animation:dv-ring calc(var(--ct-dur-leave)*7) var(--ease) infinite}
+.dv-legend{display:flex;flex-wrap:wrap;gap:6px 16px;margin:0;padding:0;list-style:none;font-size:var(--t-cap);color:var(--ink-2)}
+.dv-legend li{display:inline-flex;align-items:center;gap:6px}
+
+/* ---- The map ---- */
+.dv-map{min-width:0}
+.dv-map__svg{display:block;width:100%;max-width:1080px;height:auto;margin-inline:auto;overflow:visible}
+.dv-box{fill:var(--surface);stroke:var(--line-strong)}
+.dv-hub{fill:var(--ink);stroke:var(--ink)}
+.dv-hub__t{fill:var(--surface);font-family:var(--display);font-weight:700;font-size:17px}
+.dv-hub__s{fill:var(--surface);opacity:.75;font-family:var(--mono);font-size:10px}
+.dv-gt{fill:var(--ink-3);font-family:var(--mono);font-size:10px;letter-spacing:.08em;text-transform:uppercase}
+.dv-gi{color:var(--ink-3)}
+.dv-st{fill:var(--ink);font-size:13px;font-weight:500}
+.dv-sn{fill:var(--ink-3);font-family:var(--mono);font-size:10px}
+.dv-sep{stroke:var(--line)}
+.dv-map__svg .cu-mark{color:var(--ink)}
+.dv-d{fill:var(--ink-3)}
+.dv-d[data-status="ready"]{fill:var(--good)}
+.dv-d[data-status="missing"]{fill:var(--bad)}
+.dv-wire{fill:none;stroke:var(--line-strong);stroke-width:1.5;stroke-dasharray:1;stroke-dashoffset:0;transition:stroke var(--ct-dur-quick) var(--ease)}
+.dv-grp{transition:opacity var(--ct-dur-quick) var(--ease)}
+/* On a wide page the cards stay for a screen reader and leave the eye to the
+   drawing; under 620px (below) they are the page. */
+.dv-groups{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
+.dv-missing{display:grid;gap:0}
+
+/* ---- Stack ---- */
+.dv-stack{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+
+/* ---- Keys ---- */
+.dv-toolbar{display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center}
+.dv-chips{display:flex;flex-wrap:wrap;gap:6px}
+.dv-chip{border:1px solid var(--line-strong);background:var(--surface);border-radius:999px;padding:5px 11px;font:inherit;font-size:var(--t-cap);color:var(--ink-2);cursor:pointer;font-variant-numeric:tabular-nums;
+  transition:background-color var(--ct-dur-quick) var(--ease),color var(--ct-dur-quick) var(--ease),transform var(--ct-dur-spring) var(--ct-ease-spring)}
+.dv-chip[aria-pressed="true"]{background:var(--ink);border-color:var(--ink);color:var(--surface)}
+.dv-chip:active{transform:scale(var(--ct-press));transition-duration:var(--ct-dur-tap)}
+.dv-chip:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+@media (pointer:coarse){.dv-chip{min-height:44px;padding-inline:14px}}
+.dv-keys{list-style:none;margin:0;padding:0;border:1px solid var(--line);border-radius:var(--r);background:var(--surface)}
+.dv-krow{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1.2fr) minmax(0,.9fr) 148px;gap:10px;align-items:center;padding:9px 14px;border-top:1px solid var(--line);min-width:0}
+.dv-krow:first-child{border-top:0}
+.dv-kid{display:flex;align-items:center;gap:10px;min-width:0}
+.dv-kid>div{min-width:0}
+.dv-kname{font-family:var(--mono);font-size:var(--t-cap);overflow-wrap:anywhere}
+.dv-kval{min-width:0;font-size:var(--t-cap);color:var(--ink-2);overflow-wrap:anywhere}
+.dv-kval--mask{font-family:var(--mono);color:var(--ink-3);letter-spacing:.1em;white-space:nowrap}
+.dv-kval--shown{font-family:var(--mono);color:var(--ink);user-select:all;animation:dv-fade var(--ct-dur-rise) var(--ease) both}
+.dv-where{display:flex;gap:4px;flex-wrap:wrap;min-width:0}
+.dv-pill{display:inline-flex;align-items:center;padding:2px 8px;border-radius:999px;border:1px solid var(--line);font-family:var(--mono);font-size:var(--t-micro);letter-spacing:.03em;color:var(--ink-2);white-space:nowrap}
+.dv-pill--bad{background:var(--bad-wash);color:var(--bad);border-color:transparent}
+.dv-pill--warn{background:var(--warn-wash);color:var(--warn);border-color:transparent}
+.dv-kact{display:flex;gap:6px;justify-content:flex-end}
+.dv-kact .cu-btn{min-height:30px;padding:0 10px;font-size:var(--t-cap)}
+@media (pointer:coarse){.dv-kact .cu-btn{min-height:44px}}
+.dv-said{min-height:1.4em;margin:0;font-size:var(--t-cap)}
+
+/* ---- New computer ---- */
+.dv-steps{display:grid;gap:10px;margin:0;padding:0;list-style:none;counter-reset:dv-step}
+.dv-steps>li{counter-increment:dv-step;display:grid;grid-template-columns:28px minmax(0,1fr);gap:10px;align-items:start}
+.dv-steps>li::before{content:counter(dv-step);display:grid;place-items:center;width:26px;height:26px;border-radius:50%;border:1px solid var(--line-strong);font-family:var(--mono);font-size:var(--t-cap);color:var(--ink-2)}
+.dv-steps p{margin:0 0 6px}
+.dv-cmd{display:flex;align-items:center;gap:10px;min-width:0;padding:6px 6px 6px 12px;border-radius:var(--r-sm);background:var(--sunk)}
+.dv-cmd code{flex:1;min-width:0;overflow-x:auto;white-space:nowrap;font-family:var(--mono);font-size:var(--t-cap);user-select:all}
+.dv-cmd .cu-btn{min-height:30px;padding:0 10px;font-size:var(--t-cap)}
+@media (pointer:coarse){.dv-cmd .cu-btn{min-height:44px}}
+.dv-byhand{display:flex;flex-wrap:wrap;gap:6px;margin:0;padding:10px 14px;list-style:none}
+
+/* ---- The password dialog (a native modal <dialog>, see modal-dialog.tsx) ---- */
+.dv-scrim{position:fixed;inset:0;z-index:60;display:grid;place-items:center;padding:16px;background:var(--scrim)}
+.dv-dialog{width:100%;max-width:400px;display:grid;gap:12px;padding:20px;border-radius:12px;background:var(--surface);color:var(--ink);box-shadow:0 30px 60px -20px var(--ct-raise);
+  animation:ct-panel var(--ct-dur-spring) var(--ct-ease-spring) backwards}
+.dv-dialog h1{margin:0;font-family:var(--display);font-size:var(--t-xl);font-weight:700;letter-spacing:-.02em}
+.dv-dialog p{margin:0;color:var(--ink-2);font-size:var(--t-body)}
+.dv-dialog label{display:grid;gap:6px;font-size:var(--t-cap);font-weight:600;color:var(--ink-2)}
+.dv-dialog input{min-height:40px;padding:0 12px;border:1px solid var(--line-strong);border-radius:var(--r);background:var(--paper);color:var(--ink);font:inherit;font-size:16px}
+.dv-dialog input:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.dv-dialog__err{min-height:1.4em;color:var(--bad);font-weight:500}
+
+/* ---- Phone form: the page is under 620px wide ---- */
+@container dv (max-width:620px){
+  .dv-map__svg{display:none}
+  .dv-groups{position:static;width:auto;height:auto;overflow:visible;clip-path:none;white-space:normal;display:grid;gap:12px}
+  .dv-missing{display:none}
+  .dv-stack{grid-template-columns:minmax(0,1fr)}
+  .dv-keys{display:grid;gap:8px;border:0;background:none}
+  .dv-krow{grid-template-columns:minmax(0,1fr);gap:8px;padding:12px;border:1px solid var(--line);border-radius:var(--r);background:var(--surface)}
+  .dv-krow:first-child{border-top:1px solid var(--line)}
+  .dv-kval--mask{display:none}
+  .dv-kact{justify-content:stretch}
+  .dv-kact .cu-btn{flex:1;min-height:44px}
+  .dv-kact:empty{display:none}
+  .dv-cmd .cu-btn{min-height:44px}
+  .dv-dialog{align-self:end}
+}
+
+/* ---- Motion ---- */
+@keyframes dv-draw{from{stroke-dashoffset:1}}
+@keyframes dv-fade{from{opacity:0}}
+@keyframes dv-ring{from{transform:scale(1);opacity:.7}to{transform:scale(3.2);opacity:0}}
+@keyframes dv-travel{from{stroke-dashoffset:0;opacity:0}12%{opacity:1}85%{opacity:1}to{stroke-dashoffset:-1;opacity:0}}
+/* Wires stroke on once: 20 steps is the 720ms a chart line takes (useChartDraw). */
+.dv-wire{animation:dv-draw calc(var(--ct-dur-step)*20) var(--ease) backwards;animation-delay:calc(var(--ct-dur-step)*4)}
+.dv-grp__box{animation:ct-entry var(--ct-dur-rise) var(--ease) backwards;animation-delay:calc((var(--i,0) + 5)*var(--ct-dur-step))}
+/* A dot rides each wire the way the data goes. It is a one-point dash on a
+   copy of the wire, so it needs no script; at rest it is invisible. */
+.dv-travel{fill:none;stroke:var(--accent);stroke-width:6;stroke-linecap:round;stroke-dasharray:.001 1;opacity:0;pointer-events:none;
+  animation:dv-travel calc(var(--ct-dur-spring)*8) linear infinite;animation-delay:calc(var(--ct-dur-step)*24 + var(--i,0)*var(--ct-dur-spring))}
+.dv-travel[data-way="in"]{animation-direction:reverse}
+.dv-ring{fill:none;stroke:var(--bad);stroke-width:1.2;opacity:0;transform-box:fill-box;transform-origin:center;animation:dv-ring calc(var(--ct-dur-leave)*7) var(--ease) infinite}
+@media (hover:hover){
+  .dv-map__svg:has(.dv-grp:hover) .dv-grp:not(:hover){opacity:.42}
+  .dv-grp:hover .dv-wire{stroke:var(--accent)}
+  .dv-row,.dv-krow{transition:background-color var(--ct-dur-quick) var(--ease)}
+  .dv-block .dv-row:hover,.dv-keys .dv-krow:hover{background:var(--paper)}
+  .dv-chip:hover{border-color:var(--ink-3)}
+  .dv-link:hover{color:var(--ink)}
+}

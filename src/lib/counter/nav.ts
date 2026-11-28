@@ -39,7 +39,7 @@ export type NavId =
   | "analytics" | "pnl" | "cogs" | "labor"
   | "menu" | "recipes" | "screens"
   | "invoices" | "count" | "ingredients" | "vendors"
-  | "stores" | "settings" | "monitoring" | "people"
+  | "stores" | "settings" | "monitoring" | "developer" | "people"
 
 export interface NavItem {
   id: NavId
@@ -134,6 +134,10 @@ export const NAV_GROUPS: readonly NavGroup[] = [
       { id: "stores", label: "Stores", href: "/dashboard/stores", icon: "Store" },
       { id: "settings", label: "Settings", href: "/dashboard/settings", icon: "Settings2" },
       { id: "monitoring", label: "Monitoring", href: "/dashboard/admin/monitoring", icon: "Activity" },
+      // The developer portal: what the app is connected to and where its
+      // keys are. Under `/dashboard/admin`, so `nav-access.ts` hides it from
+      // an owner by the same rule that hides Monitoring.
+      { id: "developer", label: "Developer", href: "/dashboard/admin/developer", icon: "Network" },
       { id: "people", label: "People", href: "/dashboard/admin/people", icon: "UserPlus" },
     ],
   },

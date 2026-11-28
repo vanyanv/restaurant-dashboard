@@ -23,6 +23,7 @@ import {
   ShoppingBag,
   ClipboardList,
   UserPlus,
+  Network,
 } from "lucide-react"
 
 /**
@@ -61,4 +62,5 @@ export const NAV_ICONS: Record<string, LucideIcon> = {
   ShoppingBag,
   ClipboardList,
   UserPlus,
+  Network,
 }
