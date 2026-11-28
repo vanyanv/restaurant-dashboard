@@ -98,6 +98,7 @@ const TAB_OF: readonly (readonly [string, PhoneTabId])[] = [
   ["/m/stores", "more"],
   ["/m/settings", "more"],
   ["/m/monitoring", "more"],
+  ["/m/developer", "more"],
 ] as const
 
 /**

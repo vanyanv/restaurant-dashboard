@@ -92,6 +92,9 @@ export const DESKTOP_TO_MOBILE: Record<string, string> = {
   "/dashboard/admin/monitoring/ml": "/m/monitoring/ml",
   "/dashboard/admin/monitoring/people": "/m/monitoring/people",
   "/dashboard/admin/people": "/m/admin/people",
+  // The developer portal. Its phone page carries its own developer gate
+  // (`m/(counter)/developer/layout.tsx`), like the monitoring pages above.
+  "/dashboard/admin/developer": "/m/developer",
   // Stores had no mobile equivalent left after the mobile bloat deletion, and
   // this comment said so until `/m/stores` was rebuilt on Counter; the desk
   // path is mapped exactly above now. Analytics was in that list until it was

@@ -31,6 +31,7 @@ const PAGE_SHEETS = [
   "counter-inventory.css",
   "counter-people.css",
   "counter-week.css",
+  "counter-developer.css",
   "counter-ui.css",
 ]
 

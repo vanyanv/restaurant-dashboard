@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { timingSafeEqual } from "crypto"
 import { readSessionToken } from "@/lib/session-token"
-import { getRedis } from "@/lib/cache/redis"
+import { getRedis, redisWithin } from "@/lib/cache/redis"
 
 // --- Cron request helper (consolidated from 3 duplicated copies) ---
 
@@ -226,6 +226,74 @@ export async function isOverLimitKey(key: string, config: RateLimitConfig): Prom
   const entry = store.get(key)
   if (!entry || entry.resetAt < Date.now()) return false
   return entry.count >= config.limit
+}
+
+/**
+ * - `allowed`: counted, and still within the limit.
+ * - `over`: counted, and past the limit.
+ * - `unavailable`: Redis is set up and did not answer, so nothing was counted.
+ */
+export type AttemptCharge = "allowed" | "over" | "unavailable"
+
+/** Either Upstash setting present means this deployment is meant to count in Redis. */
+function redisIsSetUp(): boolean {
+  return Boolean(process.env.UPSTASH_REDIS_REST_URL || process.env.UPSTASH_REDIS_REST_TOKEN)
+}
+
+/** How long a Redis count may take before the attempt is refused. */
+const ATTEMPT_REDIS_MS = 2_000
+
+/**
+ * Count one attempt BEFORE it is checked, and say whether it may go ahead.
+ *
+ * For a secret that must not be guessable in bulk (the developer keys
+ * password). `isOverLimitKey` then `rateLimitKey` reads the count, does the
+ * slow check, and only then adds to it, so forty guesses sent at the same
+ * moment all read "under the limit" and all get checked. Here every attempt
+ * takes its own number first; the caller clears the count with
+ * `clearAttemptKey` when the attempt turns out right.
+ *
+ * Two things differ from `rateLimitKey`, on purpose, and only here:
+ *
+ * - The window's end is set in the same transaction as the first count
+ *   (`SET key 0 NX PX` then `INCR`, inside `MULTI`), so a count can never be
+ *   left with no end because a second call failed.
+ * - When Redis is set up but does not answer, the answer is `unavailable` and
+ *   the caller refuses. Falling back to this instance's memory would give
+ *   every server instance its own fresh budget. With no Redis set up at all
+ *   (a developer's own computer) there is one instance, and memory is right.
+ */
+export async function chargeAttemptKey(key: string, config: RateLimitConfig): Promise<AttemptCharge> {
+  if (!redisIsSetUp()) return memoryRateLimit(key, config) === null ? "allowed" : "over"
+
+  try {
+    const redis = getRedis()
+    if (!redis) return "unavailable"
+    const redisKey = `rate:${key}`
+    const answer = await redisWithin(
+      redis.multi().set(redisKey, 0, { nx: true, px: config.windowMs }).incr(redisKey).exec(),
+      ATTEMPT_REDIS_MS,
+    )
+    const count: unknown = Array.isArray(answer) ? answer[1] : undefined
+    if (typeof count !== "number" || !Number.isFinite(count) || count < 1) return "unavailable"
+    return count <= config.limit ? "allowed" : "over"
+  } catch (err) {
+    console.error("[rate-limit] Redis attempt count failed; refusing the attempt", err)
+    return "unavailable"
+  }
+}
+
+/** Forget the attempts counted on a key by `chargeAttemptKey`. Never throws. */
+export async function clearAttemptKey(key: string): Promise<void> {
+  if (!redisIsSetUp()) {
+    store.delete(key)
+    return
+  }
+  try {
+    await redisWithin(Promise.resolve(getRedis()?.del(`rate:${key}`)), ATTEMPT_REDIS_MS)
+  } catch (err) {
+    console.error("[rate-limit] Redis attempt reset failed; the count runs out on its own", err)
+  }
 }
 
 /** The client address the limiter keys on, for callers composing their own keys. */

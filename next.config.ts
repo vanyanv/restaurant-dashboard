@@ -12,6 +12,8 @@ const nextConfig: NextConfig = {
   },
   serverExternalPackages: ["@prisma/client", "bcryptjs"],
   reactCompiler: true,
+  // `next dev` prints every server action call with its arguments; the developer keys unlock takes a password.
+  logging: { serverFunctions: false },
   experimental: {
     // @radix-ui/react-* used to fill this list — 17 entries, one per
     // component still on the pre-Counter design. All of them are gone from

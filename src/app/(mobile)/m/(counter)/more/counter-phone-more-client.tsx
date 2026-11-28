@@ -193,7 +193,7 @@ export function CounterPhoneMoreClient({
  * phone those were reachable only by typing the URL.
  */
 /** More rows whose desk page sits under /dashboard/admin, which only a developer can open. */
-const DEVELOPER_ONLY_KEYS = new Set(["monitoring", "people"])
+const DEVELOPER_ONLY_KEYS = new Set(["monitoring", "developer", "people"])
 
 const r = (key: string, deskHref: string, title: string, detail: string): MListRow => ({
   key,
@@ -259,6 +259,7 @@ const MORE_GROUPS: ReadonlyArray<{ title: string; rows: MListRow[] }> = [
     rows: [
       r("stores", "/dashboard/stores", "Stores", "Rent, commissions, COGS targets"),
       r("monitoring", "/dashboard/admin/monitoring", "Monitoring", "Developer-facing"),
+      r("developer", "/dashboard/admin/developer", "Developer portal", "Connections, keys, new computer"),
       r("people", "/dashboard/admin/people", "People", "Who can sign in · invites"),
     ],
   },
